@@ -1,0 +1,32 @@
+# dependências e builds
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+.turbo/
+
+# ambiente e segredos: nunca no git
+.env
+.env.*
+!.env.example
+
+# supabase local
+supabase/.temp/
+supabase/.branches/
+supabase/functions/**/.npmrc
+
+# testes
+coverage/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# sistema e editores
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/*
+!.vscode/extensions.json
