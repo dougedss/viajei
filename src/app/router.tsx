@@ -7,7 +7,7 @@ import { RequireSession } from './RequireSession.tsx';
 import { RouteError } from './RouteError.tsx';
 import { Splash } from './Splash.tsx';
 
-/** Rotas lazy em português: cada tela só baixa quando é aberta. */
+/** Rotas lazy em português: cada tela só baixa quando é aberta (e fica no precache do service worker). */
 const page = (load: () => Promise<{ default: ComponentType }>) => async () => ({
   Component: (await load()).default,
 });
@@ -42,6 +42,22 @@ export const router = createBrowserRouter([
             element: <AppLayout />,
             children: [
               { path: '/', lazy: page(() => import('@/features/trips/routes/HomePage.tsx')) },
+              {
+                path: '/viagens/nova',
+                lazy: page(() => import('@/features/trips/routes/NovaViagemPage.tsx')),
+              },
+              {
+                path: '/viagens/:tripId',
+                lazy: page(() => import('@/features/trips/routes/ViagemPage.tsx')),
+              },
+              {
+                path: '/viagens/:tripId/editar',
+                lazy: page(() => import('@/features/trips/routes/EditarViagemPage.tsx')),
+              },
+              {
+                path: '/viagens/:tripId/membros',
+                lazy: page(() => import('@/features/trips/routes/MembrosPage.tsx')),
+              },
               {
                 path: '/perfil',
                 lazy: page(() => import('@/features/profile/routes/PerfilPage.tsx')),

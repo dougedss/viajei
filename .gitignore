@@ -16,6 +16,12 @@ supabase/.temp/
 supabase/.branches/
 supabase/functions/**/.npmrc
 
+# ícones do PWA gerados no build a partir de public/favicon.svg (pwa-assets.config.ts)
+public/pwa-*.png
+public/maskable-icon-*.png
+public/apple-touch-icon-*.png
+public/favicon.ico
+
 # testes
 coverage/
 test-results/
@@ -30,3 +36,6 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# saída incremental do tsc -b (noEmit): muda a cada build, não é fonte
+*.tsbuildinfo

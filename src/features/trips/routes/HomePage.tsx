@@ -1,30 +1,27 @@
-import { format, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { MailOpen, Route } from 'lucide-react';
+import { MailOpen, Plus, Route } from 'lucide-react';
 import { Button } from '@/components/ui/Button.tsx';
+import { ButtonLink } from '@/components/ui/ButtonLink.tsx';
 import { Card } from '@/components/ui/Card.tsx';
 import { EmptyState } from '@/components/ui/EmptyState.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
+import { InstallCard } from '@/features/pwa/components/InstallCard.tsx';
 import { useAcceptInvite, useDeclineInvite } from '../actions.ts';
-import { usePendingInvites } from '../queries.ts';
-
-function periodo(start: string, end: string) {
-  const a = parseISO(start);
-  const b = parseISO(end);
-  const sameMonth = a.getMonth() === b.getMonth();
-  return sameMonth
-    ? `${format(a, 'd', { locale: ptBR })} a ${format(b, "d 'de' MMMM", { locale: ptBR })}`
-    : `${format(a, "d 'de' MMM", { locale: ptBR })} a ${format(b, "d 'de' MMM", { locale: ptBR })}`;
-}
+import { TripCard } from '../components/TripCard.tsx';
+import { usePendingInvites, useTrips } from '../queries.ts';
+import { formatPeriod, todayISO } from '../rules.ts';
 
 export default function HomePage() {
   const invites = usePendingInvites();
+  const trips = useTrips();
   const accept = useAcceptInvite();
   const decline = useDeclineInvite();
   const toast = useToast();
+  const today = todayISO();
 
   return (
     <div className="grid gap-6">
+      <InstallCard />
+
       {invites.data && invites.data.length > 0 ? (
         <section className="grid gap-3" aria-labelledby="h-convites">
           <h2 id="h-convites" className="label-caps text-accent-ink">
@@ -46,7 +43,7 @@ export default function HomePage() {
                     {inv.trip_name}
                   </p>
                   <p className="text-[14px] text-ink-2">
-                    {periodo(inv.start_date, inv.end_date)}
+                    {formatPeriod(inv.start_date, inv.end_date)}
                     {inv.invited_by_name ? ` · convite de ${inv.invited_by_name}` : ''}
                   </p>
                 </div>
@@ -94,19 +91,38 @@ export default function HomePage() {
       ) : null}
 
       <section className="grid gap-3" aria-labelledby="h-viagens">
-        <h1 id="h-viagens" className="font-num text-[30px] leading-none font-semibold">
-          Suas viagens
-        </h1>
-        <EmptyState
-          icon={Route}
-          title="Nenhuma viagem ainda"
-          text="A primeira viagem nasce na próxima fase, já com tudo funcionando sem sinal. Por enquanto, aceite os convites e deixe o perfil do seu jeito."
-          action={
-            <Button variant="secondary" disabled title="Chega na fase 2">
+        <div className="flex items-end justify-between gap-3">
+          <h1 id="h-viagens" className="font-num text-[30px] leading-none font-semibold">
+            Suas viagens
+          </h1>
+          {trips && trips.length > 0 ? (
+            <ButtonLink to="/viagens/nova" size="sm" variant="secondary">
+              <Plus className="size-4" aria-hidden="true" />
               Nova viagem
-            </Button>
-          }
-        />
+            </ButtonLink>
+          ) : null}
+        </div>
+        {trips === undefined ? null : trips.length === 0 ? (
+          <EmptyState
+            icon={Route}
+            title="Nenhuma viagem ainda"
+            text="Crie a primeira: ela fica neste celular, funciona sem sinal e sincroniza quando a internet voltar."
+            action={
+              <ButtonLink to="/viagens/nova">
+                <Plus className="size-5" aria-hidden="true" />
+                Nova viagem
+              </ButtonLink>
+            }
+          />
+        ) : (
+          <ul className="grid gap-3">
+            {trips.map((item) => (
+              <li key={item.trip.id} className="min-w-0">
+                <TripCard item={item} today={today} />
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );

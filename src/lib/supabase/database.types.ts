@@ -90,6 +90,15 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: {
               "end_date": string,"invited_by_name": string,"member_id": string,"start_date": string,"trip_id": string,"trip_name": string
             }[]
+                           },
+"sync_pull":
+{ Args: { "p_since": string,"p_trip_id": string }; Returns: Json
+                           },
+"sync_pull_user":
+{ Args: { "p_since": string }; Returns: Json
+                           },
+"sync_push":
+{ Args: { "p_ops": Json }; Returns: Json
                            }
           }
           Enums: {

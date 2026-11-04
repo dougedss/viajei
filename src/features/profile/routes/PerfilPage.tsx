@@ -1,18 +1,19 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { PERSON_COLORS, PERSON_COLOR_KEYS, type PersonColor } from '@shared/constants.ts';
 import { Check } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { Avatar } from '@/components/ui/Avatar.tsx';
 import { Button } from '@/components/ui/Button.tsx';
 import { Card } from '@/components/ui/Card.tsx';
+import { Sheet } from '@/components/ui/Sheet.tsx';
 import { TextField } from '@/components/ui/TextField.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { nameSchema } from '@/lib/auth/schemas.ts';
 import { cx } from '@/lib/cx.ts';
 import { useSession } from '@/lib/supabase/session.ts';
-import { signOut, useUpdateProfile } from '../actions.ts';
+import { signOutNow, trySignOut, useUpdateProfile } from '../actions.ts';
 import { asPersonColor, useProfile } from '../queries.ts';
 
 const schema = z.object({ name: nameSchema, color: z.enum(PERSON_COLOR_KEYS) });
@@ -23,6 +24,8 @@ export default function PerfilPage() {
   const profile = useProfile();
   const update = useUpdateProfile();
   const toast = useToast();
+  const [leaving, setLeaving] = useState(false);
+  const [pendingOnExit, setPendingOnExit] = useState<number | null>(null);
   const form = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: { name: '', color: 'sunset' },
@@ -48,6 +51,15 @@ export default function PerfilPage() {
 
   const name = useWatch({ control: form.control, name: 'name' });
   const color = useWatch({ control: form.control, name: 'color' });
+
+  const signOut = () => {
+    setLeaving(true);
+    void trySignOut()
+      .then((pending) => {
+        if (pending > 0) setPendingOnExit(pending);
+      })
+      .finally(() => setLeaving(false));
+  };
 
   return (
     <div className="grid gap-4">
@@ -106,9 +118,26 @@ export default function PerfilPage() {
           </Button>
         </form>
       </Card>
-      <Button variant="ghost" onClick={() => void signOut()}>
+      <Button variant="ghost" loading={leaving} onClick={signOut}>
         Sair
       </Button>
+      <Sheet
+        open={pendingOnExit !== null}
+        onClose={() => setPendingOnExit(null)}
+        title="Ainda há alterações por enviar"
+        description={
+          pendingOnExit === 1
+            ? 'Uma alteração ainda não chegou ao servidor. Sair agora apaga os dados deste celular, e ela se perde.'
+            : `${pendingOnExit ?? 0} alterações ainda não chegaram ao servidor. Sair agora apaga os dados deste celular, e elas se perdem.`
+        }
+      >
+        <Button variant="secondary" onClick={() => setPendingOnExit(null)}>
+          Ficar e tentar depois
+        </Button>
+        <Button variant="danger" onClick={() => void signOutNow()}>
+          Sair mesmo assim
+        </Button>
+      </Sheet>
     </div>
   );
 }

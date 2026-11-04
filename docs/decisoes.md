@@ -53,3 +53,65 @@ Um registro curto por decisão não óbvia: contexto, decisão, consequência. E
 **Contexto.** Várias contas na mesma máquina; a CLI guarda um login só.
 **Decisão.** `SUPABASE_ACCESS_TOKEN` da conta pessoal em `.env.local`.
 **Consequência.** As contas de cliente ficam intocadas; o projeto nunca é criado na conta errada por engano.
+
+## Fase 2 · Offline, PWA e viagens (04/11/2026)
+
+### D11 · Auth do projeto hospedado versionado em `config.toml`, com `[remotes.production]`
+**Contexto.** Site URL, redirects, SMTP e templates (em inglês) viviam só no painel. A CLI 3.0 tem `config push`, que altera **apenas o que o arquivo declara** e deixa o resto como está; a substituição `env(VAR)` vira string vazia quando a variável não existe, sem erro.
+**Decisão.** A base do arquivo descreve o ambiente local (Mailpit, 1 s entre e-mails) e o que vale nos dois (templates em pt-BR, senha mínima 8, confirmação de e-mail ligada, TOTP desligado). O bloco `[remotes.production]` declara só o que difere: Site URL, redirects (produção e os previews da Vercel, que usam o mesmo projeto), limite de e-mails e o SMTP do Resend com `pass = "env(RESEND_API_KEY)"`. Os scripts `pnpm remote:*` carregam `.env.local` antes de chamar a CLI, porque um push sem a variável apagaria a senha do SMTP.
+**Consequência.** O painel deixa de ser fonte de verdade; `pnpm remote:config-diff` mostra o que mudaria antes de aplicar; a chave do Resend nunca entra no git.
+
+### D12 · O dono sempre vê a própria viagem (policy de SELECT de `trips`)
+**Contexto.** Com `ON CONFLICT` (o upsert do `sync_push`) ou `RETURNING`, o Postgres aplica a policy de SELECT à linha nova. A viagem recém-inserida só é "de membro" depois do trigger que cria a participação do dono, então o insert caía em "new row violates row-level security policy".
+**Decisão.** `using (owner_id = auth.uid() or is_trip_member(id))`, que é o que já era verdade. Não contornar no `sync_push` com exceções como fluxo de controle.
+**Consequência.** O upsert continua set-based e barato; qualquer `insert().select()` do dono pelo PostgREST também passa a funcionar.
+
+### D13 · Sessão do supabase-js em IndexedDB
+**Contexto.** Na fase 4, o service worker precisa autenticar o envio da fila quando Partiu! ou Chegamos! vem do botão da notificação; service workers não enxergam localStorage.
+**Decisão.** Adaptador `lib/supabase/idb-storage.ts` (IndexedDB cru, sem Dexie) com `storageKey: 'viajei-auth'`.
+**Consequência.** A sessão mora num banco próprio (`viajei-auth`), que o service worker abre sem carregar o banco do app.
+
+### D14 · A outbox só cresce; fusão e ordem acontecem na hora do push
+**Contexto.** Fundir operações ao gravar exigiria ler e alterar entradas na transação de escrita e apagaria a história do que a pessoa fez.
+**Decisão.** Cada `mutate` acrescenta uma operação; `coalesce` funde por linha e `orderByRank` põe pais antes de filhos ao montar o lote; a resposta do servidor remove todas as operações fundidas de uma vez.
+**Consequência.** A escrita local é constante; "Pendentes" mostra cada edição; descartar é por operação.
+
+### D15 · Linhas que o servidor deriva entram como projeção local, sem outbox
+**Contexto.** A participação do dono nasce por trigger no insert da viagem. Se o client a enviasse, o upsert cairia na linha existente, a policy "dono remove" (só `role = 'member'`) não deixaria atualizar e a operação voltaria como `stale`.
+**Decisão.** `mutate.project` grava no Dexie sem enfileirar; o pull substitui pela versão do servidor (mesmo id).
+**Consequência.** A tela de membros mostra o dono na hora, offline, sem ruído na fila.
+
+### D16 · `sync_pull` genérico para tabelas de escopo `user` que carregam `trip_id` (C6)
+**Contexto.** Conquistas e XP (fase 9) são do usuário, mas a retrospectiva e a tela de membros precisam dos dados do time, que a policy já deixa ler.
+**Decisão.** O loop do `sync_pull` inclui qualquer tabela da whitelist que tenha a coluna `trip_id`, consultando o catálogo.
+**Consequência.** A fase 9 só registra as tabelas e cria os índices; a RPC não muda.
+
+### D17 · Erro de rede não conta tentativa
+**Contexto.** Um backoff que contasse tentativas transformaria "sem sinal por dois dias" em operações "com erro".
+**Decisão.** Fetch sem resposta marca a conectividade como offline e para o ciclo; só erro do servidor no lote inteiro conta tentativa (1 s, 2 s, 4 s… até 60 s; na quinta, vai para Pendentes). Erro de regra numa operação (RLS, check, whitelist) vai direto para Pendentes, sem insistir.
+**Consequência.** O chip diz "Sem conexão · N" sem culpar a operação; "Tentar de novo" zera o contador.
+
+### D18 · Descartar uma pendência refaz a linha a partir do servidor
+**Contexto.** Apagar só a operação deixaria a linha local com um valor que o servidor nunca viu.
+**Decisão.** Descartar um `upsert` apaga a linha local e os filhos; descartar um `patch` zera o cursor da viagem, e o próximo pull traz a linha como o servidor a tem.
+**Consequência.** Nenhuma edição fantasma sobrevive no aparelho.
+
+### D19 · `revoked` apaga a viagem e as operações dela
+**Contexto.** Quem foi removido pode ter operações pendentes daquela viagem; o servidor as recusaria para sempre (P0002).
+**Decisão.** `wipeTrip` apaga linhas, cursor e as operações da viagem, com o aviso "Você saiu de X".
+**Consequência.** A regra "a outbox nunca é apagada sem ter sido enviada" tem uma exceção explícita: operação sem destino.
+
+### D20 · Sair da conta apaga o banco local, depois de tentar enviar
+**Contexto.** Aparelho compartilhado: os dados de uma pessoa não podem aparecer para outra.
+**Decisão.** `trySignOut` sincroniza; se sobrar pendência, a tela pergunta; `signOutNow` para o motor, encerra a sessão e apaga o Dexie. Ao entrar, se `sync_state.uid` for de outra pessoa, o motor zera o banco antes.
+**Consequência.** Entrar de novo custa um pull completo; é o preço certo.
+
+### D21 · Ícones do PWA gerados no build, não commitados
+**Contexto.** PNGs no git envelhecem em relação ao SVG e ninguém lembra de regenerar.
+**Decisão.** `@vite-pwa/assets-generator` pelo `pwaAssets` do plugin, a partir de `public/favicon.svg`: `any` como está, maskable e Apple com margem e fundo noite.
+**Consequência.** `sharp` entra no build (CI e Vercel têm binário pronto); os PNGs gerados ficam no `.gitignore`.
+
+### D22 · Service worker só no build
+**Contexto.** Em dev, um service worker com precache serve versões velhas e atrapalha o Playwright.
+**Decisão.** `devOptions` desligado; o e2e offline prova os dados (Dexie e outbox), não a casca; a casca offline, a instalação e "nova versão disponível" validam-se no preview e na produção da Vercel.
+**Consequência.** `pnpm build && pnpm preview` é o jeito de ver o PWA localmente.

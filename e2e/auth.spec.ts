@@ -21,7 +21,9 @@ test('senha errada mostra a mensagem em português e não entra', async ({ page 
 test('o dono entra e vê a tela inicial', async ({ page }) => {
   await entrar(page, 'dono@viajei.local');
   await expect(page.getByRole('heading', { name: 'Suas viagens' })).toBeVisible();
-  await expect(page.getByRole('img', { name: 'Douglas' })).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Perfil' }).getByRole('img', { name: 'Douglas' }),
+  ).toBeVisible();
 });
 
 test('a convidada vê o convite pendente e aceita', async ({ page }) => {
@@ -39,6 +41,10 @@ test('a convidada vê o convite pendente e aceita', async ({ page }) => {
   await convite.getByRole('button', { name: 'Aceitar' }).click();
   await expect(page.getByRole('status')).toContainText('Convite aceito');
   await expect(convite).toHaveCount(0);
+  // a participação nova chega pelo sync e a viagem é puxada para o aparelho
+  await expect(page.getByRole('link', { name: 'RS — concurso em Montenegro' })).toBeVisible({
+    timeout: 15_000,
+  });
 });
 
 test('perfil: edita o nome e sai', async ({ page }) => {
