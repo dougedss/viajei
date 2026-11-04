@@ -27,7 +27,12 @@ test('o dono entra e vê a tela inicial', async ({ page }) => {
 test('a convidada vê o convite pendente e aceita', async ({ page }) => {
   await entrar(page, 'convidado@viajei.local');
   await expect(page.getByRole('heading', { name: 'Suas viagens' })).toBeVisible();
+  // o claim_invites roda logo depois de entrar e a lista é relida em seguida: espera o card chegar
   const convite = page.getByRole('article', { name: /convite/i });
+  await convite
+    .first()
+    .waitFor({ timeout: 10_000 })
+    .catch(() => null);
   if ((await convite.count()) === 0)
     test.skip(true, 'convite já aceito neste banco; rode pnpm db:reset');
   await expect(convite).toContainText('RS — concurso em Montenegro');
