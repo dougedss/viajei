@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: lint, tipos, Vitest, pgTAP, build e Playwright
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint e formatação
+        run: |
+          pnpm lint
+          pnpm format:check
+
+      - name: Supabase local (Postgres, Auth, PostgREST, Realtime, Storage)
+        run: pnpm exec supabase start -x studio,imgproxy,logflare,vector,mailpit
+
+      - name: pgTAP
+        run: pnpm exec supabase test db
+
+      - name: Tipos do banco batem com o commit
+        run: |
+          pnpm db:types
+          git diff --exit-code -- src/lib/supabase/database.types.ts
+
+      - name: Tipos
+        run: pnpm typecheck
+
+      - name: Vitest
+        run: pnpm test
+
+      - name: Variáveis do Supabase local para o app
+        run: |
+          eval "$(pnpm exec supabase status -o env)"
+          echo "VITE_SUPABASE_URL=$API_URL" >> "$GITHUB_ENV"
+          echo "VITE_SUPABASE_PUBLISHABLE_KEY=$PUBLISHABLE_KEY" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: pnpm build
+
+      - name: Playwright
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 7

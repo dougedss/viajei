@@ -1,0 +1,22 @@
+import { fileURLToPath, URL } from 'node:url';
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@shared': fileURLToPath(new URL('./supabase/functions/_shared', import.meta.url)),
+    },
+  },
+  test: {
+    environment: 'happy-dom',
+    globals: false,
+    include: ['src/**/*.test.{ts,tsx}', 'supabase/functions/_shared/**/*.test.ts'],
+    setupFiles: ['src/test/setup.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      include: ['src/lib/**', 'src/features/**/rules.ts', 'supabase/functions/_shared/**'],
+    },
+  },
+});

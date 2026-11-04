@@ -1,0 +1,10 @@
+minimumReleaseAgeExclude:
+  - '@hookform/resolvers@7.0.2'
+  - framer-motion@14.9.1
+  - lucide-react@1.68.0
+  - motion-dom@14.9.1
+  - motion@14.9.1
+
+# pacotes com script de instalação autorizado (o supabase baixa o binário da CLI)
+onlyBuiltDependencies:
+  - supabase

@@ -1,0 +1,9 @@
+node_modules
+dist
+coverage
+playwright-report
+test-results
+pnpm-lock.yaml
+supabase/.temp
+src/lib/supabase/database.types.ts
+docs/

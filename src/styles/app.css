@@ -1,0 +1,175 @@
+@import 'tailwindcss';
+
+/*
+  Tokens do Viajei (style tile v2). Os valores que mudam com o tema vivem em variáveis "cruas" em :root
+  e são redefinidos no tema escuro; o @theme inline faz as utilities do Tailwind apontarem para elas,
+  então `bg-paper` ou `text-ink` trocam de cor sozinhos. Os fixos (acento, estados, tipos de parada) ficam
+  iguais nos dois temas, como no style tile.
+*/
+:root {
+  color-scheme: light dark;
+  --paper: #f4f4f2;
+  --card: #ffffff;
+  --ink: #1c2230;
+  --ink-2: #5b6474;
+  --line: #e2e4e8;
+  --stage: #e9eae7;
+  --accent: #e8653a;
+  --accent-ink: #b8471f;
+  --accent-soft: #fbe7de;
+  --on-time-ink: #15754c;
+  --tight-ink: #8a5a00;
+  --late-ink: #b23a3a;
+  --sky-a: #f6dcc5;
+  --sky-b: #f2eee6;
+  --shadow-card: 0 10px 30px -12px rgb(28 34 48 / 0.28);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --paper: #111722;
+    --card: #1a2130;
+    --ink: #f1eee7;
+    --ink-2: #a7aebb;
+    --line: #2a3344;
+    --stage: #151c2a;
+    --accent: #f0784f;
+    --accent-ink: #ffb08f;
+    --accent-soft: #3a2620;
+    --on-time-ink: #5bd39a;
+    --tight-ink: #ffc24d;
+    --late-ink: #ff8a8a;
+    --sky-a: #0f1627;
+    --sky-b: #26304a;
+    --shadow-card: 0 10px 30px -12px rgb(0 0 0 / 0.6);
+  }
+}
+:root[data-theme='dark'] {
+  --paper: #111722;
+  --card: #1a2130;
+  --ink: #f1eee7;
+  --ink-2: #a7aebb;
+  --line: #2a3344;
+  --stage: #151c2a;
+  --accent: #f0784f;
+  --accent-ink: #ffb08f;
+  --accent-soft: #3a2620;
+  --on-time-ink: #5bd39a;
+  --tight-ink: #ffc24d;
+  --late-ink: #ff8a8a;
+  --sky-a: #0f1627;
+  --sky-b: #26304a;
+  --shadow-card: 0 10px 30px -12px rgb(0 0 0 / 0.6);
+}
+
+@theme inline {
+  --font-ui: 'Barlow', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-num: 'Barlow Condensed', 'Barlow', 'Arial Narrow', system-ui, sans-serif;
+
+  --color-paper: var(--paper);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-line: var(--line);
+  --color-stage: var(--stage);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-time-ink: var(--on-time-ink);
+  --color-tight-ink: var(--tight-ink);
+  --color-late-ink: var(--late-ink);
+  --color-sky-a: var(--sky-a);
+  --color-sky-b: var(--sky-b);
+  --shadow-card: var(--shadow-card);
+}
+
+@theme {
+  /* fixos nos dois temas */
+  --color-sunset: #e8653a;
+  --color-night: #141a26;
+  --color-road: #3b4250;
+  --color-lane: #e9c24a;
+  --color-on-time: #1f9a66;
+  --color-tight: #e9a23b;
+  --color-late: #d94b4b;
+  --color-hud: rgb(16 21 31 / 0.8);
+  --color-hud-ink: #f1eee7;
+  --color-hud-muted: #aeb4c0;
+
+  /* tipos de parada */
+  --color-stop-origin: #e8653a;
+  --color-stop-transit: #5b6474;
+  --color-stop-nature: #4a9a5b;
+  --color-stop-winery: #8a4f8e;
+  --color-stop-hotel: #6a62c9;
+  --color-stop-food: #d6567c;
+  --color-stop-event: #2f8fc9;
+  --color-stop-city: #3a8089;
+  --color-stop-other: #7c8494;
+
+  /* cenários da maquete */
+  --color-zone-city: #9a9c94;
+  --color-zone-interior: #86b25a;
+  --color-zone-field: #d2a94a;
+  --color-zone-serra: #3e6a33;
+  --color-zone-beach: #e8d7a8;
+
+  /* cores das pessoas (avatares, itens marcados, gastos, trilha) */
+  --color-person-sunset: #e8653a;
+  --color-person-sky: #3b8bd6;
+  --color-person-leaf: #3e9d5a;
+  --color-person-grape: #6d4ba3;
+  --color-person-guava: #d6567c;
+  --color-person-lavender: #8a7fd6;
+  --color-person-teal: #2f8f8f;
+  --color-person-amber: #d9922f;
+
+  --radius-card: 22px;
+  --radius-button: 14px;
+  --radius-field: 12px;
+}
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-ui);
+    font-size: 17px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 10px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+}
+
+@utility num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+@utility label-caps {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+@utility safe-x {
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
