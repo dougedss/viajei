@@ -2,6 +2,12 @@ import { expect, test, type Page } from '@playwright/test';
 
 const SENHA = 'viajei123';
 
+/** datas sempre no futuro: durante uma viagem, `/` redireciona para o Modo Viagem */
+const futureDate = (daysAhead: number) =>
+  new Date(Date.now() + daysAhead * 86_400_000).toISOString().slice(0, 10);
+const INICIO = futureDate(30);
+const FIM = futureDate(33);
+
 async function entrar(page: Page, email: string) {
   await page.goto('/entrar');
   await page.getByLabel('E-mail').fill(email);
@@ -14,8 +20,8 @@ async function criarViagem(page: Page, nome: string) {
   await page.getByRole('link', { name: 'Nova viagem' }).first().click();
   await page.getByLabel('Nome da viagem').fill(nome);
   // "Início" também é o rótulo do link do cabeçalho: mira o campo de data
-  await page.getByRole('textbox', { name: 'Início' }).fill('2026-12-11');
-  await page.getByRole('textbox', { name: 'Fim' }).fill('2026-12-14');
+  await page.getByRole('textbox', { name: 'Início' }).fill(INICIO);
+  await page.getByRole('textbox', { name: 'Fim' }).fill(FIM);
   await page.getByLabel('Origem').fill('Papanduva/SC');
   await page.getByLabel('Orçamento').fill('3.000,00');
   await page.getByRole('button', { name: 'Criar viagem' }).click();

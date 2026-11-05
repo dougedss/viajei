@@ -37,6 +37,10 @@ O Dexie (IndexedDB) é a fonte de verdade da tela. Toda escrita passa por `mutat
 | `pnpm db:types`                                  | regenera `src/lib/supabase/database.types.ts` (commitado; a CI confere)      |
 | `pnpm remote:db-push`                            | aplica as migrations no projeto hospedado                                    |
 | `pnpm remote:config-diff` / `remote:config-push` | mostra e aplica a configuração do Auth (`[remotes.production]`) no hospedado |
+| `pnpm remote:functions-deploy`                   | publica a Edge Function `route-day` no projeto hospedado                     |
+| `pnpm remote:secrets-push`                       | grava `ORS_API_KEY` (só ela) nos secrets das Edge Functions                  |
+| `pnpm functions:serve`                           | Edge Functions no stack local (`--env-file ./.env.local` para testar o ORS)  |
+| `pnpm geo:build`                                 | regenera os dados geográficos embutidos (`docs/dados-geo.md`)                |
 
 Os scripts `remote:*` carregam `.env.local` antes de chamar a CLI: é de lá que saem o token, a senha do banco e a chave do Resend que o `config push` usa.
 

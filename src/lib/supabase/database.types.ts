@@ -5,7 +5,27 @@ export type Database = {
   
   "public": {
           Tables: {
-            "profiles": {
+            "edge_calls": {
+                  Row: {
+                    "created_at": string,"fn": string,"id": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"fn": string,"id"?: string,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"fn"?: string,"id"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "edge_calls_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"profiles": {
                   Row: {
                     "color": string,"created_at": string,"field_versions": NonNullable<Json>,"id": string,"name": string,"synced_at": string,"updated_at": string
                   }
@@ -19,16 +39,68 @@ export type Database = {
                   Relationships: [
                     
                   ]
-                },"trip_members": {
+                },"stops": {
                   Row: {
-                    "created_at": string,"deleted_at": string | null,"field_versions": NonNullable<Json>,"id": string,"invited_by": string | null,"invited_email": string | null,"role": string,"status": string,"synced_at": string,"trip_id": string,"updated_at": string,"user_id": string | null
+                    "address": string | null,"closes_at": string | null,"created_at": string,"deleted_at": string | null,"departed_at": string | null,"done_at": string | null,"done_by": string | null,"field_versions": NonNullable<Json>,"id": string,"kind": string,"lat": number | null,"lng": number | null,"name": string,"notes": string | null,"position": string,"skipped": boolean,"synced_at": string,"time": string | null,"travel_minutes_to_next": number | null,"trip_day_id": string,"trip_id": string,"updated_at": string,"url": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"deleted_at"?: string | null,"field_versions"?: NonNullable<Json>,"id": string,"invited_by"?: string | null,"invited_email"?: string | null,"role": string,"status"?: string,"synced_at": string,"trip_id": string,"updated_at": string,"user_id"?: string | null
+                    "address"?: string | null,"closes_at"?: string | null,"created_at"?: string,"deleted_at"?: string | null,"departed_at"?: string | null,"done_at"?: string | null,"done_by"?: string | null,"field_versions"?: NonNullable<Json>,"id": string,"kind": string,"lat"?: number | null,"lng"?: number | null,"name": string,"notes"?: string | null,"position": string,"skipped"?: boolean,"synced_at": string,"time"?: string | null,"travel_minutes_to_next"?: number | null,"trip_day_id": string,"trip_id": string,"updated_at": string,"url"?: string | null
                   }
                   Update: {
-                    "created_at"?: string,"deleted_at"?: string | null,"field_versions"?: NonNullable<Json>,"id"?: string,"invited_by"?: string | null,"invited_email"?: string | null,"role"?: string,"status"?: string,"synced_at"?: string,"trip_id"?: string,"updated_at"?: string,"user_id"?: string | null
+                    "address"?: string | null,"closes_at"?: string | null,"created_at"?: string,"deleted_at"?: string | null,"departed_at"?: string | null,"done_at"?: string | null,"done_by"?: string | null,"field_versions"?: NonNullable<Json>,"id"?: string,"kind"?: string,"lat"?: number | null,"lng"?: number | null,"name"?: string,"notes"?: string | null,"position"?: string,"skipped"?: boolean,"synced_at"?: string,"time"?: string | null,"travel_minutes_to_next"?: number | null,"trip_day_id"?: string,"trip_id"?: string,"updated_at"?: string,"url"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "stops_done_by_fkey"
+      columns: ["done_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "stops_trip_day_id_trip_id_fkey"
+      columns: ["trip_day_id","trip_id"]
+isOneToOne: false
+      referencedRelation: "trip_days"
+      referencedColumns: ["id","trip_id"]
+    },{
+      foreignKeyName: "stops_trip_id_fkey"
+      columns: ["trip_id"]
+isOneToOne: false
+      referencedRelation: "trips"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"trip_days": {
+                  Row: {
+                    "created_at": string,"date": string,"deleted_at": string | null,"field_versions": NonNullable<Json>,"id": string,"notes": string | null,"synced_at": string,"title": string | null,"trip_id": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"date": string,"deleted_at"?: string | null,"field_versions"?: NonNullable<Json>,"id": string,"notes"?: string | null,"synced_at": string,"title"?: string | null,"trip_id": string,"updated_at": string
+                  }
+                  Update: {
+                    "created_at"?: string,"date"?: string,"deleted_at"?: string | null,"field_versions"?: NonNullable<Json>,"id"?: string,"notes"?: string | null,"synced_at"?: string,"title"?: string | null,"trip_id"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "trip_days_trip_id_fkey"
+      columns: ["trip_id"]
+isOneToOne: false
+      referencedRelation: "trips"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"trip_members": {
+                  Row: {
+                    "created_at": string,"deleted_at": string | null,"field_versions": NonNullable<Json>,"id": string,"invited_by": string | null,"invited_email": string | null,"role": string,"share_position": boolean,"status": string,"synced_at": string,"trip_id": string,"updated_at": string,"user_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"deleted_at"?: string | null,"field_versions"?: NonNullable<Json>,"id": string,"invited_by"?: string | null,"invited_email"?: string | null,"role": string,"share_position"?: boolean,"status"?: string,"synced_at": string,"trip_id": string,"updated_at": string,"user_id"?: string | null
+                  }
+                  Update: {
+                    "created_at"?: string,"deleted_at"?: string | null,"field_versions"?: NonNullable<Json>,"id"?: string,"invited_by"?: string | null,"invited_email"?: string | null,"role"?: string,"share_position"?: boolean,"status"?: string,"synced_at"?: string,"trip_id"?: string,"updated_at"?: string,"user_id"?: string | null
                   }
                   Relationships: [
                     {
@@ -45,6 +117,38 @@ isOneToOne: false
       referencedColumns: ["id"]
     },{
       foreignKeyName: "trip_members_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"trip_tracks": {
+                  Row: {
+                    "created_at": string,"deleted_at": string | null,"field_versions": NonNullable<Json>,"id": string,"points": NonNullable<Json>,"synced_at": string,"trip_day_id": string,"trip_id": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"deleted_at"?: string | null,"field_versions"?: NonNullable<Json>,"id": string,"points"?: NonNullable<Json>,"synced_at": string,"trip_day_id": string,"trip_id": string,"updated_at": string,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"deleted_at"?: string | null,"field_versions"?: NonNullable<Json>,"id"?: string,"points"?: NonNullable<Json>,"synced_at"?: string,"trip_day_id"?: string,"trip_id"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "trip_tracks_trip_day_id_trip_id_fkey"
+      columns: ["trip_day_id","trip_id"]
+isOneToOne: false
+      referencedRelation: "trip_days"
+      referencedColumns: ["id","trip_id"]
+    },{
+      foreignKeyName: "trip_tracks_trip_id_fkey"
+      columns: ["trip_id"]
+isOneToOne: false
+      referencedRelation: "trips"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "trip_tracks_user_id_fkey"
       columns: ["user_id"]
 isOneToOne: false
       referencedRelation: "profiles"
@@ -85,6 +189,9 @@ isOneToOne: false
                            },
 "decline_invite":
 { Args: { "p_member_id": string }; Returns: undefined
+                           },
+"edge_call":
+{ Args: { "p_fn": string,"p_limit": number }; Returns: number
                            },
 "my_pending_invites":
 { Args: Record<PropertyKey, never>; Returns: {

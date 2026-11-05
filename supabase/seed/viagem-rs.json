@@ -1,0 +1,313 @@
+{
+  "days": [
+    {
+      "date": "2026-12-11",
+      "title": "Papanduva → Serra Gaúcha",
+      "stops": [
+        {
+          "time": "07:00",
+          "kind": "origin",
+          "name": "Saída de Papanduva",
+          "address": "Papanduva, SC",
+          "closes_at": null,
+          "travel_minutes_to_next": 390,
+          "notes": "Pneus, óleo e estepe revisados. Documentos na bolsa.",
+          "url": null,
+          "lat": -26.40854,
+          "lng": -50.14241
+        },
+        {
+          "time": "13:30",
+          "kind": "nature",
+          "name": "Park Salto Ventoso",
+          "address": "Nova Sardenha, Farroupilha, RS",
+          "closes_at": "17:00",
+          "travel_minutes_to_next": 45,
+          "notes": null,
+          "url": null,
+          "lat": -29.28522,
+          "lng": -51.41185
+        },
+        {
+          "time": "16:30",
+          "kind": "hotel",
+          "name": "Hotel Steffen",
+          "address": "Rua Augusto Vicente Steffen, Bom Princípio, RS",
+          "closes_at": null,
+          "travel_minutes_to_next": 10,
+          "notes": "Check-in. Noites 11 e 12, quarto luxo, café incluso.",
+          "url": null,
+          "lat": -29.49224,
+          "lng": -51.35916
+        },
+        {
+          "time": "19:00",
+          "kind": "food",
+          "name": "Restaurante dos Bifes",
+          "address": "RS-122, Bom Princípio, RS",
+          "closes_at": "22:00",
+          "travel_minutes_to_next": null,
+          "notes": "Até 22h.",
+          "url": null,
+          "lat": -29.48979,
+          "lng": -51.35668
+        }
+      ]
+    },
+    {
+      "date": "2026-12-12",
+      "title": "Cascatas de Alto Feliz e Montenegro",
+      "stops": [
+        {
+          "time": "09:30",
+          "kind": "nature",
+          "name": "Cascata Vale do Mel",
+          "address": "Estrada Vale do Mel, Alto Feliz, RS",
+          "closes_at": null,
+          "travel_minutes_to_next": 15,
+          "notes": null,
+          "url": null,
+          "lat": -29.35814,
+          "lng": -51.30991
+        },
+        {
+          "time": "11:00",
+          "kind": "nature",
+          "name": "Cascatas do Arroio Jaguar",
+          "address": "Alto Feliz, RS",
+          "closes_at": null,
+          "travel_minutes_to_next": 60,
+          "notes": null,
+          "url": null,
+          "lat": -29.37806,
+          "lng": -51.34148
+        },
+        {
+          "time": "15:00",
+          "kind": "event",
+          "name": "Reconhecimento do local da prova",
+          "address": "Montenegro, RS",
+          "closes_at": null,
+          "travel_minutes_to_next": null,
+          "notes": "Conferir portões, estacionamento e tempo de chegada.",
+          "url": null,
+          "lat": -29.68261,
+          "lng": -51.46875
+        }
+      ]
+    },
+    {
+      "date": "2026-12-13",
+      "title": "Prova e Vale dos Vinhedos",
+      "stops": [
+        {
+          "time": "06:00",
+          "kind": "food",
+          "name": "Café no hotel",
+          "address": "Hotel Steffen, Bom Princípio, RS",
+          "closes_at": null,
+          "travel_minutes_to_next": 0,
+          "notes": "Confirmar o horário do café com o hotel.",
+          "url": null,
+          "lat": -29.49224,
+          "lng": -51.35916
+        },
+        {
+          "time": "06:50",
+          "kind": "transit",
+          "name": "Saída para Montenegro",
+          "address": null,
+          "closes_at": null,
+          "travel_minutes_to_next": 35,
+          "notes": null,
+          "url": null,
+          "lat": -29.49224,
+          "lng": -51.35916
+        },
+        {
+          "time": "08:00",
+          "kind": "event",
+          "name": "Prova",
+          "address": "Montenegro, RS",
+          "closes_at": null,
+          "travel_minutes_to_next": 75,
+          "notes": "Manhã inteira. Documento com foto.",
+          "url": null,
+          "lat": -29.68261,
+          "lng": -51.46875
+        },
+        {
+          "time": "13:30",
+          "kind": "winery",
+          "name": "Casa Valduga",
+          "address": "Via Trento, 2355, Vale dos Vinhedos, Bento Gonçalves, RS",
+          "closes_at": "18:00",
+          "travel_minutes_to_next": 5,
+          "notes": null,
+          "url": null,
+          "lat": -29.17924,
+          "lng": -51.55581
+        },
+        {
+          "time": "16:00",
+          "kind": "winery",
+          "name": "Vinícola Dom Candido",
+          "address": "Via Trento, Vale dos Vinhedos, Bento Gonçalves, RS",
+          "closes_at": "18:30",
+          "travel_minutes_to_next": 0,
+          "notes": null,
+          "url": null,
+          "lat": -29.17718,
+          "lng": -51.55444
+        },
+        {
+          "time": "17:00",
+          "kind": "transit",
+          "name": "Saída para Canela",
+          "address": null,
+          "closes_at": null,
+          "travel_minutes_to_next": 90,
+          "notes": null,
+          "url": null,
+          "lat": -29.17718,
+          "lng": -51.55444
+        },
+        {
+          "time": "18:30",
+          "kind": "hotel",
+          "name": "Vila Suzana Parque Hotel",
+          "address": "R. Cel. Theobaldo Fleck, 15, Canela, RS",
+          "closes_at": null,
+          "travel_minutes_to_next": null,
+          "notes": "Noite 13. Check-in a partir das 14h; café e estacionamento inclusos.",
+          "url": null,
+          "lat": -29.35381,
+          "lng": -50.82739
+        }
+      ]
+    },
+    {
+      "date": "2026-12-14",
+      "title": "Caracol, Gramado e a volta",
+      "stops": [
+        {
+          "time": "09:00",
+          "kind": "nature",
+          "name": "Cascata do Caracol",
+          "address": "Parque do Caracol, Canela, RS",
+          "closes_at": null,
+          "travel_minutes_to_next": 20,
+          "notes": "Ingresso comprado online.",
+          "url": null,
+          "lat": -29.31295,
+          "lng": -50.85197
+        },
+        {
+          "time": "11:00",
+          "kind": "city",
+          "name": "Gramado",
+          "address": "Gramado, RS",
+          "closes_at": null,
+          "travel_minutes_to_next": 0,
+          "notes": null,
+          "url": null,
+          "lat": -29.37929,
+          "lng": -50.8737
+        },
+        {
+          "time": "14:00",
+          "kind": "transit",
+          "name": "Saída para Papanduva",
+          "address": null,
+          "closes_at": null,
+          "travel_minutes_to_next": 420,
+          "notes": "Cerca de 7h de estrada.",
+          "url": null,
+          "lat": -29.37929,
+          "lng": -50.8737
+        },
+        {
+          "time": "21:00",
+          "kind": "origin",
+          "name": "Chegada em Papanduva",
+          "address": "Papanduva, SC",
+          "closes_at": null,
+          "travel_minutes_to_next": null,
+          "notes": null,
+          "url": null,
+          "lat": -26.40854,
+          "lng": -50.14241
+        }
+      ]
+    }
+  ],
+  "reservations": [
+    {
+      "type": "hotel",
+      "name": "Hotel Steffen",
+      "stop_ref": "Hotel Steffen",
+      "day_ref": "2026-12-11",
+      "start_at": "2026-12-11T16:30",
+      "end_at": "2026-12-13T07:00",
+      "confirmation_code": null,
+      "amount": 560,
+      "cancel_policy": null,
+      "cancel_until": null,
+      "phone": "+5551997527596",
+      "address": "Bom Princípio, RS",
+      "booked_via": "WhatsApp",
+      "notes": "Noites 11 e 12, quarto luxo, café incluso."
+    },
+    {
+      "type": "hotel",
+      "name": "Vila Suzana Parque Hotel",
+      "stop_ref": "Vila Suzana Parque Hotel",
+      "day_ref": "2026-12-13",
+      "start_at": "2026-12-13T14:00",
+      "end_at": "2026-12-14T12:00",
+      "confirmation_code": null,
+      "amount": 463,
+      "cancel_policy": "Cancelamento grátis até 08/12.",
+      "cancel_until": "2026-12-08",
+      "phone": null,
+      "address": "R. Cel. Theobaldo Fleck, 15, Canela, RS",
+      "booked_via": "Booking",
+      "notes": "Noite 13. Café e estacionamento inclusos. Check-in a partir das 14h."
+    }
+  ],
+  "contacts": [
+    { "name": "Hotel Steffen", "phone": "+5551997527596", "type": "hotel", "notes": null },
+    {
+      "name": "Hotel Niro (plano B)",
+      "phone": "+5551998552808",
+      "type": "hotel",
+      "notes": "Montenegro."
+    },
+    { "name": "Salto Ventoso", "phone": "+555421315007", "type": "attraction", "notes": null },
+    { "name": "Parque do Caracol", "phone": "+5554999769063", "type": "attraction", "notes": null },
+    { "name": "Casa Valduga", "phone": "+5554992461706", "type": "attraction", "notes": null },
+    { "name": "Dom Candido", "phone": "+555425213500", "type": "attraction", "notes": null }
+  ],
+  "checklist_before": [
+    "Confirmar o horário do café no Steffen",
+    "Comprar o ingresso do Caracol online",
+    "Conferir o horário dos portões da prova e levar documento com foto",
+    "Revisar pneus, óleo e estepe",
+    "Guardar as confirmações no celular"
+  ],
+  "checklist_pack": [
+    "Protetor solar",
+    "Roupa de banho",
+    "Calçado com aderência",
+    "Blusa fina",
+    "Água",
+    "Mate"
+  ],
+  "quests": [
+    { "text": "Foto na Cascata do Caracol", "stop_ref": "Cascata do Caracol" },
+    { "text": "Registrar o vinho preferido na Casa Valduga", "stop_ref": "Casa Valduga" },
+    { "text": "Tomar um mate em Gramado", "stop_ref": "Gramado" },
+    { "text": "Lançar o gasto do almoço de domingo", "stop_ref": null }
+  ],
+  "unclassified": []
+}

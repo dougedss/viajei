@@ -13,7 +13,7 @@ import { TextField } from '@/components/ui/TextField.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { asPersonColor } from '@/features/profile/queries.ts';
 import { useSession } from '@/lib/supabase/session.ts';
-import { AlreadyInvitedError, inviteMember, removeMember } from '../actions.ts';
+import { AlreadyInvitedError, inviteMember, removeMember, setSharePosition } from '../actions.ts';
 import { useIsOwner, useTrip, useTripMembers } from '../queries.ts';
 import { memberLabel } from '../rules.ts';
 import { inviteSchema, type InviteInput } from '../schemas.ts';
@@ -34,6 +34,9 @@ export default function MembrosPage() {
   if (trip === undefined) return <Splash />;
   if (trip === null) return <NotFound />;
 
+  const me = members.find(
+    (m) => m.member.user_id === session?.user.id && m.member.status === 'accepted',
+  );
   const invite = form.handleSubmit(async ({ email }) => {
     if (!session) return;
     if (email === session.user.email?.toLowerCase()) {
@@ -81,6 +84,28 @@ export default function MembrosPage() {
               Convidar
             </Button>
           </form>
+        </Card>
+      ) : null}
+
+      {me ? (
+        <Card>
+          <label className="flex min-h-12 cursor-pointer items-center gap-3">
+            <input
+              type="checkbox"
+              role="switch"
+              className="size-6 shrink-0 accent-sunset"
+              checked={me.member.share_position}
+              onChange={(e) => void setSharePosition(me.member.id, e.target.checked)}
+            />
+            <span className="grid">
+              <span className="text-[16px] font-semibold">
+                Compartilhar minha posição nesta viagem
+              </span>
+              <span className="text-[14px] text-ink-2">
+                Quem ficou em casa vê o carrinho andar pela sua trilha. Só você muda isto.
+              </span>
+            </span>
+          </label>
         </Card>
       ) : null}
 

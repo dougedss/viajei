@@ -55,6 +55,18 @@ export const router = createBrowserRouter([
                 lazy: page(() => import('@/features/trips/routes/EditarViagemPage.tsx')),
               },
               {
+                path: '/viagens/:tripId/roteiro',
+                lazy: page(() => import('@/features/itinerary/routes/RoteiroPage.tsx')),
+              },
+              {
+                path: '/viagens/:tripId/roteiro/:dayId',
+                lazy: page(() => import('@/features/itinerary/routes/DiaPage.tsx')),
+              },
+              {
+                path: '/viagens/:tripId/viagem',
+                lazy: page(() => import('@/features/travel-mode/routes/ModoViagemPage.tsx')),
+              },
+              {
                 path: '/viagens/:tripId/membros',
                 lazy: page(() => import('@/features/trips/routes/MembrosPage.tsx')),
               },

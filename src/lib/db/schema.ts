@@ -16,8 +16,17 @@ export type LocalRow<T extends { field_versions: unknown; synced_at: string }> =
 export type Trip = LocalRow<Tables['trips']['Row']>;
 export type TripMember = LocalRow<Tables['trip_members']['Row']>;
 export type Profile = LocalRow<Tables['profiles']['Row']>;
+export type TripDay = LocalRow<Tables['trip_days']['Row']>;
+export type Stop = LocalRow<Tables['stops']['Row']>;
+export type TripTrack = LocalRow<Tables['trip_tracks']['Row']>;
 
-export type RowOf<T extends SyncTable> = { trips: Trip; trip_members: TripMember }[T];
+export type RowOf<T extends SyncTable> = {
+  trips: Trip;
+  trip_members: TripMember;
+  trip_days: TripDay;
+  stops: Stop;
+  trip_tracks: TripTrack;
+}[T];
 
 export type OutboxState = 'pending' | 'failed';
 export type OutboxOp = {
@@ -42,16 +51,47 @@ export type OutboxInsert = Omit<OutboxOp, 'seq'>;
 
 export type SyncStateEntry = { key: string; value: string };
 
+/** [lng, lat], a ordem do GeoJSON. */
+export type LngLat = [number, number];
+
+export type RouteLeg = { distance_m: number; duration_s: number };
+
+/**
+ * Rota real de um dia, como veio da Edge Function `route-day`. Cache recalculável, só neste
+ * aparelho, nunca sincronizado. `hash` é o das coordenadas que a geraram: só se refaz quando mudam.
+ */
+export type DayRoute = {
+  trip_day_id: string;
+  trip_id: string;
+  hash: string;
+  provider: string;
+  fetched_at: string;
+  geometry: LngLat[];
+  legs: RouteLeg[];
+  /** [distância percorrida em m, altitude em m], a cada 2 km */
+  elevation: [number, number][];
+};
+
+export type GeocodeResult = { name: string; address: string; lat: number; lng: number };
+/** Cache das buscas de endereço (Nominatim), por consulta normalizada. */
+export type GeocodeEntry = { query: string; results: GeocodeResult[]; fetched_at: string };
+
 /**
  * Dexie é a fonte de verdade da UI. Versão 1 com todas as stores do prompt (seção 5.6, mais
- * `notification_prefs` pela correção C11 e `travel_state` do replay); as fases seguintes tipam as
- * suas tabelas e sobem a versão só quando um índice mudar. Caches recalculáveis (`routes`,
- * `travel_state`, `blobs`, `weather`) nunca sincronizam. A `outbox` nunca é apagada sem ter sido enviada.
+ * `notification_prefs` pela correção C11 e `travel_state` do replay). Versão 2 (fase 3): índice
+ * simples `trip_day_id` em `stops`, para a lápide de um dia remover as paradas, e a store
+ * `geocode`. Caches recalculáveis (`routes`, `geocode`, `travel_state`, `blobs`, `weather`) nunca
+ * sincronizam. A `outbox` nunca é apagada sem ter sido enviada.
  */
 export class ViajeiDb extends Dexie {
   trips!: EntityTable<Trip, 'id'>;
   trip_members!: EntityTable<TripMember, 'id'>;
   profiles!: EntityTable<Profile, 'id'>;
+  trip_days!: EntityTable<TripDay, 'id'>;
+  stops!: EntityTable<Stop, 'id'>;
+  trip_tracks!: EntityTable<TripTrack, 'id'>;
+  routes!: EntityTable<DayRoute, 'trip_day_id'>;
+  geocode!: EntityTable<GeocodeEntry, 'query'>;
   outbox!: EntityTable<OutboxOp, 'seq', OutboxInsert>;
   sync_state!: EntityTable<SyncStateEntry, 'key'>;
 
@@ -79,6 +119,10 @@ export class ViajeiDb extends Dexie {
       weather: 'trip_day_id',
       outbox: '++seq, trip_id, [table+row_id], state',
       sync_state: 'key',
+    });
+    this.version(2).stores({
+      stops: 'id, trip_id, trip_day_id, [trip_day_id+position]',
+      geocode: 'query',
     });
   }
 

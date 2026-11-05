@@ -16,9 +16,22 @@ export const SYNC_TABLES = {
   trips: {
     scope: 'trip',
     rank: 10,
-    children: [{ table: 'trip_members', fk: 'trip_id' }],
+    children: [
+      { table: 'trip_members', fk: 'trip_id' },
+      { table: 'trip_days', fk: 'trip_id' },
+    ],
   },
   trip_members: { scope: 'trip', rank: 20, children: [] },
+  trip_days: {
+    scope: 'trip',
+    rank: 30,
+    children: [
+      { table: 'stops', fk: 'trip_day_id' },
+      { table: 'trip_tracks', fk: 'trip_day_id' },
+    ],
+  },
+  stops: { scope: 'trip', rank: 40, children: [] },
+  trip_tracks: { scope: 'trip', rank: 50, children: [] },
 } as const satisfies Record<
   string,
   { scope: SyncScope; rank: number; children: readonly unknown[] }

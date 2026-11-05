@@ -39,3 +39,6 @@ Thumbs.db
 
 # saída incremental do tsc -b (noEmit): muda a cada build, não é fonte
 *.tsbuildinfo
+
+# dados geográficos brutos baixados por scripts/geo/build-data.ts (gerados em src/lib/geo/data)
+scripts/geo/raw/

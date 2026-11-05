@@ -14,6 +14,9 @@ export default tseslint.config(
       'supabase/.temp',
       'src/lib/supabase/database.types.ts',
       'docs',
+      // Edge Functions são Deno (globais e import map próprios); só o _shared é código dos dois lados
+      'supabase/functions/**',
+      '!supabase/functions/_shared/**',
     ],
   },
   js.configs.recommended,

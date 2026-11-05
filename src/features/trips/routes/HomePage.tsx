@@ -1,4 +1,5 @@
 import { MailOpen, Plus, Route } from 'lucide-react';
+import { Navigate } from 'react-router';
 import { Button } from '@/components/ui/Button.tsx';
 import { ButtonLink } from '@/components/ui/ButtonLink.tsx';
 import { Card } from '@/components/ui/Card.tsx';
@@ -8,7 +9,10 @@ import { InstallCard } from '@/features/pwa/components/InstallCard.tsx';
 import { useAcceptInvite, useDeclineInvite } from '../actions.ts';
 import { TripCard } from '../components/TripCard.tsx';
 import { usePendingInvites, useTrips } from '../queries.ts';
-import { formatPeriod, todayISO } from '../rules.ts';
+import { formatPeriod, todayISO, tripStatus } from '../rules.ts';
+
+/** viagens para as quais este carregamento do app já redirecionou: o link "Viagens" continua funcionando */
+const redirected = new Set<string>();
 
 export default function HomePage() {
   const invites = usePendingInvites();
@@ -17,6 +21,13 @@ export default function HomePage() {
   const decline = useDeclineInvite();
   const toast = useToast();
   const today = todayISO();
+
+  // durante a viagem, abrir o app cai direto no Modo Viagem do dia
+  const ongoing = trips?.find((t) => tripStatus(t.trip, today) === 'ongoing');
+  if (ongoing && !redirected.has(ongoing.trip.id)) {
+    redirected.add(ongoing.trip.id);
+    return <Navigate to={`/viagens/${ongoing.trip.id}/viagem`} replace />;
+  }
 
   return (
     <div className="grid gap-6">

@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { checkDays, DaysBlockedError, syncDays } from '@/features/itinerary/actions.ts';
 import { mutate } from '@/lib/db/mutate.ts';
 import { db } from '@/lib/db/schema.ts';
 import { syncEngine } from '@/lib/db/sync/engine.ts';
@@ -38,15 +39,29 @@ export async function createTrip(values: TripFormValues, uid: string): Promise<s
     role: 'owner',
     status: 'accepted',
     invited_by: uid,
+    share_position: true,
     created_at: now,
     updated_at: now,
     deleted_at: null,
   });
+  await syncDays(id, values); // um dia por data, id determinístico
   return id;
 }
 
+/**
+ * Salva a viagem e alinha os dias às datas. Encurtar com parada em dia que sairia lança
+ * `DaysBlockedError` antes de gravar qualquer coisa: a pessoa move ou exclui as paradas antes.
+ */
 export async function updateTrip(id: string, values: TripFormValues): Promise<void> {
+  const plan = await checkDays(id, values);
+  if (plan.blocked.length > 0) throw new DaysBlockedError(plan.blocked);
   await mutate.patch('trips', id, values);
+  await syncDays(id, values);
+}
+
+/** O toggle "compartilhar minha posição nesta viagem": só a própria linha (o banco confere). */
+export async function setSharePosition(memberId: string, value: boolean): Promise<void> {
+  await mutate.patch('trip_members', memberId, { share_position: value });
 }
 
 /** Soft delete; só o dono (o banco confere). A lápide volta pelo pull e some de todos os aparelhos. */
@@ -79,6 +94,7 @@ export async function inviteMember(tripId: string, email: string, uid: string): 
     role: 'member',
     status: 'pending',
     invited_by: uid,
+    share_position: true,
     created_at: now,
     updated_at: now,
     deleted_at: null,

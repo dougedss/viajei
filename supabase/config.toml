@@ -400,6 +400,13 @@ authorization_url_path = "/oauth/consent"
 # Allow dynamic client registration
 allow_dynamic_registration = false
 
+# Edge Functions. route-day roda como o usuário (verify_jwt ligado, sem chave secreta). O import map
+# é o deno.json da pasta functions, que a CLI encontra sozinha (a chave import_map está aposentada).
+[functions.route-day]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/route-day/index.ts"
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
