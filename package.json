@@ -28,11 +28,15 @@
     "remote:db-push": "set -a && . ./.env.local && set +a && supabase db push --remote",
     "remote:config-diff": "set -a && . ./.env.local && set +a && supabase config diff",
     "remote:config-push": "set -a && . ./.env.local && set +a && supabase config push",
-    "remote:functions-deploy": "set -a && . ./.env.local && set +a && supabase functions deploy route-day && supabase functions deploy send-notifications",
+    "remote:functions-deploy": "set -a && . ./.env.local && set +a && supabase functions deploy route-day && supabase functions deploy send-notifications && supabase functions deploy push-receiver",
     "remote:secrets-push": "set -a && . ./.env.local && set +a && supabase secrets set ORS_API_KEY=\"$ORS_API_KEY\" VAPID_PRIVATE_KEY=\"$VAPID_PRIVATE_KEY\" VAPID_SUBJECT=\"$VAPID_SUBJECT\"",
     "geo:build": "node scripts/geo/build-data.ts",
     "db:vault-local": "node scripts/db/vault-local.ts",
-    "vapid:generate": "node scripts/vapid/generate.ts"
+    "vapid:generate": "node scripts/vapid/generate.ts",
+    "lab": "node scripts/lab/run.ts",
+    "lab:local": "node scripts/lab/run.ts --target local",
+    "lab:setup": "set -a && . ./.env.local && set +a && node scripts/lab/setup.ts",
+    "lab:remote": "gh workflow run lab.yml --repo dougedss/viajei && echo \"Laboratório disparado no GitHub Actions: gh run list --workflow lab.yml --repo dougedss/viajei\""
   },
   "dependencies": {
     "@dnd-kit/core": "6.3.1",

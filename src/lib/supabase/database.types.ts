@@ -25,6 +25,60 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"lab_checks": {
+                  Row: {
+                    "data": NonNullable<Json>,"detail": string | null,"latency_ms": number | null,"run_id": string,"scenario": string,"status": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "data"?: NonNullable<Json>,"detail"?: string | null,"latency_ms"?: number | null,"run_id": string,"scenario": string,"status": string
+                  }
+                  Update: {
+                    "data"?: NonNullable<Json>,"detail"?: string | null,"latency_ms"?: number | null,"run_id"?: string,"scenario"?: string,"status"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "lab_checks_run_id_fkey"
+      columns: ["run_id"]
+isOneToOne: false
+      referencedRelation: "lab_runs"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"lab_inbox": {
+                  Row: {
+                    "body_b64": string | null,"content_encoding": string | null,"gone": boolean,"id": number,"inbox": string,"received_at": string,"size_bytes": number,"status_code": number,"subscription_id": string | null,"topic": string | null,"ttl": number | null,"urgency": string | null,"user_id": string,"vapid_aud": string | null,"vapid_error": string | null,"vapid_exp": string | null,"vapid_ok": boolean,"vapid_sub": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "body_b64"?: string | null,"content_encoding"?: string | null,"gone"?: boolean,"id"?: never,"inbox": string,"received_at"?: string,"size_bytes": number,"status_code": number,"subscription_id"?: string | null,"topic"?: string | null,"ttl"?: number | null,"urgency"?: string | null,"user_id": string,"vapid_aud"?: string | null,"vapid_error"?: string | null,"vapid_exp"?: string | null,"vapid_ok": boolean,"vapid_sub"?: string | null
+                  }
+                  Update: {
+                    "body_b64"?: string | null,"content_encoding"?: string | null,"gone"?: boolean,"id"?: never,"inbox"?: string,"received_at"?: string,"size_bytes"?: number,"status_code"?: number,"subscription_id"?: string | null,"topic"?: string | null,"ttl"?: number | null,"urgency"?: string | null,"user_id"?: string,"vapid_aud"?: string | null,"vapid_error"?: string | null,"vapid_exp"?: string | null,"vapid_ok"?: boolean,"vapid_sub"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "lab_inbox_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"lab_runs": {
+                  Row: {
+                    "commit_sha": string | null,"created_at": string,"diagnostics": NonNullable<Json>,"finished_at": string,"id": string,"runner_id": string,"source": string,"started_at": string,"status": string,"summary": string | null,"target": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "commit_sha"?: string | null,"created_at"?: string,"diagnostics"?: NonNullable<Json>,"finished_at": string,"id": string,"runner_id"?: string,"source": string,"started_at": string,"status": string,"summary"?: string | null,"target": string
+                  }
+                  Update: {
+                    "commit_sha"?: string | null,"created_at"?: string,"diagnostics"?: NonNullable<Json>,"finished_at"?: string,"id"?: string,"runner_id"?: string,"source"?: string,"started_at"?: string,"status"?: string,"summary"?: string | null,"target"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"notification_prefs": {
                   Row: {
                     "created_at": string,"enabled": boolean,"field_versions": NonNullable<Json>,"id": string,"kinds": NonNullable<Json>,"lead_minutes": number,"morning_time": string,"synced_at": string,"trip_id": string,"updated_at": string,"user_id": string
@@ -274,6 +328,15 @@ isOneToOne: false
                            },
 "edge_call":
 { Args: { "p_fn": string,"p_limit": number }; Returns: number
+                           },
+"lab_diagnostics":
+{ Args: { "p_since": string }; Returns: Json
+                           },
+"lab_grant":
+{ Args: { "p_email": string,"p_role": string }; Returns: string
+                           },
+"my_lab_role":
+{ Args: Record<PropertyKey, never>; Returns: string
                            },
 "my_pending_invites":
 { Args: Record<PropertyKey, never>; Returns: {

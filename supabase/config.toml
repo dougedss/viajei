@@ -415,6 +415,14 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/send-notifications/index.ts"
 
+# push-receiver é o push service de mentira do laboratório: recebe o que o send-notifications envia
+# para as assinaturas de laboratório. Push service não recebe chave do Supabase; quem autentica é o
+# próprio VAPID, conferido dentro da função. Endpoint desconhecido responde 404 e não grava nada.
+[functions.push-receiver]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/push-receiver/index.ts"
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

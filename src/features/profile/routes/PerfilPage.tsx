@@ -1,17 +1,19 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { PERSON_COLORS, PERSON_COLOR_KEYS, type PersonColor } from '@shared/constants.ts';
-import { Check } from 'lucide-react';
+import { Check, FlaskConical } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { Avatar } from '@/components/ui/Avatar.tsx';
 import { Button } from '@/components/ui/Button.tsx';
+import { ButtonLink } from '@/components/ui/ButtonLink.tsx';
 import { Card } from '@/components/ui/Card.tsx';
 import { Sheet } from '@/components/ui/Sheet.tsx';
 import { TextField } from '@/components/ui/TextField.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { nameSchema } from '@/lib/auth/schemas.ts';
 import { cx } from '@/lib/cx.ts';
+import { useLabRole } from '@/features/lab/queries.ts';
 import { useSession } from '@/lib/supabase/session.ts';
 import { signOutNow, trySignOut, useUpdateProfile } from '../actions.ts';
 import { asPersonColor, useProfile } from '../queries.ts';
@@ -22,6 +24,7 @@ type Values = z.infer<typeof schema>;
 export default function PerfilPage() {
   const { session } = useSession();
   const profile = useProfile();
+  const labRole = useLabRole();
   const update = useUpdateProfile();
   const toast = useToast();
   const [leaving, setLeaving] = useState(false);
@@ -118,6 +121,12 @@ export default function PerfilPage() {
           </Button>
         </form>
       </Card>
+      {labRole.data ? (
+        <ButtonLink to="/lab" variant="secondary">
+          <FlaskConical className="size-5" aria-hidden="true" />
+          Laboratório de testes
+        </ButtonLink>
+      ) : null}
       <Button variant="ghost" loading={leaving} onClick={signOut}>
         Sair
       </Button>

@@ -1,0 +1,51 @@
+name: Laboratório
+
+# O agente de testes da tela apagada: roda os cenários na produção, como dois aparelhos de mentira,
+# nas máquinas do GitHub (nada depende deste Mac), e grava o resultado em lab_runs (painel /lab do
+# app). Se algo falhar, o job fica vermelho e o GitHub avisa por e-mail. Todo dia às 3h07 de
+# Brasília (06:07 UTC; fora do minuto cheio, que o GitHub atrasa) e quando alguém pedir:
+# Actions → Laboratório → Run workflow, ou `pnpm lab:remote`.
+on:
+  schedule:
+    - cron: '7 6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: laboratorio
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  laboratorio:
+    name: avisos de ponta a ponta na produção
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Chromium (o navegador que faz o roteiro manual)
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Laboratório
+        run: pnpm lab --target production
+        env:
+          LAB_SECRET: ${{ secrets.LAB_SECRET }}
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: laboratorio
+          path: lab-artifacts
+          retention-days: 14

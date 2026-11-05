@@ -38,6 +38,21 @@ Sem navegador: `curl -X POST http://127.0.0.1:54321/functions/v1/send-notificati
 
 O Dexie (IndexedDB) é a fonte de verdade da tela. Toda escrita passa por `mutate` (`src/lib/db/mutate.ts`), que atualiza a linha local e enfileira a operação na `outbox` **na mesma transação**, com ou sem rede. O motor de sync (`src/lib/db/sync/engine.ts`) funde e ordena a fila, chama `sync_push`, depois `sync_pull_user` e `sync_pull` por viagem, e aplica o resultado numa transação; outros aparelhos recebem um aviso pelo Realtime e puxam. O chip no cabeçalho mostra "Sem conexão" ou "N pendentes" e abre a lista com tentar de novo e descartar.
 
+## Laboratório (testes automáticos na produção)
+
+Um agente que exercita a tela apagada de ponta a ponta, na produção, sem ninguém pegar no celular. Roda todo dia às 3h07 de Brasília nas máquinas do GitHub Actions (`.github/workflows/lab.yml`) e quando alguém pede (`pnpm lab:remote`, ou Actions → Laboratório → Run workflow). O resultado aparece no painel **`/lab`** do app (link no Perfil para quem tem acesso); se algo falhar, o job fica vermelho e o GitHub avisa por e-mail.
+
+Como funciona: o executor (`scripts/lab/run.ts`) entra como dois usuários de laboratório (`lab-a@viajei.invalid`, `lab-b@viajei.invalid`), monta quatro viagens de hoje com horários a poucos minutos pelas mesmas RPCs do app, e assina o push com chaves geradas na hora. Os endpoints apontam para a Edge Function `push-receiver`, um push service de mentira que confere o VAPID como o FCM ou a Apple confeririam e guarda a mensagem cifrada. O cron de verdade chama o `send-notifications` de verdade; o executor decifra o que chegou (RFC 8291) e confere os cenários do servidor: preparo, entrega e atraso, "sair em" e "hora de sair", fechamento, briefing, time, avisos desligados, repetição, aparelho que saiu (410 → `failed_at`), VAPID e payload.
+
+Em paralelo, um Chromium (perfil de Android) faz o roteiro manual no app publicado (`scripts/lab/app.ts`): entra, abre o "Agora", ativa os avisos pela folha, fecha o app, recebe no service worker o "Hora de sair" que o servidor mandou, toca em **Partiu!** na notificação (a saída chega ao servidor com o app fechado), reabre, vê "Desde a última vez", deixa a posição no destino marcar **Chegamos!**, liga e desliga o modo painel e baixa o `.ics`. Só o registro no FCM e o dedo na notificação são simulados (D55). Tudo fica nas viagens dos usuários de laboratório; nada toca as viagens reais nem os seus aparelhos. Continua manual: a entrega pela Apple e pelo FCM, o selo no ícone, Wake Lock e GPS de verdade.
+
+| Comando                                                         | O que faz                                                                                                            |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `pnpm lab`                                                      | roda o laboratório contra a produção daqui (lê `~/.config/viajei/lab-secret`)                                        |
+| `pnpm lab:remote`                                               | dispara o agente no GitHub Actions agora                                                                             |
+| `pnpm lab:setup --target production --viewer <e-mail> --github` | uma vez: cria os usuários de laboratório, dá acesso ao painel e grava `LAB_SECRET` nos secrets do GitHub             |
+| `pnpm lab:local`                                                | o mesmo contra o Supabase local (precisa de `functions:serve` com VAPID; afrouxa o check de https só no banco local) |
+
 ## Scripts
 
 | Comando                                          | O que faz                                                                           |

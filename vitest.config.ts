@@ -11,7 +11,11 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     globals: false,
-    include: ['src/**/*.test.{ts,tsx}', 'supabase/functions/_shared/**/*.test.ts'],
+    include: [
+      'src/**/*.test.{ts,tsx}',
+      'supabase/functions/_shared/**/*.test.ts',
+      'scripts/**/*.test.ts',
+    ],
     setupFiles: ['src/test/setup.ts'],
     coverage: {
       provider: 'v8',

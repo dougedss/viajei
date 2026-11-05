@@ -75,6 +75,10 @@ export const router = createBrowserRouter([
                 lazy: page(() => import('@/features/trips/routes/MembrosPage.tsx')),
               },
               {
+                path: '/lab',
+                lazy: page(() => import('@/features/lab/routes/LabPage.tsx')),
+              },
+              {
                 path: '/perfil',
                 lazy: page(() => import('@/features/profile/routes/PerfilPage.tsx')),
               },

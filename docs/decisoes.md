@@ -254,3 +254,40 @@ Um registro curto por decisão não óbvia: contexto, decisão, consequência. E
 **Contexto.** Encontrado pelo e2e desta fase, sob carga: um ciclo de sync já em andamento (na fase de pull) via a viagem recém-criada no Dexie e chamava `sync_pull` para ela antes de o push acontecer; o servidor respondia "não é membro" (`revoked`) e o aparelho apagava a viagem e a operação pendente, com o aviso "Você saiu de…".
 **Decisão.** `tripsKnownToServer`: o motor só puxa as viagens locais já carimbadas pelo servidor (`synced_at`) e as participações que o pull do usuário acabou de confirmar. Uma viagem criada aqui e ainda não enviada espera o próprio push.
 **Consequência.** Nenhuma viagem some antes de existir no servidor; `revoked` volta a significar só o que diz.
+
+## Laboratório de testes automáticos (05/11/2026)
+
+### D50 · Um agente que testa a produção sozinho, no lugar do roteiro manual
+**Contexto.** O teste manual da fase 4 dependia de alguém seguir o roteiro com o celular na mão; o Douglas pediu algo que teste sem depender de ninguém e um painel para acompanhar.
+**Decisão.** Um laboratório determinístico (um script Node, não um modelo de linguagem decidindo o que olhar) que faz o papel de dois aparelhos na produção: monta viagens de hoje pelas mesmas RPCs do app, espera o cron real e confere o que chegou em onze cenários. Roda todo dia às 3h07 de Brasília no GitHub Actions (nenhuma máquina nossa para manter) e sob demanda; grava em `lab_runs`/`lab_checks`; o painel `/lab` mostra estado, histórico por cenário e o diagnóstico do servidor quando falha. Migration `0006_laboratorio`; as seguintes renumeram (0007 reservas, anexos e memórias · 0008 listas, contatos e gastos · 0009 progressão · 0010 importação).
+**Consequência.** A cadeia inteira do servidor (cron, Vault, pg_net, Edge Function, VAPID, cifra, dedupe, `failed_at`, RLS das preferências) é verificada todo dia, sem celular. O que só um aparelho prova (entrega pela Apple e pelo FCM, o service worker, Wake Lock, GPS) continua no roteiro manual.
+
+### D51 · `push-receiver`: um push service de mentira que confere o VAPID
+**Contexto.** Para ver o que o servidor manda é preciso receber como um push service recebe; os push services reais não deixam ler o que entregaram.
+**Decisão.** Edge Function sem JWT da plataforma que aceita só POSTs com JWT VAPID assinado pela nossa chave (ES256, `aud` = origem do endpoint, `exp` em até 24 h, `sub` mailto/https), responde 201, 410 (endpoint `/gone`), 413 (acima de 4096 bytes) ou 401, e guarda a mensagem ainda cifrada em `lab_inbox`, legível só pelo dono da assinatura. Endpoint desconhecido responde 404 sem gravar; a caixa guarda só a última semana. A validação mora em `_shared/vapid-jwt.ts`, testada pelo Vitest.
+**Consequência.** O VAPID de produção é provado a cada execução; ninguém consegue escrever na caixa de entrada sem a nossa chave privada.
+
+### D52 · O executor nunca tem a chave secreta
+**Contexto.** Um agente agendado com a chave secreta do projeto seria o segredo mais exposto do sistema.
+**Decisão.** O executor entra como dois usuários de laboratório, com senhas derivadas de um único `LAB_SECRET` (HMAC por e-mail), e faz tudo com RLS: escreve pelo `sync_push`, lê a própria caixa de entrada, grava resultados pela policy de executor e lê o diagnóstico por `lab_diagnostics` (security definer, só para quem está em `private.lab_access`). A chave secreta aparece só no `pnpm lab:setup`, lida na hora pela CLI e mantida na memória do processo. `LAB_SECRET` fica em `~/.config/viajei/lab-secret` (0600) e nos secrets do GitHub; nenhum valor é impresso. Os e-mails usam `.invalid` (RFC 2606): nada sai para eles.
+**Consequência.** Vazar o `LAB_SECRET` dá acesso só às viagens de laboratório; o resto do banco continua protegido pela RLS.
+
+### D53 · Viagens fixas, paradas novas, tudo em repouso entre execuções
+**Contexto.** Rodar todo dia não pode encher o banco nem disparar avisos fora das execuções.
+**Decisão.** Quatro viagens fixas por id determinístico (`v5(lab-a, 'lab:<cenário>')`), redatadas para hoje a cada execução; dias de outras datas e paradas antigas recebem `deleted_at`; as paradas são novas a cada vez (o aviso do time sai uma vez por parada, D43). Cada viagem liga só os tipos do seu cenário. No fim, preferências desligadas e assinaturas apagadas, mesmo se a execução falhar. O dedupe é medido pelo que chegou, e o atraso conta do primeiro cron em que os dados já existiam.
+**Consequência.** Algumas linhas soft-deleted por dia (o expurgo da fase 12 as leva); nenhum aviso de laboratório entre uma execução e outra.
+
+### D54 · O laboratório local afrouxa o check de https só no banco local
+**Contexto.** Da edge-runtime local, o receptor só é alcançável por `http://host.docker.internal`, e `push_subscriptions.endpoint` exige https, como deve ser em produção.
+**Decisão.** `pnpm lab:local` troca esse check por um que aceita http, apenas no container local, com guarda de alvo; `pnpm db:reset` devolve o original. Nada muda no schema de produção.
+**Consequência.** O laboratório se testa no local sem enfraquecer a regra de produção; o alvo normal é a produção.
+
+### D55 · O roteiro manual, simulado num navegador de verdade
+**Contexto.** O Douglas quer que o laboratório teste também a navegação, como o teste manual faria, e não só o servidor.
+**Decisão.** Depois do preparo, o executor abre o app publicado num Chromium (perfil de Pixel 7, pt-BR, fuso de São Paulo, permissões de notificação e posição) e faz o roteiro: entra, abre o "Agora", ativa os avisos pela folha na segunda abertura, confere `/avisos`; fecha o app; entrega ao service worker o "Hora de sair" que o servidor mandou para a assinatura do navegador (DevTools Protocol, `ServiceWorker.deliverPushMessage`), confere a notificação com Partiu!, toca em Partiu! e confere a saída no servidor; reabre, vê "Desde a última vez", deixa a posição no destino marcar Chegamos! e confere no servidor; liga e desliga o modo painel e baixa o `.ics`. Duas peças são substituídas porque não existem num robô: o registro no serviço de push do navegador (`PushManager.subscribe` devolve uma assinatura apontando para o receptor do laboratório) e o dedo (o `notificationclick` é disparado dentro do service worker de verdade, com a notificação que ele mesmo mostrou). Cada passo que falha deixa um print, guardado como artefato do GitHub.
+**Consequência.** Folha de avisos, `subscribePush`, o service worker (push, clique, `mutate` e envio da fila com o app fechado), o catch-up, o "Desde a última vez", o modo painel e o `.ics` passam a ser testados todo dia na produção. Continuam só manuais: a entrega pela Apple e pelo FCM, o selo no ícone, Wake Lock e GPS de verdade.
+
+### D56 · Reescrita de SPA na Vercel (bug encontrado pelo laboratório)
+**Contexto.** A primeira execução do navegador abriu `/entrar` direto e recebeu 404 da Vercel. Sem `vercel.json`, só `/` servia o app; as outras rotas funcionavam porque, depois da primeira visita, o service worker responde a toda navegação com o `index.html` do precache. Num aparelho novo, links de e-mail (confirmação, nova senha), recarregar uma tela interna e o toque na notificação do iPhone quando o Safari removeu o service worker davam 404.
+**Decisão.** `vercel.json` com `rewrites` de `/(.*)` para `/index.html` (a Vercel procura o arquivo estático antes de reescrever, então assets e `sw.js` seguem iguais) e `Cache-Control: no-cache` no `sw.js`, para versão nova do service worker nunca ficar presa em cache.
+**Consequência.** Qualquer rota abre do zero; o `navigate` do Declarative Web Push funciona mesmo sem service worker.
