@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './database.types.ts';
-import { idbStorage } from './idb-storage.ts';
+import { AUTH_STORAGE_KEY, idbStorage } from './idb-storage.ts';
 
 const url = import.meta.env.VITE_SUPABASE_URL;
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -8,8 +8,7 @@ if (!url || !key) {
   throw new Error('Defina VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY (veja .env.example).');
 }
 
-/** Chave da sessão no IndexedDB; a mesma que o service worker lê (fase 4). */
-export const AUTH_STORAGE_KEY = 'viajei-auth';
+export { AUTH_STORAGE_KEY };
 
 /**
  * Um único client para o app. Só a chave publicável vai para o bundle; a RLS faz o resto.

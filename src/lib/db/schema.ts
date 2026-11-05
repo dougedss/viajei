@@ -19,6 +19,7 @@ export type Profile = LocalRow<Tables['profiles']['Row']>;
 export type TripDay = LocalRow<Tables['trip_days']['Row']>;
 export type Stop = LocalRow<Tables['stops']['Row']>;
 export type TripTrack = LocalRow<Tables['trip_tracks']['Row']>;
+export type NotificationPref = LocalRow<Tables['notification_prefs']['Row']>;
 
 export type RowOf<T extends SyncTable> = {
   trips: Trip;
@@ -26,6 +27,7 @@ export type RowOf<T extends SyncTable> = {
   trip_days: TripDay;
   stops: Stop;
   trip_tracks: TripTrack;
+  notification_prefs: NotificationPref;
 }[T];
 
 export type OutboxState = 'pending' | 'failed';
@@ -72,6 +74,24 @@ export type DayRoute = {
   elevation: [number, number][];
 };
 
+/**
+ * Onde este aparelho viu a maquete pela última vez, por dia: base do catch-up ("Desde a última vez")
+ * e do replay da fase 5. Só neste aparelho, nunca sincronizado.
+ */
+export type TravelState = {
+  trip_day_id: string;
+  trip_id: string;
+  /** fração percorrida da rota do dia (0 a 1); null sem rota ou sem posição */
+  fraction: number | null;
+  /** id da última parada concluída: onde o carro estava */
+  at: string | null;
+  done_stop_ids: string[];
+  skipped_stop_ids: string[];
+  /** ids de TravelEvent já mostrados (ou animados) neste aparelho */
+  seen_event_ids: string[];
+  updated_at: string;
+};
+
 export type GeocodeResult = { name: string; address: string; lat: number; lng: number };
 /** Cache das buscas de endereço (Nominatim), por consulta normalizada. */
 export type GeocodeEntry = { query: string; results: GeocodeResult[]; fetched_at: string };
@@ -90,7 +110,9 @@ export class ViajeiDb extends Dexie {
   trip_days!: EntityTable<TripDay, 'id'>;
   stops!: EntityTable<Stop, 'id'>;
   trip_tracks!: EntityTable<TripTrack, 'id'>;
+  notification_prefs!: EntityTable<NotificationPref, 'id'>;
   routes!: EntityTable<DayRoute, 'trip_day_id'>;
+  travel_state!: EntityTable<TravelState, 'trip_day_id'>;
   geocode!: EntityTable<GeocodeEntry, 'query'>;
   outbox!: EntityTable<OutboxOp, 'seq', OutboxInsert>;
   sync_state!: EntityTable<SyncStateEntry, 'key'>;

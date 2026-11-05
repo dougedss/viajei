@@ -172,3 +172,85 @@ Um registro curto por decisão não óbvia: contexto, decisão, consequência. E
 **Contexto.** Durante a viagem, abrir o app tem de cair no "Agora"; mas o link "Viagens" precisa continuar funcionando.
 **Decisão.** `HomePage` redireciona quando há viagem em andamento e guarda o id num `Set` de módulo: na mesma abertura, não redireciona de novo.
 **Consequência.** Os testes e2e criam viagens com datas sempre no futuro (30 dias à frente), para o redirecionamento nunca pegar a suíte.
+
+## Fase 4 · Uso com a tela apagada (05/11/2026)
+
+### D34 · Payload único: declarativo (Safari) e imperativo (Chrome)
+**Contexto.** O iOS 18.4+ lê o Declarative Web Push (`web_push: 8030`, `notification: { title, body, navigate, app_badge, … }`) sem acordar JavaScript; o Chrome entrega o JSON ao service worker e só ele mostra botões de ação. O post da WebKit confirma que, com SW instalado, o `push` ainda é despachado e a parte declarativa vira fallback.
+**Decisão.** Um só JSON por aviso: a parte declarativa com `navigate` absoluto e `app_badge` como string (`"1"`, como no exemplo da WebKit), mais `actions` nossas (`departed` → Partiu!, `arrived` → Chegamos!). O SW sempre monta a notificação no `push` (Chrome precisa; no Safari a declarativa segura se o SW falhar ou tiver sido removido pelo ITP). `tag = stop:<id>` para "hora de sair" substituir "sair em 15 min"; `topic` do push service com o mesmo id, para a substituição valer também com o aparelho sem sinal.
+**Consequência.** Um código de servidor para as duas plataformas; `_shared/notifications.ts` é a única fonte do texto e é testada pelo Vitest tipo a tipo.
+
+### D35 · `claim_due_notifications`: o dedupe é um insert atômico
+**Contexto.** O delta previa `due_notifications` + insert feito pela Edge Function; duas execuções sobrepostas do cron poderiam enviar duas vezes, e um crash da função engoliria o minuto.
+**Decisão.** `claim_due_notifications(p_now)` insere em `notifications_sent` tudo o que venceu com `on conflict do nothing` e devolve só o que acabou de reservar, com as assinaturas vivas da pessoa; linhas `queued` sem `sent_at` há mais de 2 min voltam até `attempts = 3`. Os fatos ficam congelados em `data`, para a retentativa escrever o mesmo texto. `due_notifications` mantém o `not exists` para o cron não chamar a função nos 9 minutos seguintes a um envio.
+**Consequência.** Nenhum aviso sai duas vezes; `security definer` em `public` com execute só para `service_role`, porque o PostgREST só expõe `public`.
+
+### D36 · Janela de 10 minutos
+**Contexto.** Com 2 min, um minuto perdido pelo cron (ou pela função) perderia o aviso.
+**Decisão.** `scheduled_at` em `(t1 − 10 min, t1]`. O dedupe impede repetir; acima de 10 min o aviso é velho e não sai.
+**Consequência.** Tolerância a atraso sem risco de "hora de sair" chegar meia hora depois.
+
+### D37 · `enable_user_sync` e a policy restritiva de membro
+**Contexto.** `notification_prefs` é a primeira tabela do outbox com escopo `user`; a fase 9 traz conquistas e XP.
+**Decisão.** Procedimento irmão do `enable_trip_sync`: três policies "só as minhas" (`user_id = auth.uid()`), trigger `b_sync`, índice `(user_id, synced_at)`, registro com escopo `user`, sem broadcast. A exigência "só de viagem em que estou" entra como policy **restritiva** de insert (o `trip_id` é imutável).
+**Consequência.** Pelo D16, o `sync_pull` da viagem também devolve a própria linha de preferências (redundância inofensiva); outros aparelhos da mesma pessoa recebem a mudança no próximo pull do usuário.
+
+### D38 · `due_notifications` devolve fatos; o texto nasce no TypeScript
+**Contexto.** O delta redigia título e corpo em SQL.
+**Decisão.** A função devolve `data jsonb` (nome da parada, horário, deslocamento, lead, dia N de M, quem marcou…) e `_shared/notifications.ts` escreve o pt-BR. A conta do "sair às" é a do `dayState` (D29), com `at` = última concluída por `position` e `next` = primeira sem `done_at` e sem `skipped`; o teste de uma linha composta é `(st.next).id is not null`, porque `is not null` numa linha exige todos os campos.
+**Consequência.** A fixture gêmea (`src/test/fixtures/dia-gemeo.ts` e `supabase/tests/07_notificacoes.test.sql`) confere os mesmos horários nos dois lados; redigir e traduzir é trabalho de uma função pura.
+
+### D39 · `@negrel/webpush` e a chave privada em PKCS#8
+**Contexto.** `npm:web-push` depende do `crypto` do Node; a edge-runtime é Deno.
+**Decisão.** `jsr:@negrel/webpush@0.5.0`, só SubtleCrypto (RFC 8291/8292), testado na edge-runtime local. `VAPID_PRIVATE_KEY` em PKCS#8 base64url: o formato padrão de chave privada, que carrega o ponto público dentro; `_shared/vapid.ts` deriva o JWK e a pública raw, e o script `vapid:generate` confere que a pública derivada é a mesma que vai para o client.
+**Consequência.** Uma variável secreta só no servidor, sem polyfill; o par é gerado uma vez e nunca trocado.
+
+### D40 · Cron condicionado e Vault local por script
+**Contexto.** Um `net.http_post` por minuto em dias sem viagem seria ruído; o `supabase db reset` apaga o Vault.
+**Decisão.** O job roda a cada minuto, mas só chama a função `where private.has_due_notifications(now())`. URL e chave secreta vêm do Vault (`viajei_project_url`, `viajei_secret_key`), criadas uma vez pelo painel no hospedado e, no local, por `pnpm db:vault-local` (encadeado no `db:reset`), que grava `http://host.docker.internal:54321` e a `SECRET_KEY` do `supabase status` pelo psql do container, com o valor no stdin.
+**Consequência.** Zero chamadas em dias sem viagem; o ambiente local tem o mesmo caminho cron → pg_net → Kong → edge-runtime que a produção.
+
+### D41 · O service worker escreve pela mesma `mutate`
+**Contexto.** Partiu! e Chegamos! pelo botão da notificação, com o app fechado, têm de produzir exatamente o que a tela produz.
+**Decisão.** `src/sw/actions.ts` abre o Dexie, recalcula o `dayState`, confere que a parada ainda é a próxima e aplica `depart`/`arrive` (a mesma `mutate`, linha e outbox na mesma transação); depois tenta `pushOutbox` com um client supabase-js próprio sobre a sessão em IndexedDB, sob o Web Lock `viajei:sync` do motor. Estado velho (alguém marcou antes) não marca: abre o "Agora". `isNetworkError` saiu de `connectivity.ts` para `network-error.ts` para o SW não puxar `window` nem React.
+**Consequência.** `sw.js` com Dexie, supabase-js e zod: 468 KB minificado, 131 KB gzip (medido no build), sem React. O Dexie propaga o `liveQuery` para a aba aberta.
+
+### D42 · `push_subscriptions.origin`
+**Contexto.** O `navigate` declarativo tem de ser uma URL absoluta, e produção, previews da Vercel e `localhost` compartilham o projeto Supabase.
+**Decisão.** A assinatura grava a origem do app que assinou; a Edge Function monta o `navigate` por assinatura.
+**Consequência.** Nenhuma variável de URL no servidor; cada aparelho volta para a origem que conhece.
+
+### D43 · `team_arrived`: um aviso por parada e destinatário
+**Contexto.** `synced_at` muda em qualquer edição da parada (observações de uma parada já concluída dispararia "Ana chegou" de novo); desfazer e marcar de novo também repetiria.
+**Decisão.** Para esse tipo, o `not exists` ignora o minuto. O verbo depende do nó: "partiu" em origem e deslocamento, "chegou" no resto; sem artigo ("Ana chegou" · "Casa Valduga · 14:02"), porque o artigo não se deduz do nome.
+**Consequência.** Um desfazer em 10 s pode deixar um aviso a mais no time; nunca um aviso repetido.
+
+### D44 · `.ics` à mão
+**Contexto.** RFC 5545 é texto; uma dependência só para isso não vale.
+**Decisão.** `ics.ts` puro: `VTIMEZONE` de um bloco `STANDARD` (−03:00, o Brasil não tem horário de verão desde 2019), um `VEVENT` por parada com horário (`DTEND` = próxima ou +1 h, `GEO`, `LOCATION`, descrição com fechamento, observações e link do Maps), `VALARM` com `TRIGGER` relativo = −(deslocamento da anterior + 15 min), linhas dobradas em 75 octetos sem partir caractere, CRLF. Entrega por `navigator.share({ files })` quando há folha, senão download.
+**Consequência.** Funciona offline e sem permissão de push; o snapshot do dia 1 do seed trava o formato.
+
+### D45 · `travel_state` e `eventsSince`: o contrato do replay (fase 5)
+**Contexto.** O carrinho da fase 5 anda do ponto antigo ao atual disparando os eventos do caminho.
+**Decisão.** Por dia e aparelho: `{ trip_day_id, trip_id, fraction, at, done_stop_ids, skipped_stop_ids, seen_event_ids, updated_at }`, salvo ao ir para o fundo, a cada 30 s visível e ao sair da tela. `eventsSince(prev, stops, uid, passed)` produz `TravelEvent { id: 'kind:stopId', kind: arrived | departed | skipped | team_arrived | passed, stop_id, stop_name, at, by }`; sem `prev` não há "desde a última vez". Nesta fase a lista vira o card "Desde a última vez", que é o fallback de `prefers-reduced-motion`.
+**Consequência.** A fase 5 lê `prev.fraction → position.fraction` e a lista, sem recalcular nada.
+
+### D46 · Trilha: um escritor por linha
+**Contexto.** `trip_tracks` tem id `v5(trip_day_id, user_id)`; dois aparelhos da mesma pessoa escreveriam a mesma linha.
+**Decisão.** `insert` na primeira vez, `patch` de `points` depois (a outbox funde); os pontos do catch-up entram na mesma trilha. Entre aparelhos da mesma pessoa vence a última escrita da coluna (LWW): modo painel é coisa de um celular por vez.
+**Consequência.** Formato `[lng, lat, epoch_s]`, 50 m ou 30 s por ponto, Douglas-Peucker 25 m, gravação a cada 60 s ou 20 pontos.
+
+### D47 · Modo painel: Partiu! só depois de ver o carro na parada
+**Contexto.** Um GPS que começa longe da parada "sairia" dela na primeira leitura.
+**Decisão.** `panelDecision` só marca saída se alguma leitura dos últimos 15 min esteve a 150 m da parada de origem e a última está a mais de 300 m; chegada pela presença de 3 min (`arrivalAt`); parado 10 min dentro de 100 m → leituras de baixa precisão a cada 60 s. Uma mesma marcação automática não se repete em 10 min (desfazer não dispara de novo).
+**Consequência.** Nada que premie velocidade, nada que exija interação de quem dirige; "Desligar" grande e sem animação.
+
+### D48 · Permissões no momento certo e o usuário descartável do e2e
+**Contexto.** Permissão de push pedida fora de contexto é negada e não volta; e o D33 (redirecionamento com viagem de hoje) quebraria o e2e do catch-up com os usuários do seed.
+**Decisão.** Folha "Avisos da viagem" uma vez por aparelho e viagem (`sync_state['push:asked:<tripId>']`), só com viagem em até 7 dias, nunca na primeira abertura do app (`app:first-open`); posição pedida por uma frase dentro do Modo Viagem, lembrada por 24 h ao recusar. O e2e de dois contextos cria um usuário confirmado pela Admin API do Supabase local (`e2e/helpers/users.ts`) e uma viagem de hoje só dele.
+**Consequência.** Os testes dos usuários do seed continuam caindo em "Suas viagens"; o único teste que precisa do Modo Viagem ativo não toca neles.
+
+### D49 · O aparelho só pergunta ao servidor por viagens que ele já conhece
+**Contexto.** Encontrado pelo e2e desta fase, sob carga: um ciclo de sync já em andamento (na fase de pull) via a viagem recém-criada no Dexie e chamava `sync_pull` para ela antes de o push acontecer; o servidor respondia "não é membro" (`revoked`) e o aparelho apagava a viagem e a operação pendente, com o aviso "Você saiu de…".
+**Decisão.** `tripsKnownToServer`: o motor só puxa as viagens locais já carimbadas pelo servidor (`synced_at`) e as participações que o pull do usuário acabou de confirmar. Uma viagem criada aqui e ainda não enviada espera o próprio push.
+**Consequência.** Nenhuma viagem some antes de existir no servidor; `revoked` volta a significar só o que diz.

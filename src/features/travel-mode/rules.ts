@@ -1,3 +1,4 @@
+import { isDepartureKind } from '@shared/constants.ts';
 import { activeStops } from '@/features/itinerary/rules.ts';
 import type { Stop, TripDay } from '@/lib/db/schema.ts';
 import { countdownState, leaveAt, wallTime, type CountdownState } from '@/lib/time/index.ts';
@@ -43,7 +44,7 @@ export type DayState = {
 
 /** Origem e deslocamento são nós de saída: "Partiu!" é a ação deles, nunca "Chegamos!". */
 export function isDepartureNode(stop: Pick<Stop, 'kind'>): boolean {
-  return stop.kind === 'origin' || stop.kind === 'transit';
+  return isDepartureKind(stop.kind);
 }
 
 export const CLOSING_SOON_MINUTES = 60;

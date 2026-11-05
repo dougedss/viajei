@@ -7,7 +7,7 @@ import {
   TRIP_SCOPED_TABLES,
   type SyncTable,
 } from '../registry.ts';
-import { syncKeys, type Profile, type RowOf, type ViajeiDb } from '../schema.ts';
+import { syncKeys, type Profile, type RowOf, type Trip, type ViajeiDb } from '../schema.ts';
 
 /** O envelope do pull é validado; as linhas em si vêm do nosso banco, com os tipos gerados. */
 const rowSchema = z.looseObject({ id: z.string(), deleted_at: z.string().nullable().optional() });
@@ -135,6 +135,20 @@ export async function applyTripPull(
 }
 
 export type MembershipChange = { accepted: string[]; left: string[] };
+
+/**
+ * As viagens que vale puxar: as locais que o servidor já carimbou (`synced_at`) e as participações
+ * que o pull do usuário acabou de confirmar. Uma viagem criada neste aparelho e ainda não enviada
+ * fica de fora: o servidor responderia "não é membro" e o aparelho a apagaria como `revoked`
+ * antes do push (D49).
+ */
+export function tripsKnownToServer(
+  local: readonly Pick<Trip, 'id' | 'deleted_at' | 'synced_at'>[],
+  accepted: readonly string[],
+): string[] {
+  const known = local.filter((t) => t.deleted_at === null && t.synced_at !== null).map((t) => t.id);
+  return [...new Set([...known, ...accepted])];
+}
 
 /**
  * Aplica o pull do usuário: as próprias participações (é por elas que um aparelho novo descobre as

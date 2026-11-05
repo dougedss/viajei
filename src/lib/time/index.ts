@@ -59,15 +59,8 @@ export function formatClock(d: Date): string {
   return format(d, 'HH:mm');
 }
 
-/** "6h30", "1h", "35 min", "0 min". Negativos ganham o sinal. */
-export function formatDuration(minutes: number): string {
-  const sign = minutes < 0 ? '-' : '';
-  const abs = Math.abs(Math.round(minutes));
-  const h = Math.floor(abs / 60);
-  const m = abs % 60;
-  if (h === 0) return `${sign}${m} min`;
-  return m === 0 ? `${sign}${h}h` : `${sign}${h}h${String(m).padStart(2, '0')}`;
-}
+// formatDuration vive em _shared/format.ts: o texto dos avisos (servidor) e o "Agora" usam a mesma função
+export { formatDuration } from '@shared/format.ts';
 
 const WEEKDAYS_SHORT = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'] as const;
 

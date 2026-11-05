@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/ui/PageHeader.tsx';
 import { Sheet } from '@/components/ui/Sheet.tsx';
 import { TextField } from '@/components/ui/TextField.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
+import { CalendarExport } from '@/features/notifications/components/CalendarExport.tsx';
 import { useTrip } from '@/features/trips/queries.ts';
 import type { Stop, TripDay } from '@/lib/db/schema.ts';
 import { formatDayLong, formatDayShort } from '@/lib/time/index.ts';
@@ -75,6 +76,11 @@ export default function DiaPage() {
           <span className="text-[15px] text-ink-2">
             {formatDayLong(day.date)} · dia {index + 1} de {days.length}
           </span>
+        }
+        actions={
+          stops.some((s) => s.time) ? (
+            <CalendarExport trip={trip} day={day} stops={stops} size="sm" label="Calendário" />
+          ) : undefined
         }
       />
 

@@ -21,16 +21,18 @@
     "test:e2e": "playwright test",
     "db:start": "supabase start",
     "db:stop": "supabase stop",
-    "db:reset": "supabase db reset",
+    "db:reset": "supabase db reset && node scripts/db/vault-local.ts",
     "db:test": "supabase test db",
     "db:types": "supabase gen types typescript --local --schema public > src/lib/supabase/database.types.ts && prettier --write src/lib/supabase/database.types.ts",
     "functions:serve": "supabase functions serve",
     "remote:db-push": "set -a && . ./.env.local && set +a && supabase db push --remote",
     "remote:config-diff": "set -a && . ./.env.local && set +a && supabase config diff",
     "remote:config-push": "set -a && . ./.env.local && set +a && supabase config push",
-    "remote:functions-deploy": "set -a && . ./.env.local && set +a && supabase functions deploy route-day",
-    "remote:secrets-push": "set -a && . ./.env.local && set +a && supabase secrets set ORS_API_KEY=\"$ORS_API_KEY\"",
-    "geo:build": "node scripts/geo/build-data.ts"
+    "remote:functions-deploy": "set -a && . ./.env.local && set +a && supabase functions deploy route-day && supabase functions deploy send-notifications",
+    "remote:secrets-push": "set -a && . ./.env.local && set +a && supabase secrets set ORS_API_KEY=\"$ORS_API_KEY\" VAPID_PRIVATE_KEY=\"$VAPID_PRIVATE_KEY\" VAPID_SUBJECT=\"$VAPID_SUBJECT\"",
+    "geo:build": "node scripts/geo/build-data.ts",
+    "db:vault-local": "node scripts/db/vault-local.ts",
+    "vapid:generate": "node scripts/vapid/generate.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "6.3.1",

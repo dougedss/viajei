@@ -13,6 +13,23 @@ export const COLUMN_LABELS: Record<string, string> = {
   car_color: 'cor do carro',
   car_accessories: 'acessórios',
   invited_email: 'convite',
+  title: 'título',
+  time: 'horário',
+  closes_at: 'fechamento',
+  address: 'endereço',
+  position: 'ordem',
+  kind: 'tipo',
+  travel_minutes_to_next: 'deslocamento',
+  departed_at: 'saída',
+  done_at: 'chegada',
+  done_by: 'quem marcou',
+  skipped: 'pulada',
+  points: 'trilha',
+  enabled: 'avisos',
+  lead_minutes: 'antecedência',
+  kinds: 'tipos de aviso',
+  morning_time: 'hora do briefing',
+  share_position: 'compartilhar posição',
 };
 
 export function describeColumns(columns: readonly string[]): string {
@@ -29,6 +46,26 @@ export function describeOp(op: OutboxOp, ctx: OpContext): OpDescription {
     if (op.op === 'upsert') return { title: 'Viagem nova', detail: trip };
     if (op.values.deleted_at != null) return { title: 'Exclusão da viagem', detail: trip };
     return { title: `Viagem · ${trip}`, detail: describeColumns(Object.keys(op.values)) };
+  }
+  if (op.table === 'trip_days') {
+    if (op.op === 'upsert') return { title: 'Dia novo', detail: trip };
+    return { title: `Dia · ${trip}`, detail: describeColumns(Object.keys(op.values)) };
+  }
+  if (op.table === 'stops') {
+    const name = typeof op.values.name === 'string' ? op.values.name : 'parada';
+    if (op.op === 'upsert') return { title: 'Parada nova', detail: `${name} · ${trip}` };
+    if (op.values.deleted_at != null) return { title: 'Exclusão de parada', detail: trip };
+    if ('done_at' in op.values) {
+      return { title: op.values.done_at == null ? 'Chegada desfeita' : 'Chegamos!', detail: trip };
+    }
+    if ('departed_at' in op.values) {
+      return { title: op.values.departed_at == null ? 'Saída desfeita' : 'Partiu!', detail: trip };
+    }
+    return { title: `Parada · ${trip}`, detail: describeColumns(Object.keys(op.values)) };
+  }
+  if (op.table === 'trip_tracks') return { title: 'Trilha gravada', detail: trip };
+  if (op.table === 'notification_prefs') {
+    return { title: `Avisos · ${trip}`, detail: describeColumns(Object.keys(op.values)) };
   }
   const who =
     ctx.memberName ??

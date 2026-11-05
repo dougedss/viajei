@@ -25,6 +25,58 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"notification_prefs": {
+                  Row: {
+                    "created_at": string,"enabled": boolean,"field_versions": NonNullable<Json>,"id": string,"kinds": NonNullable<Json>,"lead_minutes": number,"morning_time": string,"synced_at": string,"trip_id": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"enabled"?: boolean,"field_versions"?: NonNullable<Json>,"id": string,"kinds"?: NonNullable<Json>,"lead_minutes"?: number,"morning_time"?: string,"synced_at": string,"trip_id": string,"updated_at": string,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"enabled"?: boolean,"field_versions"?: NonNullable<Json>,"id"?: string,"kinds"?: NonNullable<Json>,"lead_minutes"?: number,"morning_time"?: string,"synced_at"?: string,"trip_id"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "notification_prefs_trip_id_fkey"
+      columns: ["trip_id"]
+isOneToOne: false
+      referencedRelation: "trips"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "notification_prefs_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"notifications_sent": {
+                  Row: {
+                    "attempts": number,"claimed_at": string | null,"created_at": string,"data": NonNullable<Json>,"error": string | null,"id": string,"kind": string,"ref": string,"scheduled_at": string,"sent_at": string | null,"status": string,"stop_id": string | null,"trip_id": string | null,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "attempts"?: number,"claimed_at"?: string | null,"created_at"?: string,"data"?: NonNullable<Json>,"error"?: string | null,"id": string,"kind": string,"ref": string,"scheduled_at": string,"sent_at"?: string | null,"status"?: string,"stop_id"?: string | null,"trip_id"?: string | null,"user_id": string
+                  }
+                  Update: {
+                    "attempts"?: number,"claimed_at"?: string | null,"created_at"?: string,"data"?: NonNullable<Json>,"error"?: string | null,"id"?: string,"kind"?: string,"ref"?: string,"scheduled_at"?: string,"sent_at"?: string | null,"status"?: string,"stop_id"?: string | null,"trip_id"?: string | null,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "notifications_sent_trip_id_fkey"
+      columns: ["trip_id"]
+isOneToOne: false
+      referencedRelation: "trips"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "notifications_sent_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"profiles": {
                   Row: {
                     "color": string,"created_at": string,"field_versions": NonNullable<Json>,"id": string,"name": string,"synced_at": string,"updated_at": string
@@ -38,6 +90,26 @@ isOneToOne: false
                   }
                   Relationships: [
                     
+                  ]
+                },"push_subscriptions": {
+                  Row: {
+                    "auth": string,"created_at": string,"endpoint": string,"failed_at": string | null,"id": string,"last_seen_at": string,"origin": string,"p256dh": string,"platform": string,"user_agent": string | null,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "auth": string,"created_at"?: string,"endpoint": string,"failed_at"?: string | null,"id"?: string,"last_seen_at"?: string,"origin": string,"p256dh": string,"platform": string,"user_agent"?: string | null,"user_id": string
+                  }
+                  Update: {
+                    "auth"?: string,"created_at"?: string,"endpoint"?: string,"failed_at"?: string | null,"id"?: string,"last_seen_at"?: string,"origin"?: string,"p256dh"?: string,"platform"?: string,"user_agent"?: string | null,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "push_subscriptions_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
                   ]
                 },"stops": {
                   Row: {
@@ -184,11 +256,21 @@ isOneToOne: false
             "accept_invite":
 { Args: { "p_member_id": string }; Returns: string
                            },
+"claim_due_notifications":
+{ Args: { "p_now"?: string }; Returns: {
+              "attempts": number,"data": Json,"id": string,"kind": string,"ref": string,"scheduled_at": string,"stop_id": string,"subscriptions": Json,"trip_id": string,"user_id": string
+            }[]
+                           },
 "claim_invites":
 { Args: Record<PropertyKey, never>; Returns: number
                            },
 "decline_invite":
 { Args: { "p_member_id": string }; Returns: undefined
+                           },
+"due_notifications":
+{ Args: { "p_now"?: string }; Returns: {
+              "data": Json,"kind": string,"ref": string,"scheduled_at": string,"stop_id": string,"trip_day_id": string,"trip_id": string,"user_id": string
+            }[]
                            },
 "edge_call":
 { Args: { "p_fn": string,"p_limit": number }; Returns: number

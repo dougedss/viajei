@@ -43,6 +43,15 @@ export async function arrive(state: DayState, uid: string): Promise<Undoable> {
   return { undo };
 }
 
+/**
+ * "Vocês passaram por X. Marcar como concluída?": conclui uma parada que ficou para trás com a hora
+ * que a pessoa confirmou (padrão agora, ajustável). Nunca inventa horário: só grava o que foi dito.
+ */
+export async function arriveAt(stop: Stop, uid: string, when: Date): Promise<Undoable> {
+  const undo = await patchWithUndo(stop, { done_at: when.toISOString(), done_by: uid });
+  return { undo };
+}
+
 /** Pular: a próxima fica de fora, sem hora real. */
 export async function skip(state: DayState): Promise<Undoable> {
   if (!state.next) return { undo: () => Promise.resolve() };

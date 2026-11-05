@@ -1,5 +1,5 @@
-import { ChevronLeft, ChevronRight, CalendarOff, Route as RouteIcon } from 'lucide-react';
-import { useState } from 'react';
+import { Bell, ChevronLeft, ChevronRight, CalendarOff, Route as RouteIcon } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { NotFound } from '@/app/NotFound.tsx';
 import { Splash } from '@/app/Splash.tsx';
@@ -9,16 +9,29 @@ import { useToast } from '@/components/ui/toast-context.ts';
 import { useDayStops, useTripDays } from '@/features/itinerary/queries.ts';
 import { useDayRoute } from '@/features/itinerary/route.ts';
 import { formatKm, legsByStop, totalAscent } from '@/features/itinerary/rules.ts';
-import { useTrip, useTripMembers } from '@/features/trips/queries.ts';
-import { todayISO } from '@/features/trips/rules.ts';
-import type { Profile } from '@/lib/db/schema.ts';
+import { applyBadge, badgeCount } from '@/features/notifications/badge.ts';
+import { CalendarExport } from '@/features/notifications/components/CalendarExport.tsx';
+import { PushAskSheet } from '@/features/notifications/components/PushAskSheet.tsx';
+import { useTrip, useTripMembers, type MemberWithProfile } from '@/features/trips/queries.ts';
+import { todayISO, tripStatus } from '@/features/trips/rules.ts';
+import type { Profile, Trip } from '@/lib/db/schema.ts';
 import { useSession } from '@/lib/supabase/session.ts';
 import { currentDay, formatDayShort, formatDuration } from '@/lib/time/index.ts';
-import { arrive, depart, skip, type Undoable } from '../actions.ts';
+import { arrive, arriveAt, depart, skip, type Undoable } from '../actions.ts';
+import { useCatchup } from '../catchup.ts';
 import { AgoraHeader } from '../components/AgoraHeader.tsx';
+import {
+  PassedQuestion,
+  PositionAsk,
+  PositionLine,
+  SinceLastTime,
+} from '../components/CatchupCards.tsx';
+import { PanelBar, PanelToggle } from '../components/PanelBar.tsx';
 import { TrailList } from '../components/TrailList.tsx';
 import { useNightTheme, useNow } from '../hooks.ts';
-import { dayState, progress } from '../rules.ts';
+import { usePanelMode } from '../panel.ts';
+import { declineGeo, grantGeo, useGeoConsent, useTeamTracks } from '../queries.ts';
+import { dayState, isDepartureNode, progress } from '../rules.ts';
 
 const UNDO_MS = 10_000;
 
@@ -35,7 +48,8 @@ export default function ModoViagemPage() {
   if (trip === undefined || days === undefined) return <Splash />;
   if (trip === null) return <NotFound />;
 
-  const auto = currentDay(days, todayISO(now));
+  const today = todayISO(now);
+  const auto = currentDay(days, today);
   const day = (override ? days.find((d) => d.id === override) : null) ?? auto;
   const index = day ? days.findIndex((d) => d.id === day.id) : -1;
   const profiles = new Map<string, Profile>();
@@ -51,10 +65,21 @@ export default function ModoViagemPage() {
           >
             {trip.name}
           </Link>
-          <ButtonLink to={`/viagens/${trip.id}/roteiro`} variant="secondary" size="sm">
-            <RouteIcon className="size-4" aria-hidden="true" />
-            Roteiro
-          </ButtonLink>
+          <div className="flex shrink-0 gap-2">
+            <ButtonLink
+              to={`/viagens/${trip.id}/avisos`}
+              variant="secondary"
+              size="sm"
+              aria-label="Avisos da viagem"
+            >
+              <Bell className="size-4" aria-hidden="true" />
+              Avisos
+            </ButtonLink>
+            <ButtonLink to={`/viagens/${trip.id}/roteiro`} variant="secondary" size="sm">
+              <RouteIcon className="size-4" aria-hidden="true" />
+              Roteiro
+            </ButtonLink>
+          </div>
         </div>
         {day ? (
           <div className="flex items-center gap-2">
@@ -90,12 +115,13 @@ export default function ModoViagemPage() {
       {day ? (
         <DayView
           key={day.id}
-          tripId={trip.id}
-          dayId={day.id}
-          date={day.date}
+          trip={trip}
+          day={day}
           now={now}
           uid={session?.user.id ?? ''}
+          members={members}
           profiles={profiles}
+          active={day.date === today && tripStatus(trip, today) === 'ongoing'}
         />
       ) : (
         <EmptyState
@@ -104,32 +130,42 @@ export default function ModoViagemPage() {
           text="Os dias nascem das datas da viagem. Confira as datas em Editar viagem."
         />
       )}
+
+      <PushAskSheet trip={trip} />
     </div>
   );
 }
 
 type DayViewProps = {
-  tripId: string;
-  dayId: string;
-  date: string;
+  trip: Trip;
+  day: { id: string; date: string; title: string | null };
   now: Date;
   uid: string;
+  members: readonly MemberWithProfile[];
   profiles: Map<string, Profile>;
+  /** o dia é hoje e a viagem está acontecendo: catch-up com GPS, painel e selo só assim */
+  active: boolean;
 };
 
-function DayView({ tripId, dayId, date, now, uid, profiles }: DayViewProps) {
+function DayView({ trip, day, now, uid, members, profiles, active }: DayViewProps) {
+  const tripId = trip.id;
+  const dayId = day.id;
   const stops = useDayStops(dayId);
   const { route } = useDayRoute(tripId, dayId, stops);
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const state = dayState({ date }, stops, now);
+  const state = dayState({ date: day.date }, stops, now);
   const legs = legsByStop(stops, route);
   const done = progress(stops);
+  const teamTracks = useTeamTracks(dayId, uid, members);
+  const geo = useGeoConsent();
+  const [dismissedPassed, setDismissedPassed] = useState<string[]>([]);
 
-  const run = (label: string, action: () => Promise<Undoable>) => {
+  const run = (label: string, action: () => Promise<Undoable>, seen: readonly string[] = []) => {
     setBusy(true);
     void action()
       .then(({ undo }) => {
+        cuRef.current?.markSeen(seen);
         toast.show({
           title: label,
           duration: UNDO_MS,
@@ -141,25 +177,125 @@ function DayView({ tripId, dayId, date, now, uid, profiles }: DayViewProps) {
       .finally(() => setBusy(false));
   };
 
+  const departLabel =
+    state.at && !state.onRoad ? `Saímos de ${state.at.name}` : `Saímos: ${state.next?.name ?? ''}`;
+  // os eventos que cada ação produz, para o card "Desde a última vez" não listar o que foi feito aqui
+  const departSeen = state.next && isDepartureNode(state.next) ? [`departed:${state.next.id}`] : [];
+  const arriveSeen = state.next ? [`arrived:${state.next.id}`] : [];
+  const skipSeen = state.next ? [`skipped:${state.next.id}`] : [];
+
+  const panel = usePanelMode({
+    enabled: active && uid !== '',
+    ctx: uid ? { tripId, dayId, uid } : null,
+    state,
+    onAutoDepart: () => run(departLabel, () => depart(state, uid), departSeen),
+    onAutoArrive: () =>
+      run(`Chegamos: ${state.next?.name ?? ''}`, () => arrive(state, uid), arriveSeen),
+  });
+
+  const cu = useCatchup({
+    tripId,
+    dayId,
+    uid,
+    state,
+    route: route?.geometry ?? null,
+    teamTracks,
+    geoAllowed: geo.allowed,
+    active,
+    liveFix: panel.fix,
+  });
+  const cuRef = useRef<typeof cu | null>(null);
+  useEffect(() => {
+    cuRef.current = cu;
+  }, [cu]);
+
+  // Chegamos! automático do catch-up: uma vez por leitura, com o mesmo toast de desfazer
+  const autoHandled = useRef(new Set<string>());
+  const autoStop = cu.autoArrive;
+  const fixAt = cu.fix?.t ?? 0;
+  useEffect(() => {
+    if (!active || !autoStop || !state.arriveAvailable || state.next?.id !== autoStop.id) return;
+    const key = `${autoStop.id}:${fixAt}`;
+    if (autoHandled.current.has(key)) return;
+    autoHandled.current.add(key);
+    run(`Chegamos: ${autoStop.name}`, () => arrive(state, uid), [`arrived:${autoStop.id}`]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dispara uma vez por leitura (chave), não a cada render
+  }, [active, autoStop?.id, fixAt]);
+
+  const pendingPassed = cu.passed.filter((s) => !dismissedPassed.includes(s.id));
+  const question = pendingPassed[0];
+
+  // selo no ícone ao ir para o plano de fundo durante a viagem
+  const leaveAtMs = state.leaveAt?.getTime() ?? null;
+  const pendingCount = pendingPassed.length;
+  useEffect(() => {
+    if (!active) return;
+    const onHidden = () => {
+      if (document.visibilityState !== 'hidden') return;
+      void applyBadge(
+        badgeCount({
+          pendingQuestions: pendingCount,
+          leaveAt: leaveAtMs === null ? null : new Date(leaveAtMs),
+          now: new Date(),
+        }),
+      );
+    };
+    document.addEventListener('visibilitychange', onHidden);
+    return () => document.removeEventListener('visibilitychange', onHidden);
+  }, [active, pendingCount, leaveAtMs]);
+
   const distance = route ? route.legs.reduce((acc, l) => acc + l.distance_m, 0) : null;
   const duration = route ? route.legs.reduce((acc, l) => acc + l.duration_s, 0) / 60 : null;
 
   return (
     <>
+      <SinceLastTime
+        events={cu.events}
+        profiles={profiles}
+        onDismiss={() => void cu.dismissEvents()}
+      />
+
       <AgoraHeader
         state={state}
         busy={busy}
-        onDepart={() =>
-          run(
-            state.at && !state.onRoad
-              ? `Saímos de ${state.at.name}`
-              : `Saímos: ${state.next?.name ?? ''}`,
-            () => depart(state, uid),
-          )
+        onDepart={() => run(departLabel, () => depart(state, uid), departSeen)}
+        onArrive={() =>
+          run(`Chegamos: ${state.next?.name ?? ''}`, () => arrive(state, uid), arriveSeen)
         }
-        onArrive={() => run(`Chegamos: ${state.next?.name ?? ''}`, () => arrive(state, uid))}
-        onSkip={() => run(`Pulamos ${state.next?.name ?? ''}`, () => skip(state))}
+        onSkip={() => run(`Pulamos ${state.next?.name ?? ''}`, () => skip(state), skipSeen)}
       />
+
+      {active ? (
+        <div className="grid gap-3">
+          <PositionLine position={cu.position} />
+          {geo.loaded && !geo.allowed && !geo.declined && !panel.on ? (
+            <PositionAsk onAllow={() => void grantGeo()} onDecline={() => void declineGeo()} />
+          ) : null}
+          {question ? (
+            <PassedQuestion
+              key={question.id}
+              stop={question}
+              date={day.date}
+              now={now}
+              onConfirm={(when) => {
+                setDismissedPassed((xs) => [...xs, question.id]);
+                run(`Marcado: ${question.name}`, () => arriveAt(question, uid, when), [
+                  `arrived:${question.id}`,
+                ]);
+              }}
+              onDismiss={() => setDismissedPassed((xs) => [...xs, question.id])}
+            />
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <PanelToggle panel={panel} />
+            <CalendarExport trip={trip} day={day} stops={stops} label="Exportar o dia" />
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <CalendarExport trip={trip} day={day} stops={stops} label="Exportar o dia" />
+        </div>
+      )}
 
       <section
         aria-labelledby="h-trilha"
@@ -185,6 +321,9 @@ function DayView({ tripId, dayId, date, now, uid, profiles }: DayViewProps) {
           </p>
         ) : null}
       </section>
+
+      {panel.on ? <div className="h-24" aria-hidden="true" /> : null}
+      <PanelBar panel={panel} />
     </>
   );
 }

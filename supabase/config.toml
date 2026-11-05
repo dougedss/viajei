@@ -407,6 +407,14 @@ enabled = true
 verify_jwt = true
 entrypoint = "./functions/route-day/index.ts"
 
+# send-notifications é servidor para servidor: o pg_cron a chama com a chave secreta no cabeçalho
+# apikey e `withSupabase({ auth: 'secret' })` valida; não há usuário, então o JWT da plataforma fica
+# desligado só nela. Qualquer chamada sem a chave secreta é recusada pela própria função.
+[functions.send-notifications]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/send-notifications/index.ts"
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

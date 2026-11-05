@@ -32,6 +32,8 @@ export const SYNC_TABLES = {
   },
   stops: { scope: 'trip', rank: 40, children: [] },
   trip_tracks: { scope: 'trip', rank: 50, children: [] },
+  /** preferências de aviso: da pessoa (escopo user), uma linha por viagem; chega pelo pull do usuário */
+  notification_prefs: { scope: 'user', rank: 25, children: [] },
 } as const satisfies Record<
   string,
   { scope: SyncScope; rank: number; children: readonly unknown[] }

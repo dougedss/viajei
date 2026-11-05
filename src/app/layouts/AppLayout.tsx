@@ -4,6 +4,12 @@ import { useEffect } from 'react';
 import { Link, Outlet } from 'react-router';
 import { Avatar } from '@/components/ui/Avatar.tsx';
 import { Wordmark } from '@/components/ui/Wordmark.tsx';
+import { markFirstOpen } from '@/features/notifications/first-open.ts';
+import { touchSubscription } from '@/features/notifications/subscription.ts';
+import {
+  useClearBadgeWhenVisible,
+  useServiceWorkerMessages,
+} from '@/features/notifications/sw-messages.ts';
 import { UpdatePrompt } from '@/features/pwa/components/UpdatePrompt.tsx';
 import { asPersonColor, useProfile } from '@/features/profile/queries.ts';
 import { SyncChip } from '@/features/sync/components/SyncChip.tsx';
@@ -24,10 +30,13 @@ export function AppLayout() {
   const profile = useProfile();
   const queryClient = useQueryClient();
   const uid = session?.user.id ?? null;
+  useServiceWorkerMessages();
+  useClearBadgeWhenVisible();
 
   useEffect(() => {
     if (!uid) return;
     void syncEngine.start(uid);
+    void markFirstOpen().then(() => touchSubscription());
     return () => syncEngine.stop();
   }, [uid]);
 

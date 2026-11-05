@@ -1,0 +1,87 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`.ics > o dia 1 do seed, inteiro (snapshot) 1`] = `
+"BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Viajei//Roteiro//PT
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:RS — concurso em Montenegro · sex 11/12 · Papanduva → Se
+ rra Gaúcha
+X-WR-TIMEZONE:America/Sao_Paulo
+BEGIN:VTIMEZONE
+TZID:America/Sao_Paulo
+BEGIN:STANDARD
+DTSTART:19700101T000000
+TZOFFSETFROM:-0300
+TZOFFSETTO:-0300
+TZNAME:-03
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:e1111111-1111-4111-8111-111111111111@viajei
+DTSTAMP:20261105T120000Z
+DTSTART;TZID=America/Sao_Paulo:20261211T070000
+DTEND;TZID=America/Sao_Paulo:20261211T133000
+SUMMARY:Saída de Papanduva
+LOCATION:Papanduva\\, SC
+GEO:-26.40854;-50.14241
+DESCRIPTION:Pneus\\, óleo e estepe revisados. Documentos na bolsa.\\nMapa: h
+ ttps://www.google.com/maps/dir/?api=1&destination=-26.40854%2C-50.14241
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Sair em 15 min para Saída de Papanduva
+TRIGGER:-PT15M
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:e2222222-2222-4222-8222-222222222222@viajei
+DTSTAMP:20261105T120000Z
+DTSTART;TZID=America/Sao_Paulo:20261211T133000
+DTEND;TZID=America/Sao_Paulo:20261211T163000
+SUMMARY:Park Salto Ventoso
+LOCATION:Nova Sardenha\\, Farroupilha\\, RS
+GEO:-29.28522;-51.41185
+DESCRIPTION:Fecha às 17:00\\nMapa: https://www.google.com/maps/dir/?api=1&d
+ estination=-29.28522%2C-51.41185
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Sair em 15 min para Park Salto Ventoso
+TRIGGER:-PT6H45M
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:e3333333-3333-4333-8333-333333333333@viajei
+DTSTAMP:20261105T120000Z
+DTSTART;TZID=America/Sao_Paulo:20261211T163000
+DTEND;TZID=America/Sao_Paulo:20261211T190000
+SUMMARY:Hotel Steffen
+LOCATION:Rua Augusto Vicente Steffen\\, Bom Princípio\\, RS
+GEO:-29.49224;-51.35916
+DESCRIPTION:Check-in. Noites 11 e 12\\, quarto luxo\\, café incluso.\\nMapa: 
+ https://www.google.com/maps/dir/?api=1&destination=-29.49224%2C-51.35916
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Sair em 15 min para Hotel Steffen
+TRIGGER:-PT1H
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:e4444444-4444-4444-8444-444444444444@viajei
+DTSTAMP:20261105T120000Z
+DTSTART;TZID=America/Sao_Paulo:20261211T190000
+DTEND;TZID=America/Sao_Paulo:20261211T200000
+SUMMARY:Restaurante dos Bifes
+LOCATION:RS-122\\, Bom Princípio\\, RS
+GEO:-29.48979;-51.35668
+DESCRIPTION:Fecha às 22:00\\nAté 22h.\\nMapa: https://www.google.com/maps/d
+ ir/?api=1&destination=-29.48979%2C-51.35668
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Sair em 15 min para Restaurante dos Bifes
+TRIGGER:-PT25M
+END:VALARM
+END:VEVENT
+END:VCALENDAR
+"
+`;

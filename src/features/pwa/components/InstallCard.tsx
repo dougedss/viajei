@@ -9,17 +9,26 @@ import { dismissInstall, install, installDismissed, useInstall } from '@/lib/pwa
  * Convite para instalar, na tela inicial. Android: abre o pedido nativo. iPhone: folha com os dois
  * toques. Some quando já está instalado ou por 7 dias quando a pessoa dispensa.
  */
-export function InstallCard() {
+type Props = {
+  /** a frase que liga a instalação a outra coisa (ex.: os avisos, que no iPhone só chegam instalado) */
+  lead?: string;
+  /** não some por 7 dias ao dispensar (telas que explicam o estado, como /avisos) */
+  persistent?: boolean;
+  onDismiss?: () => void;
+};
+
+export function InstallCard({ lead, persistent = false, onDismiss }: Props) {
   const { installed, canPrompt, ios } = useInstall();
-  const [dismissed, setDismissed] = useState(() => installDismissed());
+  const [dismissed, setDismissed] = useState(() => !persistent && installDismissed());
   const [sheet, setSheet] = useState(false);
   const toast = useToast();
 
   if (installed || dismissed || (!canPrompt && !ios)) return null;
 
   const dismiss = () => {
-    dismissInstall();
+    if (!persistent) dismissInstall();
     setDismissed(true);
+    onDismiss?.();
   };
 
   return (
@@ -44,8 +53,8 @@ export function InstallCard() {
             Leve o Viajei na tela de início
           </p>
           <p className="text-[14px] text-hud-muted">
-            Instalado, ele abre sem sinal, guarda a viagem com segurança e recebe os avisos de hora
-            de sair.
+            {lead ??
+              'Instalado, ele abre sem sinal, guarda a viagem com segurança e recebe os avisos de hora de sair.'}
           </p>
         </div>
       </div>

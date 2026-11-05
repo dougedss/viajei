@@ -1,4 +1,5 @@
 import {
+  Bell,
   CalendarDays,
   MapPin,
   Navigation,
@@ -23,6 +24,8 @@ import { Sheet } from '@/components/ui/Sheet.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { useTripDays, useTripStops } from '@/features/itinerary/queries.ts';
 import { loadExampleTrip } from '@/features/itinerary/seed.ts';
+import { CalendarExport } from '@/features/notifications/components/CalendarExport.tsx';
+import { PushAskSheet } from '@/features/notifications/components/PushAskSheet.tsx';
 import { asPersonColor } from '@/features/profile/queries.ts';
 import { deleteTrip } from '../actions.ts';
 import { useIsOwner, useTrip, useTripMembers } from '../queries.ts';
@@ -213,6 +216,45 @@ export default function ViagemPage() {
           </Card>
         )}
       </section>
+
+      <section className="grid gap-3" aria-labelledby="h-avisos">
+        <div className="flex items-center justify-between">
+          <h2 id="h-avisos" className="label-caps text-accent-ink">
+            Avisos e calendário
+          </h2>
+          <Link
+            to={`/viagens/${trip.id}/avisos`}
+            className="text-[15px] font-semibold text-accent-ink"
+          >
+            Configurar
+          </Link>
+        </div>
+        <Card className="grid gap-3">
+          <p className="flex items-center gap-2 text-[16px]">
+            <Bell className="size-5 shrink-0 text-accent-ink" aria-hidden="true" />
+            <span>
+              Hora de sair, briefing da manhã e paradas fechando chegam no celular, mesmo com o app
+              fechado.
+            </span>
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <ButtonLink to={`/viagens/${trip.id}/avisos`} variant="secondary" size="md">
+              <Bell className="size-5" aria-hidden="true" />
+              Avisos da viagem
+            </ButtonLink>
+            <CalendarExport
+              trip={trip}
+              stops={stops}
+              days={tripDays.map((day) => ({
+                day,
+                stops: stops.filter((s) => s.trip_day_id === day.id),
+              }))}
+            />
+          </div>
+        </Card>
+      </section>
+
+      <PushAskSheet trip={trip} />
 
       {isOwner ? (
         <>

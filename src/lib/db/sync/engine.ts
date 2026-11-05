@@ -1,13 +1,13 @@
 import { supabase } from '@/lib/supabase/client.ts';
-import type { Json } from '@/lib/supabase/database.types.ts';
 import { connectivity, isNetworkError } from '../connectivity.ts';
 import { onMutate } from '../mutate.ts';
-import { pushResultsSchema, type PushOp, type PushResult } from '../outbox.ts';
+import type { PushOp, PushResult } from '../outbox.ts';
 import type { SyncTable } from '../registry.ts';
 import { db, syncKeys } from '../schema.ts';
-import { wipeTrip } from './apply-pull.ts';
+import { tripsKnownToServer, wipeTrip } from './apply-pull.ts';
 import { pullTrip, pullUser } from './pull.ts';
 import { pushOutbox } from './push.ts';
+import { pushRpcFor } from './rpc.ts';
 import { watchTrips } from './realtime.ts';
 
 export type SyncPhase = 'idle' | 'syncing';
@@ -44,20 +44,11 @@ function emit(notice: SyncNotice) {
 }
 
 // RPCs como o usuário (RLS vale). Erro de rede sobe como está, para o motor marcar offline.
+const basePush = pushRpcFor(supabase);
 async function rpcPush(ops: PushOp[]): Promise<PushResult[]> {
-  const p_ops = ops.map(({ seq, table, id, op, values, versions, updated_at }) => ({
-    seq,
-    table,
-    id,
-    op,
-    values,
-    versions,
-    updated_at,
-  })) as unknown as Json;
-  const { data, error } = await supabase.rpc('sync_push', { p_ops });
-  if (error) throw error;
+  const results = await basePush(ops);
   connectivity.markOnline();
-  return pushResultsSchema.parse(data);
+  return results;
 }
 async function rpcPullTrip(tripId: string, since: string): Promise<unknown> {
   const { data, error } = await supabase.rpc('sync_pull', { p_trip_id: tripId, p_since: since });
@@ -90,8 +81,7 @@ async function withLock(run: () => Promise<void>): Promise<void> {
 }
 
 async function tripIdsToPull(extra: string[]): Promise<string[]> {
-  const local = await db.trips.filter((t) => t.deleted_at === null).primaryKeys();
-  return [...new Set([...local, ...extra])];
+  return tripsKnownToServer(await db.trips.toArray(), extra);
 }
 
 async function pullOne(tripId: string): Promise<void> {

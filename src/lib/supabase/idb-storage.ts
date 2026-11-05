@@ -6,6 +6,8 @@ import type { SupportedStorage } from '@supabase/supabase-js';
  * sessão para enviar a fila. Service workers não enxergam localStorage; IndexedDB é compartilhado.
  * Sem Dexie de propósito: o SW importa este módulo sozinho, sem carregar o banco do app.
  */
+/** Chave da sessão no IndexedDB; a mesma que o service worker lê. */
+export const AUTH_STORAGE_KEY = 'viajei-auth';
 const DB_NAME = 'viajei-auth';
 const STORE = 'kv';
 
@@ -47,15 +49,16 @@ function request<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => ID
   );
 }
 
+// parâmetros anotados: o projeto do service worker (lib WebWorker) não infere a partir de SupportedStorage
 export const idbStorage: SupportedStorage = {
-  async getItem(key) {
+  async getItem(key: string) {
     const value = await request<unknown>('readonly', (s) => s.get(key));
     return typeof value === 'string' ? value : null;
   },
-  async setItem(key, value) {
+  async setItem(key: string, value: string) {
     await request('readwrite', (s) => s.put(value, key));
   },
-  async removeItem(key) {
+  async removeItem(key: string) {
     await request('readwrite', (s) => s.delete(key));
   },
 };

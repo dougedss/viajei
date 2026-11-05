@@ -28,5 +28,5 @@
     }
   },
   "include": ["src", "supabase/functions/_shared"],
-  "exclude": ["src/sw.ts"]
+  "exclude": ["src/sw.ts", "src/sw", "src/sw-env.d.ts"]
 }

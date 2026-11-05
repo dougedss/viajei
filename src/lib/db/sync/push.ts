@@ -1,4 +1,4 @@
-import { isNetworkError } from '../connectivity.ts';
+import { isNetworkError } from '../network-error.ts';
 import {
   backoffMs,
   MAX_ATTEMPTS,

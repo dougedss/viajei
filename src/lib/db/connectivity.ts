@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { isNetworkError } from './network-error.ts';
 
 /**
  * Conectividade = eventos online/offline do navegador + resultado real das requisições.
@@ -35,15 +36,7 @@ export const connectivity = {
   },
 };
 
-/** Erro de rede do fetch (sem resposta do servidor), em qualquer navegador. */
-export function isNetworkError(err: unknown): boolean {
-  if (err instanceof TypeError) return /fetch|network|load failed/i.test(err.message);
-  if (typeof err === 'object' && err !== null && 'message' in err) {
-    const m: unknown = err.message;
-    return typeof m === 'string' && /failed to fetch|network|load failed/i.test(m);
-  }
-  return false;
-}
+export { isNetworkError };
 
 export function useOnline(): boolean {
   return useSyncExternalStore(connectivity.subscribe, connectivity.isOnline, () => true);
