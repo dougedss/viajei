@@ -510,3 +510,15 @@ Um pull do Realtime que encontra o lock ocupado pede um ciclo completo. `syncNow
 ### D90 · Números medidos
 - Chunks do build: lista de reservas 5,4 KB, formulário 16,5 KB, diário 6,2 KB, Modo Viagem 51,3 KB (17,6 KB gzip), worker de compressão 4,7 KB. O visualizador de PDF fica num chunk próprio de 432,6 KB (130,5 KB gzip), mais o worker do pdf.js de 1,26 MB e 451 KB de `.wasm`, tudo carregado só quando um PDF abre. O chunk principal foi de 532,6 KB para 558,5 KB, o `sw.js` para 474,5 KB e o precache para 122 arquivos e 5,45 MB.
 - Testes: 492 Vitest (eram 407), 219 pgTAP (eram 159), 17 Playwright com 1 pulado (eram 15).
+
+## Onde se testa (06/11/2026)
+
+### D91 · Celular só na versão final, nada no Mac, tudo testado na web
+**Contexto.** Com a fase 7 pronta na branch, o Douglas decidiu: "eu não vou testar no meu celular, apenas quando tiver na versão final depois de todos os passos, e também não vamos rodar local. Vamos apenas testar executando na web pelo laboratório que criamos que roda todo dia."
+**Decisão.**
+- O teste nos aparelhos acontece uma vez, na versão final, depois da fase 12. Os roteiros `docs/teste-manual-fase-4.md` a `docs/teste-manual-fase-7.md` ficam guardados para esse dia, e nenhuma fase espera por eles para ir à main.
+- Nada roda neste Mac: nem Supabase local, nem Docker, nem Playwright, nem as suítes. Os testes rodam no GitHub Actions.
+- A CI (lint, formatação, pgTAP, tipos do banco, tipos, Vitest, build e Playwright) passa a rodar também no push das branches `fase-*`, e é ela que segura a fase antes da produção. A main continua recebendo por fast-forward, com o ok do Douglas.
+- O laboratório (D50 a D56) passa a ser o teste de aceitação na produção. A cada fase, os passos do roteiro manual que um navegador consegue fazer entram nele como cenários. Fica para o teste final só o que um aparelho julga: câmera, HEIC, o PDF no app instalado do iPhone, fps da maquete e da garagem, entrega pela Apple e pelo FCM, Wake Lock e GPS de verdade.
+
+**Consequência.** Hoje o laboratório cobre só a tela apagada da fase 4; as fases 5 a 7 ainda não têm cenários nele. A fase 7 é a primeira a passar pela CI na própria branch. Os cenários dela no laboratório são o próximo passo, com plano a aprovar.

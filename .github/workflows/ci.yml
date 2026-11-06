@@ -1,8 +1,9 @@
 name: CI
 
+# Nenhum teste roda no Mac (D91): a branch de cada fase passa por aqui antes de chegar à main.
 on:
   push:
-    branches: [main]
+    branches: [main, 'fase-*']
   pull_request:
 
 concurrency:

@@ -1,12 +1,14 @@
 # Teste manual · Fase 7 (reservas, anexos e memórias)
 
 Roteiro para o iPhone (primeiro) e para um Android. Câmera, galeria, HEIC e PDF offline só se
-julgam no aparelho. Os testes das fases 4, 5 e 6 continuam pendentes: os roteiros estão em
+julgam no aparelho. Os testes das fases 4, 5 e 6 também esperam: os roteiros estão em
 `docs/teste-manual-fase-4.md` e `docs/teste-manual-fase-6.md` (este último traz também os da fase 5).
 
+**Fica para a versão final (D91).** O teste nos aparelhos acontece uma vez, depois da fase 12. Até
+lá, a fase 7 é verificada na web: pela CI do GitHub e pelo laboratório que roda todo dia na produção.
+
 **Antes de começar:**
-- O deploy da fase 7 no ar: o preview da Vercel da branch `fase-7` (com a migration 0007 já aplicada
-  no Supabase hospedado) ou a produção depois do merge.
+- A versão final no ar, na produção.
 - O app **instalado na Tela de Início** no iPhone. O PDF e o modo avião são testados assim, porque é
   assim que se usa no balcão.
 - Uma viagem sua com uma parada de hoje, para o Chegamos!. A viagem "Teste" (06 a 09/11) serve.
