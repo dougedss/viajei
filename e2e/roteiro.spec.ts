@@ -66,7 +66,8 @@ test('os dias nascem das datas, as paradas entram no dia e o Agora mostra "sair 
   await expect(page.getByText('6h30 até a próxima')).toBeVisible();
 
   // Modo Viagem: a viagem é futura, então o dia atual é o primeiro; "sair às" é o horário da origem
-  await page.goto(page.url().replace(/\/roteiro\/.*$/, '/viagem'));
+  // a semântica do "Agora" não depende da maquete (ela tem o próprio e2e): a lista vem aberta
+  await page.goto(page.url().replace(/\/roteiro\/.*$/, '/viagem?render=list'));
   const agora = page.getByRole('region', { name: 'Agora' });
   await expect(agora).toBeVisible();
   await expect(agora.getByText('Saída de Papanduva')).toBeVisible();
@@ -77,8 +78,6 @@ test('os dias nascem das datas, as paradas entram no dia e o Agora mostra "sair 
   await expect(page.getByText(/Saímos/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Chegamos!' })).toBeVisible();
   await expect(agora.getByText(/chega às\s*13:30/)).toBeVisible();
-  // a lista do dia fica recolhida atrás da maquete (fase 5): abre para conferir
-  await page.getByRole('button', { name: /Lista do dia/ }).click();
   await expect(page.getByRole('list', { name: 'Trilha do dia' })).toContainText('chegamos');
 
   // Chegamos! no parque: dia concluído
