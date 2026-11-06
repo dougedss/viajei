@@ -42,6 +42,8 @@ export default function GarageStage(p: GarageStageProps) {
   const [forceWebGL, setForceWebGL] = useState(p.support === 'webgl2');
   const [backend, setBackend] = useState<Backend | null>(null);
   const [mountedAt] = useState(() => performance.now());
+  // o primeiro quadro desenhado: até ele, a compilação dos shaders pode segurar a tela
+  const [drawn, setDrawn] = useState(false);
   const hostRef = useRef<HTMLDivElement>(null);
 
   // o carro a mostrar: o da viagem ou a prévia; a troca anima (sem movimento reduzido)
@@ -89,6 +91,7 @@ export default function GarageStage(p: GarageStageProps) {
     [report],
   );
   const onFirstFrame = useCallback(() => {
+    setDrawn(true);
     if (import.meta.env.DEV) {
       console.info(
         `viajei: garagem no primeiro quadro em ${Math.round(performance.now() - mountedAt)} ms`,
@@ -100,6 +103,7 @@ export default function GarageStage(p: GarageStageProps) {
     <div
       ref={hostRef}
       className="absolute inset-0 touch-none select-none"
+      data-frame={drawn ? 'ready' : 'pending'}
       onPointerDown={(e) => {
         e.currentTarget.setPointerCapture(e.pointerId);
         runtime.pointerDown(e.pointerId, e.clientX, e.clientY, performance.now());

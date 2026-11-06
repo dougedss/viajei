@@ -46,6 +46,11 @@ test('a garagem abre em 3D, a cor persiste e aparece no card, e o SUV é só pr�
   await expect(page.locator('[data-garage="webgl2"], [data-garage="webgpu"]')).toBeVisible({
     timeout: 60_000,
   });
+  // o motor é escolhido antes de os shaders compilarem; no SwiftShader da CI a compilação segura a
+  // tela por segundos e o toque seria atendido depois do prazo da asserção: espera o primeiro quadro
+  await expect(page.locator('[data-garage] [data-frame="ready"]')).toBeAttached({
+    timeout: 90_000,
+  });
 
   await swatch(page, 'Céu').click();
   await expect(swatch(page, 'Céu')).toHaveAttribute('aria-pressed', 'true');
