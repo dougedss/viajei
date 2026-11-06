@@ -80,12 +80,24 @@ export async function openApp(target: AppTarget): Promise<App> {
     locale: 'pt-BR',
     timezoneId: 'America/Sao_Paulo',
     geolocation: target.destination,
-    permissions: ['notifications', 'geolocation'],
+    // nenhuma permissão de saída: como num aparelho de verdade, elas só existem depois do toque
+    permissions: [],
     acceptDownloads: true,
   });
   await context.addInitScript({ content: initScript(target.subscription) });
   const page = await context.newPage();
   page.setDefaultTimeout(TIMEOUT);
+  // o Chromium sem tela responde "negado" a notificações que ninguém concedeu; num aparelho de
+  // verdade o estado é "ainda não perguntado" (prompt), e é ele que faz a folha de avisos aparecer
+  const session = await context.newCDPSession(page);
+  const { targetInfo } = await session.send('Target.getTargetInfo');
+  await session.send('Browser.setPermission', {
+    permission: { name: 'notifications' },
+    setting: 'prompt',
+    origin: new URL(target.appUrl).origin,
+    ...(targetInfo.browserContextId ? { browserContextId: targetInfo.browserContextId } : {}),
+  });
+  await session.detach();
   return { browser, context, page, target, cdp: null, registrationId: null };
 }
 
@@ -173,6 +185,8 @@ export function appAvisos(app: App): Promise<Check> {
         async () => {
           const sheet = page.getByRole('dialog', { name: 'Avisos da viagem' });
           await sheet.waitFor();
+          // o "Permitir" do navegador, no toque em "Ativar avisos"
+          await app.context.grantPermissions(['notifications'], { origin: target.appUrl });
           await sheet.getByRole('button', { name: 'Ativar avisos' }).click();
           await page.getByText('Avisos ativados').waitFor();
         },
@@ -338,6 +352,8 @@ export function appReabrir(app: App, serverMarked: () => Promise<void>): Promise
       [
         'usar a posição: Chegamos! no destino',
         async () => {
+          // o "Permitir" da localização, no toque em "Usar posição"
+          await app.context.grantPermissions(['geolocation'], { origin: target.appUrl });
           await page.getByRole('button', { name: 'Usar posição' }).click();
           await page.getByText(`Chegamos: ${target.destinationName}`).first().waitFor();
         },
