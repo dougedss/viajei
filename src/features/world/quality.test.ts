@@ -12,9 +12,9 @@ import {
   pushFrame,
   serializeQualityPrefs,
   shouldDowngrade,
-  tierFor,
   type FrameStats,
-} from './quality.ts';
+} from '@/lib/three/quality.ts';
+import { tierFor } from './quality.ts';
 
 describe('níveis', () => {
   it('Alta usa até dpr 2 e sombras cheias; Leve fica em 1 e afina o cenário', () => {

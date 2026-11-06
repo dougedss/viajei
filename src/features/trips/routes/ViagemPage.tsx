@@ -1,14 +1,4 @@
-import {
-  Bell,
-  CalendarDays,
-  MapPin,
-  Navigation,
-  Pencil,
-  Route,
-  Trash2,
-  Users,
-  Wallet,
-} from 'lucide-react';
+import { Bell, Navigation, Pencil, Route, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { NotFound } from '@/app/NotFound.tsx';
@@ -17,7 +7,6 @@ import { Avatar } from '@/components/ui/Avatar.tsx';
 import { Button } from '@/components/ui/Button.tsx';
 import { ButtonLink } from '@/components/ui/ButtonLink.tsx';
 import { Card } from '@/components/ui/Card.tsx';
-import { Chip } from '@/components/ui/Chip.tsx';
 import { EmptyState } from '@/components/ui/EmptyState.tsx';
 import { PageHeader } from '@/components/ui/PageHeader.tsx';
 import { Sheet } from '@/components/ui/Sheet.tsx';
@@ -29,15 +18,8 @@ import { PushAskSheet } from '@/features/notifications/components/PushAskSheet.t
 import { asPersonColor } from '@/features/profile/queries.ts';
 import { deleteTrip } from '../actions.ts';
 import { useIsOwner, useTrip, useTripMembers } from '../queries.ts';
-import {
-  formatMoney,
-  formatPeriod,
-  statusKind,
-  statusLabel,
-  todayISO,
-  tripLength,
-  tripStatus,
-} from '../rules.ts';
+import { TripHero } from '../components/TripHero.tsx';
+import { todayISO } from '../rules.ts';
 
 export default function ViagemPage() {
   const { tripId = '' } = useParams();
@@ -58,14 +40,12 @@ export default function ViagemPage() {
   const today = todayISO();
   const team = members.filter((m) => m.member.status === 'accepted');
   const pendingInvites = members.length - team.length;
-  const days = tripLength(trip);
 
   return (
     <div className="grid gap-5">
       <PageHeader
         back="/"
         title={trip.name}
-        eyebrow={<Chip kind={statusKind(tripStatus(trip, today))}>{statusLabel(trip, today)}</Chip>}
         actions={
           <ButtonLink
             to={`/viagens/${trip.id}/editar`}
@@ -79,41 +59,13 @@ export default function ViagemPage() {
         }
       />
 
-      <Card className="grid gap-3">
-        <p className="flex items-center gap-2 text-[16px]">
-          <CalendarDays className="size-5 shrink-0 text-accent-ink" aria-hidden="true" />
-          <span>
-            {formatPeriod(trip.start_date, trip.end_date)}
-            <span className="text-ink-2">
-              {' '}
-              · {days} {days === 1 ? 'dia' : 'dias'}
-            </span>
-          </span>
-        </p>
-        <p className="flex items-center gap-2 text-[16px]">
-          <MapPin className="size-5 shrink-0 text-accent-ink" aria-hidden="true" />
-          {trip.origin ? (
-            <span>Sai de {trip.origin}</span>
-          ) : (
-            <span className="text-ink-2">Origem não informada</span>
-          )}
-        </p>
-        <p className="flex items-center gap-2 text-[16px]">
-          <Wallet className="size-5 shrink-0 text-accent-ink" aria-hidden="true" />
-          {trip.budget === null ? (
-            <span className="text-ink-2">Sem orçamento definido</span>
-          ) : (
-            <span>
-              Orçamento de <b className="font-num text-[18px]">{formatMoney(trip.budget)}</b>
-            </span>
-          )}
-        </p>
-        {trip.notes ? (
-          <p className="border-t border-line pt-3 text-[15px] whitespace-pre-line text-ink-2">
-            {trip.notes}
-          </p>
-        ) : null}
-      </Card>
+      <TripHero trip={trip} today={today} />
+
+      {trip.notes ? (
+        <Card>
+          <p className="text-[15px] whitespace-pre-line text-ink-2">{trip.notes}</p>
+        </Card>
+      ) : null}
 
       <section className="grid gap-3" aria-labelledby="h-time">
         <div className="flex items-center justify-between">

@@ -1,35 +1,31 @@
-import { CAR_COLORS, CAR_MODELS, type CarColor, type CarModel } from '@shared/constants.ts';
-import { buildHatch } from './hatch.ts';
-import type { CarRig } from './types.ts';
+import type { CarModel } from '@shared/constants.ts';
+import { PROFILES } from './profiles/index.ts';
+import { buildFromProfile } from './rig.ts';
+import type { BuildOptions, CarRig, CarSpec } from './types.ts';
 
-export type { CarAccessoryKey, CarRig } from './types.ts';
-export { CAR_ACCESSORY_KEYS } from './types.ts';
+export type { AttachOptions, BuildOptions, CarRig, CarSpec, RigAnchors } from './types.ts';
 
 /**
- * A garagem de código: um construtor por modelo. Nesta fase só o hatch existe; os outros quatro
- * (sedã, SUV, picape, kombi) são da fase 6 e, até lá, qualquer `car_model` desenha o hatch. Quem
- * usa (maquete, garagem, retrospectiva) só conhece o `CarRig`.
+ * A garagem de código: um construtor por modelo. Hoje os cinco saem do mesmo construtor genérico,
+ * cada um com o próprio perfil (o que é de um modelo só, como a caçamba da picape, o estepe do SUV
+ * e a saia e blusa da kombi, está nos dados do perfil). Quem usa (maquete, garagem, retrospectiva)
+ * só conhece o `CarRig`: trocar um modelo por um de artista é trocar a entrada aqui.
  */
-const BUILDERS: Record<CarModel, (color: CarColor, accessories: readonly string[]) => CarRig> = {
-  hatch: buildHatch,
-  sedan: buildHatch,
-  suv: buildHatch,
-  pickup: buildHatch,
-  kombi: buildHatch,
+type Builder = (spec: CarSpec, opts?: BuildOptions) => CarRig;
+
+const fromProfile =
+  (model: CarModel): Builder =>
+  (spec, opts) =>
+    buildFromProfile(PROFILES[model], spec, opts);
+
+export const BUILDERS: Record<CarModel, Builder> = {
+  hatch: fromProfile('hatch'),
+  sedan: fromProfile('sedan'),
+  suv: fromProfile('suv'),
+  pickup: fromProfile('pickup'),
+  kombi: fromProfile('kombi'),
 };
 
-export function asCarModel(value: string | null | undefined): CarModel {
-  return value && Object.hasOwn(CAR_MODELS, value) ? (value as CarModel) : 'hatch';
-}
-
-export function asCarColor(value: string | null | undefined): CarColor {
-  return value && Object.hasOwn(CAR_COLORS, value) ? (value as CarColor) : 'sunset';
-}
-
-export function buildCar(
-  model: string | null | undefined,
-  color: string | null | undefined,
-  accessories: readonly string[] = [],
-): CarRig {
-  return BUILDERS[asCarModel(model)](asCarColor(color), accessories);
+export function buildCar(spec: CarSpec, opts?: BuildOptions): CarRig {
+  return BUILDERS[spec.model](spec, opts);
 }

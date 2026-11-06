@@ -8,7 +8,7 @@ import {
   Vector3,
   type Group,
 } from 'three/webgpu';
-import { buildCar, type CarRig } from '@/art/cars/index.ts';
+import { buildCar, type CarRig, type CarSpec } from '@/art/cars/index.ts';
 import { lerp, smooth } from '../noise.ts';
 import { OPENING_TIMELINE } from '../opening.ts';
 import { heightAt, type HeightField } from './heightfield.ts';
@@ -23,7 +23,7 @@ import type { WorldRuntime } from './runtime.ts';
 type Props = {
   runtime: WorldRuntime;
   field: HeightField;
-  car: { model: string | null; color: string | null; accessories: readonly string[] };
+  car: CarSpec;
   group: Group;
 };
 
@@ -74,6 +74,8 @@ function drive(
   if (d.lastS !== null && motion.s !== d.lastS) rig.roll(motion.s - d.lastS);
   d.lastS = motion.s;
   rig.setNight(runtime.night.t);
+  // um acessório encaixando (a fase 9 chama `attach` quando uma conquista sai) pede mais quadros
+  if (rig.update(now)) runtime.requestFrame();
   const far = smooth(MOMENT_DIST, layout.camera.distance, runtime.cameraDistance);
   rig.group.scale.setScalar(lerp(1.3, 2.4, far));
   // na abertura o carro só entra na hora dele
@@ -91,10 +93,21 @@ function drive(
 
 export function Car({ runtime, field, car, group }: Props) {
   const invalidate = useThree((s) => s.invalidate);
+  // um carro por modelo; cor, acessórios e placa mudam no carro já montado
   const rig = useMemo(
-    () => buildCar(car.model, car.color, car.accessories),
-    [car.model, car.color, car.accessories],
+    () =>
+      buildCar(
+        { model: car.model, color: 'sunset', accessories: [], plate: null },
+        { wake: invalidate },
+      ),
+    [car.model, invalidate],
   );
+  useEffect(() => {
+    rig.setColor(car.color);
+    rig.setAccessories(car.accessories);
+    rig.setPlate(car.plate);
+    invalidate();
+  }, [rig, car, invalidate]);
   const tether = useMemo<Tether>(() => {
     const geo = new BufferGeometry();
     geo.setAttribute('position', new Float32BufferAttribute(new Float32Array(6), 3));

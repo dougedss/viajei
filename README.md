@@ -62,6 +62,18 @@ O Modo Viagem desenha o dia como uma maquete vista de cima (`src/features/world`
 - **Medir fps no iPhone:** abra `/viagens/<id>/viagem?diag=1`, toque em "Rever o dia" e leia o chip durante o movimento, em Alta e em Leve. Roteiro completo em [`docs/teste-manual-fase-5.md`](docs/teste-manual-fase-5.md).
 - **Replay ao abrir:** o carro repõe o que aconteceu desde a última vez que este aparelho viu a maquete (`travel_state`); com "reduzir movimento", o card "Desde a última vez" é o que aparece.
 
+## Garagem
+
+`/viagens/<id>/garagem`, aberta pelo carro no topo da visão geral. É um showroom 3D (`src/features/garage`): o carro da viagem gira num disco sob luz de estúdio. Arrastar na horizontal gira, na vertical inclina, e pinçar (ou a roda do mouse) aproxima. Embaixo ficam as linhas Modelo, Pintura e Acessórios.
+
+- **Os carros:** cinco modelos por código (`src/art/cars`), cada um um `CarProfile`: o contorno lateral, as rodas, os vidros e as âncoras dos acessórios. O mesmo perfil gera o 3D (`buildCar`) e a vista lateral em SVG (`CarSide`), usada no card da viagem, no topo da visão geral e na garagem sem 3D.
+- **O que está liberado:** vem do progresso do time (`useTeamProgress`): o maior nível e a união das conquistas dos membros aceitos. Até a fase 9 todo time está no nível 1, sem conquistas. Tocar em algo bloqueado abre a **prévia**, com o selo "Prévia" e a frase do que falta; a prévia nunca grava. O que a viagem já usa continua, mesmo que o progresso de agora não o libere.
+- **Persistência:** cada escolha grava só a coluna tocada (`car_model`, `car_color` ou `car_accessories`) pela outbox, e funciona offline.
+- **Sem 3D:** `?render=list`, ou um aparelho sem WebGL2, mostra a mesma tela com a vista lateral grande no lugar do palco.
+- **Chip de diagnóstico:** em dev, ou com `?diag=1` em produção, como na maquete (fps, motor, qualidade; WebGL2 forçado; som). O nível de qualidade é um só por aparelho para as duas cenas.
+- **Tudo liberado:** `?garagem=tudo` libera os cinco modelos, o dourado e todos os acessórios para conferência visual. Só existe em `pnpm dev`; o build de produção nem contém o código.
+- Roteiro de teste nos aparelhos: [`docs/teste-manual-fase-6.md`](docs/teste-manual-fase-6.md).
+
 ## Scripts
 
 | Comando                                          | O que faz                                                                           |

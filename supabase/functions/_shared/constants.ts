@@ -50,6 +50,184 @@ export const CAR_COLORS = {
 } as const;
 export type CarColor = keyof typeof CAR_COLORS;
 
+/**
+ * As conquistas da tabela 10.2: chave e nome. As regras de cada uma são da fase 9
+ * (`features/progression/rules.ts`); aqui fica só o que a garagem precisa para dizer o que falta.
+ */
+export const ACHIEVEMENTS = {
+  first_stop: { name: 'Primeiro pé na estrada' },
+  early_bird: { name: 'Madrugador' },
+  on_time_3: { name: 'Relógio suíço' },
+  nature_3: { name: 'Caçador de cascatas' },
+  winery_2: { name: 'Enólogo' },
+  offline_hero: { name: 'Sem sinal, sem problema' },
+  ready_to_go: { name: 'Pronto para partir' },
+  on_budget: { name: 'Dentro do orçamento' },
+  photographer: { name: 'Fotógrafo de estrada' },
+  chronicler: { name: 'Cronista' },
+  trip_done: { name: 'Viajei!' },
+  team: { name: 'Equipe formada' },
+  planner: { name: 'Planejador' },
+  coast: { name: 'Pé na areia' },
+  downhill: { name: 'Serra abaixo' },
+} as const;
+export type AchievementKey = keyof typeof ACHIEVEMENTS;
+export const ACHIEVEMENT_KEYS = Object.keys(ACHIEVEMENTS) as AchievementKey[];
+
+/**
+ * Os cosméticos do carro, todos da tabela 10.2. `type` diz onde o item mora no carro; no teto, o
+ * rack é a base (`roof: 'base'`) e mala, prancha e bicicleta ocupam uma faixa do trilho cada
+ * (`roof: 'lane'`) e exigem o rack. `hint` é o que falta, em português de gente, e aparece depois
+ * do rótulo ("Bicicleta: quando alguém aceitar seu convite"). `short` serve ao rótulo acessível do
+ * carro ("Hatch Pôr do sol com rack e bicicleta"). A ordem é a da linha de acessórios da garagem.
+ * As chaves antigas (`rack`, `bike`, `board`, `box`) são as que já estão gravadas em
+ * `trips.car_accessories`, que não tem `check` de valores: quem lê descarta o que não conhece.
+ */
+export type CarAccessoryType = 'roof' | 'front' | 'wheels' | 'antenna' | 'plate' | 'sticker';
+type CarAccessoryDef = {
+  label: string;
+  short: string;
+  type: CarAccessoryType;
+  roof?: 'base' | 'lane';
+  achievement: AchievementKey;
+  requires: readonly string[];
+  hint: string;
+};
+
+export const CAR_ACCESSORIES = {
+  rack: {
+    label: 'Rack de teto',
+    short: 'rack',
+    type: 'roof',
+    roof: 'base',
+    achievement: 'first_stop',
+    requires: [],
+    hint: 'quando o time concluir a primeira parada',
+  },
+  bike: {
+    label: 'Bicicleta',
+    short: 'bicicleta',
+    type: 'roof',
+    roof: 'lane',
+    achievement: 'team',
+    requires: ['rack'],
+    hint: 'quando alguém aceitar seu convite',
+  },
+  board: {
+    label: 'Prancha',
+    short: 'prancha',
+    type: 'roof',
+    roof: 'lane',
+    achievement: 'coast',
+    requires: ['rack'],
+    hint: 'chegando a menos de 1 km do mar',
+  },
+  box: {
+    label: 'Mala de teto',
+    short: 'mala de teto',
+    type: 'roof',
+    roof: 'lane',
+    achievement: 'ready_to_go',
+    requires: ['rack'],
+    hint: 'com as listas Antes e Mala completas antes da partida',
+  },
+  fog_lights: {
+    label: 'Faróis de milha',
+    short: 'faróis de milha',
+    type: 'front',
+    achievement: 'early_bird',
+    requires: [],
+    hint: 'com um Partiu! antes das 7h',
+  },
+  hubcaps: {
+    label: 'Calotas cromadas',
+    short: 'calotas cromadas',
+    type: 'wheels',
+    achievement: 'on_budget',
+    requires: [],
+    hint: 'terminando a viagem dentro do orçamento',
+  },
+  antenna: {
+    label: 'Antena com bandeirinha',
+    short: 'antena com bandeirinha',
+    type: 'antenna',
+    achievement: 'offline_hero',
+    requires: [],
+    hint: 'quando algo marcado sem sinal chegar ao time',
+  },
+  plate: {
+    label: 'Placa com o nome da viagem',
+    short: 'placa da viagem',
+    type: 'plate',
+    achievement: 'trip_done',
+    requires: [],
+    hint: 'concluindo todas as paradas da viagem',
+  },
+  sticker_clock: {
+    label: 'Adesivo de relógio',
+    short: 'adesivo de relógio',
+    type: 'sticker',
+    achievement: 'on_time_3',
+    requires: [],
+    hint: 'saindo no horário 3 vezes seguidas',
+  },
+  sticker_waterfall: {
+    label: 'Adesivo de cascata',
+    short: 'adesivo de cascata',
+    type: 'sticker',
+    achievement: 'nature_3',
+    requires: [],
+    hint: 'concluindo 3 paradas de natureza',
+  },
+  sticker_grapes: {
+    label: 'Adesivo de uva',
+    short: 'adesivo de uva',
+    type: 'sticker',
+    achievement: 'winery_2',
+    requires: [],
+    hint: 'visitando 2 vinícolas no mesmo dia',
+  },
+  sticker_camera: {
+    label: 'Adesivo de câmera',
+    short: 'adesivo de câmera',
+    type: 'sticker',
+    achievement: 'photographer',
+    requires: [],
+    hint: 'guardando 5 memórias com foto',
+  },
+  sticker_star: {
+    label: 'Adesivo de estrela',
+    short: 'adesivo de estrela',
+    type: 'sticker',
+    achievement: 'chronicler',
+    requires: [],
+    hint: 'avaliando todas as paradas de um dia',
+  },
+  sticker_map: {
+    label: 'Adesivo de mapa',
+    short: 'adesivo de mapa',
+    type: 'sticker',
+    achievement: 'planner',
+    requires: [],
+    hint: 'importando um roteiro com a IA',
+  },
+  sticker_mountains: {
+    label: 'Adesivo de serra',
+    short: 'adesivo de serra',
+    type: 'sticker',
+    achievement: 'downhill',
+    requires: [],
+    hint: 'descendo 500 m num dia',
+  },
+} as const satisfies Record<string, CarAccessoryDef>;
+export type CarAccessoryKey = keyof typeof CAR_ACCESSORIES;
+export const CAR_ACCESSORY_KEYS = Object.keys(CAR_ACCESSORIES) as CarAccessoryKey[];
+export function isCarAccessoryKey(value: string): value is CarAccessoryKey {
+  return Object.hasOwn(CAR_ACCESSORIES, value);
+}
+/** Cabem até 3 adesivos, cada um num espaço fixo do modelo, na ordem em que foram escolhidos. */
+export const CAR_STICKER_MAX = 3;
+
 export const TRIP_ROLES = ['owner', 'member'] as const;
 export type TripRole = (typeof TRIP_ROLES)[number];
 export const MEMBER_STATUSES = ['pending', 'accepted'] as const;

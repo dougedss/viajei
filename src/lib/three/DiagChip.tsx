@@ -1,18 +1,18 @@
-import type { Backend } from '../renderer.ts';
-import { labelOf, type QualityPrefs } from '../quality.ts';
+import type { Backend } from './renderer.ts';
+import { labelOf, type QualityPrefs } from './quality.ts';
 
 /**
- * O chip de diagnóstico: fps em movimento, motor em uso, qualidade e nível. Toque alterna Auto,
- * Leve, Alta. Em dev e com `?diag=1`, para o teste no iPhone. Os toggles menores (noite, WebGL
- * forçado, som) servem ao teste manual.
+ * O chip de diagnóstico das cenas 3D: fps em movimento, motor em uso, qualidade e nível. Toque
+ * alterna Auto, Leve, Alta. Em dev e com `?diag=1`, para o teste no iPhone. Os toggles menores
+ * (noite, só na maquete; WebGL forçado; som) servem ao teste manual.
  */
 type Props = {
   fps: number | null;
   backend: Backend | null;
   prefs: QualityPrefs;
   onCycle: () => void;
-  night: boolean;
-  onToggleNight: () => void;
+  /** a maquete tem dia e noite; a garagem não */
+  night?: { on: boolean; toggle: () => void };
   forceWebGL: boolean;
   onToggleWebGL: () => void;
   sound: boolean;
@@ -45,14 +45,16 @@ export function DiagChip(props: Props) {
         <span className="text-hud-muted">·</span>
         <span data-diag-quality>{labelOf(props.prefs)}</span>
       </button>
-      <button
-        type="button"
-        className={chip}
-        aria-pressed={props.night}
-        onClick={props.onToggleNight}
-      >
-        {props.night ? 'Noite' : 'Dia'}
-      </button>
+      {props.night ? (
+        <button
+          type="button"
+          className={chip}
+          aria-pressed={props.night.on}
+          onClick={props.night.toggle}
+        >
+          {props.night.on ? 'Noite' : 'Dia'}
+        </button>
+      ) : null}
       <button
         type="button"
         className={chip}

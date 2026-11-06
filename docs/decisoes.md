@@ -333,3 +333,64 @@ Um registro curto por decisão não óbvia: contexto, decisão, consequência. E
 - Primeiro quadro no Mac (Chrome, WebGPU, servidor de dev): **1,2 s** da montagem do palco ao primeiro `useFrame`, com o dia 1 do seed (479 km).
 - fps no Mac durante o replay e o "Rever o dia": 60 em Leve e em Alta, com WebGPU e com WebGL2 forçado.
 - fps no iPhone (Alta e Leve) e no Android: pendentes do teste manual do Douglas (`docs/teste-manual-fase-5.md`).
+
+## Fase 6 · Garagem 3D (06/11/2026)
+
+### D65 · A base 3D compartilhada em `src/lib/three`
+**Contexto.** A garagem é a segunda cena do app; detecção de motor, criação do renderer, níveis de qualidade, limite de erro e o laço sob demanda viviam dentro da maquete.
+**Decisão.** Saíram para `src/lib/three`: `renderer.ts`, `useSupport`, `quality.ts` (o `Tier` comum é só `dpr` e sombra; a maquete estende com o cenário em `features/world/quality.ts`), `useQuality` (recebe quem monta o `Tier`), `prefs.ts` (qualidade e as chaves `?render=list`/`?diag=1`), `ThreeBoundary`, `DiagChip` (noite opcional), `ThreeCanvas` (fábrica `gl` assíncrona, demanda, `dpr`/sombra pelo nível, tone mapping, perda de contexto, limite de erro) e `FrameDriver` (o único `useFrame`). O `useReducedMotion` foi para `src/lib/reduced-motion.ts`, porque não é do 3D: o áudio e o confete tinham cópias próprias e passaram a ler dali. A preferência de qualidade continua uma só por aparelho (`viajei:world:quality`).
+**Consequência.** A maquete não mudou de comportamento: os testes dela passaram com a troca só dos imports, e o `WorldCanvas` virou um invólucro do `ThreeCanvas`.
+
+### D66 · O contrato `CarProfile`: um perfil, duas artes
+**Contexto.** O hatch da fase 5 era um perfil lateral extrudado escrito à mão; os outros quatro modelos, a vista lateral do card e as âncoras dos acessórios precisavam da mesma fonte.
+**Decisão.** Cada modelo é um módulo de dados puro (`src/art/cars/profiles/*`, sem three): o contorno de cima como comandos de caminho (M, L, Q), a soleira, as rodas, os vidros, as luzes e as âncoras (trilho do teto com faixas, para-choque, placa, antena, três espaços de adesivo). `outline()` gera a borda de baixo com os arcos **centrados nas rodas**, e o mesmo contorno vira o `Shape` do three e o `d` do SVG. Medidas (comprimento × altura, vão, roda, entre-eixos, trilho e faixas): hatch 4,62 × 1,56, vão 0,30, roda 0,42, entre-eixos 2,80, trilho 1,80 com 2 faixas · sedã 5,14 × 1,46, 0,28, 0,42, 3,00, 1,43/2 · SUV 5,04 × 1,86, 0,47, 0,52, 2,90, 2,25/2, com para-lamas marcados e estepe · picape 5,68 × 1,82, 0,44, 0,46, 3,30, 1,40/2 sobre a cabine, com caçamba aberta · kombi 4,79 × 2,05, 0,30, 0,40, 2,40, 3,60/3, em saia e blusa. Um construtor genérico (`rig.ts`) monta todos; o que é de um modelo só (caçamba, estepe, para-lamas, saia e blusa, para-brisa dividido) está nos dados. O `CarRig` ganhou âncoras, `attach`/`detach` com animação (cai e assenta com mola; adesivos, calotas e antena crescem), `setPlate`, `update` e `dispose` idempotente.
+**Consequência.** Os testes validam o que quebraria o 3D: o contorno fecha na soleira, o arco fica abaixo da chapa com folga, vidros e adesivos ficam dentro da carroceria e longe dos arcos. Essa validação achou dois defeitos do hatch da fase 5. O arco da roda da frente passava da linha do capô (o capô subiu um pouco). E o para-brisa, a vigia e a placa ficavam por dentro do chanfro da extrusão, invisíveis; agora os vidros saem para fora do chanfro.
+
+### D67 · A vista lateral em SVG a partir do mesmo perfil
+**Contexto.** O carro tem de aparecer no card da viagem, no topo da visão geral e na garagem sem 3D, rápido e offline.
+**Decisão.** `CarSide` desenha o perfil em SVG: carroceria com degradê e o chanfro como traço, saia e blusa por recorte, vidros, rodas com calota, luzes e os cosméticos de teto e de lado, com as mesmas medidas do 3D (`shapes.ts`) e a mesma arte de adesivo (paths de 24 × 24 que viram `<path>` aqui e `Path2D` na textura). O `viewBox` de cada modelo reserva o espaço do acessório mais alto, para o carro não mudar de tamanho ao ganhar um rack. Rejeitada: uma foto do 3D guardada por aparelho, que exigiria carregar 1,2 MB de three na tela inicial ou mostrar um vazio no primeiro acesso.
+**Consequência.** Os perfis, as regras e o `CarSide` ficam num chunk de 13,9 KB (5,4 KB gzip) que a tela inicial já carrega, sem three. Snapshots dos cinco, com e sem cosméticos, travam o desenho.
+
+### D68 · Cosméticos, faixas do teto e o encaixe com memória
+**Contexto.** A tabela 10.2 traz 15 cosméticos; o teto não comporta todos ao mesmo tempo e os adesivos têm lugar fixo.
+**Decisão.** `CAR_ACCESSORIES` e `ACHIEVEMENTS` em `_shared/constants.ts` (rótulo, tipo, conquista, dependência do rack e a frase do que falta). Mala, prancha e bicicleta ocupam uma faixa cada; hatch, sedã, SUV e picape têm 2 faixas, a kombi tem 3 (o prêmio do último nível leva as três coisas). Cabem 3 adesivos, cada um num espaço do modelo. O encaixe (`placement.ts`) segue a ordem gravada e, com o encaixe anterior, quem continua fica onde estava: nada pula de faixa quando outro item entra ou sai. Trocar de modelo reencaixa o teto e avisa o que saiu.
+**Consequência.** As chaves antigas (`rack`, `bike`, `board`, `box`) continuam valendo; o banco não tem `check` em `car_accessories`.
+
+### D69 · O progresso do time e a prévia
+**Contexto.** XP e conquistas só existem na fase 9, mas a garagem tem de impressionar agora sem fingir progresso.
+**Decisão.** `TeamProgress { level, achievements }` em `features/progression/team.ts`: o maior nível e a união das conquistas dos membros aceitos (`combineTeam`). O `useTeamProgress` já lê os membros aceitos da viagem; nesta fase cada um traz nível 1 e nada, e a fase 9 troca só essa fonte. A regra da garagem é uma só (`decide`): o palco é o carro da viagem sempre que tudo nele está liberado; se algo bloqueado entra, é prévia, com o selo, as frases do que falta e "Voltar ao carro da viagem", e nada se grava. O que a viagem já usa e o progresso de agora não libera fica (`kept`) e só não volta a ser escolhido depois de trocado. `?garagem=tudo` libera tudo só em dev: está atrás de `import.meta.env.DEV`, e o build de produção não contém a string.
+**Consequência.** Os cinco carros e todos os cosméticos podem ser vistos, girados e experimentados desde já; o card e a maquete nunca mostram o que não foi gravado.
+
+### D70 · Sem migration: normalização na leitura
+**Contexto.** As colunas `car_*` existem desde a fase 1; `car_model` e `car_color` têm `check`, `car_accessories` é `text[]` livre, e cada coluna sincroniza sozinha (dois aparelhos podem gravar modelo e acessórios incompatíveis ao mesmo tempo).
+**Decisão.** `normalizeCar` resolve na leitura: modelo e cor inválidos viram hatch Pôr do sol, chaves desconhecidas saem, item de teto sem rack ganha o rack, o que passa das faixas ou dos 3 adesivos sai pela ordem. A gravação é só da coluna tocada (`mutate.patch`), offline, e a outbox funde toques seguidos.
+**Consequência.** Dado velho nunca quebra a cena. O servidor não confere se o time liberou o que foi gravado; a fase 9, com a 0009 (conquistas no banco), pode pôr esse trigger se fizer sentido.
+
+### D71 · O gesto do disco, não o `OrbitControls`
+**Contexto.** Num showroom quem gira é o carro: o cenário, o cone de luz e o piso ficam parados e só o reflexo corre pela lataria.
+**Decisão.** `disc.ts` (puro): arrastar na horizontal gira o disco (225° por largura de palco), soltar deixa a inércia dos últimos 100 ms (até 6 rad/s) voltar ao giro lento (0,35 rad/s); na vertical, inclina a câmera entre 6° e 30°; pinçar e a roda do mouse aproximam entre 0,68 e 1,35 da distância que enquadra o carro, que se calcula pela proporção do palco (no retrato, quem limita é a largura). A direção trava nos primeiros 10 px. O giro sozinho começa ao entrar e depois de cada troca e para depois de 20 s sem toque, com a aba escondida e sob reduzir movimento (sem inércia também). O estado vive no `GarageRuntime`, uma classe, como o `WorldRuntime`. Com o `OrbitControls`, a câmera orbitaria e a parede côncava giraria mostrando a abertura, e o amortecimento dele pede `update()` a cada quadro.
+**Consequência.** Parado e assentado, zero quadros. A troca de modelo (`swap.ts`, 0,9 s) faz o carro atual sair pela direita da tela, esterçando se não estiver de perfil, e o novo entrar pela esquerda, com as rodas girando pela distância percorrida.
+
+### D72 · drei fora; sombra e reflexo sem shader próprio
+**Decisão.** Continua sem drei. A sombra de contato é a sombra real da luz principal no disco (2048 em Alta, 1024 em Leve) mais um plano com degradê radial sob o carro, que anda com ele na troca. Na Alta, o topo do disco reflete o carro com o `reflector()` do TSL (meia resolução, desbotando para a borda), que funciona nos dois backends; na Leve, fica só o brilho do ambiente. Medido no Mac: 60 fps com o reflexo, em WebGPU e em WebGL2.
+**Consequência.** Nenhum componente que suponha laço contínuo ou shader só WebGL. O reflexo é o primeiro candidato a cair se o iPhone não segurar 60 fps na Alta.
+
+### D73 · Uma tinta para os cinco e a luz do estúdio
+**Contexto.** A tinta da fase 5 (metal 0,5) com a luz do protótipo (220, 70, 110) ficava pastel na garagem: o vermelho satura no tone mapping e a cor puxa para pêssego.
+**Decisão.** A tinta é um `MeshPhysicalNodeMaterial` com verniz cujo grafo TSL é o mesmo para os cinco: a divisa da saia e blusa e o V do nariz são uniformes (no carro de uma cor só, a divisa fica acima do teto). Tinta sólida com metal 0,2; dourado e névoa metálicos. Estúdio com luz principal 70, preenchimento 24, contraluz 45 e ambiente 0,4.
+**Consequência.** Cor viva com o verniz refletindo; a maquete também ganhou a tinta menos metálica. Um shader só significa que trocar de modelo nunca compila tinta nova (D74).
+
+### D74 · A troca de modelo sem engasgo
+**Contexto.** Na primeira versão, cada troca tinha três quadros de 80 a 170 ms (no build de produção também), inclusive ao voltar a um carro já visto.
+**Decisão.** A causa principal eram as duas luzes de spot de cada carro (os feixes dos faróis para a noite da maquete): carro entrando ou saindo muda o conjunto de luzes da cena, e o three reconstrói o shader de todos os materiais. O `buildCar` ganhou `beams` (padrão sim) e a garagem monta sem. Somaram-se:
+- o grafo único da tinta (D73), porque a kombi compilava a dela de forma síncrona nos passes de sombra e reflexo (451 ms);
+- um lote das peças paradas por material (`batch.ts`: o hatch sem acessórios caiu de 32 malhas para 20; o rack e a bicicleta, de 18 peças para 4);
+- os carros que já passaram pelo disco ficam estacionados fora de cena e voltam sem remontar;
+- o preparo da troca: o carro novo monta abaixo do piso, o `compileAsync` compila e um quadro de aquecimento cria os objetos de render dos três passes antes de a animação começar.
+**Consequência.** Medido no Mac, build de produção: trocas a 60 fps, com no máximo um quadro de 32 a 50 ms no instante do toque, em WebGPU e em WebGL2.
+
+### D75 · Números medidos
+- Chunks (build de produção): página da garagem 11,9 KB (5,1 KB gzip); palco 3D 16,2 KB (6,4 KB gzip); o carro por código com a base 3D, compartilhado com a maquete, 38,1 KB (14,5 KB gzip); perfis, regras e `CarSide` 13,9 KB (5,4 KB gzip), sem three. O chunk `three` foi de 1.255 KB para 1.287 KB (358 KB gzip) com o `RoundedBoxGeometry` e o `mergeGeometries`; o chunk principal ficou praticamente igual (532,6 KB). O `three` já está em cache desde a maquete.
+- Primeiro quadro da garagem no Mac (Chrome, WebGPU, servidor de dev): **0,7 s** da montagem do palco ao primeiro `useFrame`.
+- fps no Mac com o disco girando: 60 em Alta, com WebGPU e com WebGL2 forçado (mediana de 3 s; pior quadro 18 ms).
+- fps no iPhone (Alta e Leve) e no Android: pendentes do teste manual do Douglas (`docs/teste-manual-fase-6.md`), junto com os da fase 5 (D64).

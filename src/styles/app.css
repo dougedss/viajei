@@ -159,6 +159,19 @@
   }
 }
 
+/* a vista lateral da garagem dá um pulinho a cada troca (sem 3D) */
+@keyframes garage-hop {
+  0% {
+    transform: translateY(8px) scale(0.98);
+  }
+  60% {
+    transform: translateY(-4px) scale(1.01);
+  }
+  100% {
+    transform: none;
+  }
+}
+
 @utility num {
   font-family: var(--font-num);
   font-variant-numeric: tabular-nums;

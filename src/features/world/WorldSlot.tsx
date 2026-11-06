@@ -6,9 +6,10 @@ import type { Catchup } from '@/features/travel-mode/catchup.ts';
 import type { DayState } from '@/features/travel-mode/rules.ts';
 import type { RouteStatus } from '@/features/itinerary/route.ts';
 import type { DayRoute, Profile, RouteLeg, Trip } from '@/lib/db/schema.ts';
-import { WorldBoundary } from './components/Boundary.tsx';
+import { readUrlFlags } from '@/lib/three/prefs.ts';
+import { ThreeBoundary } from '@/lib/three/ThreeBoundary.tsx';
 import { DayList } from './components/DayList.tsx';
-import { readUrlFlags, useRenderPref, writeRenderPref } from './prefs.ts';
+import { useRenderPref, writeRenderPref } from './prefs.ts';
 
 /**
  * O lugar da maquete no Modo Viagem, sem nada do 3D no chunk principal: decide entre a lista (por
@@ -18,7 +19,7 @@ import { readUrlFlags, useRenderPref, writeRenderPref } from './prefs.ts';
 export type EventsOwner = 'world' | 'card';
 
 export type WorldSlotProps = {
-  trip: Pick<Trip, 'id' | 'car_model' | 'car_color' | 'car_accessories'>;
+  trip: Pick<Trip, 'id' | 'name' | 'car_model' | 'car_color' | 'car_accessories'>;
   day: { id: string; date: string };
   state: DayState;
   legs: Map<string, RouteLeg>;
@@ -65,14 +66,14 @@ export function WorldSlot(props: WorldSlotProps) {
   }
 
   return (
-    <WorldBoundary
+    <ThreeBoundary
       fallback={<ListView {...props} notice="Maquete indisponível agora." action={null} />}
       onError={() => onEventsOwner('card')}
     >
       <Suspense fallback={<WorldSkeleton />}>
         <WorldSection {...props} />
       </Suspense>
-    </WorldBoundary>
+    </ThreeBoundary>
   );
 }
 

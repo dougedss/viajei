@@ -67,6 +67,10 @@ export const router = createBrowserRouter([
                 lazy: page(() => import('@/features/travel-mode/routes/ModoViagemPage.tsx')),
               },
               {
+                path: '/viagens/:tripId/garagem',
+                lazy: page(() => import('@/features/garage/routes/GaragemPage.tsx')),
+              },
+              {
                 path: '/viagens/:tripId/avisos',
                 lazy: page(() => import('@/features/notifications/routes/AvisosPage.tsx')),
               },

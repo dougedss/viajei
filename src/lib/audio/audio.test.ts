@@ -16,6 +16,7 @@ function fakeDeps(over: { pref?: boolean; reduced?: boolean; context?: boolean }
   const synth = {
     horn: vi.fn(),
     bell: vi.fn(),
+    snap: vi.fn(),
     engine: vi.fn(() => ({ stop })),
   };
   const resume = vi.fn(() => Promise.resolve());
@@ -58,6 +59,20 @@ describe('createAudio', () => {
     expect(synth.bell).toHaveBeenCalledTimes(1);
     expect(createContext).toHaveBeenCalledTimes(1);
     expect(resume).toHaveBeenCalled();
+  });
+
+  it('o encaixe toca no contexto compartilhado e respeita o toggle', () => {
+    const on = fakeDeps();
+    on.audio.snap();
+    on.audio.snap();
+    expect(on.synth.snap).toHaveBeenCalledTimes(2);
+    expect(on.createContext).toHaveBeenCalledTimes(1);
+    const off = fakeDeps({ pref: false });
+    off.audio.snap();
+    expect(off.synth.snap).not.toHaveBeenCalled();
+    const reduced = fakeDeps({ reduced: true });
+    reduced.audio.snap();
+    expect(reduced.synth.snap).not.toHaveBeenCalled();
   });
 
   it('não faz nada desligado, com reduzir movimento ou sem Web Audio', () => {

@@ -124,17 +124,89 @@ export function createSceneTextures(colors: { road: string; lane: string }): Sce
   };
 }
 
-/** A placa "VIAJEI" do carro. */
-export function createPlateTexture(): Texture {
+/** O texto da placa: maiúsculo, uma linha, sem espaços repetidos; "VIAJEI" quando vazio. */
+export function plateText(text: string | null | undefined): string {
+  const clean = (text ?? '').replace(/\s+/g, ' ').trim().toLocaleUpperCase('pt-BR');
+  return clean.length > 0 ? clean : 'VIAJEI';
+}
+
+/**
+ * A placa do carro: "VIAJEI" por padrão; com o acessório da conquista Viajei!, o nome da viagem. O
+ * texto encolhe até caber e, se nem no menor tamanho couber, termina em reticências.
+ */
+export function createPlateTexture(text?: string | null): Texture {
+  const label = plateText(text);
   return canvasTexture(256, 72, (g, w, h) => {
     g.fillStyle = '#f2efe6';
     g.fillRect(0, 0, w, h);
     g.fillStyle = '#1f3a8a';
     g.fillRect(0, 0, w, 14);
     g.fillStyle = '#111';
-    g.font = '700 44px "Barlow Condensed", "Barlow", sans-serif';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.fillText('VIAJEI', w / 2, h / 2 + 8);
+    const max = w - 20;
+    let size = 44;
+    const font = (s: number) => `700 ${s}px "Barlow Condensed", "Barlow", sans-serif`;
+    g.font = font(size);
+    while (size > 20 && g.measureText(label).width > max) {
+      size -= 2;
+      g.font = font(size);
+    }
+    let shown = label;
+    while (shown.length > 1 && g.measureText(shown).width > max) shown = `${shown.slice(0, -2)}…`;
+    g.fillText(shown, w / 2, h / 2 + 8);
   });
+}
+
+/** Um adesivo redondo, desenhado da mesma arte (paths de 24 × 24) que a vista lateral usa. */
+export function createStickerTexture(art: {
+  bg: string;
+  ring: string;
+  ink: string;
+  strokes: readonly string[];
+  fills: readonly string[];
+  highlights: readonly string[];
+  stroke: number;
+  ringWidth: number;
+}): Texture {
+  const t = canvasTexture(128, 128, (g, w) => {
+    if (typeof Path2D === 'undefined') return;
+    const s = w / 24;
+    g.scale(s, s);
+    g.beginPath();
+    g.arc(12, 12, 11.2, 0, Math.PI * 2);
+    g.fillStyle = art.bg;
+    g.fill();
+    g.lineWidth = art.ringWidth;
+    g.strokeStyle = art.ring;
+    g.stroke();
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.lineWidth = art.stroke;
+    g.strokeStyle = art.ink;
+    for (const d of art.strokes) g.stroke(new Path2D(d));
+    g.fillStyle = art.ink;
+    for (const d of art.fills) g.fill(new Path2D(d));
+    g.fillStyle = '#ffffff';
+    for (const d of art.highlights) g.fill(new Path2D(d));
+  });
+  t.anisotropy = 4;
+  return t;
+}
+
+/** Sombra de contato: um degradê radial escuro no centro que some na borda, sem shader próprio. */
+export function createContactShadowTexture(): Texture {
+  return canvasTexture(
+    128,
+    128,
+    (g, w, h) => {
+      const grad = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+      grad.addColorStop(0, 'rgba(0,0,0,0.62)');
+      grad.addColorStop(0.55, 'rgba(0,0,0,0.3)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, w, h);
+    },
+    true,
+  );
 }

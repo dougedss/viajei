@@ -1,7 +1,9 @@
 import { CloudOff, MapPin } from 'lucide-react';
 import { Link } from 'react-router';
 import { Avatar } from '@/components/ui/Avatar.tsx';
+import { CarSide } from '@/art/cars/CarSide.tsx';
 import { Chip } from '@/components/ui/Chip.tsx';
+import { normalizeCar } from '@/features/garage/rules.ts';
 import { asPersonColor } from '@/features/profile/queries.ts';
 import type { TripListItem } from '../queries.ts';
 import { formatPeriod, statusKind, statusLabel, tripStatus } from '../rules.ts';
@@ -10,7 +12,10 @@ type Props = { item: TripListItem; today: string };
 
 const MAX_AVATARS = 4;
 
-/** Um card por viagem: estado, nome, período, origem, o time e se há alterações por enviar. */
+/**
+ * Um card por viagem: estado, nome, período, o carro da garagem de lado, origem, o time e se há
+ * alterações por enviar.
+ */
 export function TripCard({ item: { trip, members, pendingOps }, today }: Props) {
   const status = tripStatus(trip, today);
   const shown = members.slice(0, MAX_AVATARS);
@@ -33,9 +38,12 @@ export function TripCard({ item: { trip, members, pendingOps }, today }: Props) 
           </span>
         ) : null}
       </div>
-      <div className="grid gap-0.5">
-        <p className="font-num text-[24px] leading-tight font-semibold">{trip.name}</p>
-        <p className="text-[15px] text-ink-2">{formatPeriod(trip.start_date, trip.end_date)}</p>
+      <div className="flex items-end justify-between gap-3">
+        <div className="grid min-w-0 gap-0.5">
+          <p className="font-num text-[24px] leading-tight font-semibold">{trip.name}</p>
+          <p className="text-[15px] text-ink-2">{formatPeriod(trip.start_date, trip.end_date)}</p>
+        </div>
+        <CarSide car={normalizeCar(trip)} className="-mb-1 h-[46px] w-auto shrink-0" />
       </div>
       <div className="flex items-center justify-between gap-3">
         {trip.origin ? (

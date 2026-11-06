@@ -3,30 +3,33 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useLocation } from 'react-router';
 import { Button } from '@/components/ui/Button.tsx';
 import { readPalette } from '@/art/palette.ts';
+import { normalizeCar } from '@/features/garage/rules.ts';
 import { statusOf, type StopStatus } from '@/features/travel-mode/rules.ts';
 import { audio, useSoundPref, writeSoundPref } from '@/lib/audio/index.ts';
 import { db, type Stop } from '@/lib/db/schema.ts';
 import type { PlaceReading } from '@/lib/geo/index.ts';
+import { useReducedMotion } from '@/lib/reduced-motion.ts';
+import { DiagChip } from '@/lib/three/DiagChip.tsx';
+import { readUrlFlags } from '@/lib/three/prefs.ts';
+import type { Backend } from '@/lib/three/renderer.ts';
+import { useQuality } from '@/lib/three/useQuality.ts';
+import { useSupport } from '@/lib/three/useSupport.ts';
 import { formatStamp } from '@/lib/time/index.ts';
 import { placeCar } from '../car-position.ts';
 import { useElementSize } from '../hooks/useElementSize.ts';
 import { usePlace } from '../hooks/usePlace.ts';
-import { useQuality } from '../hooks/useQuality.ts';
-import { useReducedMotion } from '../hooks/useReducedMotion.ts';
-import { useSupport } from '../hooks/useSupport.ts';
 import { buildLayout, type WorldLayout } from '../layout.ts';
 import { MotionController, type MotionEvent } from '../motion.ts';
 import { OPENING_TIMELINE, openedKey, planOpening } from '../opening.ts';
-import { readUrlFlags, writeRenderPref } from '../prefs.ts';
+import { writeRenderPref } from '../prefs.ts';
+import { tierFor } from '../quality.ts';
 import { projectNodes } from '../project.ts';
-import type { Backend } from '../renderer.ts';
 import { planLiveAdvance, planReplay, planReview } from '../replay.ts';
 import { WorldRuntime, type Opening } from '../scene/runtime.ts';
 import { WorldCanvas } from '../scene/WorldCanvas.tsx';
 import { WorldScene } from '../scene/WorldScene.tsx';
 import { ListView, type WorldSlotProps } from '../WorldSlot.tsx';
 import { DayList } from './DayList.tsx';
-import { DiagChip } from './DiagChip.tsx';
 import { HUD_BOTTOM, HUD_TOP, WorldHud, type TeamChip } from './WorldHud.tsx';
 
 /**
@@ -140,9 +143,10 @@ function withoutKey<T>(record: Record<string, T>, key: string): Record<string, T
 
 function WorldStage(p: StageProps) {
   const { layout, state, catchup, panelOn, uid, reducedMotion, onEventsOwner } = p;
-  const quality = useQuality();
+  const quality = useQuality(tierFor);
   const soundPref = useSoundPref();
   const palette = useMemo(() => readPalette(), []);
+  const car = useMemo(() => normalizeCar(p.trip), [p.trip]);
   const [motion] = useState(() => new MotionController(layout.nodes[0]?.s ?? 0, reducedMotion));
   const [runtime] = useState(() => new WorldRuntime(layout, motion, p.night));
   const [backend, setBackend] = useState<Backend | null>(null);
@@ -438,11 +442,7 @@ function WorldStage(p: StageProps) {
           tier={quality.tier}
           statuses={statuses}
           pops={pops}
-          car={{
-            model: p.trip.car_model,
-            color: p.trip.car_color,
-            accessories: p.trip.car_accessories,
-          }}
+          car={car}
           onMotionEvents={onMotionEvents}
           onFrame={quality.onFrame}
           onFirstFrame={onFirstFrame}
@@ -479,8 +479,7 @@ function WorldStage(p: StageProps) {
               backend={backend}
               prefs={quality.prefs}
               onCycle={quality.cycle}
-              night={night}
-              onToggleNight={() => setNightOverride((v) => !(v ?? p.night))}
+              night={{ on: night, toggle: () => setNightOverride((v) => !(v ?? p.night)) }}
               forceWebGL={forceWebGL}
               onToggleWebGL={() => setForceWebGL((v) => !v)}
               sound={soundPref}

@@ -1,10 +1,10 @@
 import { WebGPURenderer } from 'three/webgpu';
 
 /**
- * O motor da maquete: detecção antes de montar o Canvas (WebGPU, WebGL2 ou nada), a criação do
+ * O motor das cenas 3D: detecção antes de montar o Canvas (WebGPU, WebGL2 ou nada), a criação do
  * `WebGPURenderer` do three (que tem backend WebGL2 próprio e cai nele quando não há WebGPU) e a
- * leitura de qual backend ficou ativo. `none` cai na lista acessível sem mensagem de erro, só com
- * o aviso discreto "Maquete indisponível neste aparelho".
+ * leitura de qual backend ficou ativo. `none` cai na versão sem 3D (a lista do dia, a vista
+ * lateral da garagem) sem mensagem de erro, só com um aviso discreto.
  */
 export type Backend = 'webgpu' | 'webgl2';
 export type Support = Backend | 'none';
@@ -51,7 +51,7 @@ export type CreateOptions = { forceWebGL: boolean };
 
 /**
  * Cria e inicializa o renderer no canvas do R3F. Se o WebGPU falhar no `init`, tenta uma vez em
- * WebGL2; se falhar de novo, lança, e o limite de erro da seção troca a maquete pela lista.
+ * WebGL2; se falhar de novo, lança, e o limite de erro troca a cena pela versão sem 3D.
  */
 export async function createRenderer(
   canvas: HTMLCanvasElement,

@@ -1,8 +1,9 @@
+import { readReducedMotion } from '@/lib/reduced-motion.ts';
 import { readLocal, useLocalValue, writeLocal } from '@/lib/storage/local.ts';
-import { bell, engine, horn, type EngineHandle } from './synth.ts';
+import { bell, engine, horn, snap, type EngineHandle } from './synth.ts';
 
 /**
- * Sons do Modo Viagem com a regra de quando tocar: toggle por aparelho em `localStorage`, ligado
+ * Sons do app (Modo Viagem e garagem) com a regra de quando tocar: toggle por aparelho em `localStorage`, ligado
  * por padrão, e desligado sob `prefers-reduced-motion`. O `AudioContext` nasce no primeiro som e
  * tenta retomar a cada toque (o iPhone só libera áudio depois de um gesto na página).
  */
@@ -32,6 +33,7 @@ export function soundsEnabled(input: { pref: boolean; reducedMotion: boolean }):
 type Synth = {
   horn: (ctx: AudioContext) => void;
   bell: (ctx: AudioContext) => void;
+  snap: (ctx: AudioContext) => void;
   engine: (ctx: AudioContext) => EngineHandle;
 };
 
@@ -46,6 +48,8 @@ export type AudioDeps = {
 export type Audio = {
   horn: () => void;
   bell: () => void;
+  /** o encaixe de um acessório na garagem */
+  snap: () => void;
   /** liga o ronco; devolve a função que desliga (idempotente) */
   engineStart: () => () => void;
   engineStop: () => void;
@@ -53,7 +57,7 @@ export type Audio = {
 };
 
 export function createAudio(deps: AudioDeps): Audio {
-  const synth: Synth = deps.synth ?? { horn, bell, engine };
+  const synth: Synth = deps.synth ?? { horn, bell, snap, engine };
   let ctx: AudioContext | null | undefined;
   let running: EngineHandle | null = null;
 
@@ -80,6 +84,10 @@ export function createAudio(deps: AudioDeps): Audio {
       const c = context();
       if (c) synth.bell(c);
     },
+    snap: () => {
+      const c = context();
+      if (c) synth.snap(c);
+    },
     engineStart: () => {
       const c = context();
       if (c && !running) running = synth.engine(c);
@@ -98,13 +106,9 @@ function defaultContext(): AudioContext | null {
   }
 }
 
-function prefersReducedMotion(): boolean {
-  return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
 /** O áudio do app: um só, compartilhado pelas telas. */
 export const audio: Audio = createAudio({
   createContext: defaultContext,
   readPref: readSoundPref,
-  reducedMotion: prefersReducedMotion,
+  reducedMotion: readReducedMotion,
 });

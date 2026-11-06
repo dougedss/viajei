@@ -1,8 +1,9 @@
 import { useSyncExternalStore } from 'react';
 
 /**
- * `prefers-reduced-motion`, central: a cena, o replay, a abertura e os sons leem daqui. Os
- * componentes HTML já respeitam a mesma preferência pelas classes `motion-reduce:` do Tailwind.
+ * `prefers-reduced-motion`, num lugar só: as cenas 3D, o replay, a abertura, os sons, o confete e
+ * as trocas da garagem leem daqui. Os componentes HTML respeitam a mesma preferência pelas classes
+ * `motion-reduce:` do Tailwind.
  */
 const QUERY = '(prefers-reduced-motion: reduce)';
 
