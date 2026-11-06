@@ -5,6 +5,9 @@ name: Laboratório
 # app). Se algo falhar, o job fica vermelho e o GitHub avisa por e-mail. Todo dia às 3h07 de
 # Brasília (06:07 UTC; fora do minuto cheio, que o GitHub atrasa) e quando alguém pedir:
 # Actions → Laboratório → Run workflow, ou `pnpm lab:remote`.
+# O GitHub registra o cron quando este arquivo chega na main. O push que o criou (05/11, 23:48 UTC)
+# caiu num incidente do Actions e o agendamento nunca rodou; se o histórico voltar a ficar sem
+# execuções "schedule", um commit que toque este arquivo na main registra o cron de novo.
 on:
   schedule:
     - cron: '7 6 * * *'
