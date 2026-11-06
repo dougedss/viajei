@@ -1,8 +1,8 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
+import { dateInSaoPaulo } from './helpers/dates.ts';
 import { criarUsuarioDescartavel, SENHA } from './helpers/users.ts';
 
-const today = (daysAhead = 0) =>
-  new Date(Date.now() + daysAhead * 86_400_000).toISOString().slice(0, 10);
+const today = dateInSaoPaulo;
 
 async function preencherLogin(page: Page, email: string) {
   await page.goto('/entrar');

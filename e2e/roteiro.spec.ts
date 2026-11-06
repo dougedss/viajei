@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
+import { dateInSaoPaulo } from './helpers/dates.ts';
 
 const SENHA = 'viajei123';
-const futureDate = (daysAhead: number) =>
-  new Date(Date.now() + daysAhead * 86_400_000).toISOString().slice(0, 10);
+const futureDate = dateInSaoPaulo;
 
 async function entrar(page: Page, email: string) {
   await page.goto('/entrar');

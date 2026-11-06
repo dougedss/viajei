@@ -1,10 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
+import { dateInSaoPaulo } from './helpers/dates.ts';
 
 const SENHA = 'viajei123';
 
 /** datas sempre no futuro: durante uma viagem, `/` redireciona para o Modo Viagem */
-const futureDate = (daysAhead: number) =>
-  new Date(Date.now() + daysAhead * 86_400_000).toISOString().slice(0, 10);
+const futureDate = dateInSaoPaulo;
 const INICIO = futureDate(30);
 const FIM = futureDate(33);
 
