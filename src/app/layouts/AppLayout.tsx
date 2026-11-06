@@ -17,6 +17,7 @@ import { SyncNotices } from '@/features/sync/components/SyncNotices.tsx';
 import { invitesKeys } from '@/features/trips/queries.ts';
 import { syncEngine } from '@/lib/db/sync/engine.ts';
 import { supabase } from '@/lib/supabase/client.ts';
+import { startMedia, stopMedia } from '@/lib/media/index.ts';
 import { useSession } from '@/lib/supabase/session.ts';
 
 const claimed = new Set<string>();
@@ -36,8 +37,12 @@ export function AppLayout() {
   useEffect(() => {
     if (!uid) return;
     void syncEngine.start(uid);
+    startMedia(uid);
     void markFirstOpen().then(() => touchSubscription());
-    return () => syncEngine.stop();
+    return () => {
+      syncEngine.stop();
+      stopMedia();
+    };
   }, [uid]);
 
   useEffect(() => {

@@ -5,7 +5,45 @@ export type Database = {
   
   "public": {
           Tables: {
-            "edge_calls": {
+            "attachments": {
+                  Row: {
+                    "created_at": string,"created_by": string,"deleted_at": string | null,"field_versions": NonNullable<Json>,"filename": string,"height": number | null,"id": string,"kind": string,"mime": string,"placeholder": string | null,"reservation_id": string | null,"size_bytes": number,"stop_id": string | null,"storage_path": string,"synced_at": string,"trip_id": string,"updated_at": string,"width": number | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"created_by": string,"deleted_at"?: string | null,"field_versions"?: NonNullable<Json>,"filename": string,"height"?: number | null,"id": string,"kind": string,"mime": string,"placeholder"?: string | null,"reservation_id"?: string | null,"size_bytes": number,"stop_id"?: string | null,"storage_path": string,"synced_at": string,"trip_id": string,"updated_at": string,"width"?: number | null
+                  }
+                  Update: {
+                    "created_at"?: string,"created_by"?: string,"deleted_at"?: string | null,"field_versions"?: NonNullable<Json>,"filename"?: string,"height"?: number | null,"id"?: string,"kind"?: string,"mime"?: string,"placeholder"?: string | null,"reservation_id"?: string | null,"size_bytes"?: number,"stop_id"?: string | null,"storage_path"?: string,"synced_at"?: string,"trip_id"?: string,"updated_at"?: string,"width"?: number | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "attachments_created_by_fkey"
+      columns: ["created_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "attachments_reservation_id_trip_id_fkey"
+      columns: ["reservation_id","trip_id"]
+isOneToOne: false
+      referencedRelation: "reservations"
+      referencedColumns: ["id","trip_id"]
+    },{
+      foreignKeyName: "attachments_stop_id_trip_id_fkey"
+      columns: ["stop_id","trip_id"]
+isOneToOne: false
+      referencedRelation: "stops"
+      referencedColumns: ["id","trip_id"]
+    },{
+      foreignKeyName: "attachments_trip_id_fkey"
+      columns: ["trip_id"]
+isOneToOne: false
+      referencedRelation: "trips"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"edge_calls": {
                   Row: {
                     "created_at": string,"fn": string,"id": string,"user_id": string
                   }
@@ -159,6 +197,76 @@ isOneToOne: false
                   Relationships: [
                     {
       foreignKeyName: "push_subscriptions_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"reservations": {
+                  Row: {
+                    "address": string | null,"amount": number | null,"booked_via": string | null,"cancel_policy": string | null,"cancel_until": string | null,"confirmation_code": string | null,"created_at": string,"created_by": string,"deleted_at": string | null,"end_at": string | null,"field_versions": NonNullable<Json>,"id": string,"name": string,"notes": string | null,"phone": string | null,"start_at": string | null,"stop_id": string | null,"synced_at": string,"trip_day_id": string | null,"trip_id": string,"type": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "address"?: string | null,"amount"?: number | null,"booked_via"?: string | null,"cancel_policy"?: string | null,"cancel_until"?: string | null,"confirmation_code"?: string | null,"created_at"?: string,"created_by": string,"deleted_at"?: string | null,"end_at"?: string | null,"field_versions"?: NonNullable<Json>,"id": string,"name": string,"notes"?: string | null,"phone"?: string | null,"start_at"?: string | null,"stop_id"?: string | null,"synced_at": string,"trip_day_id"?: string | null,"trip_id": string,"type": string,"updated_at": string
+                  }
+                  Update: {
+                    "address"?: string | null,"amount"?: number | null,"booked_via"?: string | null,"cancel_policy"?: string | null,"cancel_until"?: string | null,"confirmation_code"?: string | null,"created_at"?: string,"created_by"?: string,"deleted_at"?: string | null,"end_at"?: string | null,"field_versions"?: NonNullable<Json>,"id"?: string,"name"?: string,"notes"?: string | null,"phone"?: string | null,"start_at"?: string | null,"stop_id"?: string | null,"synced_at"?: string,"trip_day_id"?: string | null,"trip_id"?: string,"type"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "reservations_created_by_fkey"
+      columns: ["created_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "reservations_stop_id_trip_id_fkey"
+      columns: ["stop_id","trip_id"]
+isOneToOne: false
+      referencedRelation: "stops"
+      referencedColumns: ["id","trip_id"]
+    },{
+      foreignKeyName: "reservations_trip_day_id_trip_id_fkey"
+      columns: ["trip_day_id","trip_id"]
+isOneToOne: false
+      referencedRelation: "trip_days"
+      referencedColumns: ["id","trip_id"]
+    },{
+      foreignKeyName: "reservations_trip_id_fkey"
+      columns: ["trip_id"]
+isOneToOne: false
+      referencedRelation: "trips"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"stop_memories": {
+                  Row: {
+                    "created_at": string,"deleted_at": string | null,"field_versions": NonNullable<Json>,"id": string,"memo": string | null,"rating": number | null,"stop_id": string,"synced_at": string,"trip_id": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"deleted_at"?: string | null,"field_versions"?: NonNullable<Json>,"id": string,"memo"?: string | null,"rating"?: number | null,"stop_id": string,"synced_at": string,"trip_id": string,"updated_at": string,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"deleted_at"?: string | null,"field_versions"?: NonNullable<Json>,"id"?: string,"memo"?: string | null,"rating"?: number | null,"stop_id"?: string,"synced_at"?: string,"trip_id"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "stop_memories_stop_id_trip_id_fkey"
+      columns: ["stop_id","trip_id"]
+isOneToOne: false
+      referencedRelation: "stops"
+      referencedColumns: ["id","trip_id"]
+    },{
+      foreignKeyName: "stop_memories_trip_id_fkey"
+      columns: ["trip_id"]
+isOneToOne: false
+      referencedRelation: "trips"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "stop_memories_user_id_fkey"
       columns: ["user_id"]
 isOneToOne: false
       referencedRelation: "profiles"

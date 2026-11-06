@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildPushPayload,
   notificationText,
+  dayMonth,
   pushPayloadSchema,
   weekdayName,
 } from './notifications.ts';
@@ -140,6 +141,29 @@ describe('texto dos avisos', () => {
     ).toBe('Ana partiu');
   });
 
+  it('prazo de cancelamento: chega na véspera, então amanhã é o último dia', () => {
+    const t = notificationText(
+      'cancel_deadline',
+      {
+        trip_name: 'RS — concurso em Montenegro',
+        reservation_name: 'Vila Suzana Parque Hotel',
+        reservation_type: 'hotel',
+        cancel_until: '2026-12-08',
+      },
+      'cd111111-1111-4111-8111-111111111111',
+    );
+    expect(t).toMatchObject({
+      title: 'Amanhã é o último dia para cancelar sem custo',
+      body: 'Vila Suzana Parque Hotel · até 08/12',
+      tag: 'cancel:cd111111-1111-4111-8111-111111111111',
+      actions: [],
+      appBadge: null,
+      topic: null,
+    });
+    expect(dayMonth('2026-12-08')).toBe('08/12');
+    expect(dayMonth('x')).toBe('');
+  });
+
   it('dia da semana sem fuso', () => {
     expect(weekdayName('2026-12-11')).toBe('sexta');
     expect(weekdayName('2026-12-13')).toBe('domingo');
@@ -188,5 +212,25 @@ describe('payload único', () => {
     );
     expect(p.notification).not.toHaveProperty('app_badge');
     expect(p.notification.navigate).toBe(`http://localhost:4173/viagens/${TRIP}/viagem`);
+  });
+
+  it('o prazo de cancelamento abre a própria reserva', () => {
+    const ref = 'cd111111-1111-4111-8111-111111111111';
+    const p = buildPushPayload(
+      {
+        kind: 'cancel_deadline',
+        ref,
+        trip_id: TRIP,
+        stop_id: null,
+        data: { reservation_name: 'Vila Suzana Parque Hotel', cancel_until: '2026-12-08' },
+      },
+      'https://viajei-mauve.vercel.app',
+    );
+    expect(pushPayloadSchema.parse(p)).toEqual(p);
+    expect(p.notification.data.navigate).toBe(`/viagens/${TRIP}/reservas?abrir=${ref}`);
+    expect(p.notification.navigate).toBe(
+      `https://viajei-mauve.vercel.app/viagens/${TRIP}/reservas?abrir=${ref}`,
+    );
+    expect(p.actions).toEqual([]);
   });
 });

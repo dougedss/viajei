@@ -19,6 +19,7 @@ export const SYNC_TABLES = {
     children: [
       { table: 'trip_members', fk: 'trip_id' },
       { table: 'trip_days', fk: 'trip_id' },
+      { table: 'reservations', fk: 'trip_id' },
     ],
   },
   trip_members: { scope: 'trip', rank: 20, children: [] },
@@ -30,8 +31,28 @@ export const SYNC_TABLES = {
       { table: 'trip_tracks', fk: 'trip_day_id' },
     ],
   },
-  stops: { scope: 'trip', rank: 40, children: [] },
+  /**
+   * As reservas não são filhas da parada nem do dia: excluir a parada passa a reserva para o dia
+   * dela (`features/itinerary/actions.ts`), e o dia só sai vazio. Se a lápide da parada levasse a
+   * reserva, os documentos dela sumiriam do aparelho (a reserva volta no mesmo pull; os anexos, que
+   * não mudaram, não).
+   */
+  stops: {
+    scope: 'trip',
+    rank: 40,
+    children: [
+      { table: 'stop_memories', fk: 'stop_id' },
+      { table: 'attachments', fk: 'stop_id' },
+    ],
+  },
   trip_tracks: { scope: 'trip', rank: 50, children: [] },
+  reservations: {
+    scope: 'trip',
+    rank: 50,
+    children: [{ table: 'attachments', fk: 'reservation_id' }],
+  },
+  stop_memories: { scope: 'trip', rank: 50, children: [] },
+  attachments: { scope: 'trip', rank: 60, children: [] },
   /** preferências de aviso: da pessoa (escopo user), uma linha por viagem; chega pelo pull do usuário */
   notification_prefs: { scope: 'user', rank: 25, children: [] },
 } as const satisfies Record<

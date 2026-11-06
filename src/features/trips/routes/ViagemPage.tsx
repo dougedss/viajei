@@ -19,13 +19,17 @@ import { asPersonColor } from '@/features/profile/queries.ts';
 import { deleteTrip } from '../actions.ts';
 import { useIsOwner, useTrip, useTripMembers } from '../queries.ts';
 import { TripHero } from '../components/TripHero.tsx';
+import { TripShortcuts } from '../components/TripShortcuts.tsx';
+import { useTripReservations } from '@/features/reservations/queries.ts';
 import { todayISO } from '../rules.ts';
+import { useSession } from '@/lib/supabase/session.ts';
 
 export default function ViagemPage() {
   const { tripId = '' } = useParams();
   const trip = useTrip(tripId);
   const members = useTripMembers(tripId);
   const isOwner = useIsOwner(trip);
+  const { session } = useSession();
   const navigate = useNavigate();
   const toast = useToast();
   const [confirm, setConfirm] = useState(false);
@@ -33,6 +37,7 @@ export default function ViagemPage() {
   const tripDays = useTripDays(tripId) ?? [];
   const stops = useTripStops(tripId);
   const [loadingExample, setLoadingExample] = useState(false);
+  const reservations = useTripReservations(tripId) ?? [];
 
   if (trip === undefined) return <Splash />;
   if (trip === null) return <NotFound />;
@@ -60,6 +65,13 @@ export default function ViagemPage() {
       />
 
       <TripHero trip={trip} today={today} />
+
+      <TripShortcuts
+        trip={trip}
+        stops={stops.length}
+        reservations={reservations.length}
+        diary={stops.filter((s) => s.done_at !== null).length}
+      />
 
       {trip.notes ? (
         <Card>
@@ -128,11 +140,11 @@ export default function ViagemPage() {
                     loading={loadingExample}
                     onClick={() => {
                       setLoadingExample(true);
-                      void loadExampleTrip(trip)
+                      void loadExampleTrip(trip, session?.user.id ?? '')
                         .then((r) =>
                           toast.show({
                             title: 'Viagem de exemplo carregada',
-                            description: `${r.days} dias e ${r.stops} paradas.`,
+                            description: `${r.days} dias, ${r.stops} paradas e ${r.reservations} reservas.`,
                             kind: 'ok',
                           }),
                         )

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { STOP_KIND_KEYS } from './constants.ts';
+import { RESERVATION_TYPE_KEYS, STOP_KIND_KEYS } from './constants.ts';
 
 /**
  * Schema de importação de roteiro: o formato do seed (`supabase/seed/viagem-rs.json`), do botão
@@ -34,13 +34,13 @@ export const importDaySchema = z.object({
 });
 export type ImportDay = z.infer<typeof importDaySchema>;
 
-export const RESERVATION_TYPES = ['hotel', 'ticket', 'restaurant', 'other'] as const;
 export const importReservationSchema = z.object({
-  type: z.enum(RESERVATION_TYPES),
+  type: z.enum(RESERVATION_TYPE_KEYS),
   name: z.string(),
-  /** nome da parada ou data do dia a que se liga; o importador resolve */
+  /** nome da parada ou data do dia a que se liga; o importador resolve (a parada vence) */
   stop_ref: nullable(z.string()),
   day_ref: nullable(dateString),
+  /** hora de parede de São Paulo ('2026-12-11T16:30'), sem fuso: o importador converte */
   start_at: nullable(isoString),
   end_at: nullable(isoString),
   confirmation_code: nullable(z.string()),
@@ -52,6 +52,7 @@ export const importReservationSchema = z.object({
   booked_via: nullable(z.string()),
   notes: nullable(z.string()),
 });
+export type ImportReservation = z.infer<typeof importReservationSchema>;
 
 export const CONTACT_TYPES = ['hotel', 'attraction', 'restaurant', 'emergency', 'other'] as const;
 export const importContactSchema = z.object({

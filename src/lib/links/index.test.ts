@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { googleMapsUrl, isShortMapsLink, parseMapsLink, wazeUrl } from './index.ts';
+import {
+  googleMapsUrl,
+  isShortMapsLink,
+  parseMapsLink,
+  telUrl,
+  wazeUrl,
+  whatsappUrl,
+} from './index.ts';
 
 describe('parseMapsLink', () => {
   it('lê o @lat,lng da câmera', () => {
@@ -84,5 +91,12 @@ describe('deep links', () => {
   it('sem nada, sem link', () => {
     expect(googleMapsUrl(empty)).toBeNull();
     expect(wazeUrl(empty)).toBeNull();
+  });
+});
+
+describe('ligar e WhatsApp', () => {
+  it('tel: com o E.164 e wa.me só com os dígitos', () => {
+    expect(telUrl('+5551997527596')).toBe('tel:+5551997527596');
+    expect(whatsappUrl('+5551997527596')).toBe('https://wa.me/5551997527596');
   });
 });

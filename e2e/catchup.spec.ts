@@ -32,6 +32,8 @@ test('o card "Desde a última vez" aparece depois de marcar Partiu! em outra ses
 }: {
   browser: Browser;
 }) => {
+  // dois aparelhos, e o segundo cai primeiro na maquete (D33) antes de abrir a lista
+  test.setTimeout(60_000);
   const email = await criarUsuarioDescartavel('Viajante');
   const ctxA = await browser.newContext({ ...test.info().project.use });
   const pageA = await ctxA.newPage();
@@ -58,7 +60,8 @@ test('o card "Desde a última vez" aparece depois de marcar Partiu! em outra ses
 
   // o primeiro aparelho vê a maquete e sai: o travel_state fica salvo
   await pageA.goto(`${tripUrl}/viagem?render=list`);
-  await expect(pageA.getByRole('heading', { name: 'Agora' })).toBeVisible();
+  // a primeira visita à rota compila o Modo Viagem inteiro no Vite de dev: o mesmo prazo do B
+  await expect(pageA.getByRole('heading', { name: 'Agora' })).toBeVisible({ timeout: 15_000 });
   await expect(pageA.getByText('Saída de casa').first()).toBeVisible();
   await pageA.getByRole('link', { name: 'Roteiro' }).click();
   await expect(

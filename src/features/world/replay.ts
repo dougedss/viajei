@@ -13,8 +13,26 @@ import { clamp } from './noise.ts';
  */
 export type ReplayMode = 'catchup' | 'live' | 'review';
 
+/** Uma foto de memória que já está no aparelho (o "Rever o dia" nunca espera rede). */
+export type ReviewPhoto = {
+  attachment_id: string;
+  stop_id: string;
+  created_by: string;
+  created_at: string;
+};
+
 export type ReplayCue =
   | { kind: 'event'; s: number; event: TravelEvent }
+  | {
+      kind: 'photo';
+      s: number;
+      stop_id: string;
+      /** a primeira foto do nó (a mais antiga) */
+      attachment_id: string;
+      created_by: string;
+      /** quantas mais o nó tem: "+N" */
+      extra: number;
+    }
   | {
       kind: 'curiosity';
       s: number;
@@ -52,6 +70,8 @@ export const LIVE_MAX_CURIOSITIES = 1;
 export const SMALL_ADVANCE = 0.03;
 /** cada deixa de evento precisa deste tempo para ser lida */
 export const EVENT_SLOT_MS = 600;
+/** quanto o cartão de foto fica sobre a pílula no "Rever o dia" */
+export const PHOTO_CARD_MS = 1200;
 
 /** serra primeiro (descida ou subida), depois mar, ponto mais alto, entrada de cenário */
 const CURIOSITY_PRIORITY: Record<CuriosityKind, number> = {
@@ -235,12 +255,50 @@ export function dayEvents(stops: readonly Stop[], uid: string): TravelEvent[] {
   return out;
 }
 
-/** "Rever o dia": do primeiro nó ao `s` atual, com todos os eventos do dia, até 20 s. */
+/**
+ * As deixas de foto: uma por nó com foto, no `s` do nó (depois do evento dele), com a primeira foto
+ * e quantas mais. Só fotos de paradas dentro do trecho e que já estão no aparelho.
+ */
+export function photoCues(
+  photos: readonly ReviewPhoto[],
+  layout: WorldLayout,
+  from_s: number,
+  to_s: number,
+): ReplayCue[] {
+  const byStop = new Map<string, ReviewPhoto[]>();
+  for (const p of photos) {
+    const list = byStop.get(p.stop_id) ?? [];
+    list.push(p);
+    byStop.set(p.stop_id, list);
+  }
+  const out: ReplayCue[] = [];
+  for (const [stopId, list] of byStop) {
+    const s = nodeS(layout, stopId);
+    if (s === null || s < from_s - 1e-6 || s > to_s + 1e-6) continue;
+    const first = [...list].sort((a, b) => a.created_at.localeCompare(b.created_at))[0];
+    if (!first) continue;
+    out.push({
+      kind: 'photo',
+      s,
+      stop_id: stopId,
+      attachment_id: first.attachment_id,
+      created_by: first.created_by,
+      extra: list.length - 1,
+    });
+  }
+  return out.sort((a, b) => a.s - b.s);
+}
+
+/**
+ * "Rever o dia": do primeiro nó ao `s` atual, com todos os eventos do dia, até 20 s, e as fotos
+ * das memórias aparecendo nos nós (o replay ao abrir não mostra fotos: é sobre o que mudou).
+ */
 export function planReview(
   layout: WorldLayout,
   stops: readonly Stop[],
   uid: string,
   current_s: number,
+  photos: readonly ReviewPhoto[] = [],
 ): ReplayPlan | null {
   const from_s = layout.nodes[0]?.s ?? 0;
   const distance = current_s - from_s;
@@ -253,9 +311,19 @@ export function planReview(
     from_s,
     to_s,
     duration_ms,
+    // a ordenação é estável: no mesmo nó, o evento vem antes da foto
     cues: mergeCues(
-      eventCues(events, layout, from_s, to_s),
-      pickCuriosities(layout.curiosities, from_s, to_s, REVIEW_MAX_CURIOSITIES, CURIOSITY_LONG_MS),
+      mergeCues(
+        eventCues(events, layout, from_s, to_s),
+        pickCuriosities(
+          layout.curiosities,
+          from_s,
+          to_s,
+          REVIEW_MAX_CURIOSITIES,
+          CURIOSITY_LONG_MS,
+        ),
+      ),
+      photoCues(photos, layout, from_s, to_s),
     ),
     overflow: 0,
     event_ids: [],

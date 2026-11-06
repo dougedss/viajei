@@ -9,6 +9,7 @@ import { pullTrip, pullUser } from './pull.ts';
 import { pushOutbox } from './push.ts';
 import { pushRpcFor } from './rpc.ts';
 import { watchTrips } from './realtime.ts';
+import { CycleRunner } from './runner.ts';
 
 export type SyncPhase = 'idle' | 'syncing';
 export type SyncState = {
@@ -32,8 +33,8 @@ let uid: string | null = null;
 let generation = 0;
 let cleanups: (() => void)[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
-let queued = false;
-let running = false;
+/** o ciclo em andamento, quando não há Web Locks */
+let running: Promise<void> | null = null;
 
 function setState(patch: Partial<SyncState>) {
   state = { ...state, ...patch };
@@ -63,21 +64,35 @@ async function rpcPullUser(since: string): Promise<unknown> {
   return data;
 }
 
-/** Uma aba por vez: Web Locks quando existe; senão, um mutex do processo. */
-async function withLock(run: () => Promise<void>): Promise<void> {
-  if (typeof navigator !== 'undefined' && 'locks' in navigator) {
-    await navigator.locks.request('viajei:sync', { ifAvailable: true }, async (lock) => {
-      if (lock) await run();
+const hasLocks = () => typeof navigator !== 'undefined' && 'locks' in navigator;
+
+/**
+ * Uma aba por vez: Web Locks quando existe; senão, um mutex do processo. Devolve se rodou: com o
+ * lock ocupado (outro ciclo, um pull do Realtime, outra aba ou o service worker), não roda.
+ */
+async function withLock(run: () => Promise<void>): Promise<boolean> {
+  if (hasLocks()) {
+    return navigator.locks.request('viajei:sync', { ifAvailable: true }, async (lock) => {
+      if (!lock) return false;
+      await run();
+      return true;
     });
+  }
+  if (running) return false;
+  running = run().finally(() => {
+    running = null;
+  });
+  await running;
+  return true;
+}
+
+/** Espera quem está com o lock terminar, sem rodar nada. */
+async function lockReleased(): Promise<void> {
+  if (hasLocks()) {
+    await navigator.locks.request('viajei:sync', () => Promise.resolve());
     return;
   }
-  if (running) return;
-  running = true;
-  try {
-    await run();
-  } finally {
-    running = false;
-  }
+  await running?.catch(() => undefined);
 }
 
 async function tripIdsToPull(extra: string[]): Promise<string[]> {
@@ -121,32 +136,22 @@ async function cycle(): Promise<void> {
   }
 }
 
-/** Um pedido que chegou durante o ciclo (escrita no meio do push) roda outro ciclo em seguida. */
-function takeQueued(): boolean {
-  const again = queued;
-  queued = false;
-  return again;
-}
-
-async function run(): Promise<void> {
-  if (!uid || !connectivity.isOnline()) {
-    queued = false;
-    return;
-  }
-  do {
-    queued = false;
-    await withLock(cycle);
-  } while (takeQueued());
-}
+/** Um laço de ciclos por aba (D86): pedido no meio vira mais um ciclo; lock ocupado espera soltar. */
+const runner = new CycleRunner({
+  canRun: () => uid !== null && connectivity.isOnline(),
+  withLock,
+  lockReleased,
+  cycle,
+});
 
 /** Agenda um ciclo (com debounce curto): escrita, online, foco, abrir o app, 60 s visível. */
 export function schedule(delayMs = 150): void {
   if (!uid) return;
-  queued = true;
+  runner.request();
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => {
     timer = null;
-    void run();
+    void runner.run();
   }, delayMs);
 }
 
@@ -164,7 +169,10 @@ export function schedulePull(tripId: string, delayMs = 800): void {
         pullOne(tripId).catch((err: unknown) => {
           if (isNetworkError(err)) connectivity.markOffline();
         }),
-      );
+      ).then((ran) => {
+        // lock ocupado: um ciclo completo (que também puxa esta viagem) em seguida
+        if (!ran) schedule();
+      });
     }, delayMs),
   );
 }
@@ -220,7 +228,7 @@ export function stop(): void {
   pullTimers.clear();
   watchTrips([], () => undefined);
   uid = null;
-  queued = false;
+  runner.clear();
   setState({ phase: 'idle' });
 }
 
@@ -228,8 +236,9 @@ export function stop(): void {
 export async function syncNow(): Promise<void> {
   if (timer) clearTimeout(timer);
   timer = null;
-  queued = false;
-  await withLock(cycle);
+  // um ciclo agora (ou logo depois do que está rodando), esperando terminar
+  runner.request();
+  await runner.run();
 }
 
 export const syncEngine = {

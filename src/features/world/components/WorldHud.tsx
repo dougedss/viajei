@@ -1,5 +1,8 @@
 import { Check, MapPinOff, SkipForward } from 'lucide-react';
 import { motion } from 'motion/react';
+import { PERSON_COLORS } from '@shared/constants.ts';
+import { asPersonColor } from '@/features/profile/queries.ts';
+import { useBlobUrl } from '@/lib/media/hooks.ts';
 import { StopKindIcon } from '@/features/itinerary/components/StopKindIcon.tsx';
 import type { StopStatus } from '@/features/travel-mode/rules.ts';
 import type { Stop } from '@/lib/db/schema.ts';
@@ -15,6 +18,8 @@ import type { ProjectedNode } from '../project.ts';
  * é `aria-hidden`; o conteúdo acessível é a lista do dia.
  */
 export type TeamChip = { name: string; time: string | null };
+/** O cartão de foto do "Rever o dia": a primeira foto do nó, na cor de quem tirou, e "+N". */
+export type PhotoCard = { attachment_id: string; color: string; extra: number; at: number };
 
 type Props = {
   nodes: ProjectedNode[];
@@ -22,6 +27,7 @@ type Props = {
   statuses: Record<string, StopStatus>;
   pops: Record<string, number>;
   teamChips: Record<string, TeamChip>;
+  photoCards?: Record<string, PhotoCard>;
   /** mergulho de câmera em curso: as pílulas se escondem */
   hidePills: boolean;
   caption: string | null;
@@ -54,6 +60,7 @@ export function WorldHud(props: Props) {
         const pin = opening?.plan.pins.find((p) => p.stop_id === node.stop_id);
         const delay = pin ? pin.at_ms / 1000 : 0;
         const chip = teamChips[node.stop_id];
+        const photo = props.photoCards?.[node.stop_id];
         return (
           /* a âncora usa a propriedade CSS `translate`; o `transform` fica livre para a animação */
           <div
@@ -67,6 +74,7 @@ export function WorldHud(props: Props) {
               animate={{ y: 0, opacity: hidePills ? 0 : 1 }}
               transition={{ delay, type: 'spring', stiffness: 420, damping: 26 }}
             >
+              {photo ? <PhotoCardView key={photo.at} card={photo} /> : null}
               <motion.span
                 key={pops[node.stop_id] ?? 'still'}
                 initial={
@@ -171,5 +179,29 @@ export function WorldHud(props: Props) {
         ) : null}
       </div>
     </div>
+  );
+}
+
+/** A miniatura sobre a pílula: aparece com uma mola e some sozinha (quem tira é o palco). */
+function PhotoCardView({ card }: { card: PhotoCard }) {
+  const url = useBlobUrl(card.attachment_id);
+  if (!url) return null;
+  const hex = PERSON_COLORS[asPersonColor(card.color)].hex;
+  return (
+    <motion.span
+      initial={{ y: 10, opacity: 0, scale: 0.8 }}
+      animate={{ y: 0, opacity: 1, scale: 1 }}
+      transition={{ type: 'spring', stiffness: 420, damping: 24 }}
+      className="relative mb-1 block size-16 overflow-hidden rounded-[14px] bg-hud"
+      style={{ boxShadow: `0 0 0 3px ${hex}, 0 8px 20px -6px rgb(0 0 0 / 0.5)` }}
+      data-photo-card={card.attachment_id}
+    >
+      <img src={url} alt="" className="size-full object-cover" />
+      {card.extra > 0 ? (
+        <span className="absolute right-1 bottom-1 rounded-full bg-[rgb(8_12_24/0.7)] px-1.5 num text-[12px] font-semibold text-white">
+          +{card.extra}
+        </span>
+      ) : null}
+    </motion.span>
   );
 }

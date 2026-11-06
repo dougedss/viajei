@@ -74,25 +74,36 @@ O Modo Viagem desenha o dia como uma maquete vista de cima (`src/features/world`
 - **Tudo liberado:** `?garagem=tudo` libera os cinco modelos, o dourado e todos os acessórios para conferência visual. Só existe em `pnpm dev`; o build de produção nem contém o código.
 - Roteiro de teste nos aparelhos: [`docs/teste-manual-fase-6.md`](docs/teste-manual-fase-6.md).
 
+## Fotos e anexos
+
+As fotos das memórias ("Como foi?", no Modo Viagem e no diário) e os prints e PDFs das reservas ficam no bucket privado `attachments` do Storage, em `{viagem}/{anexo}.{ext}`, e abrem sem sinal a partir de uma cópia no aparelho (`src/lib/media`).
+
+- **Tamanhos:** a foto vira JPEG de até 1600 px e cerca de 400 KB (sem EXIF, inclusive sem a localização); o print de reserva vira JPEG de até 2400 px, qualidade 0,9; o PDF vai como está, até 10 MB. A compressão roda num worker e não depende de rede. HEIC que o navegador não abre recebe uma frase clara. Cada foto leva um thumbhash (o borrão que aparece antes do arquivo chegar).
+- **Fila de envio:** a foto entra na hora, mesmo sem sinal, e aparece com o selo "aguardando sinal". Quando há rede, o arquivo sobe primeiro e só depois a linha nasce em `attachments` pela outbox. O servidor nunca tem linha sem arquivo. No Android, o service worker envia quando o sinal volta, mesmo com o app fechado (Background Sync); no iPhone, na próxima abertura. As fotos pendentes contam no "N pendentes" do cabeçalho, e um envio recusado aparece em Pendentes com "Tentar de novo" e "Descartar".
+- **Cache no aparelho:** ao abrir uma viagem em andamento ou futura com rede, o app baixa os anexos que faltam, documentos primeiro. Os de viagens passadas baixam quando aparecem. O despejo nunca tira anexo de viagem em andamento ou futura; das passadas, saem primeiro as fotos menos usadas, até caber no orçamento (o menor entre 1 GB e 40% da cota do navegador). Nada disso vai para o cache do service worker.
+- **Limpar no aparelho:** sair da conta apaga tudo (e avisa se há foto não enviada). Para liberar espaço sem sair: no iPhone, Ajustes › Safari › Avançado › Dados de Sites (ou apagar o app da tela de início); no Android, Chrome › Configurações do site › Armazenamento. Tudo volta do servidor na próxima abertura com rede.
+- **PDF no iPhone instalado:** abre num visualizador próprio (pdf.js, carregado só quando um PDF abre e guardado no precache), porque o Safari no modo app não abre PDF de Blob. "Compartilhar" leva a outro app ou a Arquivos.
+- **Testes:** `pnpm test:e2e` tem dois projetos: `iphone` (Vite de dev) e `pwa` (o build pelo `vite preview`, com service worker, para os testes que recarregam sem rede). Rode `pnpm build` antes. Roteiro nos aparelhos: [`docs/teste-manual-fase-7.md`](docs/teste-manual-fase-7.md).
+
 ## Scripts
 
-| Comando                                          | O que faz                                                                           |
-| ------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| `pnpm dev` / `pnpm build` / `pnpm preview`       | Vite (o build gera os ícones do PWA e o service worker)                             |
-| `pnpm lint` / `pnpm format` / `pnpm typecheck`   | ESLint, Prettier, `tsc -b`                                                          |
-| `pnpm test`                                      | Vitest (lógica pura e Dexie com `fake-indexeddb`)                                   |
-| `pnpm test:e2e`                                  | Playwright, viewport de iPhone, contra o Vite e o Supabase locais                   |
-| `pnpm db:start` / `db:stop` / `db:reset`         | Supabase local (migrations + `seed.sql`)                                            |
-| `pnpm db:test`                                   | pgTAP (`supabase/tests`)                                                            |
-| `pnpm db:types`                                  | regenera `src/lib/supabase/database.types.ts` (commitado; a CI confere)             |
-| `pnpm remote:db-push`                            | aplica as migrations no projeto hospedado                                           |
-| `pnpm remote:config-diff` / `remote:config-push` | mostra e aplica a configuração do Auth (`[remotes.production]`) no hospedado        |
-| `pnpm remote:functions-deploy`                   | publica as Edge Functions `route-day` e `send-notifications` no hospedado           |
-| `pnpm remote:secrets-push`                       | grava `ORS_API_KEY`, `VAPID_PRIVATE_KEY` e `VAPID_SUBJECT` (só elas) nos secrets    |
-| `pnpm functions:serve`                           | Edge Functions no stack local (`-- --env-file ./.env.local` para ORS e VAPID)       |
-| `pnpm geo:build`                                 | regenera os dados geográficos embutidos (`docs/dados-geo.md`)                       |
-| `pnpm vapid:generate`                            | gera o par VAPID uma vez (`VITE_VAPID_PUBLIC_KEY` raw, `VAPID_PRIVATE_KEY` PKCS#8)  |
-| `pnpm db:vault-local`                            | grava URL e chave secreta locais no Vault, para o `pg_cron` (o `db:reset` já chama) |
+| Comando                                          | O que faz                                                                                   |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| `pnpm dev` / `pnpm build` / `pnpm preview`       | Vite (o build gera os ícones do PWA e o service worker)                                     |
+| `pnpm lint` / `pnpm format` / `pnpm typecheck`   | ESLint, Prettier, `tsc -b`                                                                  |
+| `pnpm test`                                      | Vitest (lógica pura e Dexie com `fake-indexeddb`)                                           |
+| `pnpm test:e2e`                                  | Playwright, viewport de iPhone, contra o Supabase local (dev e o build; `pnpm build` antes) |
+| `pnpm db:start` / `db:stop` / `db:reset`         | Supabase local (migrations + `seed.sql`)                                                    |
+| `pnpm db:test`                                   | pgTAP (`supabase/tests`)                                                                    |
+| `pnpm db:types`                                  | regenera `src/lib/supabase/database.types.ts` (commitado; a CI confere)                     |
+| `pnpm remote:db-push`                            | aplica as migrations no projeto hospedado                                                   |
+| `pnpm remote:config-diff` / `remote:config-push` | mostra e aplica a configuração do Auth (`[remotes.production]`) no hospedado                |
+| `pnpm remote:functions-deploy`                   | publica as Edge Functions `route-day` e `send-notifications` no hospedado                   |
+| `pnpm remote:secrets-push`                       | grava `ORS_API_KEY`, `VAPID_PRIVATE_KEY` e `VAPID_SUBJECT` (só elas) nos secrets            |
+| `pnpm functions:serve`                           | Edge Functions no stack local (`-- --env-file ./.env.local` para ORS e VAPID)               |
+| `pnpm geo:build`                                 | regenera os dados geográficos embutidos (`docs/dados-geo.md`)                               |
+| `pnpm vapid:generate`                            | gera o par VAPID uma vez (`VITE_VAPID_PUBLIC_KEY` raw, `VAPID_PRIVATE_KEY` PKCS#8)          |
+| `pnpm db:vault-local`                            | grava URL e chave secreta locais no Vault, para o `pg_cron` (o `db:reset` já chama)         |
 
 Os scripts `remote:*` carregam `.env.local` antes de chamar a CLI: é de lá que saem o token, a senha do banco e a chave do Resend que o `config push` usa.
 

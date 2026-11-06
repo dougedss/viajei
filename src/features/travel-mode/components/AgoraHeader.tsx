@@ -1,4 +1,5 @@
 import { Check, Flag, SkipForward, TriangleAlert } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/Button.tsx';
 import { Ring } from '@/components/ui/Ring.tsx';
 import { formatClock, formatDuration } from '@/lib/time/index.ts';
@@ -10,6 +11,8 @@ type Props = {
   onDepart: () => void;
   onArrive: () => void;
   onSkip: () => void;
+  /** embaixo do "Agora": o "Ver reserva" quando a parada atual ou a próxima tem reserva */
+  footer?: ReactNode;
 };
 
 const RING_COLOR = {
@@ -24,7 +27,7 @@ const TEXT_COLOR = {
 } as const;
 
 /** Legível em cinco segundos: próxima saída grande, "sair às", anel, Partiu!, Chegamos!, Pular. */
-export function AgoraHeader({ state, busy, onDepart, onArrive, onSkip }: Props) {
+export function AgoraHeader({ state, busy, onDepart, onArrive, onSkip, footer }: Props) {
   const { next, countdown, closingSoon } = state;
 
   if (state.finished) {
@@ -40,6 +43,7 @@ export function AgoraHeader({ state, busy, onDepart, onArrive, onSkip }: Props) 
         <p className="text-[17px] text-ink-2">
           Todas as paradas de hoje foram marcadas. Bom descanso.
         </p>
+        {footer}
       </section>
     );
   }
@@ -54,6 +58,7 @@ export function AgoraHeader({ state, busy, onDepart, onArrive, onSkip }: Props) 
           Agora
         </h2>
         <p className="text-[17px] text-ink-2">Este dia ainda não tem paradas.</p>
+        {footer}
       </section>
     );
   }
@@ -160,6 +165,7 @@ export function AgoraHeader({ state, busy, onDepart, onArrive, onSkip }: Props) 
             : `${closingSoon.stop.name} fecha às ${formatClock(closingSoon.closesAt)} · faltam ${formatDuration(closingSoon.minutes)}`}
         </p>
       ) : null}
+      {footer}
     </section>
   );
 }

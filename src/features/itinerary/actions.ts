@@ -1,5 +1,7 @@
 import { mutate } from '@/lib/db/mutate.ts';
-import { db, type Stop, type TripDay } from '@/lib/db/schema.ts';
+import { db, type TripDay } from '@/lib/db/schema.ts';
+import { removeAllMedia } from '@/lib/media/actions.ts';
+import { mergeMedia } from '@/lib/media/hooks.ts';
 import { positionAtEnd, positionForMove } from '@/lib/ids/position.ts';
 import { uuidV4, uuidV5 } from '@/lib/ids/uuid.ts';
 import { blockedMessage, planDays, sortStops, type DaysPlan } from './rules.ts';
@@ -18,12 +20,13 @@ export function dayId(tripId: string, date: string): Promise<string> {
   return uuidV5(tripId, date);
 }
 
-async function daysAndStops(tripId: string): Promise<{ days: TripDay[]; stops: Stop[] }> {
-  const [days, stops] = await Promise.all([
+async function daysAndStops(tripId: string) {
+  const [days, stops, reservations] = await Promise.all([
     db.trip_days.where('trip_id').equals(tripId).toArray(),
     db.stops.where('trip_id').equals(tripId).toArray(),
+    db.reservations.where('trip_id').equals(tripId).toArray(),
   ]);
-  return { days, stops };
+  return { days, stops, reservations };
 }
 
 /** Só confere: o que a mudança de datas faria. Para o formulário avisar antes de salvar. */
@@ -31,8 +34,8 @@ export async function checkDays(
   tripId: string,
   range: { start_date: string; end_date: string },
 ): Promise<DaysPlan> {
-  const { days, stops } = await daysAndStops(tripId);
-  return planDays(range, days, stops);
+  const { days, stops, reservations } = await daysAndStops(tripId);
+  return planDays(range, days, stops, reservations);
 }
 
 /**
@@ -121,7 +124,29 @@ export async function updateStop(stopId: string, values: StopFormValues): Promis
   await mutate.patch('stops', stopId, stopColumns(values));
 }
 
-export async function removeStop(stopId: string): Promise<void> {
+/**
+ * Excluir a parada. A reserva ligada a ela continua (a hospedagem existe mesmo fora do roteiro) e
+ * passa para o dia da parada. A memória e as fotos da própria pessoa saem junto; as dos outros só a
+ * RLS de cada um tiraria, então ficam no servidor sem parada (o expurgo leva) e somem deste
+ * aparelho com a lápide da parada.
+ */
+export async function removeStop(stopId: string, uid: string, isOwner: boolean): Promise<void> {
+  const stop = await db.stops.get(stopId);
+  if (!stop) return;
+  const [reservations, memories, rows, jobs] = await Promise.all([
+    db.reservations.where('stop_id').equals(stopId).toArray(),
+    db.stop_memories.where('stop_id').equals(stopId).toArray(),
+    db.attachments.where('stop_id').equals(stopId).toArray(),
+    db.uploads.where('trip_id').equals(stop.trip_id).toArray(),
+  ]);
+  for (const r of reservations.filter((x) => x.deleted_at === null)) {
+    await mutate.patch('reservations', r.id, { stop_id: null, trip_day_id: stop.trip_day_id });
+  }
+  const mine = mergeMedia(rows, jobs, (row) => row.stop_id === stopId && row.created_by === uid);
+  await removeAllMedia(mine, uid, isOwner);
+  for (const m of memories.filter((x) => x.user_id === uid && x.deleted_at === null)) {
+    await mutate.remove('stop_memories', m.id);
+  }
   await mutate.remove('stops', stopId);
 }
 

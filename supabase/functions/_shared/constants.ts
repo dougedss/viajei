@@ -29,6 +29,37 @@ export const STOP_KINDS = {
 export type StopKind = keyof typeof STOP_KINDS;
 export const STOP_KIND_KEYS = Object.keys(STOP_KINDS) as StopKind[];
 
+/**
+ * Tipos de reserva (o `check` de `reservations.type`), com rótulo e ícone do lucide.
+ */
+export const RESERVATION_TYPES = {
+  hotel: { label: 'Hotel', icon: 'bed-double' },
+  ticket: { label: 'Ingresso', icon: 'ticket' },
+  restaurant: { label: 'Restaurante', icon: 'utensils-crossed' },
+  other: { label: 'Outro', icon: 'bookmark' },
+} as const;
+export type ReservationType = keyof typeof RESERVATION_TYPES;
+export const RESERVATION_TYPE_KEYS = Object.keys(RESERVATION_TYPES) as [
+  ReservationType,
+  ...ReservationType[],
+];
+
+/**
+ * Fotos e anexos: os mesmos números dos `check` de `attachments` e do bucket `attachments`. A foto
+ * sempre vira JPEG no client (C8); os prints de reserva também.
+ */
+export const MEDIA = {
+  /** limite do bucket e de `attachments.size_bytes` */
+  maxBytes: 10 * 1024 * 1024,
+  /** fotos de memória por pessoa e parada (limite do client) */
+  photosPerStop: 3,
+  /** caracteres da memória (`stop_memories.memo`) */
+  memoMax: 500,
+  /** tipos aceitos pelo bucket */
+  mimes: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
+} as const;
+export type AttachmentMime = (typeof MEDIA.mimes)[number];
+
 export const CAR_MODELS = {
   hatch: { label: 'Hatch', level: 1 },
   sedan: { label: 'Sedã', level: 2 },
@@ -299,10 +330,10 @@ export const NOTIFICATION_KINDS = {
   },
   cancel_deadline: {
     label: 'Prazo de cancelamento',
-    description: 'Véspera do prazo de uma reserva',
+    description: 'Na véspera do último dia para cancelar sem custo, às 10h',
     on: true,
     phase: 7,
-    available: false,
+    available: true,
   },
   team_arrived: {
     label: 'Time',

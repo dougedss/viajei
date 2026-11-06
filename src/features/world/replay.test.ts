@@ -18,6 +18,7 @@ import {
   pickCuriosities,
   planLiveAdvance,
   planReplay,
+  photoCues,
   planReview,
   REPLAY_MAX_MS,
   REPLAY_MIN_MS,
@@ -295,5 +296,70 @@ describe('planReview e dayEvents', () => {
 
   it('nada feito e carro no início: nada a rever', () => {
     expect(planReview(layout, stops, UID, node(0).s)).toBeNull();
+  });
+
+  it('as fotos aparecem nos nós, depois do evento, a primeira com +N', () => {
+    const at = (i: number) => done[i]?.id ?? '';
+    const photos = [
+      {
+        attachment_id: 'f2',
+        stop_id: at(1),
+        created_by: 'ana',
+        created_at: '2026-12-11T13:50:00Z',
+      },
+      { attachment_id: 'f1', stop_id: at(1), created_by: UID, created_at: '2026-12-11T13:45:00Z' },
+      { attachment_id: 'f3', stop_id: at(0), created_by: UID, created_at: '2026-12-11T07:01:00Z' },
+    ];
+    const plan = planReview(layout, done, UID, layout.pathLength, photos);
+    const cues = plan?.cues ?? [];
+    const photo = cues.filter((c) => c.kind === 'photo');
+    expect(photo).toHaveLength(2);
+    expect(photo[1]).toMatchObject({
+      stop_id: at(1),
+      attachment_id: 'f1',
+      created_by: UID,
+      extra: 1,
+    });
+    // no mesmo nó, o evento antes da foto
+    const i1 = cues.findIndex((c) => c.kind === 'event' && c.event.stop_id === at(1));
+    const p1 = cues.findIndex((c) => c.kind === 'photo' && c.stop_id === at(1));
+    expect(i1).toBeLessThan(p1);
+  });
+
+  it('foto de nó fora do trecho ou de parada desconhecida não entra', () => {
+    const at0 = done[0]?.id ?? '';
+    const last = done.at(-1)?.id ?? '';
+    const photos = [
+      {
+        attachment_id: 'x',
+        stop_id: 'nao-existe',
+        created_by: UID,
+        created_at: '2026-12-11T12:00:00Z',
+      },
+      { attachment_id: 'y', stop_id: last, created_by: UID, created_at: '2026-12-11T12:00:00Z' },
+      { attachment_id: 'z', stop_id: at0, created_by: UID, created_at: '2026-12-11T12:00:00Z' },
+    ];
+    const cues = photoCues(photos, layout, node(0).s, node(1).s);
+    expect(cues.map((c) => (c.kind === 'photo' ? c.attachment_id : ''))).toEqual(['z']);
+  });
+
+  it('o replay ao abrir nunca mostra fotos', () => {
+    const plan = planReplay({
+      prev: {
+        trip_day_id: 'd',
+        trip_id: 't',
+        fraction: null,
+        at: null,
+        done_stop_ids: [],
+        skipped_stop_ids: [],
+        seen_event_ids: [],
+        updated_at: '2026-12-11T10:00:00Z',
+      },
+      current_s: layout.pathLength,
+      events: [],
+      layout,
+      reducedMotion: false,
+    });
+    expect(plan?.cues.some((c) => c.kind === 'photo')).toBe(false);
   });
 });

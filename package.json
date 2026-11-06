@@ -55,11 +55,13 @@
     "fractional-indexing": "4.0.0",
     "lucide-react": "1.68.0",
     "motion": "14.9.1",
+    "pdfjs-dist": "6.4.299",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "react-hook-form": "7.91.0",
     "react-router": "8.5.1",
     "three": "0.187.0",
+    "thumbhash": "0.1.1",
     "zod": "4.6.7"
   },
   "devDependencies": {

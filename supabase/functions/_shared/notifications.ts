@@ -34,6 +34,9 @@ export const notificationDataSchema = z.looseObject({
   start_date: z.string().nullish(),
   done_time: z.string().nullish(),
   actor_name: z.string().nullish(),
+  reservation_name: z.string().nullish(),
+  reservation_type: z.string().nullish(),
+  cancel_until: z.string().nullish(),
 });
 export type NotificationData = z.infer<typeof notificationDataSchema>;
 
@@ -137,6 +140,12 @@ function roadBody(data: NotificationData): string {
   return parts.join(' · ');
 }
 
+/** "08/12" a partir de 'YYYY-MM-DD', sem passar por Date (nada de fuso). */
+export function dayMonth(date: string): string {
+  const [, m, d] = date.split('-');
+  return m && d ? `${d}/${m}` : '';
+}
+
 function action(id: PushActionId) {
   return { action: id, title: PUSH_ACTIONS[id] };
 }
@@ -220,7 +229,19 @@ export function notificationText(
         ttlSeconds: 1800,
         topic: null,
       };
-    case 'cancel_deadline': // fase 7
+    case 'cancel_deadline': {
+      // chega na véspera do cancel_until: amanhã é o último dia; a data repete a da política
+      const until = data.cancel_until ? ` · até ${dayMonth(data.cancel_until)}` : '';
+      return {
+        title: 'Amanhã é o último dia para cancelar sem custo',
+        body: `${data.reservation_name ?? 'Reserva'}${until}`,
+        tag: `cancel:${ref}`,
+        actions: [],
+        appBadge: null,
+        ttlSeconds: 6 * 3600,
+        topic: null,
+      };
+    }
     case 'retro_ready': // fase 9
       return {
         title: data.trip_name ?? 'Viajei',
@@ -234,9 +255,13 @@ export function notificationText(
   }
 }
 
-/** Caminho que o aviso abre: o "Agora" da viagem. */
-export function navigatePath(tripId: string | null): string {
-  return tripId ? `/viagens/${tripId}/viagem` : '/';
+/** Caminho que o aviso abre: o "Agora" da viagem; o prazo de cancelamento abre a própria reserva. */
+export function navigatePath(row: Pick<ClaimedNotification, 'kind' | 'ref' | 'trip_id'>): string {
+  if (!row.trip_id) return '/';
+  if (row.kind === 'cancel_deadline') {
+    return `/viagens/${row.trip_id}/reservas?abrir=${encodeURIComponent(row.ref)}`;
+  }
+  return `/viagens/${row.trip_id}/viagem`;
 }
 
 /** O payload para uma assinatura: `navigate` absoluto na origem que assinou (produção, preview ou localhost). */
@@ -245,7 +270,7 @@ export function buildPushPayload(
   origin: string,
 ): PushPayload {
   const text = notificationText(row.kind, row.data, row.ref);
-  const path = navigatePath(row.trip_id);
+  const path = navigatePath(row);
   return {
     web_push: DECLARATIVE_WEB_PUSH,
     notification: {

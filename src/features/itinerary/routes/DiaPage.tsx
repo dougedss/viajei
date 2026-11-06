@@ -10,7 +10,8 @@ import { Sheet } from '@/components/ui/Sheet.tsx';
 import { TextField } from '@/components/ui/TextField.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { CalendarExport } from '@/features/notifications/components/CalendarExport.tsx';
-import { useTrip } from '@/features/trips/queries.ts';
+import { useIsOwner, useTrip } from '@/features/trips/queries.ts';
+import { useSession } from '@/lib/supabase/session.ts';
 import type { Stop, TripDay } from '@/lib/db/schema.ts';
 import { formatDayLong, formatDayShort } from '@/lib/time/index.ts';
 import {
@@ -60,6 +61,8 @@ export default function DiaPage() {
   const toast = useToast();
   const [editing, setEditing] = useState<Stop | 'new' | null>(null);
   const [removing, setRemoving] = useState<Stop | null>(null);
+  const { session } = useSession();
+  const isOwner = useIsOwner(trip);
 
   if (trip === undefined || day === undefined || days === undefined) return <Splash />;
   if (trip === null || day === null) return <NotFound />;
@@ -148,14 +151,16 @@ export default function DiaPage() {
         onClose={() => setRemoving(null)}
         title="Excluir a parada?"
         {...(removing
-          ? { description: `${removing.name} sai do roteiro em todos os aparelhos.` }
+          ? {
+              description: `${removing.name} sai do roteiro em todos os aparelhos. Uma reserva ligada a ela continua, no mesmo dia; a sua memória e as suas fotos da parada saem junto.`,
+            }
           : {})}
       >
         <Button
           variant="danger"
           onClick={() => {
             if (!removing) return;
-            void removeStop(removing.id).then(() => {
+            void removeStop(removing.id, session?.user.id ?? '', isOwner).then(() => {
               toast.show({ title: 'Parada excluída', kind: 'info' });
               setRemoving(null);
             });

@@ -24,13 +24,13 @@ import { OPENING_TIMELINE, openedKey, planOpening } from '../opening.ts';
 import { writeRenderPref } from '../prefs.ts';
 import { tierFor } from '../quality.ts';
 import { projectNodes } from '../project.ts';
-import { planLiveAdvance, planReplay, planReview } from '../replay.ts';
+import { PHOTO_CARD_MS, planLiveAdvance, planReplay, planReview } from '../replay.ts';
 import { WorldRuntime, type Opening } from '../scene/runtime.ts';
 import { WorldCanvas } from '../scene/WorldCanvas.tsx';
 import { WorldScene } from '../scene/WorldScene.tsx';
 import { ListView, type WorldSlotProps } from '../WorldSlot.tsx';
 import { DayList } from './DayList.tsx';
-import { HUD_BOTTOM, HUD_TOP, WorldHud, type TeamChip } from './WorldHud.tsx';
+import { HUD_BOTTOM, HUD_TOP, WorldHud, type PhotoCard, type TeamChip } from './WorldHud.tsx';
 
 /**
  * A maquete do dia no Modo Viagem. Esta casca decide se há como desenhar (WebGPU, WebGL2 ou nada),
@@ -113,6 +113,7 @@ export default function WorldSection(props: WorldSlotProps) {
         profiles={props.profiles}
         route={route}
         defaultOpen={false}
+        stopExtras={props.stopExtras}
         footer={
           <Button variant="ghost" size="sm" onClick={() => writeRenderPref('list')}>
             Ver como lista
@@ -156,6 +157,7 @@ function WorldStage(p: StageProps) {
   const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
   const [pops, setPops] = useState<Record<string, number>>({});
   const [teamChips, setTeamChips] = useState<Record<string, TeamChip>>({});
+  const [photoCards, setPhotoCards] = useState<Record<string, PhotoCard>>({});
   const [caption, setCaption] = useState<string | null>(null);
   const [overflow, setOverflow] = useState(0);
   const [diving, setDiving] = useState(false);
@@ -361,6 +363,24 @@ function WorldStage(p: StageProps) {
               setTeamChips((c) => ({ ...c, [ev.stop_id]: { name, time } }));
               later(4000, () => setTeamChips((c) => withoutKey(c, ev.stop_id)));
             }
+          } else if (e.cue.kind === 'photo') {
+            // o cartão de foto sobre a pílula, só com o arquivo já no aparelho; nada sob reduzir movimento
+            if (!reducedMotion) {
+              const cue = e.cue;
+              const color = p.profiles.get(cue.created_by)?.color ?? 'sunset';
+              setPhotoCards((c) => ({
+                ...c,
+                [cue.stop_id]: {
+                  attachment_id: cue.attachment_id,
+                  color,
+                  extra: cue.extra,
+                  at: now,
+                },
+              }));
+              later(PHOTO_CARD_MS, () =>
+                setPhotoCards((c) => (c[cue.stop_id]?.at === now ? withoutKey(c, cue.stop_id) : c)),
+              );
+            }
           } else {
             const text = e.cue.caption;
             setCaption(text);
@@ -399,7 +419,16 @@ function WorldStage(p: StageProps) {
     onMotionEvents(motion.skip(performance.now()));
     runtime.invalidate();
   };
-  const reviewPlan = phase === 'idle' ? planReview(layout, state.stops, uid, placement.s) : null;
+  const reviewPlan =
+    phase === 'idle'
+      ? planReview(
+          layout,
+          state.stops,
+          uid,
+          placement.s,
+          reducedMotion ? [] : (p.reviewPhotos ?? []),
+        )
+      : null;
   const startReview = () => {
     if (!reviewPlan) return;
     motion.enqueue(motion.fromPlan(reviewPlan, 'review'), performance.now());
@@ -462,6 +491,7 @@ function WorldStage(p: StageProps) {
         statuses={statuses}
         pops={pops}
         teamChips={teamChips}
+        photoCards={photoCards}
         hidePills={diving}
         caption={caption}
         offRouteM={offRouteM}

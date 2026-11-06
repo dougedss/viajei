@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeDay, makeStop } from '@/test/factories.ts';
+import { makeDay, makeReservation, makeStop } from '@/test/factories.ts';
 import {
   blockedMessage,
   datesBetween,
@@ -62,6 +62,24 @@ describe('planDays', () => {
     expect(plan.blocked[0]?.stops.map((s) => s.name)).toEqual(['Caracol', 'Gramado']);
     expect(blockedMessage(plan.blocked)).toBe(
       'Não dá para encurtar: 13/12 tem 2 paradas (Caracol, Gramado). Mova ou exclua essas paradas antes.',
+    );
+  });
+
+  it('dia vazio de paradas mas com reserva ligada também bloqueia', () => {
+    const reservations = [
+      makeReservation({ id: 'r1', trip_day_id: 'd13', name: 'Ingresso do Caracol' }),
+      makeReservation({ id: 'r2', trip_day_id: 'd13', name: 'Apagada', deleted_at: 'x' }),
+    ];
+    const plan = planDays(
+      { start_date: '2026-12-11', end_date: '2026-12-12' },
+      [d11, d12, d13],
+      [],
+      reservations,
+    );
+    expect(plan.retire).toEqual([]);
+    expect(plan.blocked[0]?.reservations.map((r) => r.name)).toEqual(['Ingresso do Caracol']);
+    expect(blockedMessage(plan.blocked)).toBe(
+      'Não dá para encurtar: 13/12 tem 1 reserva (Ingresso do Caracol). Mova ou exclua essas paradas e reservas antes.',
     );
   });
 

@@ -59,6 +59,8 @@ export function formatClock(d: Date): string {
   return format(d, 'HH:mm');
 }
 
+export { TRIP_TIME_ZONE, isoToWall, localStampToISO, wallToISO, wallToInstant } from './zone.ts';
+
 // formatDuration vive em _shared/format.ts: o texto dos avisos (servidor) e o "Agora" usam a mesma função
 export { formatDuration } from '@shared/format.ts';
 

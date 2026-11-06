@@ -1,14 +1,48 @@
+import { createReadStream, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import babel from '@rolldown/plugin-babel';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// Os .wasm do pdf.js (JPEG 2000, JBIG2 e perfis de cor dentro de PDFs) num caminho fixo,
+// `/pdfjs/wasm/`, que o pdf.js monta sozinho a partir do `wasmUrl`: emitidos no build (e por isso
+// no precache do service worker, para o PDF da reserva abrir sem sinal) e servidos em dev.
+const PDFJS_WASM = ['openjpeg.wasm', 'jbig2.wasm', 'qcms_bg.wasm'];
+function pdfjsWasm(): Plugin {
+  const dir = fileURLToPath(new URL('./node_modules/pdfjs-dist/wasm/', import.meta.url));
+  return {
+    name: 'viajei:pdfjs-wasm',
+    configureServer(server) {
+      server.middlewares.use('/pdfjs/wasm/', (req, res, next) => {
+        const name = (req.url ?? '').replace(/^\//, '').split('?')[0] ?? '';
+        if (!PDFJS_WASM.includes(name)) {
+          next();
+          return;
+        }
+        res.setHeader('Content-Type', 'application/wasm');
+        createReadStream(join(dir, name)).pipe(res);
+      });
+    },
+    generateBundle() {
+      for (const name of PDFJS_WASM) {
+        this.emitFile({
+          type: 'asset',
+          fileName: `pdfjs/wasm/${name}`,
+          source: readFileSync(join(dir, name)),
+        });
+      }
+    },
+  };
+}
+
 // React Compiler pelo caminho estável (babel-plugin-react-compiler 1.0). O compilador em Rust do
 // plugin-react ainda é experimental; quando sair da fase experimental, basta trocar por `react({ compiler: true })`.
 export default defineConfig({
   plugins: [
+    pdfjsWasm(),
     react(),
     babel({ presets: [reactCompilerPreset()] }),
     tailwindcss(),
@@ -35,7 +69,8 @@ export default defineConfig({
         categories: ['travel', 'navigation'],
       },
       injectManifest: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        // mjs e wasm: o worker e os módulos do pdf.js, para o PDF da reserva abrir sem sinal
+        globPatterns: ['**/*.{js,mjs,css,html,svg,png,ico,woff2,wasm}'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },
     }),

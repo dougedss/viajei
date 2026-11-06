@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
  */
 export const SENHA = 'viajei123';
 
-function localEnv(): Record<string, string> {
+export function localEnv(): Record<string, string> {
   const out = execFileSync('supabase', ['status', '-o', 'env'], { encoding: 'utf8' });
   const env: Record<string, string> = {};
   for (const line of out.split('\n')) {

@@ -1,4 +1,5 @@
 import { ExternalLink } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { StopKindIcon } from '@/features/itinerary/components/StopKindIcon.tsx';
 import type { Profile, RouteLeg, Stop } from '@/lib/db/schema.ts';
 import { googleMapsUrl, wazeUrl } from '@/lib/links/index.ts';
@@ -10,6 +11,8 @@ type Props = {
   state: DayState;
   legs: Map<string, RouteLeg>;
   profiles: Map<string, Profile>;
+  /** o que mais cada parada mostra no Modo Viagem: notas do time, "Ver reserva", "Como foi?" */
+  stopExtras?: ((stop: Stop) => ReactNode) | undefined;
 };
 
 const STATUS_LABEL: Record<StopStatus, string> = {
@@ -46,7 +49,7 @@ function Node({ status, stop }: { status: StopStatus; stop: Stop }) {
  * A lista acessível da trilha: a mesma informação da maquete (fase 5), em lista, para leitor de
  * tela e como fallback permanente. O carro está no último nó concluído; o halo pulsa no próximo.
  */
-export function TrailList({ state, legs, profiles }: Props) {
+export function TrailList({ state, legs, profiles, stopExtras }: Props) {
   return (
     <ol className="grid gap-0" aria-label="Trilha do dia">
       {state.stops.map((stop, i) => {
@@ -114,6 +117,7 @@ export function TrailList({ state, legs, profiles }: Props) {
                   ) : null}
                 </p>
               ) : null}
+              {stopExtras?.(stop)}
             </div>
             {!isLast ? (
               <>

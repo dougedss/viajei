@@ -1,4 +1,14 @@
-import { Bell, ChevronLeft, ChevronRight, CalendarOff, Route as RouteIcon } from 'lucide-react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import {
+  Bell,
+  BookOpen,
+  ChevronLeft,
+  ChevronRight,
+  CalendarOff,
+  Route as RouteIcon,
+  Star,
+  Ticket,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { NotFound } from '@/app/NotFound.tsx';
@@ -15,8 +25,31 @@ import { PushAskSheet } from '@/features/notifications/components/PushAskSheet.t
 import { useTrip, useTripMembers, type MemberWithProfile } from '@/features/trips/queries.ts';
 import { todayISO, tripStatus } from '@/features/trips/rules.ts';
 import type { Profile, Trip } from '@/lib/db/schema.ts';
+import { cx } from '@/lib/cx.ts';
 import { useSession } from '@/lib/supabase/session.ts';
-import { WorldSlot, type EventsOwner } from '@/features/world/WorldSlot.tsx';
+import { WorldSlot, type EventsOwner, type ReviewPhoto } from '@/features/world/WorldSlot.tsx';
+import { dismissMemoryPrompt } from '@/features/memories/actions.ts';
+import { HowWasItSheet } from '@/features/memories/components/HowWasItSheet.tsx';
+import { MemoryPromptCard } from '@/features/memories/components/MemoryPromptCard.tsx';
+import { RatingChips } from '@/features/memories/components/StarRating.tsx';
+import {
+  useDismissedPrompts,
+  useTripMemories,
+  useTripPhotos,
+} from '@/features/memories/queries.ts';
+import {
+  answeredStops,
+  memoryPrompt,
+  pendingPrompts,
+  SHEET_DELAY_MS,
+  type ArrivalSource,
+} from '@/features/memories/rules.ts';
+import { NowReservations } from '@/features/reservations/components/NowReservations.tsx';
+import { ReservationSheet } from '@/features/reservations/components/ReservationSheet.tsx';
+import { useTripReservations } from '@/features/reservations/queries.ts';
+import { reservationsForNow, reservationsOfStop } from '@/features/reservations/rules.ts';
+import { db, type Stop } from '@/lib/db/schema.ts';
+import { useTripMediaPrefetch } from '@/lib/media/hooks.ts';
 import { audio } from '@/lib/audio/index.ts';
 import { celebrateArrival } from '@/lib/celebrate.ts';
 import { currentDay, formatDayShort } from '@/lib/time/index.ts';
@@ -167,13 +200,38 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
   // quem conta "o que aconteceu desde a última vez": a maquete (replay) ou o card; nunca os dois
   const [owner, setOwner] = useState<EventsOwner | null>(null);
 
+  // reservas, memórias e fotos da viagem: o "Ver reserva", o "Como foi?" e o "Rever o dia"
+  const reservations = useTripReservations(tripId) ?? [];
+  const memories = useTripMemories(tripId);
+  const dismissedPrompts = useDismissedPrompts();
+  const photos = useTripPhotos(tripId);
+  const localBlobs = useLiveQuery(
+    () => db.blobs.where('trip_id').equals(tripId).primaryKeys(),
+    [tripId],
+    [],
+  );
+  useTripMediaPrefetch(tripId);
+  const answered = answeredStops(memories, uid);
+  const [memoryStopId, setMemoryStopId] = useState<string | null>(null);
+  const [reservationId, setReservationId] = useState<string | null>(null);
+  const sheetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (sheetTimer.current) clearTimeout(sheetTimer.current);
+    },
+    [],
+  );
+
   const run = (
     label: string,
     action: () => Promise<Undoable>,
     seen: readonly string[] = [],
     effect?: 'depart' | 'arrive',
+    source: ArrivalSource = 'tap',
   ) => {
     setBusy(true);
+    // a parada que este Chegamos! conclui, para a folha "Como foi?" saber de quem é
+    const arriving = effect === 'arrive' ? state.next : null;
     void action()
       .then(({ undo }) => {
         cuRef.current?.markSeen(seen);
@@ -181,6 +239,18 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
         if (effect === 'arrive') {
           audio.bell();
           celebrateArrival();
+        }
+        if (
+          arriving &&
+          memoryPrompt({
+            source,
+            panelOn: panel.on,
+            stop: arriving,
+            answered: answered.has(arriving.id),
+          }) === 'sheet'
+        ) {
+          if (sheetTimer.current) clearTimeout(sheetTimer.current);
+          sheetTimer.current = setTimeout(() => setMemoryStopId(arriving.id), SHEET_DELAY_MS);
         }
         toast.show({
           title: label,
@@ -206,7 +276,13 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
     state,
     onAutoDepart: () => run(departLabel, () => depart(state, uid), departSeen, 'depart'),
     onAutoArrive: () =>
-      run(`Chegamos: ${state.next?.name ?? ''}`, () => arrive(state, uid), arriveSeen, 'arrive'),
+      run(
+        `Chegamos: ${state.next?.name ?? ''}`,
+        () => arrive(state, uid),
+        arriveSeen,
+        'arrive',
+        'panel',
+      ),
   });
 
   const cu = useCatchup({
@@ -239,6 +315,7 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
       () => arrive(state, uid),
       [`arrived:${autoStop.id}`],
       'arrive',
+      'catchup',
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- dispara uma vez por leitura (chave), não a cada render
   }, [active, autoStop?.id, fixAt]);
@@ -265,6 +342,60 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
     return () => document.removeEventListener('visibilitychange', onHidden);
   }, [active, pendingCount, leaveAtMs]);
 
+  // a folha fecha sozinha se o Chegamos! for desfeito enquanto ela está aberta
+  const sheetStop = memoryStopId
+    ? (stops.find((s) => s.id === memoryStopId && s.done_at !== null) ?? null)
+    : null;
+  const prompts = pendingPrompts(stops, answered, dismissedPrompts, sheetStop?.id ?? null);
+  const promptStop = prompts[0] ?? null;
+  const openReservation = reservations.find((r) => r.id === reservationId) ?? null;
+  const cached = new Set(localBlobs);
+  const dayStopIds = new Set(stops.map((s) => s.id));
+  const reviewPhotos: ReviewPhoto[] = photos
+    .filter(
+      (p) => p.row.stop_id && dayStopIds.has(p.row.stop_id) && (p.pending || cached.has(p.row.id)),
+    )
+    .map((p) => ({
+      attachment_id: p.row.id,
+      stop_id: p.row.stop_id ?? '',
+      created_by: p.row.created_by,
+      created_at: p.row.created_at,
+    }));
+
+  const stopExtras = (stop: Stop) => {
+    const mine = memories.filter((m) => m.stop_id === stop.id);
+    const res = reservationsOfStop(stop.id, reservations);
+    const canRemember = stop.done_at !== null && !isDepartureNode(stop) && !stop.skipped;
+    if (res.length === 0 && !canRemember && !mine.some((m) => m.rating !== null)) return null;
+    const pill =
+      'inline-flex min-h-10 items-center gap-1.5 rounded-full bg-card px-3 text-[14px] font-semibold text-accent-ink shadow-[inset_0_0_0_1.5px_var(--color-line)]';
+    return (
+      <div className="flex flex-wrap items-center gap-2 pt-1 pb-2">
+        <RatingChips memories={mine} profiles={profiles} />
+        {res.map((r) => (
+          <button key={r.id} type="button" className={pill} onClick={() => setReservationId(r.id)}>
+            <Ticket className="size-4" aria-hidden="true" />
+            Ver reserva
+          </button>
+        ))}
+        {canRemember ? (
+          <button
+            type="button"
+            className={cx(pill, answered.has(stop.id) && 'text-ink-2')}
+            onClick={() => setMemoryStopId(stop.id)}
+          >
+            {answered.has(stop.id) ? (
+              <BookOpen className="size-4" aria-hidden="true" />
+            ) : (
+              <Star className="size-4" aria-hidden="true" />
+            )}
+            {answered.has(stop.id) ? 'Minha memória' : 'Como foi?'}
+          </button>
+        ) : null}
+      </div>
+    );
+  };
+
   return (
     <>
       {owner === 'card' ? (
@@ -276,6 +407,12 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
       ) : null}
 
       <AgoraHeader
+        footer={
+          <NowReservations
+            reservations={reservationsForNow(state, reservations, now)}
+            onOpen={(r) => setReservationId(r.id)}
+          />
+        }
         state={state}
         busy={busy}
         onDepart={() => run(departLabel, () => depart(state, uid), departSeen, 'depart')}
@@ -317,6 +454,18 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
         </div>
       )}
 
+      {promptStop ? (
+        <MemoryPromptCard
+          key={promptStop.id}
+          stop={promptStop}
+          uid={uid}
+          profiles={profiles}
+          more={prompts.length - 1}
+          onOpen={() => setMemoryStopId(promptStop.id)}
+          onDismiss={() => void dismissMemoryPrompt(promptStop.id)}
+        />
+      ) : null}
+
       {stops.length === 0 ? (
         <section
           aria-label="Trilha do dia"
@@ -339,8 +488,28 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
           uid={uid}
           night={night}
           onEventsOwner={setOwner}
+          stopExtras={stopExtras}
+          reviewPhotos={reviewPhotos}
         />
       )}
+
+      <HowWasItSheet
+        tripId={tripId}
+        stop={sheetStop}
+        uid={uid}
+        onClose={() => setMemoryStopId(null)}
+      />
+      <ReservationSheet
+        reservation={openReservation}
+        stop={
+          openReservation?.stop_id
+            ? (stops.find((s) => s.id === openReservation.stop_id) ?? null)
+            : null
+        }
+        today={todayISO(now)}
+        now
+        onClose={() => setReservationId(null)}
+      />
 
       {panel.on ? <div className="h-24" aria-hidden="true" /> : null}
       <PanelBar panel={panel} />

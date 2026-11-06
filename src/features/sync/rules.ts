@@ -30,6 +30,20 @@ export const COLUMN_LABELS: Record<string, string> = {
   kinds: 'tipos de aviso',
   morning_time: 'hora do briefing',
   share_position: 'compartilhar posição',
+  rating: 'nota',
+  memo: 'memória',
+  confirmation_code: 'código',
+  amount: 'valor',
+  cancel_policy: 'cancelamento',
+  cancel_until: 'prazo de cancelamento',
+  phone: 'telefone',
+  booked_via: 'reservado por',
+  start_at: 'início',
+  end_at: 'fim',
+  stop_id: 'parada',
+  trip_day_id: 'dia',
+  type: 'tipo',
+  filename: 'nome do arquivo',
 };
 
 export function describeColumns(columns: readonly string[]): string {
@@ -64,6 +78,18 @@ export function describeOp(op: OutboxOp, ctx: OpContext): OpDescription {
     return { title: `Parada · ${trip}`, detail: describeColumns(Object.keys(op.values)) };
   }
   if (op.table === 'trip_tracks') return { title: 'Trilha gravada', detail: trip };
+  if (op.table === 'reservations') {
+    const name = typeof op.values.name === 'string' ? op.values.name : 'reserva';
+    if (op.op === 'upsert') return { title: 'Reserva nova', detail: `${name} · ${trip}` };
+    if (op.values.deleted_at != null) return { title: 'Exclusão de reserva', detail: trip };
+    return { title: `Reserva · ${trip}`, detail: describeColumns(Object.keys(op.values)) };
+  }
+  if (op.table === 'stop_memories') return { title: 'Memória da parada', detail: trip };
+  if (op.table === 'attachments') {
+    if (op.values.deleted_at != null) return { title: 'Anexo tirado', detail: trip };
+    const photo = op.values.kind === 'photo';
+    return { title: photo ? 'Foto da memória' : 'Anexo da reserva', detail: trip };
+  }
   if (op.table === 'notification_prefs') {
     return { title: `Avisos · ${trip}`, detail: describeColumns(Object.keys(op.values)) };
   }

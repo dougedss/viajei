@@ -20,6 +20,9 @@ export type TripDay = LocalRow<Tables['trip_days']['Row']>;
 export type Stop = LocalRow<Tables['stops']['Row']>;
 export type TripTrack = LocalRow<Tables['trip_tracks']['Row']>;
 export type NotificationPref = LocalRow<Tables['notification_prefs']['Row']>;
+export type Reservation = LocalRow<Tables['reservations']['Row']>;
+export type StopMemory = LocalRow<Tables['stop_memories']['Row']>;
+export type Attachment = LocalRow<Tables['attachments']['Row']>;
 
 export type RowOf<T extends SyncTable> = {
   trips: Trip;
@@ -28,6 +31,9 @@ export type RowOf<T extends SyncTable> = {
   stops: Stop;
   trip_tracks: TripTrack;
   notification_prefs: NotificationPref;
+  reservations: Reservation;
+  stop_memories: StopMemory;
+  attachments: Attachment;
 }[T];
 
 export type OutboxState = 'pending' | 'failed';
@@ -92,6 +98,45 @@ export type TravelState = {
   updated_at: string;
 };
 
+/**
+ * O arquivo de um anexo guardado neste aparelho, por id do anexo (o arquivo é imutável). Cache: sai
+ * pela regra de despejo (`lib/media/eviction.ts`) e volta pelo `storage.download` quando há rede.
+ */
+export type BlobEntry = {
+  attachment_id: string;
+  trip_id: string;
+  kind: 'photo' | 'document';
+  size: number;
+  blob: Blob;
+  stored_at: string;
+  last_used_at: string;
+};
+
+/** A linha de `attachments` que nasce quando o arquivo chega ao Storage. */
+export type AttachmentDraft = Omit<Attachment, 'synced_at'>;
+
+/**
+ * Um trabalho da fila de mídia (`lib/media/queue.ts`), por id do anexo. `upload`: a foto ou o
+ * documento esperando sinal, com o Blob já comprimido e a linha pronta para gravar depois do envio.
+ * `remove`: o objeto do Storage a apagar depois que a lápide da linha for aceita. `waiting` espera a
+ * vez (ou a rede); `failed` foi recusado por regra e está em Pendentes.
+ */
+export type MediaJobState = 'waiting' | 'failed';
+type MediaJobBase = {
+  attachment_id: string;
+  trip_id: string;
+  storage_path: string;
+  state: MediaJobState;
+  attempts: number;
+  /** epoch ms a partir do qual pode tentar de novo; 0 = já */
+  next_at: number;
+  last_error: string | null;
+  created_at: number;
+};
+export type UploadJob = MediaJobBase & { op: 'upload'; blob: Blob; row: AttachmentDraft };
+export type RemoveJob = MediaJobBase & { op: 'remove' };
+export type MediaJob = UploadJob | RemoveJob;
+
 export type GeocodeResult = { name: string; address: string; lat: number; lng: number };
 /** Cache das buscas de endereço (Nominatim), por consulta normalizada. */
 export type GeocodeEntry = { query: string; results: GeocodeResult[]; fetched_at: string };
@@ -100,8 +145,10 @@ export type GeocodeEntry = { query: string; results: GeocodeResult[]; fetched_at
  * Dexie é a fonte de verdade da UI. Versão 1 com todas as stores do prompt (seção 5.6, mais
  * `notification_prefs` pela correção C11 e `travel_state` do replay). Versão 2 (fase 3): índice
  * simples `trip_day_id` em `stops`, para a lápide de um dia remover as paradas, e a store
- * `geocode`. Caches recalculáveis (`routes`, `geocode`, `travel_state`, `blobs`, `weather`) nunca
- * sincronizam. A `outbox` nunca é apagada sem ter sido enviada.
+ * `geocode`. Versão 3 (fase 7): `blobs` ganha o índice `trip_id` (a viagem que sai leva os
+ * arquivos dela) e nasce `uploads`, a fila de envio de fotos e documentos sem sinal. Caches
+ * recalculáveis (`routes`, `geocode`, `travel_state`, `blobs`, `weather`) nunca sincronizam. A
+ * `outbox` nunca é apagada sem ter sido enviada; a `uploads` também não, pelo mesmo motivo.
  */
 export class ViajeiDb extends Dexie {
   trips!: EntityTable<Trip, 'id'>;
@@ -111,6 +158,11 @@ export class ViajeiDb extends Dexie {
   stops!: EntityTable<Stop, 'id'>;
   trip_tracks!: EntityTable<TripTrack, 'id'>;
   notification_prefs!: EntityTable<NotificationPref, 'id'>;
+  reservations!: EntityTable<Reservation, 'id'>;
+  stop_memories!: EntityTable<StopMemory, 'id'>;
+  attachments!: EntityTable<Attachment, 'id'>;
+  blobs!: EntityTable<BlobEntry, 'attachment_id'>;
+  uploads!: EntityTable<MediaJob, 'attachment_id'>;
   routes!: EntityTable<DayRoute, 'trip_day_id'>;
   travel_state!: EntityTable<TravelState, 'trip_day_id'>;
   geocode!: EntityTable<GeocodeEntry, 'query'>;
@@ -145,6 +197,10 @@ export class ViajeiDb extends Dexie {
     this.version(2).stores({
       stops: 'id, trip_id, trip_day_id, [trip_day_id+position]',
       geocode: 'query',
+    });
+    this.version(3).stores({
+      blobs: 'attachment_id, trip_id, last_used_at',
+      uploads: 'attachment_id, trip_id, state',
     });
   }
 

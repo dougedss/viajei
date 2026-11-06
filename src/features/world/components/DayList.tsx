@@ -3,7 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { TrailList } from '@/features/travel-mode/components/TrailList.tsx';
 import { progress, type DayState } from '@/features/travel-mode/rules.ts';
 import { formatKm, totalAscent } from '@/features/itinerary/rules.ts';
-import type { DayRoute, Profile, RouteLeg } from '@/lib/db/schema.ts';
+import type { DayRoute, Profile, RouteLeg, Stop } from '@/lib/db/schema.ts';
 import { cx } from '@/lib/cx.ts';
 import { formatDuration } from '@/lib/time/index.ts';
 
@@ -20,9 +20,10 @@ type Props = {
   defaultOpen: boolean;
   /** ações no rodapé da lista (ex.: "Ver como lista", "Ver a maquete") */
   footer?: ReactNode;
+  stopExtras?: ((stop: Stop) => ReactNode) | undefined;
 };
 
-export function DayList({ state, legs, profiles, route, defaultOpen, footer }: Props) {
+export function DayList({ state, legs, profiles, route, defaultOpen, footer, stopExtras }: Props) {
   const [open, setOpen] = useState(defaultOpen);
   const done = progress(state.stops);
   const distance = route ? route.legs.reduce((acc, l) => acc + l.distance_m, 0) : null;
@@ -56,7 +57,7 @@ export function DayList({ state, legs, profiles, route, defaultOpen, footer }: P
         {state.stops.length === 0 ? (
           <p className="text-[17px] text-ink-2">Nenhuma parada neste dia.</p>
         ) : (
-          <TrailList state={state} legs={legs} profiles={profiles} />
+          <TrailList state={state} legs={legs} profiles={profiles} stopExtras={stopExtras} />
         )}
         {route && distance !== null && duration !== null ? (
           <p className="border-t border-line pt-3 text-[15px] text-ink-2">

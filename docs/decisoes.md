@@ -394,3 +394,119 @@ Um registro curto por decisão não óbvia: contexto, decisão, consequência. E
 - Primeiro quadro da garagem no Mac (Chrome, WebGPU, servidor de dev): **0,7 s** da montagem do palco ao primeiro `useFrame`.
 - fps no Mac com o disco girando: 60 em Alta, com WebGPU e com WebGL2 forçado (mediana de 3 s; pior quadro 18 ms).
 - fps no iPhone (Alta e Leve) e no Android: pendentes do teste manual do Douglas (`docs/teste-manual-fase-6.md`), junto com os da fase 5 (D64).
+
+## Fase 7 · Reservas, anexos e memórias (06/11/2026)
+
+### D76 · A 0007 a partir da DDL base, e o que mudou
+**Contexto.** A DDL base do Passo 0 (bloco 0005 de lá) vira a `0007_reservas_anexos_memorias.sql`, com a correção C8.
+**Decisão.** As três tabelas entram pelo `enable_trip_sync` (ranks 50, 50 e 60), com as FKs compostas. Diferenças, cada uma com o porquê:
+- `reservations.created_by`, imutável e com policy restritiva de insert: o XP `reservation_added` da fase 9 vai para "quem cadastrou", e sem a coluna isso não seria derivável.
+- `num_nonnulls(stop_id, trip_day_id) <= 1`: a parada já diz o dia; as duas juntas divergiriam quando a parada muda de dia.
+- `end_at` exige `start_at` (na base, `end_at >= null` passava) e limites de texto em todos os campos livres.
+- `attachments.placeholder` (thumbhash, D81). Foto é de memória (`stop_id`) e documento é de reserva, por `check`. O caminho é conferido exatamente (`{trip_id}/{id}.{ext do mime}`), e não por `like '…%'`. PDF não tem medidas nem placeholder.
+- Medidas, tamanho, tipo e placeholder imutáveis, porque o arquivo é imutável; o nome continua editável.
+- Policy restritiva "foto de memória: só quem tirou mexe" (o padrão da D23). O documento de reserva qualquer membro tira, porque a reserva é do time.
+
+**Consequência.** 60 testes pgTAP em `09_reservas_anexos_memorias`; o `sync_pull` devolve as três tabelas pelo D16, sem mudar a RPC.
+
+### D77 · O bucket e as policies do Storage
+**Decisão.** Bucket privado `attachments`, 10 MB, sem `image/heic` (C8: o client sempre manda JPEG ou PDF). Membros leem e enviam na pasta da viagem, e o nome do objeto é validado já no envio (`{viagem}/{anexo}.{ext}`). Não há policy de update: o arquivo é imutável. Apagar é só para quem enviou (`owner_id`) ou para o dono da viagem, **e só sem linha viva apontando para o objeto** (`private.attachment_is_live`, security definer).
+**Por quê.** Apagar um objeto é imediato e sem volta, enquanto tirar a linha não é. Com a regra da linha viva, o servidor nunca fica com linha sem arquivo, nos dois sentidos: o arquivo sobe antes da linha, e a linha sai antes do arquivo.
+**Consequência.** O pgTAP testa o Storage como a API faz: `storage.objects` tem o trigger `protect_delete`, e o teste liga `storage.allow_delete_query` na sessão, como a própria API do Storage.
+
+### D78 · A fila de envio sem sinal (divergência intencional do prompt)
+**Contexto.** O prompt v3 diz "upload só online" (4.4) e "o registro nasce depois do upload" (5.3). Mas a cascata não tem sinal, e a foto é tirada lá.
+**Decisão.** A foto entra **na hora** na store `uploads` (Dexie v3): Blob comprimido, linha pronta, id do anexo já definitivo. Ela aparece pelo Blob local com o selo "aguardando sinal". Com rede, `MediaQueue` sobe ao Storage (`upsert: false`) e só depois grava a linha pela `mutate`, numa transação com o Blob no cache.
+- "Já existe" conta como enviado: o caminho é do anexo, então repetir é idempotente.
+- Sem rede, não conta tentativa (D17).
+- Erro de servidor: espera 1 s, 2 s… e vai para Pendentes na quinta tentativa. Erro de regra (403, 413, 415) vai direto para Pendentes.
+- Viagem criada sem sinal espera chegar ao servidor antes de subir o arquivo.
+- Destino apagado descarta o envio. Tirar a foto no meio do envio vira um trabalho de apagar.
+- A fila tem Web Lock próprio (`viajei:media`): um Chegamos! nunca espera uma foto, nem a foto espera o sync. Ela acorda no começo e no fim de cada ciclo do motor (o fim pega a viagem recém-confirmada pelo pull).
+- No Android, o service worker registra um Background Sync e envia com o app fechado. No iPhone, que não tem Background Sync, sobe na próxima abertura.
+
+**Consequência.** O servidor nunca tem linha sem arquivo. O indicador "N pendentes" e "Sair da conta" contam as fotos não enviadas, e Pendentes mostra cada uma com "Tentar de novo" e "Descartar". Testes: a máquina de estados no Vitest (10 casos) e o e2e "foto sem rede → sobe quando a rede volta".
+
+### D79 · Quem apaga o objeto do Storage
+**Decisão.** Tirar uma foto ou um documento grava a lápide pela `mutate`. Se quem tira enviou o arquivo ou é dono da viagem, um trabalho `remove` espera a lápide sair da outbox e então chama `storage.remove`. Negado (alguém descartou a lápide e a linha voltou) ou objeto inexistente: o trabalho some. O resto fica para o expurgo da fase 12.
+**Por quê.** Quem tira uma foto espera que ela suma de verdade, não daqui a 30 dias. A regra da linha viva (D77) torna isso seguro, mesmo com a lápide ainda a caminho.
+**Consequência.** O expurgo da fase 12 precisa apagar também os objetos sem linha: os de anexos tirados por quem não enviou, e o de um insert descartado em Pendentes.
+
+### D80 · Compressão sem dependência
+**Decisão.** `createImageBitmap(file, { imageOrientation: 'from-image' })` decodifica e endireita a foto. A redução é feita em passos de metade (do contrário, serrilha no Safari), sobre fundo branco, e a codificação em JPEG.
+- Foto de memória: até 1600 px, e a qualidade é buscada em até 4 codificações para chegar a cerca de 400 KB.
+- Print de reserva: até 2400 px, qualidade 0,9.
+- PDF: vai como está, até 10 MB.
+
+Tudo roda num worker com `OffscreenCanvas` e cai para a thread principal se o worker não carregar. Recodificar apaga o EXIF, inclusive a localização da foto. O tipo do arquivo é lido pelos primeiros bytes, e HEIC que o navegador não abre vira a frase "Esta foto está em HEIC…". JPEG e não WebP porque o Safari não codifica WebP pelo canvas.
+**Por que não a `browser-image-compression` (C8 a citava).** Ela usa o mesmo canvas por baixo, e conferi no pacote 2.0.2 que o worker dela importa o script de `cdn.jsdelivr.net` (`libURL`). Sem sinal, exatamente onde a foto é tirada, o worker não carrega. A biblioteca saiu da tabela da stack, com o ok do Douglas.
+**Consequência.** Worker de 4,7 KB, sem dependência. A busca de qualidade e as medidas são testadas com codificador injetado.
+
+### D81 · O borrão antes da foto: thumbhash
+**Decisão.** `thumbhash` 0.1.1 (MIT, sem dependências, 13 KB): cerca de 25 bytes por foto, calculados de uma redução a 100 px e guardados em base64 em `attachments.placeholder`. O valor viaja com a linha pelo sync.
+**Consequência.** O diário, a folha e o "Rever o dia" mostram o borrão na cor certa antes do arquivo chegar, inclusive offline, num aparelho que só recebeu a linha.
+
+### D82 · O cache de arquivos e a regra de despejo
+**Decisão.** `blobs` (Dexie v3, com índice `trip_id`) guarda o arquivo por id do anexo.
+- Ao abrir uma viagem em andamento ou futura com rede, o app baixa o que falta, documentos primeiro.
+- De viagem passada, baixa sob demanda, quando a foto aparece (assim não baixa e despeja em ciclo).
+- Regra pura `planEviction`: anexo de viagem com `end_date` maior ou igual a hoje nunca sai. Das passadas, saem primeiro as fotos menos usadas, depois os documentos, até caber no orçamento.
+- Orçamento: o menor entre 1 GB e 40% da cota de `navigator.storage.estimate()`, nunca abaixo de 200 MB.
+- `last_used_at` é regravado no máximo uma vez por dia por anexo. O despejo roda depois de cada lote baixado e uma vez por abertura.
+- Os arquivos nunca vão para o cache do service worker (bucket privado, arquivo por id). `persistStorage()` é pedido no primeiro arquivo guardado, com o app instalado.
+- A lápide de um anexo leva o Blob junto; `wipeTrip` e "sair da conta" levam Blobs e fila.
+
+### D83 · Quando a folha "Como foi?" abre
+**Decisão.** Regra pura `memoryPrompt`:
+- A folha abre sozinha, 1,2 s depois do confete, só quando o Chegamos! veio de um toque na tela, o modo painel está desligado, a parada não é um nó de saída e a pessoa ainda não respondeu.
+- Painel, notificação, catch-up automático, "vocês passaram por…" e marcação de outro membro viram um card discreto no Modo Viagem: um por vez, o mais recente primeiro, com "mais N depois".
+- "Agora não" e o ✕ do card dispensam a pergunta naquela parada, neste aparelho (`sync_state`).
+- A linha de memória nasce mesmo só com fotos: é o "respondido" que sincroniza entre os aparelhos da pessoa.
+- Desfazer o Chegamos! com a folha aberta fecha a folha.
+- As fotos escolhidas só entram na fila no "Salvar".
+
+**Consequência.** Nada abre por cima de quem dirige. A memória se edita depois pela lista do dia ("Minha memória") e pelo diário.
+
+### D84 · O PDF no PWA instalado do iPhone: um visualizador próprio
+**Contexto.** Abrir um PDF a partir de Blob no modo standalone do iOS é o ponto mais frágil desta fase: `window.open(blob:)` abre em branco, e o `<iframe>` mostra só a primeira página.
+**Decisão.** `pdfjs-dist` 6.4.299 (de outubro; a 6.5 tinha 5 dias), num chunk carregado só quando um PDF abre (432 KB, 131 KB gzip, mais o worker de 1,26 MB). Os `.wasm` (JPEG 2000, JBIG2, perfis de cor) saem num caminho fixo (`/pdfjs/wasm/`) por um plugin pequeno no `vite.config.ts`, servidos em dev e emitidos no build. Tudo entra no precache do service worker, para abrir sem sinal. As páginas são desenhadas em canvas na resolução da tela, quando aparecem, com zoom em quatro níveis. "Compartilhar" (`navigator.share({ files })`) fica como segundo caminho (abrir em outro app, salvar em Arquivos).
+**Consequência.** O precache foi a 122 arquivos e 5,45 MB; baixa uma vez. O e2e prova o print aberto sem rede depois de recarregar o build; o PDF no iPhone fica no teste manual.
+
+### D85 · O aviso de prazo de cancelamento
+**Decisão.** Um ramo novo no `due_notifications` (`create or replace`, mesma assinatura): véspera do `cancel_until` às 10:00 de São Paulo, só reserva viva de viagem viva, respeitando a preferência. Os fatos (nome, data limite, viagem) vão em `data`. Um índice parcial em `reservations (cancel_until)` atende um `between` sobre a janela.
+- O texto mudou em relação ao exemplo do delta, com ok do Douglas: "Amanhã é o último dia para cancelar sem custo" · "Vila Suzana Parque Hotel · até 08/12". O aviso chega na véspera, então "último dia" seria falso nesse dia, e "o Vila Suzana" pediria um artigo que não se deduz do nome (D43).
+- O toque abre a própria reserva (`/reservas?abrir=<id>`).
+
+**Consequência.** pgTAP com 10:00 de São Paulo (13:00 UTC), 07:00 (10:00 UTC, ainda não), tipo desligado e reserva apagada.
+
+### D86 · O laço do motor de sync (correção de um defeito da fase 2)
+**Contexto.** O e2e do catch-up desta fase mostrou o Partiu! parado como pendente por até 60 s. O motor pedia o lock com `ifAvailable`: um pedido que chegava com o lock ocupado (um pull do Realtime, o ciclo anterior) era descartado. A primeira correção criou outro defeito: dois laços na mesma aba se alternando pelo lock, sem rodar ciclo. A segunda criou um terceiro: o laço que terminava sem esperar nada se zerava antes da própria atribuição e ficava preso como resolvido.
+**Decisão.** A classe `CycleRunner` (`lib/db/sync/runner.ts`), sem rede e testável:
+- um único laço por aba;
+- pedido no meio vira mais um ciclo do mesmo laço;
+- lock ocupado espera soltar (`lockReleased`) e roda;
+- o laço se limpa por `.finally`, que roda sempre depois da atribuição.
+
+Um pull do Realtime que encontra o lock ocupado pede um ciclo completo. `syncNow` usa o mesmo laço.
+**Consequência.** Cinco testes cobrem o pedido no meio do ciclo, o lock ocupado, a volta da rede depois de um laço que terminou na hora e a parada do motor.
+
+### D87 · Reservas: horário, telefone, vínculo e o que acontece com o roteiro
+**Decisão.**
+- Data e hora de parede de São Paulo viram `timestamptz` por `lib/time/zone.ts`. O deslocamento vem do `Intl`, e não de `-03:00` fixo, então vale para datas com horário de verão (2018-2019, testado) e num aparelho em outro fuso.
+- Data e hora andam juntas no formulário: data sem hora seria inventar horário.
+- O telefone digitado à brasileira vira E.164 em `_shared/phone.ts` (a importação da fase 10 usa o mesmo). Os helpers `tel:` e `wa.me` estão em `lib/links`.
+- Excluir uma parada passa a reserva dela para o dia (a hospedagem existe fora do roteiro) e leva a memória e as fotos da própria pessoa.
+- Encurtar a viagem bloqueia também por reserva ligada a um dia que sai (D28).
+- Na lápide local, a reserva não é filha da parada nem do dia. Se fosse, os documentos sumiriam do aparelho: a reserva volta no mesmo pull, e os anexos, que não mudaram, não voltam.
+- O "Ver reserva" aparece quando a parada atual ou a próxima tem reserva, ou quando há uma hospedagem em curso (o check-out do hotel de ontem).
+
+### D88 · As fotos no "Rever o dia"
+**Decisão.** O `planReview` ganha deixas `photo`, puras e testadas: uma por nó com foto, no `s` do nó e depois do evento dele, com a primeira foto e "+N". Só entram fotos com arquivo no aparelho; o replay nunca espera rede. O palco mostra um cartão em HTML sobre a pílula por 1,2 s, com o anel na cor de quem tirou. O replay ao abrir não mostra fotos (é sobre o que mudou), e com "reduzir movimento" nada aparece.
+
+### D89 · Os e2e desta fase e o projeto `pwa`
+**Decisão.** Os testes que recarregam sem rede rodam num segundo projeto do Playwright (`pwa`), contra o `vite preview` do build, com o service worker de verdade. Em dev não há service worker (D22), e recarregar offline não carrega a casca. Na CI, o build é o passo anterior. Dois testes de uso ganharam prazo maior pelo tamanho da rota do Modo Viagem no Vite de dev: o catch-up (60 s no teste, 15 s no primeiro "Agora") e o da garagem, que espera o primeiro quadro antes do toque (commit `5777e39`).
+**Consequência.** 17 testes (1 pulado, o do convite já aceito). Os novos são `reservas.pwa` (print aberto sem rede depois de recarregar) e `memorias` (Chegamos!, "Como foi?", foto sem rede, diário).
+
+### D90 · Números medidos
+- Chunks do build: lista de reservas 5,4 KB, formulário 16,5 KB, diário 6,2 KB, Modo Viagem 51,3 KB (17,6 KB gzip), worker de compressão 4,7 KB. O visualizador de PDF fica num chunk próprio de 432,6 KB (130,5 KB gzip), mais o worker do pdf.js de 1,26 MB e 451 KB de `.wasm`, tudo carregado só quando um PDF abre. O chunk principal foi de 532,6 KB para 558,5 KB, o `sw.js` para 474,5 KB e o precache para 122 arquivos e 5,45 MB.
+- Testes: 492 Vitest (eram 407), 219 pgTAP (eram 159), 17 Playwright com 1 pulado (eram 15).

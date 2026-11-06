@@ -76,3 +76,13 @@ export function wazeUrl(place: Place): string | null {
   if (q.trim() === '') return null;
   return `https://waze.com/ul?q=${encodeURIComponent(q)}&navigate=yes`;
 }
+
+/** Ligar: `tel:` com o número em E.164 (funciona sem sinal de dados; precisa de sinal de voz). */
+export function telUrl(e164: string): string {
+  return `tel:${e164}`;
+}
+
+/** WhatsApp: `wa.me` com os dígitos do E.164, sem o "+". */
+export function whatsappUrl(e164: string): string {
+  return `https://wa.me/${e164.replace(/\D/g, '')}`;
+}

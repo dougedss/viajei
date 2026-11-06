@@ -14,6 +14,8 @@ import {
   parsePushData,
 } from '@/features/notifications/push-payload.ts';
 import { applyNotificationAction, pushNow, resubscribe } from './sw/actions.ts';
+import { drainMediaInBackground } from './sw/media.ts';
+import { MEDIA_SYNC_TAG } from '@/lib/media/types.ts';
 
 declare let self: ServiceWorkerGlobalScope;
 
@@ -154,4 +156,11 @@ self.addEventListener('pushsubscriptionchange', (event) => {
       console.warn('viajei: não deu para reassinar o push', err);
     }),
   );
+});
+
+// Background Sync (Android): a fila de fotos e documentos sobe quando a rede volta, com o app fechado
+type SyncEvent = ExtendableEvent & { tag: string };
+self.addEventListener('sync', (event) => {
+  const e = event as SyncEvent;
+  if (e.tag === MEDIA_SYNC_TAG) e.waitUntil(drainMediaInBackground());
 });

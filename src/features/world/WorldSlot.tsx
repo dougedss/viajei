@@ -1,14 +1,15 @@
 import { Box, List } from 'lucide-react';
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
 import { Button } from '@/components/ui/Button.tsx';
 import type { Catchup } from '@/features/travel-mode/catchup.ts';
 import type { DayState } from '@/features/travel-mode/rules.ts';
 import type { RouteStatus } from '@/features/itinerary/route.ts';
-import type { DayRoute, Profile, RouteLeg, Trip } from '@/lib/db/schema.ts';
+import type { DayRoute, Profile, RouteLeg, Stop, Trip } from '@/lib/db/schema.ts';
 import { readUrlFlags } from '@/lib/three/prefs.ts';
 import { ThreeBoundary } from '@/lib/three/ThreeBoundary.tsx';
 import { DayList } from './components/DayList.tsx';
+import type { ReviewPhoto } from './replay.ts';
 import { useRenderPref, writeRenderPref } from './prefs.ts';
 
 /**
@@ -17,6 +18,8 @@ import { useRenderPref, writeRenderPref } from './prefs.ts';
  * desenhar. Se o chunk não carregar, a lista aparece. O "Agora" nunca espera por nada disto.
  */
 export type EventsOwner = 'world' | 'card';
+
+export type { ReviewPhoto } from './replay.ts';
 
 export type WorldSlotProps = {
   trip: Pick<Trip, 'id' | 'name' | 'car_model' | 'car_color' | 'car_accessories'>;
@@ -34,6 +37,10 @@ export type WorldSlotProps = {
   night: boolean;
   /** quem mostra "o que aconteceu": a maquete (replay) ou o card "Desde a última vez" */
   onEventsOwner: (owner: EventsOwner) => void;
+  /** notas, "Ver reserva" e "Como foi?" de cada parada na lista do dia */
+  stopExtras?: ((stop: Stop) => ReactNode) | undefined;
+  /** as fotos de memória com arquivo no aparelho, para o "Rever o dia" */
+  reviewPhotos?: readonly ReviewPhoto[] | undefined;
 };
 
 const WorldSection = lazy(() => import('./components/WorldSection.tsx'));
@@ -85,7 +92,8 @@ export function ListView({
   route,
   notice,
   action,
-}: Pick<WorldSlotProps, 'state' | 'legs' | 'profiles' | 'route'> & {
+  stopExtras,
+}: Pick<WorldSlotProps, 'state' | 'legs' | 'profiles' | 'route' | 'stopExtras'> & {
   notice?: string;
   action: React.ReactNode;
 }) {
@@ -104,6 +112,7 @@ export function ListView({
         route={route}
         defaultOpen
         footer={action}
+        stopExtras={stopExtras}
       />
     </div>
   );

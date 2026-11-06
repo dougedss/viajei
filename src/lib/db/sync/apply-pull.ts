@@ -65,6 +65,13 @@ export async function removeWithChildren(
     for (const childId of ids) n += await removeWithChildren(db, child.table, childId);
   }
   await db.syncTable(table).delete(id);
+  // o arquivo em cache vai junto com a linha; o trabalho de apagar o objeto no Storage fica (ele
+  // espera justamente esta lápide ser aceita)
+  if (table === 'attachments') {
+    await db.blobs.delete(id);
+    const job = await db.uploads.get(id);
+    if (job?.op === 'upload') await db.uploads.delete(id);
+  }
   return n + 1;
 }
 
@@ -93,14 +100,20 @@ async function applyRow(
 
 export type ApplyStats = { upserted: number; removed: number; revoked: boolean };
 
-/** Apaga tudo de uma viagem neste aparelho: linhas de todas as tabelas, cursor e as operações que já não têm destino. */
+/**
+ * Apaga tudo de uma viagem neste aparelho: linhas de todas as tabelas, os arquivos em cache, cursor
+ * e as operações e envios que já não têm destino.
+ */
 export async function wipeTrip(db: ViajeiDb, tripId: string): Promise<void> {
-  await db.transaction('rw', [...TRIP_SCOPED_TABLES, 'outbox', 'sync_state'], async () => {
+  const stores = [...TRIP_SCOPED_TABLES, 'outbox', 'sync_state', 'blobs', 'uploads'];
+  await db.transaction('rw', stores, async () => {
     for (const t of TRIP_SCOPED_TABLES) {
       if (t === 'trips') await db.trips.delete(tripId);
       else await db.syncTable(t).where('trip_id').equals(tripId).delete();
     }
     await db.outbox.where('trip_id').equals(tripId).delete();
+    await db.blobs.where('trip_id').equals(tripId).delete();
+    await db.uploads.where('trip_id').equals(tripId).delete();
     await db.sync_state.delete(syncKeys.tripCursor(tripId));
   });
 }

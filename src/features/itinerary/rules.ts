@@ -1,6 +1,6 @@
 import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { comparePosition } from '@/lib/ids/position.ts';
-import type { DayRoute, RouteLeg, Stop, TripDay } from '@/lib/db/schema.ts';
+import type { DayRoute, Reservation, RouteLeg, Stop, TripDay } from '@/lib/db/schema.ts';
 import { formatDayNumeric } from '@/lib/time/index.ts';
 
 /** Datas de `start` a `end`, inclusive, no formato das colunas `date`. */
@@ -18,19 +18,20 @@ export type DaysPlan = {
   restore: TripDay[];
   /** dias que saem do intervalo e não têm paradas: aposentar */
   retire: TripDay[];
-  /** dias que saem do intervalo com paradas: bloqueiam a mudança */
-  blocked: { day: TripDay; stops: Stop[] }[];
+  /** dias que saem do intervalo com paradas ou reservas ligadas: bloqueiam a mudança */
+  blocked: { day: TripDay; stops: Stop[]; reservations: Reservation[] }[];
 };
 
 /**
  * O que fazer com os dias quando a viagem é criada ou muda de datas. Dias são derivados das
- * datas: um por data, nunca por posição. Encurtar só aposenta dia vazio; dia com paradas bloqueia,
- * e a pessoa move ou exclui as paradas antes. Nada é apagado por acidente.
+ * datas: um por data, nunca por posição. Encurtar só aposenta dia vazio; dia com paradas ou com
+ * reserva ligada bloqueia, e a pessoa move ou exclui antes. Nada é apagado por acidente.
  */
 export function planDays(
   range: { start_date: string; end_date: string },
   days: readonly TripDay[],
   stops: readonly Stop[],
+  reservations: readonly Reservation[] = [],
 ): DaysPlan {
   const wanted = new Set(datesBetween(range.start_date, range.end_date));
   const byDate = new Map(days.map((d) => [d.date, d]));
@@ -45,8 +46,11 @@ export function planDays(
     const dayStops = sortStops(
       stops.filter((s) => s.trip_day_id === day.id && s.deleted_at === null),
     );
-    if (dayStops.length === 0) plan.retire.push(day);
-    else plan.blocked.push({ day, stops: dayStops });
+    const dayReservations = reservations.filter(
+      (r) => r.trip_day_id === day.id && r.deleted_at === null,
+    );
+    if (dayStops.length === 0 && dayReservations.length === 0) plan.retire.push(day);
+    else plan.blocked.push({ day, stops: dayStops, reservations: dayReservations });
   }
   plan.retire.sort((a, b) => a.date.localeCompare(b.date));
   plan.blocked.sort((a, b) => a.day.date.localeCompare(b.day.date));
@@ -55,11 +59,21 @@ export function planDays(
 
 /** A mensagem do bloqueio: lista os dias e as paradas que impedem encurtar. */
 export function blockedMessage(blocked: DaysPlan['blocked']): string {
-  const parts = blocked.map(({ day, stops }) => {
-    const names = stops.map((s) => s.name).join(', ');
-    return `${formatDayNumeric(day.date)} tem ${stops.length === 1 ? '1 parada' : `${stops.length} paradas`} (${names})`;
+  const parts = blocked.map(({ day, stops, reservations }) => {
+    const items = [
+      stops.length > 0
+        ? `${stops.length === 1 ? '1 parada' : `${stops.length} paradas`} (${stops.map((s) => s.name).join(', ')})`
+        : null,
+      reservations.length > 0
+        ? `${reservations.length === 1 ? '1 reserva' : `${reservations.length} reservas`} (${reservations.map((r) => r.name).join(', ')})`
+        : null,
+    ].filter(Boolean);
+    return `${formatDayNumeric(day.date)} tem ${items.join(' e ')}`;
   });
-  return `Não dá para encurtar: ${parts.join('; ')}. Mova ou exclua essas paradas antes.`;
+  const what = blocked.some((b) => b.reservations.length > 0)
+    ? 'essas paradas e reservas'
+    : 'essas paradas';
+  return `Não dá para encurtar: ${parts.join('; ')}. Mova ou exclua ${what} antes.`;
 }
 
 /** Em ordem de `position` (collate "C"). Quem chama filtra as excluídas. */
