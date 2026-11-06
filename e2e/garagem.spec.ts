@@ -52,8 +52,13 @@ test('a garagem abre em 3D, a cor persiste e aparece no card, e o SUV é só pr�
     timeout: 90_000,
   });
 
-  await swatch(page, 'Céu').click();
-  await expect(swatch(page, 'Céu')).toHaveAttribute('aria-pressed', 'true');
+  // no SwiftShader da CI, depois do primeiro quadro ainda há passes de sombra e reflexo compilando
+  // e a linha de cores rola com snap: o toque pode chegar tarde ou cair na vizinha. Toca de novo até
+  // pegar (tocar em "Céu" com "Céu" já escolhida não muda nada)
+  await expect(async () => {
+    await swatch(page, 'Céu').click();
+    await expect(swatch(page, 'Céu')).toHaveAttribute('aria-pressed', 'true', { timeout: 3_000 });
+  }).toPass({ timeout: 45_000 });
   await page.reload();
   await expect(swatch(page, 'Céu')).toHaveAttribute('aria-pressed', 'true');
 
