@@ -51,17 +51,19 @@ values
  ('e4444444-4444-4444-8444-444444444444', 'b9111111-1111-4111-8111-111111111111', extensions.uuid_generate_v5('b9111111-1111-4111-8111-111111111111', '2026-12-11'),
   'a3', 'food', 'Restaurante dos Bifes', '19:00', '22:00', -29.48979, -51.35668, null, now());
 
--- viagem C, de hoje: team_arrived usa synced_at (relógio real), então a parada tem de ser de hoje
+-- viagem C, de hoje: team_arrived usa synced_at (relógio real), então a parada tem de ser de hoje.
+-- "Hoje" é o de São Paulo, como na due_notifications; (now() at time zone 'America/Sao_Paulo')::date é UTC e, depois das 21h de
+-- Brasília, já seria amanhã
 insert into public.trips (id, owner_id, name, start_date, end_date, updated_at)
-values ('b9333333-3333-4333-8333-333333333333', 'a1111111-1111-4111-8111-111111111111', 'Bate-volta de hoje', current_date, current_date, now());
+values ('b9333333-3333-4333-8333-333333333333', 'a1111111-1111-4111-8111-111111111111', 'Bate-volta de hoje', (now() at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date, now());
 insert into public.trip_members (id, trip_id, user_id, invited_email, role, status, invited_by, updated_at)
 values (extensions.uuid_generate_v5('b9333333-3333-4333-8333-333333333333', 'invite:n2@teste.local'), 'b9333333-3333-4333-8333-333333333333',
         'a2222222-2222-4222-8222-222222222222', 'n2@teste.local', 'member', 'accepted', 'a1111111-1111-4111-8111-111111111111', now());
 insert into public.trip_days (id, trip_id, date, updated_at)
-values (extensions.uuid_generate_v5('b9333333-3333-4333-8333-333333333333', to_char(current_date, 'YYYY-MM-DD')), 'b9333333-3333-4333-8333-333333333333', current_date, now());
+values (extensions.uuid_generate_v5('b9333333-3333-4333-8333-333333333333', to_char((now() at time zone 'America/Sao_Paulo')::date, 'YYYY-MM-DD')), 'b9333333-3333-4333-8333-333333333333', (now() at time zone 'America/Sao_Paulo')::date, now());
 insert into public.stops (id, trip_id, trip_day_id, position, kind, name, time, updated_at)
 values ('e5555555-5555-4555-8555-555555555555', 'b9333333-3333-4333-8333-333333333333',
-        extensions.uuid_generate_v5('b9333333-3333-4333-8333-333333333333', to_char(current_date, 'YYYY-MM-DD')), 'a0', 'winery', 'Casa Valduga', '10:00', now());
+        extensions.uuid_generate_v5('b9333333-3333-4333-8333-333333333333', to_char((now() at time zone 'America/Sao_Paulo')::date, 'YYYY-MM-DD')), 'a0', 'winery', 'Casa Valduga', '10:00', now());
 
 -- ---------------------------------------------------------------- whitelist e sync do usuário
 select is((select scope || '|' || rank from private.sync_tables where name = 'notification_prefs'), 'user|25',
