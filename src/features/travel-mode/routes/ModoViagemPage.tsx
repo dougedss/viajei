@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/ui/EmptyState.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { useDayStops, useTripDays } from '@/features/itinerary/queries.ts';
 import { useDayRoute } from '@/features/itinerary/route.ts';
-import { formatKm, legsByStop, totalAscent } from '@/features/itinerary/rules.ts';
+import { legsByStop } from '@/features/itinerary/rules.ts';
 import { applyBadge, badgeCount } from '@/features/notifications/badge.ts';
 import { CalendarExport } from '@/features/notifications/components/CalendarExport.tsx';
 import { PushAskSheet } from '@/features/notifications/components/PushAskSheet.tsx';
@@ -16,7 +16,10 @@ import { useTrip, useTripMembers, type MemberWithProfile } from '@/features/trip
 import { todayISO, tripStatus } from '@/features/trips/rules.ts';
 import type { Profile, Trip } from '@/lib/db/schema.ts';
 import { useSession } from '@/lib/supabase/session.ts';
-import { currentDay, formatDayShort, formatDuration } from '@/lib/time/index.ts';
+import { WorldSlot, type EventsOwner } from '@/features/world/WorldSlot.tsx';
+import { audio } from '@/lib/audio/index.ts';
+import { celebrateArrival } from '@/lib/celebrate.ts';
+import { currentDay, formatDayShort } from '@/lib/time/index.ts';
 import { arrive, arriveAt, depart, skip, type Undoable } from '../actions.ts';
 import { useCatchup } from '../catchup.ts';
 import { AgoraHeader } from '../components/AgoraHeader.tsx';
@@ -27,11 +30,10 @@ import {
   SinceLastTime,
 } from '../components/CatchupCards.tsx';
 import { PanelBar, PanelToggle } from '../components/PanelBar.tsx';
-import { TrailList } from '../components/TrailList.tsx';
 import { useNightTheme, useNow } from '../hooks.ts';
 import { usePanelMode } from '../panel.ts';
 import { declineGeo, grantGeo, useGeoConsent, useTeamTracks } from '../queries.ts';
-import { dayState, isDepartureNode, progress } from '../rules.ts';
+import { dayState, isDepartureNode } from '../rules.ts';
 
 const UNDO_MS = 10_000;
 
@@ -118,6 +120,7 @@ export default function ModoViagemPage() {
           trip={trip}
           day={day}
           now={now}
+          night={night}
           uid={session?.user.id ?? ''}
           members={members}
           profiles={profiles}
@@ -140,6 +143,8 @@ type DayViewProps = {
   trip: Trip;
   day: { id: string; date: string; title: string | null };
   now: Date;
+  /** tema noturno (18:30 às 6:00): a maquete escurece junto */
+  night: boolean;
   uid: string;
   members: readonly MemberWithProfile[];
   profiles: Map<string, Profile>;
@@ -147,25 +152,36 @@ type DayViewProps = {
   active: boolean;
 };
 
-function DayView({ trip, day, now, uid, members, profiles, active }: DayViewProps) {
+function DayView({ trip, day, now, night, uid, members, profiles, active }: DayViewProps) {
   const tripId = trip.id;
   const dayId = day.id;
   const stops = useDayStops(dayId);
-  const { route } = useDayRoute(tripId, dayId, stops);
+  const { route, status: routeStatus, loaded: routeLoaded } = useDayRoute(tripId, dayId, stops);
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const state = dayState({ date: day.date }, stops, now);
   const legs = legsByStop(stops, route);
-  const done = progress(stops);
   const teamTracks = useTeamTracks(dayId, uid, members);
   const geo = useGeoConsent();
   const [dismissedPassed, setDismissedPassed] = useState<string[]>([]);
+  // quem conta "o que aconteceu desde a última vez": a maquete (replay) ou o card; nunca os dois
+  const [owner, setOwner] = useState<EventsOwner | null>(null);
 
-  const run = (label: string, action: () => Promise<Undoable>, seen: readonly string[] = []) => {
+  const run = (
+    label: string,
+    action: () => Promise<Undoable>,
+    seen: readonly string[] = [],
+    effect?: 'depart' | 'arrive',
+  ) => {
     setBusy(true);
     void action()
       .then(({ undo }) => {
         cuRef.current?.markSeen(seen);
+        if (effect === 'depart') audio.horn();
+        if (effect === 'arrive') {
+          audio.bell();
+          celebrateArrival();
+        }
         toast.show({
           title: label,
           duration: UNDO_MS,
@@ -188,9 +204,9 @@ function DayView({ trip, day, now, uid, members, profiles, active }: DayViewProp
     enabled: active && uid !== '',
     ctx: uid ? { tripId, dayId, uid } : null,
     state,
-    onAutoDepart: () => run(departLabel, () => depart(state, uid), departSeen),
+    onAutoDepart: () => run(departLabel, () => depart(state, uid), departSeen, 'depart'),
     onAutoArrive: () =>
-      run(`Chegamos: ${state.next?.name ?? ''}`, () => arrive(state, uid), arriveSeen),
+      run(`Chegamos: ${state.next?.name ?? ''}`, () => arrive(state, uid), arriveSeen, 'arrive'),
   });
 
   const cu = useCatchup({
@@ -218,7 +234,12 @@ function DayView({ trip, day, now, uid, members, profiles, active }: DayViewProp
     const key = `${autoStop.id}:${fixAt}`;
     if (autoHandled.current.has(key)) return;
     autoHandled.current.add(key);
-    run(`Chegamos: ${autoStop.name}`, () => arrive(state, uid), [`arrived:${autoStop.id}`]);
+    run(
+      `Chegamos: ${autoStop.name}`,
+      () => arrive(state, uid),
+      [`arrived:${autoStop.id}`],
+      'arrive',
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- dispara uma vez por leitura (chave), não a cada render
   }, [active, autoStop?.id, fixAt]);
 
@@ -244,23 +265,22 @@ function DayView({ trip, day, now, uid, members, profiles, active }: DayViewProp
     return () => document.removeEventListener('visibilitychange', onHidden);
   }, [active, pendingCount, leaveAtMs]);
 
-  const distance = route ? route.legs.reduce((acc, l) => acc + l.distance_m, 0) : null;
-  const duration = route ? route.legs.reduce((acc, l) => acc + l.duration_s, 0) / 60 : null;
-
   return (
     <>
-      <SinceLastTime
-        events={cu.events}
-        profiles={profiles}
-        onDismiss={() => void cu.dismissEvents()}
-      />
+      {owner === 'card' ? (
+        <SinceLastTime
+          events={cu.events}
+          profiles={profiles}
+          onDismiss={() => void cu.dismissEvents()}
+        />
+      ) : null}
 
       <AgoraHeader
         state={state}
         busy={busy}
-        onDepart={() => run(departLabel, () => depart(state, uid), departSeen)}
+        onDepart={() => run(departLabel, () => depart(state, uid), departSeen, 'depart')}
         onArrive={() =>
-          run(`Chegamos: ${state.next?.name ?? ''}`, () => arrive(state, uid), arriveSeen)
+          run(`Chegamos: ${state.next?.name ?? ''}`, () => arrive(state, uid), arriveSeen, 'arrive')
         }
         onSkip={() => run(`Pulamos ${state.next?.name ?? ''}`, () => skip(state), skipSeen)}
       />
@@ -297,30 +317,30 @@ function DayView({ trip, day, now, uid, members, profiles, active }: DayViewProp
         </div>
       )}
 
-      <section
-        aria-labelledby="h-trilha"
-        className="grid gap-3 rounded-card bg-card p-5 shadow-card"
-      >
-        <div className="flex items-baseline justify-between">
-          <h2 id="h-trilha" className="label-caps text-accent-ink">
-            Trilha do dia
-          </h2>
-          <span className="text-[15px] text-ink-2">
-            {done.done} de {done.total} {done.total === 1 ? 'parada' : 'paradas'}
-          </span>
-        </div>
-        {stops.length === 0 ? (
+      {stops.length === 0 ? (
+        <section
+          aria-label="Trilha do dia"
+          className="grid gap-3 rounded-card bg-card p-5 shadow-card"
+        >
           <p className="text-[17px] text-ink-2">Nenhuma parada neste dia.</p>
-        ) : (
-          <TrailList state={state} legs={legs} profiles={profiles} />
-        )}
-        {route && distance !== null && duration !== null ? (
-          <p className="border-t border-line pt-3 text-[15px] text-ink-2">
-            Rota do dia · {formatKm(distance)} · {formatDuration(duration)} · sobe{' '}
-            {totalAscent(route.elevation).toLocaleString('pt-BR')} m
-          </p>
-        ) : null}
-      </section>
+        </section>
+      ) : (
+        <WorldSlot
+          trip={trip}
+          day={day}
+          state={state}
+          legs={legs}
+          route={route}
+          routeStatus={routeStatus}
+          routeLoaded={routeLoaded}
+          profiles={profiles}
+          catchup={cu}
+          panelOn={panel.on}
+          uid={uid}
+          night={night}
+          onEventsOwner={setOwner}
+        />
+      )}
 
       {panel.on ? <div className="h-24" aria-hidden="true" /> : null}
       <PanelBar panel={panel} />

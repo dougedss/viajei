@@ -57,7 +57,7 @@ test('o card "Desde a última vez" aparece depois de marcar Partiu! em outra ses
   await adicionarParada(pageA, { tipo: 'Natureza', nome: 'Parque', horario: '10:00' });
 
   // o primeiro aparelho vê a maquete e sai: o travel_state fica salvo
-  await pageA.goto(`${tripUrl}/viagem`);
+  await pageA.goto(`${tripUrl}/viagem?render=list`);
   await expect(pageA.getByRole('heading', { name: 'Agora' })).toBeVisible();
   await expect(pageA.getByText('Saída de casa').first()).toBeVisible();
   await pageA.getByRole('link', { name: 'Roteiro' }).click();
@@ -71,7 +71,7 @@ test('o card "Desde a última vez" aparece depois de marcar Partiu! em outra ses
   await preencherLogin(pageB, email);
   // com uma viagem de hoje, `/` cai direto no Modo Viagem (D33)
   await expect(pageB.getByRole('heading', { name: 'Agora' })).toBeVisible({ timeout: 15_000 });
-  await pageB.goto(`${tripUrl}/viagem`);
+  await pageB.goto(`${tripUrl}/viagem?render=list`);
   await expect(pageB.getByRole('heading', { name: 'Agora' })).toBeVisible();
   await expect(pageB.getByText('Saída de casa').first()).toBeVisible({ timeout: 15_000 });
   await pageB.getByRole('button', { name: 'Partiu!' }).click();
@@ -82,7 +82,7 @@ test('o card "Desde a última vez" aparece depois de marcar Partiu! em outra ses
 
   // de volta ao primeiro: o que aconteceu desde a última vez
   await pageA.bringToFront();
-  await pageA.goto(`${tripUrl}/viagem`);
+  await pageA.goto(`${tripUrl}/viagem?render=list`);
   await expect(pageA.getByRole('heading', { name: 'Desde a última vez' })).toBeVisible({
     timeout: 20_000,
   });

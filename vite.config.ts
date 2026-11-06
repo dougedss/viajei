@@ -41,9 +41,30 @@ export default defineConfig({
     }),
   ],
   resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-      '@shared': fileURLToPath(new URL('./supabase/functions/_shared', import.meta.url)),
+    alias: [
+      { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
+      {
+        find: '@shared',
+        replacement: fileURLToPath(new URL('./supabase/functions/_shared', import.meta.url)),
+      },
+      // O R3F e os addons do three importam 'three'. O único three do bundle é o build WebGPU
+      // (`three/webgpu`, que traz o backend WebGL2 dentro); sem o alias, o build clássico com o
+      // WebGLRenderer entraria junto, repetido, só para ninguém usar.
+      { find: /^three$/, replacement: 'three/webgpu' },
+    ],
+  },
+  build: {
+    rolldownOptions: {
+      output: {
+        // O 3D (three, R3F) vive num chunk próprio, carregado só quando o Modo Viagem desenha a
+        // maquete (`lazy()`); o nome fixo deixa medir o tamanho e a fase 6 reaproveitar.
+        codeSplitting: {
+          // só o que casa com o teste entra no grupo: com as dependências recursivas, o React
+          // inteiro ia junto e todo chunk do app passava a importar o three
+          includeDependenciesRecursively: false,
+          groups: [{ name: 'three', test: /node_modules[\\/](three|@react-three)[\\/]/ }],
+        },
+      },
     },
   },
   // O scanner de dependências só olha a entrada do app. Por padrão ele varre todo *.html da raiz,

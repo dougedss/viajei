@@ -77,6 +77,8 @@ test('os dias nascem das datas, as paradas entram no dia e o Agora mostra "sair 
   await expect(page.getByText(/Saímos/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Chegamos!' })).toBeVisible();
   await expect(agora.getByText(/chega às\s*13:30/)).toBeVisible();
+  // a lista do dia fica recolhida atrás da maquete (fase 5): abre para conferir
+  await page.getByRole('button', { name: /Lista do dia/ }).click();
   await expect(page.getByRole('list', { name: 'Trilha do dia' })).toContainText('chegamos');
 
   // Chegamos! no parque: dia concluído

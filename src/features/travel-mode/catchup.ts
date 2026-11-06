@@ -52,6 +52,8 @@ export type Catchup = CatchupResult & {
   fix: Fix | null;
   /** o estado anterior deste aparelho, para a fase 5 animar o replay */
   prev: TravelState | null;
+  /** o estado anterior já foi lido (mesmo que não exista): a maquete pode decidir o replay */
+  loaded: boolean;
   dismissEvents: () => Promise<void>;
   /** eventos produzidos por uma ação feita neste aparelho: não são "desde a última vez" */
   markSeen: (ids: readonly string[]) => void;
@@ -63,6 +65,8 @@ type Reading = { before: TravelState | null; read: Fix | null };
 export function useCatchup(args: CatchupArgs): Catchup {
   const { tripId, dayId, uid, state, route, teamTracks, geoAllowed, active, liveFix } = args;
   const [prev, setPrev] = useState<TravelState | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const loadedRef = useRef(false);
   const [gpsFix, setGpsFix] = useState<Fix | null>(null);
   const lastRunRef = useRef(0);
   const seenRef = useRef(new Set<string>());
@@ -85,6 +89,8 @@ export function useCatchup(args: CatchupArgs): Catchup {
 
   const save = useCallback(async () => {
     const { state: s, route: r } = latest.current;
+    // antes da primeira leitura, ou com as paradas ainda por carregar, o snapshot seria vazio e apagaria o anterior
+    if (!loadedRef.current || s.stops.length === 0) return;
     const fraction =
       r && fix
         ? (catchup({ stops: s.stops, at: s.at, next: s.next, route: r, fix, teamTracks: [] })
@@ -110,6 +116,8 @@ export function useCatchup(args: CatchupArgs): Catchup {
     if (!r) return;
     if (r.before) seenRef.current = new Set([...seenRef.current, ...r.before.seen_event_ids]);
     setPrev(r.before);
+    setLoaded(true);
+    loadedRef.current = true;
     if (r.read) setGpsFix(r.read);
   }, []);
 
@@ -125,12 +133,15 @@ export function useCatchup(args: CatchupArgs): Catchup {
       if (document.visibilityState === 'visible') void reading().then(apply);
       else void save();
     };
+    const onHide = () => void save();
     document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', onHide);
     const timer = setInterval(() => {
       if (document.visibilityState === 'visible') void save();
     }, TRAVEL_STATE_SAVE_MS);
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', onHide);
       clearInterval(timer);
       void save();
     };
@@ -148,5 +159,5 @@ export function useCatchup(args: CatchupArgs): Catchup {
     setPrev((p) => (p ? { ...p, seen_event_ids: [...new Set([...p.seen_event_ids, ...ids])] } : p));
   }, [events, dayId]);
 
-  return { ...result, events, fix, prev, dismissEvents, markSeen, run };
+  return { ...result, events, fix, prev, loaded, dismissEvents, markSeen, run };
 }

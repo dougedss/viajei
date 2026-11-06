@@ -108,7 +108,17 @@ export function classifySample(s: PlaceSample): SceneryKind {
   return 'interior';
 }
 
-export type Segment = { kind: SceneryKind; from_m: number; to_m: number };
+export type Segment = {
+  kind: SceneryKind;
+  from_m: number;
+  to_m: number;
+  /** cidade grande: a população do município que a fez, para a maquete dosar as quadras */
+  pop?: number;
+};
+
+function cityPop(s: PlaceSample): number {
+  return Math.max(s.city?.pop ?? 0, s.town?.pop ?? 0);
+}
 
 /** Runs consecutivos de uma mesma classe. */
 function runs(samples: readonly PlaceSample[], kinds: readonly SceneryKind[]): Segment[] {
@@ -117,8 +127,14 @@ function runs(samples: readonly PlaceSample[], kinds: readonly SceneryKind[]): S
     const kind = kinds[i] ?? 'interior';
     const last = out.at(-1);
     const to = samples[i + 1]?.dist_m ?? s.dist_m;
-    if (last?.kind === kind) last.to_m = to;
-    else out.push({ kind, from_m: s.dist_m, to_m: to });
+    if (last?.kind === kind) {
+      last.to_m = to;
+      if (kind === 'city') last.pop = Math.max(last.pop ?? 0, cityPop(s));
+    } else {
+      const seg: Segment = { kind, from_m: s.dist_m, to_m: to };
+      if (kind === 'city' && cityPop(s) > 0) seg.pop = cityPop(s);
+      out.push(seg);
+    }
   });
   return out;
 }
@@ -138,6 +154,7 @@ function mergeInto(segments: Segment[], index: number): void {
   if (!target) return;
   target.from_m = Math.min(target.from_m, seg.from_m);
   target.to_m = Math.max(target.to_m, seg.to_m);
+  if (target.kind === 'city' && seg.pop) target.pop = Math.max(target.pop ?? 0, seg.pop);
   segments.splice(index, 1);
   // vizinhos iguais depois da fusão viram um só
   for (let i = segments.length - 1; i > 0; i--) {
@@ -146,6 +163,7 @@ function mergeInto(segments: Segment[], index: number): void {
     if (!a || !b) continue;
     if (a.kind === b.kind) {
       a.to_m = b.to_m;
+      if (b.pop) a.pop = Math.max(a.pop ?? 0, b.pop);
       segments.splice(i, 1);
     }
   }

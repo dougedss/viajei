@@ -3,10 +3,14 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-      '@shared': fileURLToPath(new URL('./supabase/functions/_shared', import.meta.url)),
-    },
+    alias: [
+      { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
+      {
+        find: '@shared',
+        replacement: fileURLToPath(new URL('./supabase/functions/_shared', import.meta.url)),
+      },
+      { find: /^three$/, replacement: 'three/webgpu' },
+    ],
   },
   test: {
     environment: 'happy-dom',

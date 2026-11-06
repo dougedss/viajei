@@ -21,6 +21,7 @@ import { todayISO } from '@/features/trips/rules.ts';
 import { isIOS } from '@/lib/pwa/install.ts';
 import { useSession } from '@/lib/supabase/session.ts';
 import { currentDay } from '@/lib/time/index.ts';
+import { useSoundPref, writeSoundPref } from '@/lib/audio/index.ts';
 import { cx } from '@/lib/cx.ts';
 import { savePrefs, usePrefs } from '../prefs.ts';
 import { PushSetupError, subscribePush, unsubscribePush, usePushStatus } from '../subscription.ts';
@@ -140,6 +141,7 @@ export default function AvisosPage() {
   const days = useTripDays(tripId);
   const stops = useTripStops(tripId);
   const { prefs, row } = usePrefs(tripId);
+  const sound = useSoundPref();
   const toast = useToast();
   const uid = session?.user.id ?? '';
 
@@ -231,6 +233,25 @@ export default function AvisosPage() {
               onChange={(v) => save({ kinds: { [k]: v } })}
             />
           ))}
+        </Card>
+      </section>
+
+      <section className="grid gap-3" aria-labelledby="h-sons">
+        <div className="grid gap-0.5">
+          <h2 id="h-sons" className="label-caps text-accent-ink">
+            Sons
+          </h2>
+          <p className="text-[14px] text-ink-2">
+            Só neste aparelho. Mudos com "reduzir movimento".
+          </p>
+        </div>
+        <Card>
+          <Switch
+            label="Sons do Modo Viagem"
+            description="Buzina no Partiu!, sino no Chegamos!, ronco do motor no replay."
+            checked={sound}
+            onChange={writeSoundPref}
+          />
         </Card>
       </section>
 

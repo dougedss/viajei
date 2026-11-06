@@ -53,6 +53,15 @@ Em paralelo, um Chromium (perfil de Android) faz o roteiro manual no app publica
 | `pnpm lab:setup --target production --viewer <e-mail> --github` | uma vez: cria os usuários de laboratório, dá acesso ao painel e grava `LAB_SECRET` nos secrets do GitHub             |
 | `pnpm lab:local`                                                | o mesmo contra o Supabase local (precisa de `functions:serve` com VAPID; afrouxa o check de https só no banco local) |
 
+## Maquete 3D
+
+O Modo Viagem desenha o dia como uma maquete vista de cima (`src/features/world`): o traçado em S entre as paradas, o relevo do perfil de altitude real, o cenário lido da geografia (`lib/geo`), o carro da viagem (`src/art/cars`) e, em HTML por cima, as pílulas das paradas. A câmera fica parada com o dia inteiro na tela e só mergulha nas curiosidades do caminho. Motor: `three/webgpu` (WebGPU no iOS 26 e no Chrome recente, WebGL2 nos demais) com React Three Fiber, render sob demanda (parado, zero quadros) e dois níveis de qualidade (Leve e Alta, automático com rebaixamento por fps). Tudo do 3D entra por `lazy()` num chunk próprio, só quando a maquete vai aparecer.
+
+- **Forçar a lista:** `?render=list` na URL do Modo Viagem, ou "Ver como lista" no rodapé de "Lista do dia" (fica guardado no aparelho; "Ver a maquete" desfaz). Sem WebGL2 a lista aparece sozinha, com "Maquete indisponível neste aparelho".
+- **Chip de diagnóstico:** em dev, ou com `?diag=1` em produção. Mostra fps (só em movimento), motor, qualidade e nível; toque alterna Auto → Leve → Alta. Os chips menores forçam noite, WebGL2 e o som.
+- **Medir fps no iPhone:** abra `/viagens/<id>/viagem?diag=1`, toque em "Rever o dia" e leia o chip durante o movimento, em Alta e em Leve. Roteiro completo em [`docs/teste-manual-fase-5.md`](docs/teste-manual-fase-5.md).
+- **Replay ao abrir:** o carro repõe o que aconteceu desde a última vez que este aparelho viu a maquete (`travel_state`); com "reduzir movimento", o card "Desde a última vez" é o que aparece.
+
 ## Scripts
 
 | Comando                                          | O que faz                                                                           |

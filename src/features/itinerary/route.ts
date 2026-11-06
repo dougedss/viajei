@@ -79,6 +79,8 @@ export type RouteStatus = 'insufficient' | 'ready' | 'loading' | 'offline' | 'er
 
 export type DayRouteState = {
   route: DayRoute | null;
+  /** o cache local já respondeu (com rota ou sem): antes disso ninguém decide nada pela rota */
+  loaded: boolean;
   /** a rota em cache não corresponde às paradas de agora */
   stale: boolean;
   status: RouteStatus;
@@ -115,6 +117,7 @@ export function useDayRoute(tripId: string, dayId: string, stops: readonly Stop[
 
   return {
     route,
+    loaded: cached !== undefined,
     stale: stale && route?.hash !== hash,
     status,
     error,
