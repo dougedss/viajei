@@ -620,3 +620,8 @@ Um pull do Realtime que encontra o lock ocupado pede um ciclo completo. `syncNow
 - Chunks do build da CI: listas 23,4 KB (8,5 KB gzip), contatos 12,1 KB (4,8 KB gzip), gastos 10,6 KB (4,4 KB gzip), visão geral 13,4 KB (5,4 KB gzip). O Modo Viagem ficou em 51,6 KB (17,7 KB gzip), quase igual: a folha de gasto e as missões da parada vêm em chunks compartilhados. O chunk principal foi de 558,5 KB para 561,6 KB; o precache, de 122 para 141 arquivos e 5,54 MB.
 - Testes: 538 Vitest em 75 arquivos (eram 492), 284 pgTAP (eram 219), 22 Playwright, todos rodando (eram 16 e 1 pulado; o do convite já aceito rodou desta vez). CI verde na `fase-8` em 8 min 41 s.
 - A primeira CI da branch gerou o `database.types.ts` igual ao escrito à mão: o artefato `tipos-do-banco` não precisou ser baixado.
+
+### D108 · O deploy das funções empacota no servidor
+**Contexto.** A republicação das funções da fase 8 falhou na `route-day`: com o Docker fechado (D91), a CLI empacota no hospedado, e o empacotador de lá não acha o `deno.json` da pasta `functions`. O Deno local o acha subindo de pasta; o do servidor só recebe os arquivos que a CLI manda. O `zod` ficou sem mapa.
+**Decisão.** O `remote:functions-deploy` publica as três funções numa chamada só, com `--use-api` (empacota sempre no servidor) e `--import-map supabase/functions/deno.json` (o mapa vai junto). O comentário do `config.toml` explica por quê.
+**Consequência.** O deploy dá o mesmo resultado com ou sem Docker, e publicar continua sem pedir stack local.

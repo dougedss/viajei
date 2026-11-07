@@ -28,7 +28,7 @@
     "remote:db-push": "set -a && . ./.env.local && set +a && supabase db push --remote",
     "remote:config-diff": "set -a && . ./.env.local && set +a && supabase config diff",
     "remote:config-push": "set -a && . ./.env.local && set +a && supabase config push",
-    "remote:functions-deploy": "set -a && . ./.env.local && set +a && supabase functions deploy route-day && supabase functions deploy send-notifications && supabase functions deploy push-receiver",
+    "remote:functions-deploy": "set -a && . ./.env.local && set +a && supabase functions deploy route-day send-notifications push-receiver --use-api --import-map supabase/functions/deno.json",
     "remote:secrets-push": "set -a && . ./.env.local && set +a && supabase secrets set ORS_API_KEY=\"$ORS_API_KEY\" VAPID_PRIVATE_KEY=\"$VAPID_PRIVATE_KEY\" VAPID_SUBJECT=\"$VAPID_SUBJECT\"",
     "geo:build": "node scripts/geo/build-data.ts",
     "db:vault-local": "node scripts/db/vault-local.ts",

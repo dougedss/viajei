@@ -401,7 +401,9 @@ authorization_url_path = "/oauth/consent"
 allow_dynamic_registration = false
 
 # Edge Functions. route-day roda como o usuário (verify_jwt ligado, sem chave secreta). O import map
-# é o deno.json da pasta functions, que a CLI encontra sozinha (a chave import_map está aposentada).
+# é o deno.json da pasta functions (a chave import_map daqui está aposentada). O Deno local o acha
+# subindo de pasta; o empacotador do hospedado não, então o `remote:functions-deploy` empacota no
+# servidor (`--use-api`, sem Docker: D91) e manda o arquivo pelo `--import-map`.
 [functions.route-day]
 enabled = true
 verify_jwt = true
