@@ -14,7 +14,9 @@ import type { AchievementGrant } from './rules.ts';
  * e subida de nível); o que o time ganhou aparece na garagem e no cabeçalho, sem cartão e sem nome.
  *
  * - A primeira derivação de um aparelho (inclusive ao publicar a fase) junta tudo o que já tinha
- *   acontecido num resumo calmo, sem confete: nunca uma cascata de cartões.
+ *   acontecido antes de o aparelho começar a derivar num resumo calmo, sem confete: nunca uma
+ *   cascata de cartões. O que acontece depois disso (a parada concluída enquanto o primeiro sync
+ *   ainda corria) é novo para a pessoa e vira cartão.
  * - Depois, cada conquista nova e cada subida de nível entram numa fila por aparelho, que sai um por
  *   vez, com "mais N", no próximo momento calmo (ao fechar a folha "Como foi?", ao abrir a visão
  *   geral, a garagem ou o perfil). Cada momento mostra só o que já estava na fila quando ele começou:
@@ -38,6 +40,8 @@ export function celebrationId(c: Celebration): string {
 export function planCelebrations(input: {
   /** a primeira derivação deste aparelho */
   firstRun: boolean;
+  /** quando este aparelho começou a derivar (ISO): na primeira derivação, o que veio depois é cartão */
+  since: string;
   beforeXp: number;
   afterXp: number;
   /** todas as conquistas da pessoa depois desta derivação (as novas e as que já estavam) */
@@ -46,22 +50,27 @@ export function planCelebrations(input: {
   added: readonly AchievementGrant[];
   now: string;
 }): { queue: Celebration[]; summary: Summary | null } {
+  const byTime = (a: AchievementGrant, b: AchievementGrant) =>
+    a.unlocked_at < b.unlocked_at ? -1 : a.unlocked_at > b.unlocked_at ? 1 : 0;
+  const toCard = (a: AchievementGrant): Celebration => ({
+    kind: 'achievement',
+    key: a.key,
+    trip_id: a.trip_id,
+    at: a.unlocked_at,
+  });
   if (input.firstRun) {
-    const nothing = input.afterXp === 0 && input.allKeys.length === 0;
+    const fresh = input.added.filter((a) => a.unlocked_at >= input.since).sort(byTime);
+    const freshKeys = new Set(fresh.map((a) => a.key));
+    const before = input.allKeys.filter((k) => !freshKeys.has(k));
+    const nothing = input.afterXp === 0 && before.length === 0;
     return {
-      queue: [],
+      queue: fresh.map(toCard),
       summary: nothing
         ? null
-        : {
-            xp: input.afterXp,
-            level: levelOf(input.afterXp).level,
-            keys: [...input.allKeys].sort(),
-          },
+        : { xp: input.afterXp, level: levelOf(input.afterXp).level, keys: [...before].sort() },
     };
   }
-  const queue: Celebration[] = [...input.added]
-    .sort((a, b) => (a.unlocked_at < b.unlocked_at ? -1 : a.unlocked_at > b.unlocked_at ? 1 : 0))
-    .map((a) => ({ kind: 'achievement', key: a.key, trip_id: a.trip_id, at: a.unlocked_at }));
+  const queue: Celebration[] = [...input.added].sort(byTime).map(toCard);
   const before = levelOf(input.beforeXp).level;
   const after = levelOf(input.afterXp).level;
   // pulou dois níveis de uma vez (raro fora da primeira derivação): um cartão, o do nível novo

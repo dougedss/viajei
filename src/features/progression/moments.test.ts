@@ -14,6 +14,7 @@ describe('a primeira derivação vira um resumo calmo, nunca uma cascata', () =>
   it('tudo o que já tinha acontecido vai para o resumo, e a fila fica vazia', () => {
     const plan = planCelebrations({
       firstRun: true,
+      since: NOW,
       beforeXp: 0,
       afterXp: 420,
       allKeys: ['team', 'first_stop'],
@@ -33,9 +34,29 @@ describe('a primeira derivação vira um resumo calmo, nunca uma cascata', () =>
     );
   });
 
+  it('o que aconteceu depois de o aparelho começar (o primeiro sync ainda corria) vira cartão', () => {
+    const plan = planCelebrations({
+      firstRun: true,
+      since: '2026-12-11T09:00:00.000Z',
+      beforeXp: 0,
+      afterXp: 130,
+      allKeys: ['team', 'first_stop'],
+      added: [
+        { key: 'team', trip_id: 't', unlocked_at: '2026-11-20T10:00:00.000Z' },
+        { key: 'first_stop', trip_id: 't', unlocked_at: '2026-12-11T09:04:00.000Z' },
+      ],
+      now: NOW,
+    });
+    expect(plan.queue.map((c) => (c.kind === 'achievement' ? c.key : c.level))).toEqual([
+      'first_stop',
+    ]);
+    expect(plan.summary).toEqual({ xp: 130, level: 1, keys: ['team'] });
+  });
+
   it('sem nada, sem resumo', () => {
     const plan = planCelebrations({
       firstRun: true,
+      since: NOW,
       beforeXp: 0,
       afterXp: 0,
       allKeys: [],
@@ -50,6 +71,7 @@ describe('depois, cada conquista e cada nível entram na fila', () => {
   it('na ordem do fato, e um cartão de nível quando o nível sobe', () => {
     const plan = planCelebrations({
       firstRun: false,
+      since: NOW,
       beforeXp: 140,
       afterXp: 165,
       allKeys: ['early_bird', 'first_stop'],

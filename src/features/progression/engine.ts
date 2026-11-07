@@ -53,6 +53,8 @@ let cleanups: (() => void)[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
 /** um ciclo completo do sync terminou nesta sessão (o pull do usuário já trouxe o que existia) */
 let synced = false;
+/** quando o motor começou nesta sessão: na primeira derivação, o que veio depois vira cartão */
+let startedAt = 0;
 
 function parse<T>(raw: string | undefined, fallback: T): T {
   if (!raw) return fallback;
@@ -147,6 +149,7 @@ async function run(me: string): Promise<void> {
   const beforeXp = totalXp(mineXp);
   const plan = planCelebrations({
     firstRun: !baseline,
+    since: new Date(startedAt).toISOString(),
     beforeXp,
     afterXp: beforeXp + totalXp(xp),
     allKeys: [...mineAch.map((a) => a.key), ...achievements.map((a) => a.key)].filter(
@@ -210,6 +213,7 @@ export function startProgress(userId: string): void {
   stopProgress();
   uid = userId;
   synced = false;
+  startedAt = Date.now();
   let phase = syncEngine.getState().phase;
   let lastSyncAt = syncEngine.getState().lastSyncAt;
   cleanups = [
