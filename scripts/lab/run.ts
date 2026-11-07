@@ -50,7 +50,7 @@ import {
 import { appProgressao, appRetrospectiva, type ProgressContext } from './app-progress.ts';
 import { roadScenarios, ROAD_SCENARIOS } from './app-road.ts';
 import { NOT_ARMED, runArmed } from './armed.ts';
-import { prepareRoad } from './road.ts';
+import { prepareRoad, resetRoad } from './road.ts';
 import { ensureTeamMember, kindsOnly, log, sleep, type Session } from './session.ts';
 import { ensureLocalLab, probeReceiver } from './setup-lib.ts';
 import {
@@ -554,42 +554,56 @@ async function main(): Promise<number> {
   log(`armados: ${armed.checks.map((c) => `${c.scenario} ${c.status}`).join(', ')}`);
   const pending = (keys: readonly Check['scenario'][]) =>
     keys.filter((k) => !checks.some((c) => c.scenario === k));
-  const planned = planRun(new Date());
+  // a progressão antes do plano dos avisos: o preparo dos outros cenários conclui paradas de A, e o
+  // cartão do primeiro desbloqueio só aparece com a progressão zerada e nenhuma parada concluída
+  // viva (D125); o navegador leva minutos, então os horários dos avisos se contam depois dele
+  const progress: ProgressContext = {
+    appUrl: cfg.appOrigin,
+    a,
+    b,
+    emails: { a: LAB_USERS.a.email, b: LAB_USERS.b.email },
+    passwords: {
+      a: await derivePassword(cfg.secret, LAB_USERS.a.email),
+      b: await derivePassword(cfg.secret, LAB_USERS.b.email),
+    },
+    artifactsDir: join(process.cwd(), 'lab-artifacts'),
+  };
+  if (withApp) {
+    try {
+      await resetRoad(a);
+    } catch (err) {
+      log(
+        `aviso: zerar as viagens do roteiro: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+  let planned = planRun(new Date());
+  if (!('skip' in planned)) {
+    if (withApp) {
+      const progressao = await appProgressao(progress, planned.today);
+      checks.push(progressao);
+      log(
+        `app: app_progressao ${progressao.status}${progressao.status === 'pass' ? '' : ` · ${progressao.detail}`}`,
+      );
+    } else {
+      checks.push(skipped('app_progressao', 'Sem navegador nesta execução.'));
+    }
+    planned = planRun(new Date());
+  }
   try {
     if ('skip' in planned) {
+      const reason = planned.skip;
       checks.push(
         ...pending(LAB_SCENARIO_KEYS).map((scenario) => ({
           scenario,
           status: 'skip' as const,
           latency_ms: null,
-          detail: planned.skip,
+          detail: reason,
           data: {},
         })),
       );
     } else {
       const plan = planned;
-      // a progressão antes de tudo: o preparo dos outros cenários conclui paradas de A, e o cartão do
-      // primeiro desbloqueio só aparece com a progressão zerada e nenhuma parada concluída viva (D125)
-      const progress: ProgressContext = {
-        appUrl: cfg.appOrigin,
-        a,
-        b,
-        emails: { a: LAB_USERS.a.email, b: LAB_USERS.b.email },
-        passwords: {
-          a: await derivePassword(cfg.secret, LAB_USERS.a.email),
-          b: await derivePassword(cfg.secret, LAB_USERS.b.email),
-        },
-        artifactsDir: join(process.cwd(), 'lab-artifacts'),
-      };
-      if (withApp) {
-        const progressao = await appProgressao(progress, plan.today);
-        checks.push(progressao);
-        log(
-          `app: app_progressao ${progressao.status}${progressao.status === 'pass' ? '' : ` · ${progressao.detail}`}`,
-        );
-      } else {
-        checks.push(skipped('app_progressao', 'Sem navegador nesta execução.'));
-      }
       ids = await idsFor(a.uid, plan.today);
       const t0 = Date.now();
       let prepared: Awaited<ReturnType<typeof prepare>> | null = null;

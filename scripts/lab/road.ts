@@ -98,22 +98,31 @@ export async function clean(
   );
   await syncPush(a.client, stops.map(tomb('stops')));
   const days = must(
-    await a.client
-      .from('trip_days')
-      .select('id')
-      .in('trip_id', trips)
-      .is('deleted_at', null)
-      .not('id', 'in', `(${keepDays.join(',')})`),
+    await a.client.from('trip_days').select('id').in('trip_id', trips).is('deleted_at', null),
     'dias antigos',
   );
-  await syncPush(a.client, days.map(tomb('trip_days')));
+  await syncPush(a.client, days.filter((d) => !keepDays.includes(d.id)).map(tomb('trip_days')));
+}
+
+const roadTrips = async (a: Session) => ({
+  listas: await uuidV5(a.uid, 'lab:listas'),
+  estrada: await uuidV5(a.uid, 'lab:estrada'),
+});
+
+/**
+ * Antes de qualquer aparelho de A entrar: as viagens do roteiro sem o que a execução anterior
+ * deixou. A lista que terminou pronta ontem, já no banco do aparelho, abriria a festa do "Pronto
+ * para partir" antes de o preparo de hoje chegar a ele.
+ */
+export async function resetRoad(a: Session): Promise<void> {
+  const { listas, estrada } = await roadTrips(a);
+  await clean(a, [listas, estrada], []);
 }
 
 export async function prepareRoad(a: Session, b: Session, plan: LabPlan): Promise<Road> {
   const today = plan.today;
   const listasDate = addDays(today, 3);
-  const listas = await uuidV5(a.uid, 'lab:listas');
-  const estrada = await uuidV5(a.uid, 'lab:estrada');
+  const { listas, estrada } = await roadTrips(a);
   const listasDay = await uuidV5(listas, listasDate);
   const estradaDay = await uuidV5(estrada, today);
 
