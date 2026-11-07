@@ -7,7 +7,7 @@ import {
   Pencil,
   Trash2,
 } from 'lucide-react';
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { Card } from '@/components/ui/Card.tsx';
 import type { Stop } from '@/lib/db/schema.ts';
 import { googleMapsUrl, wazeUrl } from '@/lib/links/index.ts';
@@ -27,9 +27,12 @@ type Props = {
   onMove: (delta: -1 | 1) => void;
   /** props da alça de arrasto (dnd-kit) */
   handleProps?: ComponentProps<'button'>;
+  /** um detalhe pequeno embaixo do endereço (a previsão do tempo no horário da parada) */
+  detail?: ReactNode;
 };
 
-function NavLinks({ stop }: { stop: Stop }) {
+/** Abrir no Google Maps e no Waze: é assim que se navega (o Viajei não navega). */
+export function NavLinks({ stop }: { stop: Stop }) {
   const maps = googleMapsUrl(stop);
   const waze = wazeUrl(stop);
   if (!maps && !waze) return null;
@@ -64,6 +67,7 @@ export function StopCard({
   onRemove,
   onMove,
   handleProps,
+  detail,
 }: Props) {
   const travel = stop.travel_minutes_to_next;
   return (
@@ -93,6 +97,7 @@ export function StopCard({
           {stop.notes ? (
             <p className="mt-1 text-[14px] whitespace-pre-line text-ink-2">{stop.notes}</p>
           ) : null}
+          {detail}
         </div>
       </div>
 

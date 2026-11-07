@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import {
   closestCenter,
   DndContext,
@@ -25,6 +26,8 @@ type Props = {
   onAcceptSuggestion: (stop: Stop, minutes: number) => void;
   onEdit: (stop: Stop) => void;
   onRemove: (stop: Stop) => void;
+  /** um detalhe pequeno embaixo da parada (a previsão do tempo no horário dela) */
+  detail?: ((stop: Stop) => ReactNode) | undefined;
 };
 
 function SortableItem({
@@ -36,11 +39,13 @@ function SortableItem({
   onEdit,
   onRemove,
   onMove,
+  detail,
 }: {
   stop: Stop;
   index: number;
   count: number;
   suggestion: number | undefined;
+  detail: ReactNode;
   onAcceptSuggestion: (minutes: number) => void;
   onEdit: () => void;
   onRemove: () => void;
@@ -64,6 +69,7 @@ function SortableItem({
         onEdit={onEdit}
         onRemove={onRemove}
         onMove={onMove}
+        detail={detail}
         handleProps={{ ...attributes, ...listeners }}
       />
     </li>
@@ -81,6 +87,7 @@ export function SortableStops({
   onAcceptSuggestion,
   onEdit,
   onRemove,
+  detail,
 }: Props) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -110,6 +117,7 @@ export function SortableStops({
               onEdit={() => onEdit(stop)}
               onRemove={() => onRemove(stop)}
               onMove={(delta) => onMove(index, index + delta)}
+              detail={detail?.(stop)}
             />
           ))}
         </ol>

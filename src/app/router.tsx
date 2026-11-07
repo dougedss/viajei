@@ -95,6 +95,10 @@ export const router = createBrowserRouter([
                 lazy: page(() => import('@/features/expenses/routes/GastosPage.tsx')),
               },
               {
+                path: '/viagens/:tripId/mapa',
+                lazy: page(() => import('@/features/map/routes/MapaPage.tsx')),
+              },
+              {
                 path: '/viagens/:tripId/diario',
                 lazy: page(() => import('@/features/memories/routes/DiarioPage.tsx')),
               },

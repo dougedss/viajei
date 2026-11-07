@@ -33,6 +33,8 @@ import { contactCount, contactGroups } from '@/features/contacts/rules.ts';
 import { useTripExpenses } from '@/features/expenses/queries.ts';
 import { formatMoneyShort, totals } from '@/features/expenses/rules.ts';
 import { todayISO } from '../rules.ts';
+import { WeatherStrip } from '@/features/weather/components/WeatherStrip.tsx';
+import { useTripWeather } from '@/features/weather/queries.ts';
 import { useSession } from '@/lib/supabase/session.ts';
 
 export default function ViagemPage() {
@@ -53,6 +55,7 @@ export default function ViagemPage() {
   const contacts = useTripContacts(tripId) ?? [];
   const expenses = useTripExpenses(tripId) ?? [];
   const teamLevel = useTeamLevel(tripId);
+  const weather = useTripWeather(trip);
 
   if (trip === undefined) return <Splash />;
   if (trip === null) return <NotFound />;
@@ -98,8 +101,11 @@ export default function ViagemPage() {
         contacts={contactCount(contactGroups(contacts, reservations))}
         spent={formatMoneyShort(totals(expenses).total)}
         diary={stops.filter((s) => s.done_at !== null).length}
+        located={stops.filter((s) => s.lat !== null && s.lng !== null).length}
       />
       <ReadyCelebration trip={trip} items={items} today={today} />
+
+      <WeatherStrip weather={weather} />
 
       {trip.notes ? (
         <Card>

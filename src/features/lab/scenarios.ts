@@ -21,7 +21,8 @@ export const LAB_SCENARIOS = {
   },
   briefing: {
     label: 'Briefing da manhã',
-    description: 'Dia, semana, paradas e primeira parada, no horário escolhido pela pessoa',
+    description:
+      'Dia, semana, paradas, primeira parada e o clima que a função gravou, no horário escolhido pela pessoa',
   },
   time: {
     label: 'Time',
@@ -127,6 +128,16 @@ export const LAB_SCENARIOS = {
     label: 'App · importar',
     description:
       'Cola um roteiro curto, a IA lê de verdade, a revisão salva; horário, telefone e código exatos no servidor',
+  },
+  app_mapa: {
+    label: 'App · mapa',
+    description:
+      'Abre o mapa de hoje com os tiles do OSM: pinos, rota real e atribuição; tile no cache com 200 e, sem rede, os tiles vistos e o aviso',
+  },
+  app_clima: {
+    label: 'App · clima',
+    description:
+      'A faixa da visão geral com os números de hoje pelo Open-Meteo; sem rede, o "atualizado às"',
   },
   app_retrospectiva: {
     label: 'App · retrospectiva',

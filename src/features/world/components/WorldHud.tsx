@@ -1,4 +1,4 @@
-import { Check, MapPinOff, SkipForward } from 'lucide-react';
+import { Check, CloudRain, MapPinOff, SkipForward } from 'lucide-react';
 import { motion } from 'motion/react';
 import { PERSON_COLORS } from '@shared/constants.ts';
 import { asPersonColor } from '@/features/profile/queries.ts';
@@ -37,6 +37,8 @@ type Props = {
   onSkip: () => void;
   opening: { plan: OpeningPlan; startedAt: number } | null;
   reducedMotion: boolean;
+  /** as paradas em que é mais provável chover no horário delas (a previsão guardada) */
+  rainy?: ReadonlySet<string>;
 };
 
 export const HUD_TOP = 44;
@@ -103,6 +105,14 @@ export function WorldHud(props: Props) {
                 </span>
                 {stop.time ? (
                   <time className="num text-[13px] text-hud-muted">{hhmm(stop.time)}</time>
+                ) : null}
+                {props.rainy?.has(node.stop_id) ? (
+                  <CloudRain
+                    className="size-3.5 text-person-sky"
+                    role="img"
+                    aria-label="previsão de chuva"
+                    data-pill-rain
+                  />
                 ) : null}
                 {status === 'next' ? (
                   <span

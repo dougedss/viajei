@@ -1,6 +1,8 @@
 import type { NotificationKind } from '../../supabase/functions/_shared/constants.ts';
 import { weekdayName, type PushPayload } from '../../supabase/functions/_shared/notifications.ts';
 import type { LabScenario, LabStatus } from '../../src/features/lab/scenarios.ts';
+import { briefingWeatherSchema } from '../../supabase/functions/_shared/briefing-weather.ts';
+import { WEATHER_CODES } from '../../supabase/functions/_shared/weather.ts';
 
 /**
  * A parte pura do laboratório: o plano de horários de uma execução e a avaliação do que chegou na
@@ -34,6 +36,12 @@ export const LAB_DESTINATION = {
   latitude: -29.28522,
   longitude: -51.41185,
 } as const;
+
+/**
+ * O lugar da parada da viagem do briefing (fase 11): com coordenada, a `send-notifications` busca o
+ * clima de verdade no Open-Meteo para o aviso da manhã do laboratório, todo dia.
+ */
+export const LAB_BRIEFING_POINT = { latitude: -29.31295, longitude: -50.85197 } as const;
 
 export const LAB_TRIP_NAMES: Record<TripKey, string> = {
   departure: 'Laboratório · hora de sair',
@@ -127,9 +135,11 @@ const floorMinute = (d: Date) => new Date(Math.floor(d.getTime() / MIN) * MIN);
 
 export function expectedMessages(
   plan: LabPlan,
-  ctx: { actorName: string; teamDoneAt: Date; readyAt: Date },
+  ctx: { actorName: string; teamDoneAt: Date; readyAt: Date; briefingFacts?: BriefingFacts },
 ): Expected[] {
   const { tick, times } = plan;
+  // o briefing da manhã ganha a linha do clima quando a função grava o clima (fase 11)
+  const briefingLine = ctx.briefingFacts ? briefingWeatherLine(ctx.briefingFacts).line : null;
   // vence em `scheduled`, mas só sai no primeiro cron em que os dados já existiam
   const firstCron = ceilMinute(ctx.readyAt);
   const due = (scheduled: Date) => new Date(Math.max(scheduled.getTime(), firstCron.getTime()));
@@ -160,7 +170,7 @@ export function expectedMessages(
       kind: 'morning_briefing',
       trip: 'closes',
       title: `Dia 1 de 1 · ${weekdayName(plan.today)}`,
-      body: `1 parada · primeira parada às ${times.closes}`,
+      body: `1 parada · primeira parada às ${times.closes}${briefingLine ? `\n${briefingLine}` : ''}`,
       dueAt: due(tick),
     },
     {
@@ -223,7 +233,80 @@ export type EvalContext = {
   /** a assinatura que respondeu 410 ganhou failed_at */
   goneFailed: boolean;
   received: Received[];
+  /** o clima que a função gravou no briefing (`lab_diagnostics`), para montar o texto esperado */
+  briefingFacts?: BriefingFacts;
 };
+
+/**
+ * O que o servidor diz do clima do briefing do laboratório: `weather` como a `send-notifications`
+ * gravou em `notifications_sent.data` (lido pelo `lab_diagnostics`), e se a função publicada já é a
+ * que grava o clima (a resposta dela traz o resumo `weather`). Antes da função da fase 11 estar no
+ * hospedado (o preview da branch usa as funções da produção), o briefing é conferido sem clima.
+ */
+export type BriefingFacts = { weather: unknown; functionWrites: boolean };
+
+export function briefingFactsOf(diagnostics: unknown, dayId: string): BriefingFacts {
+  const d = (diagnostics ?? {}) as {
+    sent?: { kind?: string; ref?: string; weather?: unknown }[];
+    http?: { body?: unknown }[];
+  };
+  const row = (d.sent ?? []).find((x) => x.kind === 'morning_briefing' && x.ref === dayId);
+  return {
+    weather: row?.weather ?? null,
+    functionWrites: (d.http ?? []).some(
+      (h) => typeof h.body === 'string' && h.body.includes('"weather"'),
+    ),
+  };
+}
+
+const NO_WEATHER = /^(no_point|no_data|timeout|network|invalid|http_\d{3})$/;
+
+/**
+ * A segunda linha do briefing a partir dos fatos, escrita aqui por conta própria (como os outros
+ * textos do laboratório): a menor mínima, a maior máxima, a maior chuva (dita a partir de 20%) e o
+ * rótulo do código mais grave. Sem clima, null. Devolve também o que estiver errado nos fatos.
+ */
+export function briefingWeatherLine(facts: BriefingFacts): {
+  line: string | null;
+  problems: string[];
+} {
+  if (!facts.functionWrites) return { line: null, problems: [] };
+  const parsed = briefingWeatherSchema.safeParse(facts.weather);
+  if (!parsed.success) return { line: null, problems: ['a função não gravou o clima do briefing'] };
+  const w = parsed.data;
+  if (w.status === 'none') {
+    return {
+      line: null,
+      problems: NO_WEATHER.test(w.reason) ? [] : [`motivo sem clima desconhecido: ${w.reason}`],
+    };
+  }
+  const problems: string[] = [];
+  if (w.places[0]?.role !== 'start') problems.push('o clima não começa por onde o dia começa');
+  for (const p of w.places) {
+    if (!(p.min <= p.max) || p.min < -30 || p.max > 50)
+      problems.push(`temperaturas ${p.min}/${p.max}`);
+    if (p.rain !== null && (p.rain < 0 || p.rain > 100)) problems.push(`chuva ${p.rain}`);
+  }
+  const min = Math.min(...w.places.map((p) => p.min));
+  const max = Math.max(...w.places.map((p) => p.max));
+  const rains = w.places.map((p) => p.rain).filter((r): r is number => r !== null);
+  const rain = rains.length > 0 ? Math.max(...rains) : null;
+  const known = w.places
+    .map((p) => p.code)
+    .filter((c): c is number => c !== null && Object.hasOwn(WEATHER_CODES, c));
+  const worst = known.sort(
+    (a, b) => (WEATHER_CODES[b]?.severity ?? 0) - (WEATHER_CODES[a]?.severity ?? 0),
+  )[0];
+  const deg = (t: number) => `${String(Math.round(t) || 0)}°`;
+  const line = [
+    worst === undefined ? null : (WEATHER_CODES[worst]?.label ?? null),
+    `${deg(min)} a ${deg(max)}`,
+    rain !== null && rain >= 20 ? `chuva ${String(Math.round(rain))}%` : null,
+  ]
+    .filter((x): x is string => x !== null)
+    .join(', ');
+  return { line, problems };
+}
 
 export function formatMs(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
@@ -358,11 +441,22 @@ export function evaluate(ctx: EvalContext): Check[] {
   const briefingProblems = textProblems(exp('morning_briefing'), briefing);
   if (briefing?.payload && briefing.payload.actions.length > 0)
     briefingProblems.push('ações indevidas');
+  const facts = ctx.briefingFacts ?? { weather: null, functionWrites: false };
+  briefingProblems.push(...briefingWeatherLine(facts).problems);
+  const recorded = briefingWeatherSchema.safeParse(facts.weather);
+  const sky = !facts.functionWrites
+    ? ' · a função publicada ainda não grava o clima'
+    : recorded.success && recorded.data.status === 'none'
+      ? ` · sem clima (${recorded.data.reason})`
+      : '';
   const briefingCheck = result(
     'briefing',
     briefingProblems,
-    `"${briefing?.payload?.notification.title ?? ''}" · "${briefing?.payload?.notification.body ?? ''}"`,
-    { latency_ms: latencyOf(exp('morning_briefing'), briefing) },
+    `"${briefing?.payload?.notification.title ?? ''}" · "${(briefing?.payload?.notification.body ?? '').replace('\n', ' / ')}"${sky}`,
+    {
+      latency_ms: latencyOf(exp('morning_briefing'), briefing),
+      data: { clima: facts.weather, funcao_grava_clima: facts.functionWrites },
+    },
   );
 
   // ---------------------------------------------------------------- time

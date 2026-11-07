@@ -31,8 +31,10 @@ import {
 } from './app.ts';
 import { derivePassword, LAB_USERS, loadConfig, parseTarget, type LabConfig } from './env.ts';
 import {
+  briefingFactsOf,
   evaluate,
   formatMs,
+  LAB_BRIEFING_POINT,
   LAB_DESTINATION,
   LAB_LEAD_MINUTES,
   LAB_STOPS,
@@ -50,6 +52,7 @@ import {
 import { appProgressao, appRetrospectiva, type ProgressContext } from './app-progress.ts';
 import { roadScenarios, ROAD_SCENARIOS } from './app-road.ts';
 import { appImportar } from './app-import.ts';
+import { appMapaClima } from './app-map.ts';
 import { measureImport } from './measure-import.ts';
 import { NOT_ARMED, runArmed } from './armed.ts';
 import { prepareRoad, resetRoad } from './road.ts';
@@ -221,6 +224,9 @@ async function prepare(
         name: LAB_STOPS[k].name,
         time: STOP_TIME[k](plan),
         closes_at: k === 'closes' ? plan.times.closesAt : null,
+        // a parada do briefing com lugar: o aviso da manhã busca o clima de verdade (fase 11)
+        lat: k === 'closes' ? LAB_BRIEFING_POINT.latitude : null,
+        lng: k === 'closes' ? LAB_BRIEFING_POINT.longitude : null,
         travel_minutes_to_next: k === 'departure' ? 30 : null,
         departed_at: null,
         done_at: null,
@@ -616,6 +622,27 @@ async function main(): Promise<number> {
     } else {
       checks.push(skipped('app_importar', 'Sem navegador nesta execução.'));
     }
+    // o mapa e o clima (fase 11): os tiles do OSM e o Open-Meteo de verdade, numa viagem só deles
+    if (withApp) {
+      const mapa = await appMapaClima(
+        {
+          appUrl: cfg.appOrigin,
+          bypass: cfg.bypass,
+          a,
+          email: LAB_USERS.a.email,
+          password: progress.passwords.a,
+          artifactsDir: progress.artifactsDir,
+        },
+        planned.today,
+      );
+      checks.push(...mapa);
+      log(`app: ${mapa.map((c) => `${c.scenario} ${c.status} · ${c.detail}`).join(' | ')}`);
+    } else {
+      checks.push(
+        skipped('app_mapa', 'Sem navegador nesta execução.'),
+        skipped('app_clima', 'Sem navegador nesta execução.'),
+      );
+    }
     planned = planRun(new Date());
   }
   try {
@@ -706,8 +733,14 @@ async function main(): Promise<number> {
             .eq('id', prepared.subs.gone.id),
           'assinatura morta',
         );
+        // o clima que a função gravou no briefing: o texto esperado sai dos fatos (fase 11)
+        const diag = await a.client.rpc('lab_diagnostics', {
+          p_since: new Date(startedAt.getTime() - 60_000).toISOString(),
+        });
+        const briefingFacts = briefingFactsOf(diag.data, ids.days.closes);
         checks.push(
           ...evaluate({
+            briefingFacts,
             plan,
             trips: ids.trips,
             stops: ids.stops,

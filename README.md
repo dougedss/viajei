@@ -143,6 +143,18 @@ XP, níveis e as 15 conquistas (`src/features/progression`), sem ranking: a equi
 - **A chave:** `ANTHROPIC_API_KEY`, da conta pessoal do Douglas (workspace Viajei, com limite de gasto), mora só em `supabase secrets` (`pnpm remote:secrets-push`). A CI não tem a chave: a função é testada com respostas gravadas e o e2e intercepta a rede.
 - **Decisões:** `docs/decisoes.md`, D127 a D140.
 
+## Mapa e clima
+
+`/viagens/<id>/mapa` (`src/features/map`) e a previsão do tempo (`src/features/weather`, com as regras puras em `supabase/functions/_shared/weather.ts`, as mesmas do aviso da manhã).
+
+- **O mapa** fica fora do Modo Viagem e não é GPS: sem "você está aqui", sem pedir a posição, sem rota passo a passo. Leaflet 1.9 pelo react-leaflet 5 (licença Hippocratic-2.1, ética e não aprovada pela OSI), num chunk só da rota. Chips "Viagem" e "Dia N"; a rota real de cada dia vem do Dexie e, sem rota, um traço reto pontilhado; o trecho entre paradas concluídas é o rodado; pinos com a arte do app e os estados da lista do dia; as paradas sem lugar numa linha abaixo; no dia de hoje, a trilha de quem compartilha a posição e o carro da viagem no último ponto ("Visto às 14:02"). Entra pelo atalho "Mapa" e por "Ver no mapa" na página do dia.
+- **Os tiles do OSM** (`src/lib/map/tiles.ts`, o único lugar com a URL): só `tile.openstreetmap.org`, zoom até 19, pedidos com CORS. A política de uso não permite uso offline nesse servidor: o app **nunca baixa antes** os tiles da rota nem "salva uma área". O service worker guarda só os tiles que a pessoa já viu (`CacheFirst`, só o status 200, 30 dias, 1.500 entradas), e sem rede o mapa mostra esses, com a linha e os pinos do Dexie. O app não define `Referrer-Policy`: o `Referer` que a política exige vai sozinho.
+- **O clima** vem do Open-Meteo, direto do navegador (sem chave, CORS aberto; o limite é por IP: 600 por minuto, 5.000 por hora, 10.000 por dia e 300 mil por mês, uso não comercial). Uma chamada para a viagem inteira, com onde cada dia começa e termina (o fim a 50 km ou mais) e a hora de cada parada com horário escrito. Previsão até hoje + 15; os dias além dizem "previsão a partir de". Guardado no Dexie (store `weather`), vale 1 h durante a viagem e 6 h antes; sem rede, mostra o que tem com "atualizado às". Aparece na visão geral, na página do dia, em cada parada com horário, no "Agora", no chip da maquete e na folha do pino. Sem previsão, nada aparece.
+- **O briefing da manhã** ganha o clima numa segunda linha: a `send-notifications` faz uma chamada por lote, com prazo de 3 s, grava os fatos em `data.weather` e, sem resposta, manda o aviso sem clima.
+- **Atribuições:** "© OpenStreetMap" sempre visível no canto do mapa; "Dados do tempo: Open-Meteo.com" (CC BY 4.0) na visão geral, na página do dia e na folha do pino.
+- **Testes:** no Playwright, os servidores de verdade nem resolvem; os testes do mapa e do clima fingem os dois. O laboratório confere o mapa e o clima com os serviços de verdade, todo dia. Roteiro nos aparelhos: [`docs/teste-manual-fase-11.md`](docs/teste-manual-fase-11.md).
+- **Decisões:** `docs/decisoes.md`, D141 a D153.
+
 ## Onde se testa (sem stack local)
 
 Nada roda neste Mac (D91). O caminho de uma fase:

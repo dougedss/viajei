@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/Button.tsx';
 import type { Catchup } from '@/features/travel-mode/catchup.ts';
 import type { DayState } from '@/features/travel-mode/rules.ts';
 import type { RouteStatus } from '@/features/itinerary/route.ts';
-import type { DayRoute, Profile, RouteLeg, Stop, Trip } from '@/lib/db/schema.ts';
+import type { DaySummary } from '@/features/weather/rules.ts';
+import type { DayRoute, Profile, RouteLeg, Stop, Trip, WeatherEntry } from '@/lib/db/schema.ts';
 import { readUrlFlags } from '@/lib/three/prefs.ts';
 import { ThreeBoundary } from '@/lib/three/ThreeBoundary.tsx';
 import { DayList } from './components/DayList.tsx';
@@ -41,6 +42,16 @@ export type WorldSlotProps = {
   stopExtras?: ((stop: Stop) => ReactNode) | undefined;
   /** as fotos de memória com arquivo no aparelho, para o "Rever o dia" */
   reviewPhotos?: readonly ReviewPhoto[] | undefined;
+  /**
+   * A previsão do dia guardada no aparelho (funciona sem rede): o chip do clima na abertura e na faixa
+   * de cima, e a chuva nas pílulas. Só HTML: nada do tempo entra na cena 3D.
+   */
+  weather?: WorldWeather | undefined;
+};
+
+export type WorldWeather = {
+  summary: DaySummary | null;
+  stops: Readonly<WeatherEntry['stops']>;
 };
 
 const WorldSection = lazy(() => import('./components/WorldSection.tsx'));

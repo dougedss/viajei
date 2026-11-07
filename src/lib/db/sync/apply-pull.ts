@@ -120,6 +120,7 @@ export async function wipeTrip(db: ViajeiDb, tripId: string): Promise<void> {
     'sync_state',
     'blobs',
     'uploads',
+    'weather',
   ];
   await db.transaction('rw', stores, async () => {
     for (const t of TRIP_SCOPED_TABLES) {
@@ -139,6 +140,8 @@ export async function wipeTrip(db: ViajeiDb, tripId: string): Promise<void> {
     await db.outbox.where('trip_id').equals(tripId).delete();
     await db.blobs.where('trip_id').equals(tripId).delete();
     await db.uploads.where('trip_id').equals(tripId).delete();
+    // a previsão do tempo é cache: poucos dias por viagem, sem índice por viagem
+    await db.weather.filter((w) => w.trip_id === tripId).delete();
     await db.sync_state.delete(syncKeys.tripCursor(tripId));
   });
 }

@@ -1,0 +1,171 @@
+/**
+ * Respostas do Open-Meteo gravadas em 07/11/2026 (previsão para 08/11), para os testes não chamarem
+ * a API: dois lugares com o dia e as horas (Papanduva e Nova Petrópolis, a primeira e a última parada
+ * do Dia 1 do seed, a 340 km uma da outra) e um lugar só com o dia (Canela). Com dois lugares a
+ * resposta é uma lista; com um, um objeto. A latitude que volta é a do centro da grade do modelo.
+ */
+export const RECORDED_DATE = '2026-11-08';
+
+export const OPEN_METEO_TWO_PLACES: unknown = [
+  {
+    latitude: -26.397188,
+    longitude: -50.099,
+    utc_offset_seconds: -10800,
+    timezone: 'America/Sao_Paulo',
+    timezone_abbreviation: 'GMT-3',
+    elevation: 827.0,
+    hourly_units: {
+      time: 'iso8601',
+      temperature_2m: '°C',
+      precipitation_probability: '%',
+      weather_code: 'wmo code',
+      is_day: '',
+    },
+    hourly: {
+      time: [
+        '2026-11-08T00:00',
+        '2026-11-08T01:00',
+        '2026-11-08T02:00',
+        '2026-11-08T03:00',
+        '2026-11-08T04:00',
+        '2026-11-08T05:00',
+        '2026-11-08T06:00',
+        '2026-11-08T07:00',
+        '2026-11-08T08:00',
+        '2026-11-08T09:00',
+        '2026-11-08T10:00',
+        '2026-11-08T11:00',
+        '2026-11-08T12:00',
+        '2026-11-08T13:00',
+        '2026-11-08T14:00',
+        '2026-11-08T15:00',
+        '2026-11-08T16:00',
+        '2026-11-08T17:00',
+        '2026-11-08T18:00',
+        '2026-11-08T19:00',
+        '2026-11-08T20:00',
+        '2026-11-08T21:00',
+        '2026-11-08T22:00',
+        '2026-11-08T23:00',
+      ],
+      temperature_2m: [
+        16.9, 16.0, 14.2, 14.0, 14.1, 14.0, 13.2, 14.8, 16.0, 16.8, 17.2, 18.3, 19.2, 20.3, 20.5,
+        19.7, 19.1, 18.4, 15.9, 14.1, 13.1, 12.9, 12.3, 11.3,
+      ],
+      precipitation_probability: [
+        43, 43, 39, 33, 25, 16, 10, 10, 14, 16, 15, 13, 12, 12, 12, 12, 13, 15, 16, 16, 15, 14, 12,
+        10,
+      ],
+      weather_code: [
+        51, 51, 51, 3, 3, 0, 0, 1, 51, 51, 53, 51, 51, 51, 2, 3, 1, 1, 1, 1, 2, 2, 3, 3,
+      ],
+      is_day: [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
+    },
+    daily_units: {
+      time: 'iso8601',
+      weather_code: 'wmo code',
+      temperature_2m_max: '°C',
+      temperature_2m_min: '°C',
+      precipitation_probability_max: '%',
+    },
+    daily: {
+      time: ['2026-11-08'],
+      weather_code: [53],
+      temperature_2m_max: [20.6],
+      temperature_2m_min: [11.0],
+      precipitation_probability_max: [43],
+    },
+  },
+  {
+    latitude: -29.490334,
+    longitude: -51.398865,
+    utc_offset_seconds: -10800,
+    timezone: 'America/Sao_Paulo',
+    timezone_abbreviation: 'GMT-3',
+    elevation: 71.0,
+    location_id: 1,
+    hourly_units: {
+      time: 'iso8601',
+      temperature_2m: '°C',
+      precipitation_probability: '%',
+      weather_code: 'wmo code',
+      is_day: '',
+    },
+    hourly: {
+      time: [
+        '2026-11-08T00:00',
+        '2026-11-08T01:00',
+        '2026-11-08T02:00',
+        '2026-11-08T03:00',
+        '2026-11-08T04:00',
+        '2026-11-08T05:00',
+        '2026-11-08T06:00',
+        '2026-11-08T07:00',
+        '2026-11-08T08:00',
+        '2026-11-08T09:00',
+        '2026-11-08T10:00',
+        '2026-11-08T11:00',
+        '2026-11-08T12:00',
+        '2026-11-08T13:00',
+        '2026-11-08T14:00',
+        '2026-11-08T15:00',
+        '2026-11-08T16:00',
+        '2026-11-08T17:00',
+        '2026-11-08T18:00',
+        '2026-11-08T19:00',
+        '2026-11-08T20:00',
+        '2026-11-08T21:00',
+        '2026-11-08T22:00',
+        '2026-11-08T23:00',
+      ],
+      temperature_2m: [
+        14.2, 13.9, 13.4, 13.4, 13.4, 13.0, 12.7, 13.2, 14.2, 15.9, 16.5, 18.6, 19.9, 20.2, 20.8,
+        20.5, 19.9, 19.0, 17.6, 15.6, 13.3, 12.6, 12.0, 11.4,
+      ],
+      precipitation_probability: [
+        71, 75, 85, 92, 96, 98, 98, 93, 86, 78, 73, 68, 59, 41, 18, 2, 0, 0, 0, 0, 0, 0, 0, 0,
+      ],
+      weather_code: [
+        81, 81, 80, 51, 51, 51, 53, 51, 51, 51, 51, 51, 51, 3, 3, 3, 2, 0, 1, 0, 0, 0, 0, 0,
+      ],
+      is_day: [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
+    },
+    daily_units: {
+      time: 'iso8601',
+      weather_code: 'wmo code',
+      temperature_2m_max: '°C',
+      temperature_2m_min: '°C',
+      precipitation_probability_max: '%',
+    },
+    daily: {
+      time: ['2026-11-08'],
+      weather_code: [81],
+      temperature_2m_max: [20.9],
+      temperature_2m_min: [11.0],
+      precipitation_probability_max: [98],
+    },
+  },
+];
+
+export const OPEN_METEO_ONE_PLACE: unknown = {
+  latitude: -29.349737,
+  longitude: -50.86505,
+  utc_offset_seconds: -10800,
+  timezone: 'America/Sao_Paulo',
+  timezone_abbreviation: 'GMT-3',
+  elevation: 673.0,
+  daily_units: {
+    time: 'iso8601',
+    weather_code: 'wmo code',
+    temperature_2m_max: '°C',
+    temperature_2m_min: '°C',
+    precipitation_probability_max: '%',
+  },
+  daily: {
+    time: ['2026-11-08'],
+    weather_code: [51],
+    temperature_2m_max: [16.9],
+    temperature_2m_min: [7.4],
+    precipitation_probability_max: [98],
+  },
+};

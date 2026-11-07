@@ -1,5 +1,6 @@
 import { FunctionsFetchError, FunctionsHttpError } from '@supabase/supabase-js';
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 import {
   routeErrorSchema,
   routeResponseSchema,
@@ -7,6 +8,7 @@ import {
 } from '@shared/route-schema.ts';
 import { connectivity, useOnline } from '@/lib/db/connectivity.ts';
 import { db, type DayRoute, type LngLat, type Stop } from '@/lib/db/schema.ts';
+import { waypointsHash } from './route-hash.ts';
 import { supabase } from '@/lib/supabase/client.ts';
 import { useCachedRoute } from './queries.ts';
 import { routeWaypoints } from './rules.ts';
@@ -24,18 +26,7 @@ export class RouteRequestError extends Error {
   }
 }
 
-/** FNV-1a sobre as coordenadas com 5 casas (≈ 1 m): muda só quando uma parada muda de lugar. */
-export function waypointsHash(waypoints: readonly LngLat[]): string {
-  const text = JSON.stringify(waypoints.map(([lng, lat]) => [lng.toFixed(5), lat.toFixed(5)]));
-  let a = 0x811c9dc5;
-  let b = 0x01000193;
-  for (let i = 0; i < text.length; i++) {
-    const c = text.charCodeAt(i);
-    a = Math.imul(a ^ c, 0x01000193) >>> 0;
-    b = Math.imul(b ^ c, 0x811c9dc5) >>> 0;
-  }
-  return a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0');
-}
+export { waypointsHash } from './route-hash.ts';
 
 export async function fetchDayRoute(
   tripId: string,
@@ -124,4 +115,38 @@ export function useDayRoute(tripId: string, dayId: string, stops: readonly Stop[
     waypointCount: waypoints.length,
     refresh: () => void query.refetch(),
   };
+}
+
+/**
+ * As rotas que faltam na viagem, ou que não valem mais para as paradas de agora (outro hash), uma por
+ * vez. Serve às telas que mostram a viagem inteira (o mapa e a retrospectiva, D124): o resto do app
+ * busca a rota do dia aberto pelo `useDayRoute`.
+ */
+export async function fetchMissingRoutes(
+  tripId: string,
+  days: readonly { day: { id: string }; stops: readonly Stop[] }[],
+  routes: readonly Pick<DayRoute, 'trip_day_id' | 'hash'>[],
+): Promise<void> {
+  for (const { day, stops } of days) {
+    const wps = routeWaypoints(stops).map((w) => w.lngLat);
+    if (wps.length < 2) continue;
+    const hash = waypointsHash(wps);
+    if (routes.some((r) => r.trip_day_id === day.id && r.hash === hash)) continue;
+    await fetchDayRoute(tripId, day.id, wps).catch(() => undefined);
+  }
+}
+
+/** Uma vez por tela aberta, com rede e com as paradas e as rotas guardadas já lidas. */
+export function useMissingRoutes(
+  tripId: string,
+  days: readonly { day: { id: string }; stops: readonly Stop[] }[],
+  routes: readonly Pick<DayRoute, 'trip_day_id' | 'hash'>[] | undefined,
+  ready: boolean,
+): void {
+  const asked = useRef(false);
+  useEffect(() => {
+    if (asked.current || !ready || !routes || !connectivity.canTry()) return;
+    asked.current = true;
+    void fetchMissingRoutes(tripId, days, routes);
+  }, [tripId, days, routes, ready]);
 }

@@ -5,7 +5,9 @@ import {
   NOTIFICATION_KIND_KEYS,
   type NotificationKind,
 } from './constants.ts';
+import { briefingDay, briefingWeatherSchema } from './briefing-weather.ts';
 import { formatDuration } from './format.ts';
+import { briefingWeatherText } from './weather.ts';
 
 /**
  * O texto dos avisos, puro. O banco (`due_notifications`) devolve fatos em `data`; aqui eles viram
@@ -43,6 +45,14 @@ export const notificationDataSchema = z.looseObject({
   /** retrospectiva: dias da viagem e paradas concluídas */
   days: z.number().nullish(),
   stops_done: z.number().nullish(),
+  /** briefing: onde o dia começa e termina (os lugares do clima, fase 11) */
+  first_point: z.unknown().optional(),
+  last_point: z.unknown().optional(),
+  /**
+   * briefing: o clima que a `send-notifications` gravou antes de enviar, ou o motivo de não ter. Um
+   * valor fora do formato vira null: o aviso sai sem clima, nunca deixa de sair.
+   */
+  weather: briefingWeatherSchema.nullish().catch(null),
 });
 export type NotificationData = z.infer<typeof notificationDataSchema>;
 
@@ -216,9 +226,12 @@ export function notificationText(
       const first = data.first_time
         ? ` · primeira ${isDepartureKind(data.first_kind ?? '') ? 'saída' : 'parada'} às ${data.first_time}`
         : '';
+      // o clima numa segunda linha, curto: no Android recolhido fica a primeira, no iPhone as duas
+      const weather = briefingDay(data.weather);
+      const sky = weather ? `\n${briefingWeatherText(weather)}` : '';
       return {
         title: `Dia ${data.day_index ?? 1} de ${data.day_count ?? 1} · ${weekdayName(data.date ?? '')}`,
-        body: `${plural(n, 'parada', 'paradas')}${first}`,
+        body: `${plural(n, 'parada', 'paradas')}${first}${sky}`,
         tag: `day:${ref}`,
         actions: [],
         appBadge: null,

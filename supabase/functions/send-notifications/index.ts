@@ -8,6 +8,7 @@ import {
   type ClaimedNotification,
   type ClaimedSubscription,
 } from '../_shared/notifications.ts';
+import { briefingWeather } from '../_shared/briefing-weather.ts';
 import { vapidJwkFromPkcs8 } from '../_shared/vapid.ts';
 
 /**
@@ -15,7 +16,8 @@ import { vapidJwkFromPkcs8 } from '../_shared/vapid.ts';
  * chave secreta do projeto no cabeçalho `apikey`. `withSupabase({ auth: 'secret' })` recusa qualquer
  * outra chamada e entrega o client admin: é a única função com `supabaseAdmin`.
  *
- * Fluxo: claim_due_notifications (reserva atômica no banco) → texto em _shared/notifications.ts →
+ * Fluxo: claim_due_notifications (reserva atômica no banco) → o clima dos briefings da manhã (uma
+ * chamada ao Open-Meteo para o lote, com prazo de 3 s, gravada em `data.weather`) → texto em _shared/notifications.ts →
  * Web Push (RFC 8291/8292) para cada assinatura viva, 8 por vez, dentro do orçamento de 30 s →
  * sent_at/status na linha; 404 ou 410 marcam failed_at na assinatura.
  */
@@ -90,6 +92,39 @@ async function forEachLimited<T>(
 
 const bodySchema = z.object({ now: z.string().optional() }).passthrough();
 
+/**
+ * O clima dos briefings da manhã do lote, gravado na linha antes de enviar: a nova tentativa de um
+ * aviso lê o que ficou gravado (o mesmo texto) e não chama o Open-Meteo de novo. Sem resposta no
+ * prazo, o aviso sai sem clima, com o motivo em `data.weather`.
+ */
+async function withWeather(
+  rows: ClaimedNotification[],
+  save: (id: string, data: ClaimedNotification['data']) => PromiseLike<unknown>,
+): Promise<{ ok: number; none: number }> {
+  const pending = rows.filter((r) => r.kind === 'morning_briefing' && r.data.weather == null);
+  const tally = { ok: 0, none: 0 };
+  if (pending.length === 0) return tally;
+  const weather = await briefingWeather(
+    pending.map((r) => ({
+      id: r.id,
+      date: r.data.date,
+      first_point: r.data.first_point,
+      last_point: r.data.last_point,
+    })),
+    { fetch },
+  );
+  await Promise.all(
+    pending.map(async (r) => {
+      const w = weather.get(r.id);
+      if (!w) return;
+      r.data = { ...r.data, weather: w };
+      tally[w.status]++;
+      await save(r.id, r.data);
+    }),
+  );
+  return tally;
+}
+
 export default {
   fetch: withSupabase({ auth: 'secret' }, async (req, ctx) => {
     if (req.method !== 'POST') return Response.json({ error: 'Use POST.' }, { status: 405 });
@@ -113,6 +148,9 @@ export default {
     }
     const rows = parsed.data;
     const summary = { claimed: rows.length, sent: 0, failed: 0, no_subscription: 0, skipped: 0 };
+    const weather = await withWeather(rows, (id, data) =>
+      admin.from('notifications_sent').update({ data }).eq('id', id),
+    );
 
     summary.skipped = await forEachLimited(rows, CONCURRENCY, deadline, async (row) => {
       if (row.subscriptions.length === 0) {
@@ -156,7 +194,7 @@ export default {
       }
     });
 
-    console.info('send-notifications', { ...summary, ms: Date.now() - started });
-    return Response.json({ ...summary, ms: Date.now() - started });
+    console.info('send-notifications', { ...summary, weather, ms: Date.now() - started });
+    return Response.json({ ...summary, weather, ms: Date.now() - started });
   }),
 };

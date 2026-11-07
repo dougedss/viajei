@@ -13,6 +13,8 @@ type Props = {
   onSkip: () => void;
   /** embaixo do "Agora": o "Ver reserva" quando a parada atual ou a próxima tem reserva */
   footer?: ReactNode;
+  /** a previsão do tempo da próxima parada no horário dela: discreta, sem toque */
+  forecast?: ReactNode;
 };
 
 const RING_COLOR = {
@@ -27,7 +29,7 @@ const TEXT_COLOR = {
 } as const;
 
 /** Legível em cinco segundos: próxima saída grande, "sair às", anel, Partiu!, Chegamos!, Pular. */
-export function AgoraHeader({ state, busy, onDepart, onArrive, onSkip, footer }: Props) {
+export function AgoraHeader({ state, busy, onDepart, onArrive, onSkip, footer, forecast }: Props) {
   const { next, countdown, closingSoon } = state;
 
   if (state.finished) {
@@ -120,6 +122,7 @@ export function AgoraHeader({ state, busy, onDepart, onArrive, onSkip, footer }:
               {formatDuration(travel)} de estrada · chega {formatClock(state.arriveAt)}
             </p>
           ) : null}
+          {forecast}
         </div>
       </div>
 

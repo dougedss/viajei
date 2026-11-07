@@ -2,6 +2,7 @@ import {
   BookOpen,
   CarFront,
   ListChecks,
+  Map as MapIcon,
   Phone,
   Route,
   Ticket,
@@ -15,7 +16,8 @@ import type { Trip } from '@/lib/db/schema.ts';
 
 /**
  * Os atalhos da visão geral, como no style tile: cada um com a sua cor e um número que diz o estado
- * (paradas, reservas, listas, contatos, gastos, o diário, o carro). O mapa entra na fase 11.
+ * (paradas, reservas, listas, contatos, gastos, o mapa, o diário, o carro). Oito atalhos: duas linhas
+ * de quatro.
  */
 type Props = {
   trip: Trip;
@@ -28,11 +30,22 @@ type Props = {
   spent: string;
   /** paradas concluídas: o diário tem o que mostrar */
   diary: number;
+  /** paradas com lugar no mapa */
+  located: number;
 };
 
 type Tile = { to: string; label: string; value: string; icon: LucideIcon; color: string };
 
-export function TripShortcuts({ trip, stops, reservations, lists, contacts, spent, diary }: Props) {
+export function TripShortcuts({
+  trip,
+  stops,
+  reservations,
+  lists,
+  contacts,
+  spent,
+  diary,
+  located,
+}: Props) {
   const car = normalizeCar(trip);
   const tiles: Tile[] = [
     {
@@ -69,6 +82,13 @@ export function TripShortcuts({ trip, stops, reservations, lists, contacts, spen
       value: spent,
       icon: Wallet,
       color: '#D9922F',
+    },
+    {
+      to: `/viagens/${trip.id}/mapa`,
+      label: 'Mapa',
+      value: located === 0 ? 'sem lugar' : `${located} ${located === 1 ? 'ponto' : 'pontos'}`,
+      icon: MapIcon,
+      color: '#3A8089',
     },
     {
       to: `/viagens/${trip.id}/diario`,

@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+import { CacheableResponsePlugin } from 'workbox-cacheable-response';
 import { ExpirationPlugin } from 'workbox-expiration';
 import {
   cleanupOutdatedCaches,
@@ -15,14 +16,15 @@ import {
 } from '@/features/notifications/push-payload.ts';
 import { applyNotificationAction, pushNow, resubscribe } from './sw/actions.ts';
 import { drainMediaInBackground } from './sw/media.ts';
+import { OSM_TILE_ORIGIN, TILE_CACHE } from '@/lib/map/tiles.ts';
 import { MEDIA_SYNC_TAG } from '@/lib/media/types.ts';
 
 declare let self: ServiceWorkerGlobalScope;
 
 /**
  * Service worker próprio (estratégia injectManifest do vite-plugin-pwa). Precache da casca, fontes
- * e ícones; toda navegação cai no index.html, então o app abre sem rede; tiles do OSM em
- * CacheFirst. E a parte da tela apagada: `push` monta a notificação (o payload é o mesmo que o
+ * e ícones; toda navegação cai no index.html, então o app abre sem rede; os tiles do OSM já vistos
+ * em CacheFirst. E a parte da tela apagada: `push` monta a notificação (o payload é o mesmo que o
  * Safari lê sozinho, de forma declarativa), `notificationclick` grava Partiu!/Chegamos! pela mesma
  * `mutate` da tela e tenta enviar a fila, `pushsubscriptionchange` reassina.
  */
@@ -31,14 +33,21 @@ precacheAndRoute(self.__WB_MANIFEST);
 
 registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html')));
 
+// Os tiles do OSM que a pessoa já viu, para o mapa abrir sem sinal (nunca baixados antes, pela
+// política do OSM). Até a fase 11 esta rota nunca gravou um tile: sem `cacheWillUpdate`, o Workbox só
+// grava status 200, e o Leaflet pedia os tiles sem `crossorigin` (no-cors), com resposta opaca
+// (status 0). Agora o mapa pede com CORS (o OSM responde `access-control-allow-origin: *`) e só o 200
+// entra. Nunca o 0: o Chrome conta uns 7 MB de cota por resposta opaca, e um erro opaco ficaria preso
+// no CacheFirst.
 registerRoute(
-  ({ url }) => url.hostname.endsWith('tile.openstreetmap.org'),
+  ({ url }) => url.origin === OSM_TILE_ORIGIN,
   new CacheFirst({
-    cacheName: 'osm-tiles',
+    cacheName: TILE_CACHE.name,
     plugins: [
+      new CacheableResponsePlugin({ statuses: [200] }),
       new ExpirationPlugin({
-        maxEntries: 500,
-        maxAgeSeconds: 30 * 24 * 60 * 60,
+        maxEntries: TILE_CACHE.maxEntries,
+        maxAgeSeconds: TILE_CACHE.maxAgeSeconds,
         purgeOnQuotaError: true,
       }),
     ],

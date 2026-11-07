@@ -1,0 +1,198 @@
+/*
+  O mapa com a cara do app. Entra no chunk do mapa logo depois do leaflet.css (a mesma especificidade
+  vence por vir depois). Os tiles do OSM são mais saturados que a paleta: um filtro só na camada dos
+  tiles aproxima o mapa do papel do app; no escuro, uma versão invertida e apagada. Linhas e marcadores
+  usam os tokens (classes, não o `color` do Leaflet: um atributo SVG não lê `var()`).
+*/
+.leaflet-container {
+  background: var(--color-stage);
+  font-family: var(--font-ui);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.map-tiles {
+  filter: saturate(0.62) sepia(0.06) contrast(0.95) brightness(1.03);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .map-tiles {
+    filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.86) saturate(0.4);
+  }
+}
+:root[data-theme='dark'] .map-tiles {
+  filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.86) saturate(0.4);
+}
+
+/* ------------------------------------------------------------------ as linhas */
+.leaflet-container path.map-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* a borda clara por baixo da estrada: a linha se lê sobre qualquer tile, nos dois temas */
+.leaflet-container path.map-line--casing {
+  stroke: var(--color-card);
+  stroke-opacity: 0.9;
+}
+/* a rota real adiante, fina; o que já se rodou, cheio e grosso */
+.leaflet-container path.map-line--route {
+  stroke: var(--color-accent);
+  stroke-opacity: 0.62;
+}
+.leaflet-container path.map-line--driven {
+  stroke: var(--color-accent);
+  stroke-opacity: 1;
+}
+/* sem rota: um pontilhado reto, claramente diferente da estrada (nunca finge ser o caminho) */
+.leaflet-container path.map-line--straight {
+  stroke: var(--color-ink-2);
+  stroke-opacity: 0.85;
+  stroke-dasharray: 1 9;
+}
+.leaflet-container path.map-line--straight.map-line--driven {
+  stroke: var(--color-accent-ink);
+}
+/* a trilha de quem compartilha a posição: fina, na cor da pessoa (vem do `color` do Leaflet) */
+.leaflet-container path.map-line--track {
+  stroke-opacity: 0.85;
+}
+
+/* ------------------------------------------------------------------ os pinos */
+.map-pin-host {
+  background: none;
+  border: 0;
+}
+.map-pin-host:focus-visible {
+  outline: none;
+}
+.map-pin-host:focus-visible .map-pin__disc {
+  box-shadow:
+    0 0 0 3px var(--color-card),
+    0 0 0 6px var(--color-accent);
+}
+.map-pin {
+  position: relative;
+  display: grid;
+  justify-items: center;
+}
+.map-pin__disc {
+  position: relative;
+  border-radius: 9999px;
+  box-shadow:
+    0 0 0 2.5px var(--color-card),
+    0 6px 14px -4px rgb(0 0 0 / 0.45);
+}
+.map-pin__tail {
+  width: 2.5px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--color-card);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.3);
+}
+.map-pin__n {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  display: grid;
+  min-width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 9999px;
+  padding: 0 5px;
+  background: var(--color-card);
+  color: var(--color-ink);
+  font-family: var(--font-num);
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 0 0 1.5px var(--color-line);
+}
+.map-pin[data-status='done'] .map-pin__n {
+  background: var(--color-on-time);
+  color: #fff;
+  box-shadow: 0 0 0 1.5px var(--color-card);
+}
+.map-pin[data-status='skipped'] {
+  opacity: 0.55;
+  filter: grayscale(0.7);
+}
+.map-pin[data-status='next'] .map-pin__disc {
+  box-shadow:
+    0 0 0 2.5px var(--color-card),
+    0 0 0 5.5px var(--color-sunset),
+    0 6px 14px -4px rgb(0 0 0 / 0.45);
+}
+.map-pin__pulse {
+  position: absolute;
+  inset: -6px;
+  border-radius: 9999px;
+  background: rgb(232 101 58 / 0.35);
+  animation: map-pin-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+@keyframes map-pin-ping {
+  75%,
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-pin__pulse {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* ------------------------------------------------------------------ o carro de quem viaja */
+.map-car {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  pointer-events: none;
+}
+.map-car__label {
+  border-radius: 9999px;
+  padding: 1px 8px;
+  background: var(--color-hud);
+  color: var(--color-hud-ink);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ controles e atribuição */
+/* longe do canto arredondado do cartão (22 px), que cortaria o fim do texto */
+.leaflet-control-attribution.leaflet-control {
+  margin: 0 12px 10px 0;
+  border-radius: 9999px;
+  padding: 2px 10px;
+  background: color-mix(in oklab, var(--color-card) 88%, transparent);
+  color: var(--color-ink-2);
+  font-size: 12px;
+  line-height: 18px;
+}
+.leaflet-control-attribution a {
+  color: var(--color-accent-ink);
+  font-weight: 600;
+}
+.leaflet-bar.leaflet-control {
+  margin: 0 0 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px var(--color-line),
+    0 6px 16px -8px rgb(0 0 0 / 0.4);
+}
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  width: 40px;
+  height: 40px;
+  line-height: 40px;
+  background: var(--color-card);
+  color: var(--color-ink);
+  border-bottom-color: var(--color-line);
+}
+.leaflet-bar a.leaflet-disabled {
+  background: var(--color-card);
+  color: var(--color-ink-2);
+  opacity: 0.5;
+}

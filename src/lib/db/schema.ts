@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
+import type { DayWeather, HourWeather } from '@shared/weather.ts';
 import type { Database } from '@/lib/supabase/database.types.ts';
 import type { SyncTable } from './registry.ts';
 
@@ -161,6 +162,23 @@ export type UploadJob = MediaJobBase & { op: 'upload'; blob: Blob; row: Attachme
 export type RemoveJob = MediaJobBase & { op: 'remove' };
 export type MediaJob = UploadJob | RemoveJob;
 
+/**
+ * A previsão do tempo de um dia (Open-Meteo), como o aparelho a guardou: cache recalculável, só neste
+ * aparelho, nunca sincronizado. `hash` é o dos lugares e da data (muda quando uma parada muda de lugar
+ * ou de horário). `places` traz onde o dia começa e, a 50 km ou mais, onde termina; `stops`, a
+ * previsão na hora cheia de cada parada com horário escrito. Sem previsão, a lista vem vazia: nada
+ * aparece na tela, mas o dia não fica pedindo de novo.
+ */
+export type WeatherEntry = {
+  trip_day_id: string;
+  trip_id: string;
+  date: string;
+  hash: string;
+  fetched_at: string;
+  places: { role: 'start' | 'end'; lat: number; lng: number; day: DayWeather }[];
+  stops: Record<string, HourWeather & { hour: string }>;
+};
+
 export type GeocodeResult = { name: string; address: string; lat: number; lng: number };
 /** Cache das buscas de endereço (Nominatim), por consulta normalizada. */
 export type GeocodeEntry = { query: string; results: GeocodeResult[]; fetched_at: string };
@@ -173,7 +191,8 @@ export type GeocodeEntry = { query: string; results: GeocodeResult[]; fetched_at
  * arquivos dela) e nasce `uploads`, a fila de envio de fotos e documentos sem sinal. A fase 8 não
  * sobe a versão: `checklist_items`, `contacts` e `expenses` já tinham os índices de que precisa (o
  * gasto de uma reserva se acha pelo id determinístico, sem índice). Versão 4 (fase 9): `achievements`
- * ganha o índice `trip_id` (as conquistas da viagem, no filme). Caches
+ * ganha o índice `trip_id` (as conquistas da viagem, no filme). A fase 11 não sobe a versão: a store
+ * `weather` existe desde a v1, com a chave `trip_day_id`, e só ganhou o tipo (`WeatherEntry`). Caches
  * recalculáveis (`routes`, `geocode`, `travel_state`, `blobs`, `weather`) nunca sincronizam. A
  * `outbox` nunca é apagada sem ter sido enviada; a `uploads` também não, pelo mesmo motivo.
  */
@@ -195,6 +214,7 @@ export class ViajeiDb extends Dexie {
   uploads!: EntityTable<MediaJob, 'attachment_id'>;
   routes!: EntityTable<DayRoute, 'trip_day_id'>;
   travel_state!: EntityTable<TravelState, 'trip_day_id'>;
+  weather!: EntityTable<WeatherEntry, 'trip_day_id'>;
   geocode!: EntityTable<GeocodeEntry, 'query'>;
   achievements!: EntityTable<Achievement, 'id'>;
   xp_events!: EntityTable<XpEvent, 'id'>;

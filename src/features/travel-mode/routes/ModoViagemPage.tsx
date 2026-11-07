@@ -61,7 +61,10 @@ import { celebrateArrival } from '@/lib/celebrate.ts';
 import { XP_POINTS } from '@shared/constants.ts';
 import { CelebrationHost } from '@/features/progression/components/CelebrationHost.tsx';
 import { gainXp, tappedRect } from '@/features/progression/xp-gain.ts';
-import { currentDay, formatDayShort } from '@/lib/time/index.ts';
+import { currentDay, formatDayShort, hhmm } from '@/lib/time/index.ts';
+import { StopForecast } from '@/features/weather/components/StopForecast.tsx';
+import { useTripWeather } from '@/features/weather/queries.ts';
+import { daySummary, stopForecast } from '@/features/weather/rules.ts';
 import { arrive, arriveAt, depart, skip, type Undoable } from '../actions.ts';
 import { useCatchup } from '../catchup.ts';
 import { AgoraHeader } from '../components/AgoraHeader.tsx';
@@ -205,6 +208,9 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
   const state = dayState({ date: day.date }, stops, now);
   const legs = legsByStop(stops, route);
   const teamTracks = useTeamTracks(dayId, uid, members);
+  // a previsão do dia (Dexie; com rede e cache velho, a busca da viagem inteira)
+  const weather = useTripWeather(trip);
+  const forecast = weather.entries.get(dayId);
   const geo = useGeoConsent();
   const [dismissedPassed, setDismissedPassed] = useState<string[]>([]);
   // quem conta "o que aconteceu desde a última vez": a maquete (replay) ou o card; nunca os dois
@@ -443,6 +449,14 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
       ) : null}
 
       <AgoraHeader
+        forecast={
+          state.next?.time ? (
+            <StopForecast
+              forecast={stopForecast(forecast, state.next.id)}
+              at={`às ${hhmm(state.next.time)}`}
+            />
+          ) : null
+        }
         footer={
           <NowReservations
             reservations={reservationsForNow(state, reservations, now)}
@@ -534,6 +548,7 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
           onEventsOwner={setOwner}
           stopExtras={stopExtras}
           reviewPhotos={reviewPhotos}
+          weather={{ summary: daySummary(forecast), stops: forecast?.stops ?? {} }}
         />
       )}
 

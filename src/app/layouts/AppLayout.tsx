@@ -20,6 +20,7 @@ import { invitesKeys } from '@/features/trips/queries.ts';
 import { syncEngine } from '@/lib/db/sync/engine.ts';
 import { supabase } from '@/lib/supabase/client.ts';
 import { startMedia, stopMedia } from '@/lib/media/index.ts';
+import { sweepWeather } from '@/features/weather/fetch.ts';
 import { useSession } from '@/lib/supabase/session.ts';
 
 const claimed = new Set<string>();
@@ -42,6 +43,8 @@ export function AppLayout() {
     void syncEngine.start(uid);
     startMedia(uid);
     startProgress(uid);
+    // a previsão de dia que já passou e a de viagem que saiu do aparelho saem do cache
+    void sweepWeather().catch(() => undefined);
     void markFirstOpen().then(() => touchSubscription());
     return () => {
       syncEngine.stop();

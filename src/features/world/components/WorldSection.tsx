@@ -20,7 +20,7 @@ import { useElementSize } from '../hooks/useElementSize.ts';
 import { usePlace } from '../hooks/usePlace.ts';
 import { buildLayout, type WorldLayout } from '../layout.ts';
 import { MotionController, type MotionEvent } from '../motion.ts';
-import { OPENING_TIMELINE, openedKey, planOpening } from '../opening.ts';
+import { OPENING_TIMELINE, OPENING_TOTAL_MS, openedKey, planOpening } from '../opening.ts';
 import { writeRenderPref } from '../prefs.ts';
 import { tierFor } from '../quality.ts';
 import { projectNodes } from '../project.ts';
@@ -30,6 +30,8 @@ import { WorldCanvas } from '../scene/WorldCanvas.tsx';
 import { WorldScene } from '../scene/WorldScene.tsx';
 import { ListView, type WorldSlotProps } from '../WorldSlot.tsx';
 import { DayList } from './DayList.tsx';
+import { RAIN_LIKELY } from '@shared/weather.ts';
+import { WeatherChip } from './WeatherChip.tsx';
 import { HUD_BOTTOM, HUD_TOP, WorldHud, type PhotoCard, type TeamChip } from './WorldHud.tsx';
 
 /**
@@ -138,6 +140,9 @@ type StageProps = WorldSlotProps & {
   onFail: (reason: string) => void;
 };
 
+/** Quanto o chip do clima fica grande depois de o carro estacionar, antes de subir para a faixa. */
+const WEATHER_HOLD_MS = 1_200;
+
 function withoutKey<T>(record: Record<string, T>, key: string): Record<string, T> {
   return Object.fromEntries(Object.entries(record).filter(([k]) => k !== key));
 }
@@ -162,6 +167,9 @@ function WorldStage(p: StageProps) {
   const [overflow, setOverflow] = useState(0);
   const [diving, setDiving] = useState(false);
   const [opening, setOpening] = useState<Opening | null>(null);
+  // o chip do clima grande, sobre a origem: entra com o carro na abertura e sobe para a faixa de cima
+  // um pouco depois de ela acabar
+  const [weatherBig, setWeatherBig] = useState(false);
   const [decidedAt, setDecidedAt] = useState(0);
   const decided = useRef(false);
   const shown = useRef(new Set<string>());
@@ -183,6 +191,17 @@ function WorldStage(p: StageProps) {
     }
     return out;
   }, [statusKey]);
+
+  // as paradas em que a chance de chuva no horário passa de 50%: a pílula ganha a nuvem de chuva
+  const forecasts = p.weather?.stops;
+  const rainKey = state.stops
+    .filter((s) => {
+      const f = forecasts && Object.hasOwn(forecasts, s.id) ? forecasts[s.id] : undefined;
+      return (f?.rain ?? 0) > RAIN_LIKELY;
+    })
+    .map((s) => s.id)
+    .join(',');
+  const rainy = useMemo(() => new Set(rainKey === '' ? [] : rainKey.split(',')), [rainKey]);
 
   const later = useCallback((ms: number, fn: () => void) => {
     timers.current.push(setTimeout(fn, ms));
@@ -268,6 +287,8 @@ function WorldStage(p: StageProps) {
         const started: Opening = { plan: op, startedAt: now };
         runtime.setOpening(started);
         setOpening(started);
+        setWeatherBig(true);
+        later(OPENING_TOTAL_MS + WEATHER_HOLD_MS, () => setWeatherBig(false));
         motion.jumpTo(op.enter_s);
         const [carFrom, carTo] = OPENING_TIMELINE.car;
         motion.enqueue(
@@ -500,9 +521,25 @@ function WorldStage(p: StageProps) {
         onSkip={skip}
         opening={opening}
         reducedMotion={reducedMotion}
+        rainy={rainy}
       />
+      {weatherBig ? (
+        <WeatherChip
+          summary={p.weather?.summary ?? null}
+          size="big"
+          anchor={nodes[0] ? { x: nodes[0].x, y: nodes[0].y } : null}
+          reducedMotion={reducedMotion}
+        />
+      ) : null}
       <div className="pointer-events-none absolute inset-x-3 top-2 flex items-start justify-between gap-2">
-        <div>
+        <div className="flex flex-wrap items-start gap-2">
+          {!weatherBig ? (
+            <WeatherChip
+              summary={p.weather?.summary ?? null}
+              size="small"
+              reducedMotion={reducedMotion}
+            />
+          ) : null}
           {p.diag ? (
             <DiagChip
               fps={quality.fps}

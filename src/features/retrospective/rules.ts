@@ -16,6 +16,7 @@ import type {
   TripTrack,
 } from '@/lib/db/schema.ts';
 import { parseTrackPoints } from '@/features/travel-mode/track.ts';
+import { splitAtStops } from '@/lib/geo/split.ts';
 
 /**
  * A retrospectiva "Viajei!", pura: quando ela abre, os números do card final, a emenda das rotas dos
@@ -212,34 +213,7 @@ function lengthM(line: readonly LngLat[]): number {
   return m;
 }
 
-/**
- * Corta a geometria da rota nas paradas: para cada parada, o vértice mais perto dela, sempre adiante
- * do anterior. Devolve um pedaço por trecho.
- */
-export function splitAtStops(geometry: readonly LngLat[], stops: readonly LngLat[]): LngLat[][] {
-  const cuts: number[] = [];
-  let from = 0;
-  for (const p of stops) {
-    let best = from;
-    let bestD = Infinity;
-    for (let i = from; i < geometry.length; i++) {
-      const g = geometry[i];
-      if (!g) continue;
-      const d = haversineM(g, p);
-      if (d < bestD) {
-        bestD = d;
-        best = i;
-      }
-    }
-    cuts.push(best);
-    from = best;
-  }
-  const pieces: LngLat[][] = [];
-  for (let k = 0; k < cuts.length - 1; k++) {
-    pieces.push(geometry.slice(cuts[k] ?? 0, (cuts[k + 1] ?? 0) + 1));
-  }
-  return pieces;
-}
+export { splitAtStops } from '@/lib/geo/split.ts';
 
 /**
  * Os dias da viagem num caminho só, para o filme sobrevoar do início ao fim (D121). Cada dia entra

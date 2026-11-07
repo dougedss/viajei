@@ -820,3 +820,91 @@ Em todas, as 18 paradas e nenhuma a mais; ~6.050 tokens de entrada e ~3.000 de s
 - **A chave** `viajei-supabase` está na organização pessoal do Douglas no Console (workspace Default), sem data de expiração (escolha dele). A organização está vinculada ao plano Ultra dele desde 07/11/2026: US$ 200 de crédito de API por ciclo, sem acumular, e sem recarga automática. Se o crédito acabar, a API para até o ciclo seguinte e nada é cobrado; cabem ~4.700 importações do tamanho do seed por mês.
 - **A primeira medição** (run 42416818982) falhou inteira com `failed`·`bad_request`, pelo limite de uniões da saída estruturada (D129).
 - **Testes:** 715 Vitest em 91 arquivos (eram 617 em 81), 375 pgTAP (eram 343), 28 Playwright (eram 25). A tela de importar é um chunk próprio de ~48 KB (17 KB gzip), carregado só na rota.
+
+## Fase 11 · Mapa e clima (07/11/2026)
+
+O Douglas disse na abertura que não precisava esperar o ok do plano: as escolhas abaixo seguem a recomendação do prompt da fase. Depois, deixou aprovado aplicar a 0011, publicar a `send-notifications` e fazer o fast-forward na `main` sem esperar, com a CI e o laboratório no preview verdes, e rodar o laboratório na produção em seguida. O primeiro commit da fase devolveu o alvo `preview` ao laboratório (a D106, reescrita).
+
+### D141 · Os tiles nunca eram gravados (defeito da rota `osm-tiles`)
+**Contexto.** A rota do service worker existia desde a fase 2 e nunca guardou um tile. Sem `cacheWillUpdate`, o Workbox 7.4.1 só grava status 200; o Leaflet, por padrão, cria o `<img>` sem `crossorigin`, o pedido sai em no-cors e a resposta chega opaca (status 0). E o filtro por `hostname.endsWith('tile.openstreetmap.org')` aceitava qualquer subdomínio.
+**Decisão.** O `TileLayer` pede com `crossOrigin` (o OSM responde `access-control-allow-origin: *`), a rota filtra por `url.origin === 'https://tile.openstreetmap.org'` e o `CacheableResponsePlugin({ statuses: [200] })` deixa só o 200 entrar. **Nunca `[0, 200]`:** o Chrome conta uns 7 MB de cota por resposta opaca, e um erro opaco ficaria preso no `CacheFirst`. A URL, o zoom máximo (19), a atribuição e o tamanho do cache moram num lugar só (`src/lib/map/tiles.ts`), que o mapa e o service worker leem.
+**Consequência.** O e2e do projeto `pwa` e o `app_mapa` conferem pelo menos um tile no cache com status 200, e o mapa sem rede, depois de recarregar, mostra os tiles do cache.
+
+### D142 · Os 30 dias contra o `max-age`, nunca baixar antes, e o tamanho do cache
+**Contexto.** A política dos tiles do OSM diz "Offline use is not permitted" nesse servidor; as respostas trazem `max-age` de umas 25 h, `stale-while-revalidate` de 7 dias e ETag. O prompt pede `CacheFirst` de 30 dias.
+**Decisão.** O aparelho guarda só o que a pessoa já viu, e nunca baixa antes os tiles da rota nem "salva uma área". Guardar 30 dias vai além do `max-age`: é a leitura desta fase, porque o aparelho pede menos ao servidor e o mapa já visto continua lá na estrada sem sinal. A linha e os pinos vêm do Dexie e aparecem mesmo sem tile, sobre o fundo na cor do app. O limite subiu de 500 para 1.500 entradas: a viagem do seed, com cada dia aberto, duas aproximações e os níveis intermediários do voo entre os dias, passa de 300 tiles, e 500 despejariam tiles da própria viagem. Com `purgeOnQuotaError`.
+**Consequência.** Umas quatro viagens como a do seed, uns 25 MB. O número medido está na D153.
+
+### D143 · react-leaflet, a licença e os pinos por portal
+**Decisão.** `leaflet` 1.9.4 (BSD-2; a 2.0 está em beta), `react-leaflet` 5.0.0 e `@types/leaflet` 1.9.22, mais `workbox-cacheable-response` 7.4.1, todos publicados há mais de duas semanas. O react-leaflet usa a **Hippocratic-2.1**, uma licença ética que a OSI não aprovou: fica, porque é a stack aprovada; a alternativa seria o Leaflet puro numa classe, como o `WorldRuntime`. As props do `MapContainer` são imutáveis depois de montar: o primeiro enquadramento vai nelas e os seguintes num filho com `useMap()`.
+- O ícone padrão do Leaflet quebra com o Vite (os PNGs viram `data:`). Os pinos são `divIcon` cujo `html` é um elemento criado pelo próprio componente, onde o React desenha por portal: o `StopKindIcon`, o número e o estado, com a arte do app e sem `react-dom/server`.
+- A classe de um caminho do Leaflet não muda depois de criado (o `setStyle` não mexe em `className`): uma linha que troca de tipo (traço reto → rota) ou de estado (rodada) é outra linha, pela chave.
+- As cores das linhas vêm de classes CSS com os tokens: o atributo `stroke` de um SVG não lê `var()`.
+
+### D144 · A tela do mapa
+**Decisão.**
+- **Fora do Modo Viagem e não é GPS:** sem "você está aqui", sem pedir a posição, sem rota passo a passo. Entra pelo atalho "Mapa" da visão geral (oito atalhos, duas linhas de quatro) e por "Ver no mapa" na página do dia (`?dia=<id>`).
+- **Os chips:** "Viagem" e "Dia 1 · sex"… A escolha fica na URL. Abre no dia pedido; senão, durante a viagem, hoje; antes dela, o Dia 1; depois dela, a viagem inteira.
+- **"Viagem" é um traço por dia, não o `spliceTrip` (D121).** No filme, a ponte reta da noite entre um dia e o outro funciona; num mapa, ela fingiria um caminho. Cada dia desenha a própria estrada ou o pontilhado. Nessa vista os pinos ficam menores e sem número, porque a numeração recomeça a cada dia.
+- **As linhas:** a rota real do Dexie, cortada nas paradas (`splitAtStops`, que saiu da retrospectiva para `lib/geo/split.ts`), vale só se o hash dela é o das coordenadas de agora; senão conta como rota que falta. Sem rota, um traço reto pontilhado em tinta, claramente diferente da estrada. O trecho entre duas paradas concluídas é o rodado: cheio e mais grosso; o que falta, mais fino e mais claro. Uma borda clara por baixo da estrada a deixa legível sobre qualquer tile. Com rede, a tela busca as rotas que faltam (D124), pela mesma função da retrospectiva (`fetchMissingRoutes`), que agora também refaz a rota de hash velho.
+- **Os pinos:** numerados na ordem da lista do dia (as paradas sem lugar contam, para o número bater), com os estados da lista: concluída (check verde), pulada (apagada), próxima (anel laranja que pulsa, parado com reduzir movimento; só no dia de hoje), pendente. As sem coordenada viram uma linha abaixo do mapa ("2 paradas sem lugar no mapa"), com "Pôr no mapa" para a página do dia.
+- **Para quem ficou em casa:** no dia de hoje, as trilhas da própria pessoa e de quem compartilha a posição, finas, na cor de cada um, e o carro da viagem (`CarSide`) no último ponto, com "Visto às 14:02". Não é posição ao vivo: muda quando a trilha sincroniza.
+- **O enquadramento:** `fitBounds` do que está visível, com margem para os pinos, o aviso de sem internet e a atribuição; ao trocar de dia, `flyToBounds` de 0,9 s, e sem animação com reduzir movimento. O mapa é um cartão no fluxo da página, como a maquete: o cabeçalho e os chips ficam fora dele, e a página respeita a área segura embaixo.
+- **A folha do pino** (a `Sheet` do app): nome, tipo, dia e posição ("3ª parada" ou "saída"), horário, "fecha às", endereço, a previsão no horário, Google Maps e Waze (os mesmos links do roteiro) e "Ver no roteiro".
+- **O tema:** um filtro CSS só na camada dos tiles aproxima o OSM do papel do app; no escuro, a versão invertida e apagada. A atribuição fica numa pílula no canto, longe da curva do cartão, e os botões de zoom no canto oposto.
+
+### D145 · Os lugares do clima (divergência do 4.9)
+**Contexto.** O 4.9 dizia "pela primeira parada com coordenadas". Numa viagem de carro, o tempo de onde se acorda e o de onde se dorme diferem: Papanduva, no planalto, e Montenegro, no vale, num mesmo dezembro.
+**Decisão.** Puro em `_shared/weather.ts`, o mesmo no app e no aviso:
+- **Onde o dia começa e onde termina:** a primeira e a última parada viva, não pulada, com coordenada. O fim só conta a 50 km ou mais do começo, medidos nas coordenadas de verdade.
+- **Cada parada com horário escrito**, pela previsão da hora cheia mais perto (13:30 → 14:00; das 23:30 em diante, 23:00). Parada sem horário não ganha previsão por hora: nunca se inventa uma chegada.
+- **Duas casas decimais** (uns 1 km), para o mesmo lugar não sair duas vezes. Não uma: o Open-Meteo corrige a temperatura pela altitude do ponto pedido, e 10 km no planalto podem ser 500 m de altitude, uns 3°.
+- **O horizonte:** hoje até hoje + 15 no fuso de São Paulo (o Open-Meteo recusa o pedido além disso; conferido); para os dias além, "previsão a partir de" a data menos 15. O dia que passou não mostra nada.
+- **Os códigos:** a tabela atual do Open-Meteo, com o 97 (conferida na documentação), em pt-BR, com ícone (lua de noite) e uma gravidade que pesa para quem dirige: neblina sobre nuvem, chuva sobre garoa, trovoada sobre tudo. Código desconhecido tem rótulo de reserva e nunca vence um conhecido.
+- **Os textos:** o dia junta os lugares (a menor mínima, a maior máxima, a maior chance de chuva e o código mais grave). A chance de chuva só se diz a partir de 20%, em todas as telas e no aviso: abaixo disso é ruído. A pílula da maquete ganha a nuvem de chuva acima de 50%, quando chover é mais provável que não.
+
+### D146 · O clima no aparelho
+**Decisão.**
+- **Direto do navegador:** o Open-Meteo não pede chave e tem CORS aberto. O limite dele é por IP, então cada aparelho conta o seu, e nada passa pelo Supabase. **Uma chamada para a viagem inteira**, com todos os lugares dos dias do horizonte e a previsão por hora; a resposta casa com os lugares pela ordem do pedido (a latitude que volta é a do centro da grade do modelo, conferido).
+- **O cache:** `WeatherEntry` na store `weather` (a chave `trip_day_id` existe desde a v1: o Dexie fica na v4), com `trip_id`, `date`, `fetched_at`, o `hash` dos lugares e da data, os lugares do dia e a hora de cada parada. O hook (`useTripWeather`) segue o `useDayRoute`: lê o Dexie e, com rede e cache velho, busca pelo TanStack Query e grava. **Velho** é um dia do horizonte sem entrada, outro `hash` ou o prazo: **1 h durante a viagem**, porque o tempo do dia é o que importa e os modelos se refazem a cada hora; **6 h antes**, porque a previsão de daqui a dias muda devagar. A hora do que está guardado entra na chave da busca, e a busca vencida é outra busca.
+- **Sem rede**, mostra o que tem, com "atualizado às 07:40", "ontem às 18:10" ou a data. Uma falha do Open-Meteo não mexe na conectividade do app (a internet pode estar boa).
+- **O que sai:** a resposta substitui as entradas da viagem (o dia que saiu do horizonte ou ficou sem lugar sai junto); o `wipeTrip` leva o clima da viagem que saiu; e uma varredura por abertura do app tira o dia que já passou e o de viagem que não está mais no aparelho.
+- **Onde aparece:** a faixa da visão geral (ícone, máxima, mínima, chuva, "a partir de"), a página do dia ("Papanduva 26° / 15° → Nova Petrópolis 31° / 19° · chuva 60%", com o município pelos dados embutidos e, longe de qualquer centro, o nome da parada), o detalhe pequeno em cada parada com horário, a linha discreta do "Agora", a folha do pino no mapa, e na maquete o chip da abertura (entra com o carro, grande sobre a origem, e voa para a faixa de cima pelo mesmo `layoutId`; com reduzir movimento, já pequeno) e a nuvem nas pílulas. Tudo em HTML, nada na cena 3D; tudo do Dexie, sem rede. Sem previsão, nada aparece: nem traço, nem zero.
+
+### D147 · A 0011
+**Decisão.** `0011_clima.sql` recria duas funções com a mesma assinatura (os grants e o `claim_due_notifications` continuam valendo):
+- `due_notifications`, com o corpo inteiro da 0009 (a 0010 não o recriou): o `morning_briefing` ganha `last_point` (a última parada com coordenada), e o `first_point`, que era só o gancho da 0009 e ninguém lia, passa a ignorar parada pulada, como os lugares do app.
+- `lab_diagnostics`, com o `data.weather` de cada aviso do laboratório: `notifications_sent` é invisível ao client, e o laboratório confere o texto do briefing pelos fatos que a função gravou. Uma divergência do prompt, que previa a 0011 só para o `due_notifications`.
+
+**Consequência.** pgTAP `13_clima` (9 testes): o fim do dia, o dia de uma parada só, as puladas e a sem coordenada fora, o dia sem lugar, os outros fatos iguais, o diagnóstico só das linhas do laboratório e o `due_notifications` continuando só do `service_role`. O expurgo da fase 12 vira a 0012.
+
+### D148 · O clima no aviso: uma chamada, prazo, sem clima quando falha
+**Decisão.** A `send-notifications` junta os `morning_briefing` do lote que ainda não têm clima, escolhe os lugares pela regra do app (`dayEnds`, sobre `first_point` e `last_point`) e faz **uma** chamada ao Open-Meteo, só com o resumo do dia, com **prazo de 3 s** (que vale mesmo se o `fetch` ignorar o sinal). Antes de enviar, grava `data.weather` na linha de `notifications_sent`: `{ status: 'ok', places: [...] }` com os números de cada lugar, ou `{ status: 'none', reason }` com um código curto (`no_point`, `no_data`, `timeout`, `network`, `invalid`, `http_<status>`). A nova tentativa de um aviso lê o que ficou gravado: o mesmo texto, sem chamar o Open-Meteo de novo. O aviso nunca espera o clima: sem resposta, sai sem ele. O Open-Meteo vê o IP compartilhado do Supabase, que pode bater no limite; uma chamada por minuto com briefing fica muito abaixo dele.
+**O texto**, numa segunda linha (no Android recolhido aparece a primeira; no iPhone, as duas):
+- "Dia 1 de 4 · sexta" / "4 paradas · primeira saída às 07:00" / "Parcialmente nublado, 15° a 31°, chuva 60%";
+- "Dia 2 de 4 · sábado" / "1 parada · primeira parada às 09:30" / "Céu limpo, 14° a 27°";
+- sem clima, o texto de antes.
+
+**Consequência.** Os testes rodam a função com uma resposta gravada de verdade do Open-Meteo (dois lugares em lista, um em objeto) e com ele fora do ar (o prazo, a rede, 429, resposta fora do formato, o dia sem números). Um `data.weather` fora do formato vira null na leitura: o aviso sai sem clima, nunca deixa de sair.
+
+### D149 · As atribuições
+**Decisão.** "© OpenStreetMap" com link para a página de copyright, sempre visível no canto do mapa, numa pílula que nada cobre, e o prefixo do Leaflet só com o nome. O Open-Meteo (CC BY 4.0: um link junto de onde o dado aparece) vai com "Dados do tempo: Open-Meteo.com" nas telas com o detalhe: a faixa da visão geral, a página do dia e a folha do pino. O chip da maquete, as pílulas e o "Agora" contam com elas: é a leitura desta fase do "junto de onde o dado aparece", porque um link a mais no HUD de quem dirige é ruído.
+
+### D150 · Os testes sem o mundo de fora
+**Decisão.** No Playwright, o navegador inteiro roda com `--host-resolver-rules` que fazem `tile.openstreetmap.org` e `api.open-meteo.com` não resolverem: nenhum teste pede tile nem previsão de verdade, nem os que criam contextos à mão, nem o service worker. Os testes do mapa e do clima fingem os dois com `context.route` (`e2e/helpers/world.ts`: um PNG de 256 × 256 com CORS aberto, uma previsão fixa para cada lugar, e a `route-day` respondendo uma estrada), que pega também os pedidos do service worker no projeto `pwa`. O teste sem rede tira a rota dos tiles antes de ficar sem rede: o que aparece vem do cache.
+**Consequência.** `e2e/mapa.spec.ts` (pinos, linha, atribuição não coberta, folha, troca de dia, "Ver no mapa"), `e2e/mapa.pwa.spec.ts` (o tile no Cache Storage `osm-tiles` com 200 e o mapa sem rede depois de recarregar) e `e2e/clima.spec.ts` (a faixa, o resumo do dia, o detalhe da parada, uma chamada só, o "a partir de" e o "atualizado às" sem rede).
+
+### D151 · O laboratório da fase 11
+**Decisão.**
+- `app_mapa` e `app_clima`, depois do `app_importar`, numa viagem fixa do lab-a (`v5(lab-a, 'lab:mapa')`, de hoje, avisos desligados) com três paradas reais na serra, novas a cada execução (D53). O mapa abre com os tiles de verdade, num viewport de celular e num zoom só, sem arrastar (umas dezenas de tiles, dentro da política), e confere os pinos, a rota real (`route-day`), a atribuição sem nada por cima, pelo menos um tile no cache com 200 e, sem rede, depois de recarregar, os tiles do cache e o aviso. O clima confere a faixa com os números de hoje pelo Open-Meteo de verdade e, sem rede, o "atualizado às".
+- O `briefing` passou a montar o texto esperado pelos fatos que a função gravou (`data.weather`, pelo `lab_diagnostics`): com clima, a segunda linha refeita dos números; sem clima, o motivo tem de ser um dos códigos. A parada da viagem do briefing ganhou coordenada, para o servidor buscar o clima de verdade todo dia. Enquanto a função publicada ainda não grava o clima (o preview usa as funções da produção), o cenário confere o texto de antes e diz isso: a função nova se reconhece pela resposta dela, que traz o resumo `weather`.
+- Primeiro no preview da branch, depois na produção.
+
+### D152 · O que ficou fora
+- O céu da maquete mudando com o tempo (nuvens, chuva em 3D): o fps no iPhone ainda não foi medido, e a maquete mostra o dia inteiro, enquanto o tempo muda ao longo dele.
+- Baixar antes os tiles da rota ou "salvar uma área" (a política do OSM não permite).
+- Previsão para parada sem horário, para dia que já passou e alerta de tempo.
+- "Você está aqui" ou qualquer pedido de posição no mapa.
+
+### D153 · Números medidos
+Pendente: entra com o build da CI e o laboratório no preview e na produção.

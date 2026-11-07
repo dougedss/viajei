@@ -21,7 +21,7 @@ import { useTripChecklist } from '@/features/checklists/queries.ts';
 import { useTripExpenses } from '@/features/expenses/queries.ts';
 import { normalizeCar } from '@/features/garage/rules.ts';
 import { useTripDays, useTripStops } from '@/features/itinerary/queries.ts';
-import { activeStops, routeWaypoints } from '@/features/itinerary/rules.ts';
+import { activeStops } from '@/features/itinerary/rules.ts';
 import { useTripMemories } from '@/features/memories/queries.ts';
 import { asPersonColor } from '@/features/profile/queries.ts';
 import { isAchievementKey } from '@/features/progression/team.ts';
@@ -45,7 +45,7 @@ import { useThemeOverride } from '@/lib/theme.ts';
 import { readUrlFlags } from '@/lib/three/prefs.ts';
 import { ThreeBoundary } from '@/lib/three/ThreeBoundary.tsx';
 import { useSupport } from '@/lib/three/useSupport.ts';
-import { fetchDayRoute } from '@/features/itinerary/route.ts';
+import { fetchMissingRoutes } from '@/features/itinerary/route.ts';
 import type { PlaceReading } from '@/lib/geo/index.ts';
 import { ExportSheet } from '../components/ExportSheet.tsx';
 import type { FilmHandle } from '../components/FilmStage.tsx';
@@ -134,11 +134,7 @@ function useFillGaps(
     asked.current = true;
     void (async () => {
       for (const p of photos) if (!cached.has(p.id)) await mediaCache.ensure(p).catch(() => false);
-      for (const { day, stops } of days) {
-        const wps = routeWaypoints(stops).map((w) => w.lngLat);
-        if (wps.length < 2 || routes.some((r) => r.trip_day_id === day.id)) continue;
-        await fetchDayRoute(tripId, day.id, wps).catch(() => undefined);
-      }
+      await fetchMissingRoutes(tripId, days, routes);
     })();
   }, [tripId, photos, days, routes, cached]);
 }

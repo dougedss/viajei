@@ -1,9 +1,10 @@
-import { MapPinPlus, Plus } from 'lucide-react';
+import { Map as MapIcon, MapPinPlus, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useParams } from 'react-router';
 import { NotFound } from '@/app/NotFound.tsx';
 import { Splash } from '@/app/Splash.tsx';
 import { Button } from '@/components/ui/Button.tsx';
+import { ButtonLink } from '@/components/ui/ButtonLink.tsx';
 import { EmptyState } from '@/components/ui/EmptyState.tsx';
 import { PageHeader } from '@/components/ui/PageHeader.tsx';
 import { Sheet } from '@/components/ui/Sheet.tsx';
@@ -11,6 +12,10 @@ import { TextField } from '@/components/ui/TextField.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { CalendarExport } from '@/features/notifications/components/CalendarExport.tsx';
 import { useIsOwner, useTrip } from '@/features/trips/queries.ts';
+import { DayForecast } from '@/features/weather/components/DayForecast.tsx';
+import { StopForecast } from '@/features/weather/components/StopForecast.tsx';
+import { useTripWeather } from '@/features/weather/queries.ts';
+import { stopForecast } from '@/features/weather/rules.ts';
 import { useSession } from '@/lib/supabase/session.ts';
 import type { Stop, TripDay } from '@/lib/db/schema.ts';
 import { formatDayLong, formatDayShort } from '@/lib/time/index.ts';
@@ -63,6 +68,7 @@ export default function DiaPage() {
   const [removing, setRemoving] = useState<Stop | null>(null);
   const { session } = useSession();
   const isOwner = useIsOwner(trip);
+  const weather = useTripWeather(trip);
 
   if (trip === undefined || day === undefined || days === undefined) return <Splash />;
   if (trip === null || day === null) return <NotFound />;
@@ -91,6 +97,15 @@ export default function DiaPage() {
 
       <RouteCard state={routeState} />
 
+      <DayForecast weather={weather} dayId={day.id} stops={stops} />
+
+      {stops.some((s) => s.lat !== null) ? (
+        <ButtonLink to={`/viagens/${trip.id}/mapa?dia=${day.id}`} variant="secondary" size="md">
+          <MapIcon className="size-5" aria-hidden="true" />
+          Ver no mapa
+        </ButtonLink>
+      ) : null}
+
       {stops.length === 0 ? (
         <EmptyState
           icon={MapPinPlus}
@@ -112,6 +127,9 @@ export default function DiaPage() {
             onAcceptSuggestion={(stop, minutes) => void acceptTravelSuggestion(stop.id, minutes)}
             onEdit={setEditing}
             onRemove={setRemoving}
+            detail={(stop) => (
+              <StopForecast forecast={stopForecast(weather.entries.get(day.id), stop.id)} />
+            )}
           />
           <Button variant="secondary" onClick={() => setEditing('new')}>
             <Plus className="size-5" aria-hidden="true" />
