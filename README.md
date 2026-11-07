@@ -46,6 +46,8 @@ Como funciona: o executor (`scripts/lab/run.ts`) entra como dois usuários de la
 
 Em paralelo, um Chromium (perfil de Android) faz o roteiro manual no app publicado (`scripts/lab/app.ts`): entra, abre o "Agora", ativa os avisos pela folha, fecha o app, recebe no service worker o "Hora de sair" que o servidor mandou, toca em **Partiu!** na notificação (a saída chega ao servidor com o app fechado), reabre, vê "Desde a última vez", deixa a posição no destino marcar **Chegamos!**, liga e desliga o modo painel e baixa o `.ics`. Só o registro no FCM e o dedo na notificação são simulados (D55). Tudo fica nas viagens dos usuários de laboratório; nada toca as viagens reais nem os seus aparelhos. Continua manual: a entrega pela Apple e pelo FCM, o selo no ícone, Wake Lock e GPS de verdade.
 
+Desde a fase 8, um segundo Chromium entra como `lab-b` e os dois fazem também o roteiro das fases 7 e 8 (`scripts/lab/app-road.ts`): fechar as listas e ver "Pronto para partir" nos dois aparelhos, adicionar e dispensar sugestões, a missão feita pela folha "Como foi?", os `href` de ligar e WhatsApp e a emergência, o "+ Gasto" e a barra do orçamento, a reserva com print e PDF aberta sem rede, a foto sem sinal que sobe quando a rede volta e aparece no diário do outro, e "Sair" com foto pendente. Dois avisos se conferem em dois dias (`scripts/lab/armed.ts`, exceção à D53): uma execução arma a véspera e o prazo de cancelamento, o cron manda às 19h e às 10h, e a execução seguinte confere o texto e arma o próximo ciclo (D105). O laboratório testa só a produção: a fase chega a ele depois do merge (D106).
+
 | Comando                                                         | O que faz                                                                                                            |
 | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | `pnpm lab`                                                      | roda o laboratório contra a produção daqui (lê `~/.config/viajei/lab-secret`)                                        |
@@ -116,7 +118,7 @@ Nada roda neste Mac (D91). O caminho de uma fase:
 1. **CI da branch** (`.github/workflows/ci.yml`, em todo push de `fase-*`): lint, formatação, pgTAP, tipos do banco, tipos, Vitest, build e Playwright, no Supabase que a própria CI sobe.
 2. **Tipos do banco:** quando uma migration muda o schema, a CI gera o `src/lib/supabase/database.types.ts`, guarda como artefato `tipos-do-banco`, roda o resto com ele e falha no fim. Baixe e commite: `gh run download <id> -n tipos-do-banco -D src/lib/supabase`.
 3. **Hospedado:** com a CI verde e o ok, `SUPABASE_YES=1 pnpm remote:db-push` e `SUPABASE_YES=1 pnpm remote:functions-deploy`.
-4. **Laboratório:** os cenários da fase rodam no app publicado (`gh workflow run lab.yml --repo dougedss/viajei --ref <branch>`), contra a produção ou, com o bypass de automação da Vercel, contra o preview da branch antes do merge.
+4. **Merge e laboratório:** com a CI verde e a migration no hospedado, fast-forward da branch na `main` (deploy de produção). Os cenários da fase rodam no app publicado, contra a produção: todo dia às 3h07 e sob demanda (`gh workflow run lab.yml --repo dougedss/viajei`). O preview da branch não é testado (D106).
 5. **Aparelhos:** uma vez, na versão final, pelos roteiros `docs/teste-manual-fase-*.md`.
 
 ## Scripts

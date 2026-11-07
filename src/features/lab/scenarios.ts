@@ -47,6 +47,15 @@ export const LAB_SCENARIOS = {
     label: 'Payload',
     description: 'Decifra (RFC 8291), cabe em 4 KB e abre o "Agora" da viagem certa',
   },
+  vespera: {
+    label: 'Véspera',
+    description:
+      'Em dois dias: armado numa execução, chega às 19h da véspera com o que falta nas listas',
+  },
+  prazo: {
+    label: 'Prazo de cancelamento',
+    description: 'Em dois dias: armado numa execução, chega às 10h da véspera do último dia',
+  },
   app_avisos: {
     label: 'App · ativar avisos',
     description:
@@ -69,6 +78,40 @@ export const LAB_SCENARIOS = {
     label: 'App · maquete',
     description:
       'A maquete monta (WebGPU ou WebGL2) com as pílulas, e o "Rever o dia" anda até o fim',
+  },
+  app_listas: {
+    label: 'App · listas',
+    description: 'A fecha Antes e Mala e vê "Pronto para partir"; B vê tudo marcado e o selo',
+  },
+  app_contatos: {
+    label: 'App · contatos',
+    description: 'Ligar e WhatsApp nos href certos, telefone da reserva sem repetir, emergência',
+  },
+  app_agora_reserva: {
+    label: 'App · reserva no Agora',
+    description: '"Ver reserva" no "Agora" abre a reserva da próxima parada com o código',
+  },
+  app_reserva_offline: {
+    label: 'App · reserva sem rede',
+    description: 'Print e PDF sobem; sem rede, recarregar e abrir os dois do aparelho',
+  },
+  app_missoes: {
+    label: 'App · missões',
+    description:
+      'Sugestão adicionada e outra dispensada, iguais para B; missão feita na folha "Como foi?"',
+  },
+  app_memoria: {
+    label: 'App · foto sem sinal',
+    description: 'A foto aparece na hora, sobe quando a rede volta e chega ao diário de B',
+  },
+  app_gastos: {
+    label: 'App · gastos',
+    description:
+      '"+ Gasto" no Modo Viagem com a parada e a categoria; a barra do orçamento em âmbar',
+  },
+  app_sair_pendente: {
+    label: 'App · sair com pendência',
+    description: '"Sair" com uma foto sem sinal avisa o que se perderia; ficar mantém tudo',
   },
 } as const;
 

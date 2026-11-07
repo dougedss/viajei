@@ -8,6 +8,10 @@ name: Laboratório
 # O GitHub registra o cron quando este arquivo chega na main. O push que o criou (05/11, 23:48 UTC)
 # caiu num incidente do Actions e o agendamento nunca rodou; se o histórico voltar a ficar sem
 # execuções "schedule", um commit que toque este arquivo na main registra o cron de novo.
+# Desde a fase 8 o navegador também faz o roteiro das fases 7 e 8 (listas, missões, contatos, gastos,
+# reservas e fotos sem rede) e dois avisos são conferidos em dois dias (véspera e prazo): cada
+# execução confere o que a anterior armou e arma o próximo ciclo.
+# O laboratório testa só a produção: a fase chega a ele depois do merge (D106).
 on:
   schedule:
     - cron: '7 6 * * *'
@@ -24,7 +28,7 @@ jobs:
   laboratorio:
     name: avisos de ponta a ponta na produção
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
 

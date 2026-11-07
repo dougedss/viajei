@@ -12,16 +12,13 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import {
-  NOTIFICATION_KIND_KEYS,
-  type NotificationKind,
-} from '../../supabase/functions/_shared/constants.ts';
+import { NOTIFICATION_KIND_KEYS } from '../../supabase/functions/_shared/constants.ts';
 import { pushPayloadSchema } from '../../supabase/functions/_shared/notifications.ts';
 import { fromBase64Url } from '../../supabase/functions/_shared/vapid.ts';
 import { LAB_SCENARIOS, LAB_SCENARIO_KEYS } from '../../src/features/lab/scenarios.ts';
 import { uuidV5 } from '../../src/lib/ids/uuid.ts';
 import type { Json } from '../../src/lib/supabase/database.types.ts';
-import { must, ok, signIn, syncPush, type Lab, type Op } from './client.ts';
+import { must, ok, signIn, syncPush, type Op } from './client.ts';
 import {
   closeApp,
   appAvisos,
@@ -50,6 +47,10 @@ import {
   type Received,
   type TripKey,
 } from './evaluate.ts';
+import { roadScenarios, ROAD_SCENARIOS } from './app-road.ts';
+import { NOT_ARMED, runArmed } from './armed.ts';
+import { prepareRoad } from './road.ts';
+import { ensureTeamMember, kindsOnly, log, sleep, type Session } from './session.ts';
 import { ensureLocalLab, probeReceiver } from './setup-lib.ts';
 import {
   decryptWebPush,
@@ -63,12 +64,6 @@ function subscriptionJsonFor(endpoint: string, keys: SubscriptionKeys) {
   return { endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth };
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const log = (msg: string) => {
-  console.log(`[lab ${new Date().toISOString().slice(11, 19)}] ${msg}`);
-};
-
-type Session = { client: Lab; uid: string };
 type Ids = {
   trips: Record<TripKey, string>;
   days: Record<TripKey, string>;
@@ -84,10 +79,6 @@ type Subs = {
   /** a assinatura que o navegador cria pela folha de avisos (sem id: nasce pelo app) */
   app: Omit<Sub, 'id'> | null;
 };
-
-function kindsOnly(...on: NotificationKind[]): Record<string, boolean> {
-  return Object.fromEntries(NOTIFICATION_KIND_KEYS.map((k) => [k, on.includes(k)]));
-}
 
 const STOP_TIME: Record<TripKey, (p: LabPlan) => string> = {
   departure: (p) => p.times.departure,
@@ -107,47 +98,6 @@ async function idsFor(aUid: string, today: string): Promise<Ids> {
     stops[k] = randomUUID();
   }
   return { trips, days, stops, destination: randomUUID() };
-}
-
-/** B entra no time da viagem "time": convite de A, claim e accept de B. Idempotente. */
-async function ensureTeamMember(a: Session, b: Session, tripId: string): Promise<void> {
-  const members = must(
-    await a.client
-      .from('trip_members')
-      .select('id, user_id, status, deleted_at')
-      .eq('trip_id', tripId),
-    'membros do time',
-  );
-  if (
-    members.some((m) => m.user_id === b.uid && m.status === 'accepted' && m.deleted_at === null)
-  ) {
-    return;
-  }
-  const email = LAB_USERS.b.email;
-  const inviteId = await uuidV5(tripId, `invite:${email}`);
-  const invite = members.find((m) => m.id === inviteId);
-  if (!invite) {
-    await syncPush(a.client, [
-      {
-        table: 'trip_members',
-        id: inviteId,
-        op: 'upsert',
-        values: {
-          trip_id: tripId,
-          invited_email: email,
-          role: 'member',
-          status: 'pending',
-          invited_by: a.uid,
-        },
-      },
-    ]);
-  } else if (invite.deleted_at !== null) {
-    await syncPush(a.client, [
-      { table: 'trip_members', id: inviteId, op: 'patch', values: { deleted_at: null } },
-    ]);
-  }
-  ok(await b.client.rpc('claim_invites'), 'claim_invites');
-  ok(await b.client.rpc('accept_invite', { p_member_id: inviteId }), 'accept_invite');
 }
 
 async function newSub(): Promise<Omit<Sub, 'id'>> {
@@ -354,7 +304,8 @@ async function prepare(
 
   // assinaturas novas; as de execuções anteriores saem
   ok(
-    await a.client.from('push_subscriptions').delete().eq('user_id', a.uid),
+    // as armadas (véspera e prazo) ficam: elas esperam o aviso de amanhã
+    await a.client.from('push_subscriptions').delete().eq('user_id', a.uid).or(NOT_ARMED),
     'limpar assinaturas A',
   );
   ok(
@@ -496,7 +447,7 @@ async function finalize(a: Session, b: Session, ids: Ids | null): Promise<void> 
     );
   }
   await step('apagar assinaturas', async () => {
-    ok(await a.client.from('push_subscriptions').delete().eq('user_id', a.uid), 'A');
+    ok(await a.client.from('push_subscriptions').delete().eq('user_id', a.uid).or(NOT_ARMED), 'A');
     ok(await b.client.from('push_subscriptions').delete().eq('user_id', b.uid), 'B');
   });
 }
@@ -596,11 +547,17 @@ async function main(): Promise<number> {
   const checks: Check[] = [];
   let ids: Ids | null = null;
   let app: App | null = null;
+  // os avisos de dois dias primeiro: conferir o que a execução anterior armou e armar o próximo
+  const armed = await runArmed(cfg, a);
+  checks.push(...armed.checks);
+  log(`armados: ${armed.checks.map((c) => `${c.scenario} ${c.status}`).join(', ')}`);
+  const pending = (keys: readonly Check['scenario'][]) =>
+    keys.filter((k) => !checks.some((c) => c.scenario === k));
   const planned = planRun(new Date());
   try {
     if ('skip' in planned) {
       checks.push(
-        ...LAB_SCENARIO_KEYS.map((scenario) => ({
+        ...pending(LAB_SCENARIO_KEYS).map((scenario) => ({
           scenario,
           status: 'skip' as const,
           latency_ms: null,
@@ -634,7 +591,7 @@ async function main(): Promise<number> {
           data: {},
         });
         checks.push(
-          ...LAB_SCENARIO_KEYS.filter((s) => s !== 'preparo').map((scenario) => ({
+          ...pending(LAB_SCENARIO_KEYS.filter((s) => s !== 'preparo')).map((scenario) => ({
             scenario,
             status: 'skip' as const,
             latency_ms: null,
@@ -672,7 +629,10 @@ async function main(): Promise<number> {
             `app: ${appChecks[0]?.status === 'pass' ? 'avisos ativados pelo navegador' : (appChecks[0]?.detail ?? '')}`,
           );
         }
-        const received = await waitAndCollect(a, b, subs, plan);
+        // um aviso armado que vencer no meio desta execução não é desta execução
+        const received = (await waitAndCollect(a, b, subs, plan)).filter(
+          (r) => !armed.tripIds.has(r.payload?.notification.data.tripId ?? ''),
+        );
         const after = must(
           await a.client
             .from('push_subscriptions')
@@ -740,6 +700,45 @@ async function main(): Promise<number> {
           );
         } else {
           appChecks.push(...APP_SCENARIOS.map((s) => skipped(s, 'Sem navegador nesta execução.')));
+        }
+        // o roteiro das fases 7 e 8: as viagens "listas" e "estrada" e os dois aparelhos
+        if (app) {
+          try {
+            const road = await prepareRoad(a, b, plan);
+            log('preparo das listas e da estrada pronto');
+            appChecks.push(
+              ...(await roadScenarios({
+                app,
+                a,
+                road,
+                peer: {
+                  email: LAB_USERS.b.email,
+                  password: await derivePassword(cfg.secret, LAB_USERS.b.email),
+                },
+              })),
+            );
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            const [first, ...rest] = ROAD_SCENARIOS;
+            appChecks.push(
+              {
+                scenario: first,
+                status: 'fail',
+                latency_ms: null,
+                detail: `Preparo das listas e da estrada: ${message}`.slice(0, 900),
+                data: {},
+              },
+              ...rest.map((s) => skipped(s, 'O preparo das listas e da estrada falhou.')),
+            );
+          }
+          log(
+            `roteiro: ${appChecks
+              .slice(-ROAD_SCENARIOS.length)
+              .map((c) => `${c.scenario} ${c.status}`)
+              .join(', ')}`,
+          );
+        } else {
+          appChecks.push(...ROAD_SCENARIOS.map((s) => skipped(s, 'Sem navegador nesta execução.')));
         }
         checks.push(...appChecks);
       }

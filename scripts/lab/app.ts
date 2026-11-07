@@ -47,7 +47,45 @@ export type App = {
 };
 
 type Step = { step: string; ok: boolean; detail?: string };
-const TIMEOUT = 20_000;
+export const TIMEOUT = 20_000;
+
+/** O perfil de aparelho dos dois contextos: Pixel 7, pt-BR, fuso de São Paulo. */
+const DEVICE = {
+  ...devices['Pixel 7'],
+  locale: 'pt-BR',
+  timezoneId: 'America/Sao_Paulo',
+} as const;
+
+/** Entrar pela tela de entrar, como uma pessoa. */
+export async function signInPage(
+  page: Page,
+  appUrl: string,
+  email: string,
+  password: string,
+): Promise<void> {
+  await page.goto(`${appUrl}/entrar`);
+  await page.getByLabel('E-mail').fill(email);
+  await page.getByLabel('Senha', { exact: true }).fill(password);
+  await page.getByRole('button', { name: 'Entrar' }).click();
+  await page.waitForURL((u) => !u.pathname.startsWith('/entrar'));
+}
+
+/**
+ * Um segundo aparelho no mesmo navegador (o lab-b): outro contexto, outro Dexie, outra sessão. Sem
+ * push nem posição: ele só olha o que o sync trouxe.
+ */
+export async function openPeer(
+  browser: Browser,
+  appUrl: string,
+  email: string,
+  password: string,
+): Promise<{ context: BrowserContext; page: Page }> {
+  const context = await browser.newContext({ ...DEVICE, permissions: [] });
+  const page = await context.newPage();
+  page.setDefaultTimeout(TIMEOUT);
+  await signInPage(page, appUrl, email, password);
+  return { context, page };
+}
 
 /** O `PushManager` do app passa a falar com o receptor do laboratório; a folha de compartilhar some (o .ics vira download). */
 function initScript(sub: AppTarget['subscription']): string {
@@ -76,9 +114,7 @@ export async function openApp(target: AppTarget): Promise<App> {
   // canal "chromium": o headless novo, o Chrome inteiro (o headless shell não tem notificações)
   const browser = await chromium.launch({ channel: 'chromium' });
   const context = await browser.newContext({
-    ...devices['Pixel 7'],
-    locale: 'pt-BR',
-    timezoneId: 'America/Sao_Paulo',
+    ...DEVICE,
     geolocation: target.destination,
     // nenhuma permissão de saída: como num aparelho de verdade, elas só existem depois do toque
     permissions: [],
@@ -118,7 +154,7 @@ function result(scenario: LabScenario, steps: Step[], ok: string, startedAt: num
 }
 
 /** Roda os passos em ordem; o primeiro que falha para o cenário e deixa um print. */
-async function runSteps(
+export async function runSteps(
   app: App,
   scenario: LabScenario,
   ok: string,
@@ -161,11 +197,7 @@ export function appAvisos(app: App): Promise<Check> {
       [
         'entrar',
         async () => {
-          await page.goto(`${target.appUrl}/entrar`);
-          await page.getByLabel('E-mail').fill(target.email);
-          await page.getByLabel('Senha', { exact: true }).fill(target.password);
-          await page.getByRole('button', { name: 'Entrar' }).click();
-          await page.waitForURL((u) => !u.pathname.startsWith('/entrar'));
+          await signInPage(page, target.appUrl, target.email, target.password);
         },
       ],
       [

@@ -599,3 +599,24 @@ Um pull do Realtime que encontra o lock ocupado pede um ciclo completo. `syncNow
 **Contexto.** Sem stack local (D91), `supabase gen types` não roda aqui.
 **Decisão.** A CI gera o `database.types.ts` no Supabase dela; se mudou, guarda como artefato `tipos-do-banco`, roda tipos, Vitest, build e Playwright **com o arquivo gerado** e falha só no fim. O arquivo é baixado (`gh run download`) e commitado. As tabelas novas entram à mão primeiro, só para os tipos fecharem localmente.
 **Consequência.** Uma volta da CI diz tudo, em vez de parar no primeiro passo.
+
+### D105 · O laboratório das fases 7 e 8, e a exceção à D53
+**Contexto.** Pela D91, o laboratório é o teste de aceitação na produção; as fases 7 e 8 ainda não tinham cenários nele. Dois avisos (a véspera às 19h e o prazo de cancelamento às 10h) só se conferem de verdade com horas de espera, e a D53 deixava tudo em repouso entre execuções.
+**Decisão.**
+- O Douglas aprovou em 07/11/2026 os cenários da fase 7 junto com os da fase 8.
+- Duas viagens fixas novas, com A e B no time e os avisos desligados: `listas` (começa em 3 dias; itens novos a cada execução) e `estrada` (hoje, orçamento de R$ 100, com contato, reservas e paradas novas a cada execução). Anexos de execuções anteriores saem do Storage no preparo (D77).
+- Um segundo navegador, como `lab-b`, faz o lado do time. Cenários: `app_listas`, `app_contatos`, `app_agora_reserva`, `app_reserva_offline`, `app_missoes`, `app_memoria`, `app_gastos`, `app_sair_pendente`. `app_memoria`, `app_gastos` e `app_sair_pendente` dependem do Chegamos! do `app_missoes` e são pulados com o motivo se ele falhar.
+- **Exceção à D53:** `vespera` e `prazo` deixam, de uma execução para a outra, uma viagem e uma assinatura de laboratório vivas, só com aquele tipo de aviso ligado. Cada execução primeiro confere o que a anterior armou (texto, contagens, destino do toque e atraso até 2 min); depois desarma e arma o próximo ciclo. Se o aviso ainda não venceu (o agendamento do GitHub atrasa até 8 h), o cenário é pulado e a armação fica.
+- As chaves da assinatura armada são derivadas do `LAB_SECRET` e do rótulo do ciclo (`HMAC` como escalar da P-256, o ponto público pelo ECDH do Node): a execução seguinte refaz as mesmas chaves e decifra a caixa. Nenhum segredo fica guardado em lugar nenhum.
+
+**Consequência.** O job vai a até 30 min. Entre execuções há no máximo duas assinaturas de laboratório e dois avisos por dia, ambos esperados.
+
+### D106 · O laboratório testa a produção, depois do merge
+**Contexto.** O preview da Vercel de cada branch fica atrás do login da Vercel. Para o laboratório testar a branch antes do merge, ele precisaria do "Protection Bypass for Automation" (um segredo gerado no painel) e de um segundo alvo no `lab.yml` e nos scripts.
+**Decisão.** O Douglas não vai configurar o bypass (07/11/2026). O laboratório testa só a produção: a fase chega a ele depois do merge, e o agendamento diário segue como alarme. O alvo `preview` saiu do `lab.yml` e dos scripts antes de chegar à `main`, porque código que nunca roda nunca é testado: um caminho que dependesse de um segredo que ninguém vai gravar apodreceria em silêncio.
+**Consequência.** O portão antes do merge é a CI da branch. O laboratório confirma na produção logo depois do fast-forward, com a migration da fase já no hospedado, porque o banco é o mesmo. Em 07/11 duas execuções chegaram a rodar contra o preview, com um secret `VERCEL_AUTOMATION_BYPASS_SECRET` que estava gravado no repositório. Elas acharam a barra de ferramentas da Vercel cobrindo um botão, coisa que só existe no preview, e o defeito do motor de sync da D109. O secret ficou sem uso.
+
+### D107 · Números medidos
+- Chunks do build da CI: listas 23,4 KB (8,5 KB gzip), contatos 12,1 KB (4,8 KB gzip), gastos 10,6 KB (4,4 KB gzip), visão geral 13,4 KB (5,4 KB gzip). O Modo Viagem ficou em 51,6 KB (17,7 KB gzip), quase igual: a folha de gasto e as missões da parada vêm em chunks compartilhados. O chunk principal foi de 558,5 KB para 561,6 KB; o precache, de 122 para 141 arquivos e 5,54 MB.
+- Testes: 538 Vitest em 75 arquivos (eram 492), 284 pgTAP (eram 219), 22 Playwright, todos rodando (eram 16 e 1 pulado; o do convite já aceito rodou desta vez). CI verde na `fase-8` em 8 min 41 s.
+- A primeira CI da branch gerou o `database.types.ts` igual ao escrito à mão: o artefato `tipos-do-banco` não precisou ser baixado.
