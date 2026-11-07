@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase/client.ts';
 import { connectivity, isNetworkError } from '../connectivity.ts';
-import { onMutate } from '../mutate.ts';
+import { onMutate, setOfflineProbe } from '../mutate.ts';
 import type { PushOp, PushResult } from '../outbox.ts';
 import type { SyncTable } from '../registry.ts';
 import { db, syncKeys } from '../schema.ts';
@@ -205,6 +205,8 @@ export async function start(userId: string): Promise<void> {
     await db.open();
   }
   await db.sync_state.put({ key: syncKeys.uid, value: userId });
+  // a marca "sem sinal" da outbox segue a conectividade real (requisição que falhou), não só o navegador
+  setOfflineProbe(() => !connectivity.isOnline());
   await supabase.realtime.setAuth();
   if (gen !== generation) return; // parado enquanto preparava
 

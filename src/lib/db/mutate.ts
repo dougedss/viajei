@@ -11,6 +11,17 @@ function tableOf(table: SyncTable): EntityTable<AnyRow, 'id'> {
   return db.table(table);
 }
 
+/**
+ * Diz se o app está sem sinal no momento da escrita (a marca `offline` da outbox). O app troca pela
+ * conectividade real (`connectivity.isOnline`, que sabe da requisição que falhou); o service worker,
+ * que não carrega o React, fica com o `navigator.onLine`.
+ */
+let offlineProbe: () => boolean = () => typeof navigator !== 'undefined' && !navigator.onLine;
+
+export function setOfflineProbe(probe: () => boolean): void {
+  offlineProbe = probe;
+}
+
 type Listener = (table: SyncTable) => void;
 const listeners = new Set<Listener>();
 
@@ -49,6 +60,7 @@ function newOp(
     values,
     versions: versionsFor(values, now),
     updated_at: now,
+    offline: offlineProbe(),
     state: 'pending',
     attempts: 0,
     next_at: 0,
@@ -73,6 +85,28 @@ export const mutate = {
     await db.transaction('rw', [table, 'outbox'], async () => {
       await tableOf(table).put({ ...row, synced_at: null, updated_at: now });
       await db.outbox.add(op);
+    });
+    notify(table);
+  },
+
+  /**
+   * Várias linhas novas da mesma tabela numa transação e com um aviso só: a progressão grava de uma
+   * vez tudo o que a derivação achou (na primeira, dezenas de eventos de XP).
+   */
+  async insertMany<T extends SyncTable>(
+    table: T,
+    rows: readonly Omit<RowOf<T>, 'synced_at'>[],
+  ): Promise<void> {
+    if (rows.length === 0) return;
+    const now = new Date().toISOString();
+    await db.transaction('rw', [table, 'outbox'], async () => {
+      for (const row of rows) {
+        const values = Object.fromEntries(
+          Object.entries(row).filter(([col]) => !SERVER_COLUMNS.has(col) && col !== 'updated_at'),
+        );
+        await tableOf(table).put({ ...row, synced_at: null, updated_at: now });
+        await db.outbox.add(newOp(table, row, 'upsert', values, now));
+      }
     });
     notify(table);
   },

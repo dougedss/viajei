@@ -27,6 +27,16 @@ export type ChecklistItem = LocalRow<Tables['checklist_items']['Row']>;
 export type Contact = LocalRow<Tables['contacts']['Row']>;
 export type Expense = LocalRow<Tables['expenses']['Row']>;
 
+/**
+ * Linha somente-anexar (conquistas e XP): não tem `field_versions` nem `updated_at` no banco, porque
+ * nunca é editada; o id determinístico é o que faz duas escritas do mesmo fato caírem na mesma linha.
+ */
+export type AppendRow<T extends { synced_at: string }> = Omit<T, 'synced_at'> & {
+  synced_at: string | null;
+};
+export type Achievement = AppendRow<Tables['achievements']['Row']>;
+export type XpEvent = AppendRow<Tables['xp_events']['Row']>;
+
 export type RowOf<T extends SyncTable> = {
   trips: Trip;
   trip_members: TripMember;
@@ -40,6 +50,8 @@ export type RowOf<T extends SyncTable> = {
   checklist_items: ChecklistItem;
   contacts: Contact;
   expenses: Expense;
+  achievements: Achievement;
+  xp_events: XpEvent;
 }[T];
 
 export type OutboxState = 'pending' | 'failed';
@@ -54,6 +66,12 @@ export type OutboxOp = {
   /** hora da edição de cada coluna tocada, do client */
   versions: Record<string, string>;
   updated_at: string;
+  /**
+   * A escrita nasceu sem sinal (a conectividade do app dizia offline no momento da `mutate`). Quando
+   * uma operação assim é aceita pelo servidor, o aparelho guarda o fato da conquista `offline_hero`
+   * ("algo marcado sem sinal chegou ao time"). Operações antigas, de antes da fase 9, não têm o campo.
+   */
+  offline?: boolean;
   state: OutboxState;
   attempts: number;
   /** epoch ms a partir do qual pode tentar de novo (backoff); 0 = já */
@@ -154,7 +172,8 @@ export type GeocodeEntry = { query: string; results: GeocodeResult[]; fetched_at
  * `geocode`. Versão 3 (fase 7): `blobs` ganha o índice `trip_id` (a viagem que sai leva os
  * arquivos dela) e nasce `uploads`, a fila de envio de fotos e documentos sem sinal. A fase 8 não
  * sobe a versão: `checklist_items`, `contacts` e `expenses` já tinham os índices de que precisa (o
- * gasto de uma reserva se acha pelo id determinístico, sem índice). Caches
+ * gasto de uma reserva se acha pelo id determinístico, sem índice). Versão 4 (fase 9): `achievements`
+ * ganha o índice `trip_id` (as conquistas da viagem, no filme). Caches
  * recalculáveis (`routes`, `geocode`, `travel_state`, `blobs`, `weather`) nunca sincronizam. A
  * `outbox` nunca é apagada sem ter sido enviada; a `uploads` também não, pelo mesmo motivo.
  */
@@ -177,6 +196,8 @@ export class ViajeiDb extends Dexie {
   routes!: EntityTable<DayRoute, 'trip_day_id'>;
   travel_state!: EntityTable<TravelState, 'trip_day_id'>;
   geocode!: EntityTable<GeocodeEntry, 'query'>;
+  achievements!: EntityTable<Achievement, 'id'>;
+  xp_events!: EntityTable<XpEvent, 'id'>;
   outbox!: EntityTable<OutboxOp, 'seq', OutboxInsert>;
   sync_state!: EntityTable<SyncStateEntry, 'key'>;
 
@@ -213,6 +234,9 @@ export class ViajeiDb extends Dexie {
       blobs: 'attachment_id, trip_id, last_used_at',
       uploads: 'attachment_id, trip_id, state',
     });
+    this.version(4).stores({
+      achievements: 'id, user_id, trip_id',
+    });
   }
 
   /** A tabela de uma linha sincronizada, pelo nome (tipada por `RowOf`). */
@@ -229,4 +253,6 @@ export const syncKeys = {
   uid: 'uid',
   userCursor: 'cursor:user',
   tripCursor: (tripId: string) => `cursor:trip:${tripId}`,
+  /** a primeira escrita feita sem sinal que o servidor aceitou: { at, trip_id } (offline_hero) */
+  offlineSynced: 'progress:offline-synced',
 } as const;

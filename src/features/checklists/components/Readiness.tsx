@@ -7,7 +7,10 @@ import { Button } from '@/components/ui/Button.tsx';
 import { ButtonLink } from '@/components/ui/ButtonLink.tsx';
 import { Ring } from '@/components/ui/Ring.tsx';
 import { Sheet } from '@/components/ui/Sheet.tsx';
-import { normalizeCar } from '@/features/garage/rules.ts';
+import { useToast } from '@/components/ui/toast-context.ts';
+import { saveCar } from '@/features/garage/actions.ts';
+import { decide, normalizeCar } from '@/features/garage/rules.ts';
+import { useTeamProgress } from '@/features/progression/useTeamProgress.ts';
 import { audio } from '@/lib/audio/index.ts';
 import { confettiBurst, vibrate } from '@/lib/celebrate.ts';
 import { db, type ChecklistItem, type Trip } from '@/lib/db/schema.ts';
@@ -129,6 +132,8 @@ export function ReadyCelebration({
   const open = !closed && row != null && row.value >= since;
   const close = () => setClosed(true);
 
+  const team = useTeamProgress(trip.id);
+  const toast = useToast();
   const days = daysUntil(today, trip.start_date);
   const when = days <= 1 ? 'na véspera da estrada' : `a ${days} dias da estrada`;
   const car = normalizeCar(trip);
@@ -136,6 +141,19 @@ export function ReadyCelebration({
     ...trip,
     car_accessories: [...car.accessories, 'rack', 'box'],
   });
+  // esta festa é a da conquista "Pronto para partir" (fase 9): a mala já vale, mesmo antes de a
+  // derivação gravá-la; ela vai no rack, que chega com a primeira parada concluída
+  const ready = { ...team, achievements: new Set([...team.achievements, 'ready_to_go' as const]) };
+  const outcome = car.accessories.includes('box')
+    ? null
+    : decide(car, car, { kind: 'accessory', key: 'box' }, ready);
+  const use = () => {
+    if (outcome?.kind !== 'trip') return;
+    void saveCar(trip.id, outcome.patch)
+      .then(() => toast.show({ title: 'Mala de teto no carro da viagem', kind: 'ok' }))
+      .catch(() => toast.show({ title: 'Não deu para pôr no carro', kind: 'late' }));
+    close();
+  };
   return (
     <Sheet open={open} onClose={close} title="Pronto para partir">
       <div className="grid gap-4">
@@ -145,14 +163,26 @@ export function ReadyCelebration({
           label="O carro da viagem com a mala de teto"
         />
         <p className="text-[17px] leading-snug">
-          Antes e Mala completas, {when}. A mala de teto é a recompensa: ela chega ao carro com as
-          conquistas.
+          Antes e Mala completas, {when}. A mala de teto é a recompensa.
+          {outcome?.kind === 'preview'
+            ? ' Ela vai no rack, que chega com a primeira parada concluída.'
+            : ''}
         </p>
         <div className="grid gap-2">
+          {outcome?.kind === 'trip' ? (
+            <Button size="lg" onClick={use}>
+              Usar no carro
+            </Button>
+          ) : null}
           <ButtonLink to={`/viagens/${trip.id}/garagem`} variant="secondary" size="md">
             Ver a garagem
           </ButtonLink>
-          <Button size="lg" onClick={close}>
+          {/* "Fechar" sempre: a mala continua liberada na garagem */}
+          <Button
+            variant={outcome?.kind === 'trip' ? 'secondary' : 'primary'}
+            size="lg"
+            onClick={close}
+          >
             Fechar
           </Button>
         </div>

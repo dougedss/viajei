@@ -53,10 +53,18 @@ export async function pushOutbox(
       return outcome;
     }
     const resolution = resolveResults(batch, results);
-    await db.transaction('rw', db.outbox, async () => {
+    await db.transaction('rw', db.outbox, db.sync_state, async () => {
       if (resolution.done.length > 0) await db.outbox.bulkDelete(resolution.done);
       for (const f of resolution.failed) {
         await db.outbox.update(f.seq, { state: 'failed', last_error: f.error, next_at: 0 });
+      }
+      // a primeira escrita sem sinal que chegou ao servidor: a hora do envio e a viagem dela
+      const first = resolution.offline[0];
+      if (first && !(await db.sync_state.get(syncKeys.offlineSynced))) {
+        await db.sync_state.put({
+          key: syncKeys.offlineSynced,
+          value: JSON.stringify({ at: new Date(now).toISOString(), trip_id: first.trip_id }),
+        });
       }
     });
     outcome.done += resolution.done.length;

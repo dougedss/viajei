@@ -45,7 +45,11 @@ export type Road = {
 const TABLES_TO_CLEAN = ['checklist_items', 'contacts', 'reservations', 'expenses'] as const;
 
 /** Lápide em tudo o que sobrou das execuções anteriores, e os arquivos fora do Storage (D77). */
-async function clean(a: Session, trips: readonly string[], keepDays: readonly string[]) {
+export async function clean(
+  a: Session,
+  trips: readonly string[],
+  keepDays: readonly string[],
+): Promise<void> {
   const removedAt = new Date().toISOString();
   const tomb =
     (table: string) =>

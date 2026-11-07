@@ -36,3 +36,33 @@ export async function deliverFile(
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
   return 'downloaded';
 }
+
+/**
+ * Arquivos binários gerados no aparelho (o vídeo e os cards da retrospectiva): a folha de compartilhar
+ * com os arquivos, quando o aparelho aceita (`canShare({ files })`); sem ela, um download por arquivo.
+ * Chame de dentro de um toque: o Safari só abre a folha com o gesto da pessoa.
+ */
+export async function deliverFiles(files: readonly File[], title: string): Promise<FileDelivery> {
+  const nav: ShareNavigator = navigator;
+  if (files.length > 0 && nav.share && nav.canShare?.({ files: [...files] })) {
+    try {
+      await nav.share({ files: [...files], title });
+      return 'shared';
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return 'cancelled';
+      // sem a folha (tipo não aceito, gesto perdido): cai no download
+    }
+  }
+  for (const file of files) {
+    const url = URL.createObjectURL(file);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file.name;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  }
+  return 'downloaded';
+}

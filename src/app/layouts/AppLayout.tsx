@@ -12,6 +12,8 @@ import {
 } from '@/features/notifications/sw-messages.ts';
 import { UpdatePrompt } from '@/features/pwa/components/UpdatePrompt.tsx';
 import { asPersonColor, useProfile } from '@/features/profile/queries.ts';
+import { XpGainHost } from '@/features/progression/components/XpGainHost.tsx';
+import { startProgress, stopProgress } from '@/features/progression/engine.ts';
 import { SyncChip } from '@/features/sync/components/SyncChip.tsx';
 import { SyncNotices } from '@/features/sync/components/SyncNotices.tsx';
 import { invitesKeys } from '@/features/trips/queries.ts';
@@ -23,7 +25,8 @@ import { useSession } from '@/lib/supabase/session.ts';
 const claimed = new Set<string>();
 
 /**
- * Casca do app autenticado. Liga o motor de sync para o usuário da sessão (e desliga ao sair),
+ * Casca do app autenticado. Liga o motor de sync, a fila de fotos e o motor de progressão para o
+ * usuário da sessão (e desliga ao sair),
  * reivindica os convites do e-mail confirmado uma vez por sessão, e mostra o estado do sync.
  */
 export function AppLayout() {
@@ -38,10 +41,12 @@ export function AppLayout() {
     if (!uid) return;
     void syncEngine.start(uid);
     startMedia(uid);
+    startProgress(uid);
     void markFirstOpen().then(() => touchSubscription());
     return () => {
       syncEngine.stop();
       stopMedia();
+      stopProgress();
     };
   }, [uid]);
 
@@ -78,6 +83,7 @@ export function AppLayout() {
       </main>
       <UpdatePrompt />
       <SyncNotices />
+      <XpGainHost />
     </div>
   );
 }

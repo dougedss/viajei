@@ -1,17 +1,28 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useId, type ReactNode } from 'react';
+import { changeOpenSheets } from './sheet-stack.ts';
 
 type Props = {
   open: boolean;
   onClose: () => void;
   title: string;
   description?: string;
+  /**
+   * A folha de comemoração (fase 9) não conta como "outra folha aberta": ela é quem espera as outras
+   * fecharem para aparecer.
+   */
+  celebration?: boolean;
   children: ReactNode;
 };
 
 /** Folha de baixo: a folha de memória, confirmações e formulários curtos. Esc e toque no fundo fecham. */
-export function Sheet({ open, onClose, title, description, children }: Props) {
+export function Sheet({ open, onClose, title, description, celebration = false, children }: Props) {
   const titleId = useId();
+  useEffect(() => {
+    if (!open || celebration) return;
+    changeOpenSheets(1);
+    return () => changeOpenSheets(-1);
+  }, [open, celebration]);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {

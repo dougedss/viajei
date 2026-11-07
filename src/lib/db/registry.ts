@@ -67,6 +67,12 @@ export const SYNC_TABLES = {
   expenses: { scope: 'trip', rank: 55, children: [] },
   /** preferências de aviso: da pessoa (escopo user), uma linha por viagem; chega pelo pull do usuário */
   notification_prefs: { scope: 'user', rank: 25, children: [] },
+  /**
+   * Conquistas e XP: somente-anexar, da pessoa (escopo user), por último no push (90). As próprias
+   * chegam pelo pull do usuário; as do time, pelo pull da viagem (C6, só as que têm o trip_id dela).
+   */
+  achievements: { scope: 'user', rank: 90, children: [] },
+  xp_events: { scope: 'user', rank: 90, children: [] },
 } as const satisfies Record<
   string,
   { scope: SyncScope; rank: number; children: readonly unknown[] }

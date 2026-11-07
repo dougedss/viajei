@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { rankOf, type SyncTable } from './registry.ts';
+import { rankOf, scopeOf, type SyncTable } from './registry.ts';
 import type { OutboxOp } from './schema.ts';
 
 /** Uma operação como vai no lote do `sync_push`, com os `seq` da outbox que ela resume. */
@@ -13,6 +13,10 @@ export type PushOp = {
   updated_at: string;
   /** operações da outbox fundidas nesta */
   sources: number[];
+  /** a viagem da linha (null nas de escopo `user`), da primeira operação fundida */
+  trip_id?: string | null;
+  /** alguma das operações fundidas nasceu sem sinal */
+  offline?: boolean;
 };
 
 /** A resposta do `sync_push`, validada antes de decidir o destino de cada operação. */
@@ -51,9 +55,12 @@ export function coalesce(ops: readonly OutboxOp[]): PushOp[] {
         versions: { ...op.versions },
         updated_at: op.updated_at,
         sources: [op.seq],
+        trip_id: op.trip_id,
+        offline: op.offline === true,
       });
       continue;
     }
+    if (op.offline === true) prev.offline = true;
     prev.op = prev.op === 'upsert' || op.op === 'upsert' ? 'upsert' : 'patch';
     for (const [col, value] of Object.entries(op.values)) {
       const mine = op.versions[col];
@@ -98,7 +105,21 @@ export type Resolution = {
   failed: { seq: number; error: string }[];
   /** avisos discretos: edição mais nova de outro aparelho prevaleceu */
   notices: { table: SyncTable; id: string; columns: string[] }[];
+  /** escritas feitas sem sinal que o servidor aceitou agora (o fato da conquista `offline_hero`) */
+  offline: { table: SyncTable; id: string; trip_id: string }[];
 };
+
+/**
+ * Conta como "algo marcado sem sinal": uma escrita da pessoa numa tabela da viagem. A trilha do modo
+ * painel é gravada sozinha, e XP, conquistas e preferências são da própria pessoa, não do time.
+ */
+export function isDerived(table: SyncTable): boolean {
+  return table === 'achievements' || table === 'xp_events';
+}
+
+export function countsAsOfflineWrite(table: SyncTable): boolean {
+  return scopeOf(table) === 'trip' && table !== 'trip_tracks';
+}
 
 /** Lê a resposta do `sync_push` e decide o destino de cada operação da outbox. */
 export function resolveResults(
@@ -106,7 +127,7 @@ export function resolveResults(
   results: readonly PushResult[],
 ): Resolution {
   const bySeq = new Map(results.map((r) => [r.seq, r]));
-  const out: Resolution = { done: [], failed: [], notices: [] };
+  const out: Resolution = { done: [], failed: [], notices: [], offline: [] };
   for (const op of batch) {
     const r = bySeq.get(op.seq);
     if (!r) {
@@ -117,6 +138,8 @@ export function resolveResults(
       case 'applied':
       case 'ignored':
         out.done.push(...op.sources);
+        if (r.status === 'applied' && op.offline && op.trip_id && countsAsOfflineWrite(op.table))
+          out.offline.push({ table: op.table, id: op.id, trip_id: op.trip_id });
         if (r.superseded && r.superseded.length > 0)
           out.notices.push({ table: op.table, id: op.id, columns: r.superseded });
         break;
@@ -125,6 +148,12 @@ export function resolveResults(
         out.notices.push({ table: op.table, id: op.id, columns: Object.keys(op.versions) });
         break;
       case 'error':
+        // XP e conquista são derivados: recusados (a pessoa saiu da viagem antes do envio, por
+        // exemplo), saem da fila sem ir para Pendentes, porque a próxima derivação recalcula tudo
+        if (isDerived(op.table)) {
+          out.done.push(...op.sources);
+          break;
+        }
         out.failed.push(
           ...op.sources.map((seq) => ({ seq, error: describeError(r.code, r.message) })),
         );

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button.tsx';
 import { PageHeader } from '@/components/ui/PageHeader.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { FULL_PROGRESS, levelName, type TeamProgress } from '@/features/progression/team.ts';
+import { CelebrationHost } from '@/features/progression/components/CelebrationHost.tsx';
 import { useTeamProgress } from '@/features/progression/useTeamProgress.ts';
 import { useTrip } from '@/features/trips/queries.ts';
 import { audio } from '@/lib/audio/index.ts';
@@ -120,6 +121,9 @@ function Garage({
           </span>
         }
       />
+
+      {/* abrir a garagem é um momento calmo: o resumo ou o cartão de desbloqueio sai aqui */}
+      <CelebrationHost active tripId={trip.id} />
 
       <div
         className="relative -mx-4 h-[clamp(320px,52svh,560px)] overflow-hidden sm:mx-0 sm:rounded-card"

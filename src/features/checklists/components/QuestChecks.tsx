@@ -1,6 +1,7 @@
 import { Check, Flag } from 'lucide-react';
 import { cx } from '@/lib/cx.ts';
 import type { ChecklistItem } from '@/lib/db/schema.ts';
+import { gainXp, tappedRect } from '@/features/progression/xp-gain.ts';
 import { setDone } from '../actions.ts';
 
 /**
@@ -39,7 +40,11 @@ export function QuestChecks({
               type="button"
               aria-pressed={done}
               aria-label={`Missão feita: ${q.text}`}
-              onClick={() => void setDone(q, uid, !done)}
+              onClick={() => {
+                const at = tappedRect();
+                void setDone(q, uid, !done);
+                if (!done) void gainXp(uid, 'quest_done', q.id, q.points, at);
+              }}
               className={cx(
                 'inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full px-4 text-[15px] font-semibold',
                 done

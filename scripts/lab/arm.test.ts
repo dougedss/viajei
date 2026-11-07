@@ -45,6 +45,22 @@ describe('os horários dos avisos armados', () => {
     expect(nextEventDate('vespera', new Date('2026-11-08T02:30:00Z'))).toBe('2026-11-08');
   });
 
+  it('retrospectiva: 9:00 do dia seguinte ao fim; arma para o próximo 9h que ainda está à frente', () => {
+    expect(eventMoment('retro', '2026-12-15').toISOString()).toBe('2026-12-15T12:00:00.000Z');
+    // a data guardada (o fim da viagem) é o dia anterior ao do aviso
+    expect(anchorOf('2026-12-15', 'retro')).toBe('2026-12-14');
+    expect(eventDateOf('2026-12-14', 'retro')).toBe('2026-12-15');
+    // 03:07: o aviso de hoje às 9h ainda vem, então a viagem armada terminou ontem
+    expect(nextEventDate('retro', new Date('2026-11-07T06:07:00Z'))).toBe('2026-11-07');
+    // 11:10: o de hoje já foi; arma o de amanhã (a viagem termina hoje)
+    expect(nextEventDate('retro', new Date('2026-11-07T14:10:00Z'))).toBe('2026-11-08');
+    expect(armExpected('retro', { tripId: 't', anchor: '2026-11-06' })).toEqual({
+      title: 'A retrospectiva da viagem está pronta',
+      body: '1 dia, 1 parada',
+      navigate: '/viagens/t/retrospectiva',
+    });
+  });
+
   it('rótulo e momento legíveis', () => {
     expect(armLabel('vespera', '2026-11-07')).toBe('vespera:2026-11-07');
     expect(formatMoment(new Date('2026-11-07T22:00:00Z'))).toBe('07/11 às 19:00');

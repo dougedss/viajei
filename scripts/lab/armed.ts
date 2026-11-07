@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { pushPayloadSchema } from '../../supabase/functions/_shared/notifications.ts';
 import { fromBase64Url, toBase64Url } from '../../supabase/functions/_shared/vapid.ts';
 import { uuidV5 } from '../../src/lib/ids/uuid.ts';
+import { wallToInstant } from '../../src/lib/time/zone.ts';
 import {
   anchorOf,
   ARM,
@@ -35,6 +36,7 @@ export type ArmedResult = { checks: Check[]; tripIds: Set<string> };
 const TRIP_NAMES: Record<ArmKind, string> = {
   vespera: 'Laboratório · véspera',
   prazo: 'Laboratório · prazo de cancelamento',
+  retro: 'Laboratório · retrospectiva pronta',
 };
 const RESERVATION_NAME = 'Pousada do prazo';
 
@@ -48,8 +50,16 @@ async function idsOf(a: Session, kind: ArmKind): Promise<Ids> {
 const endpointOf = (cfg: LabConfig, inbox: string) => `${cfg.receiverBase}/${inbox}`;
 const inboxOf = (a: Session, label: string) => uuidV5(a.uid, `lab:arm:${label}`);
 
-/** A data guardada na linha (início da viagem ou último dia para cancelar), ou null se não há. */
+/** A data guardada na linha (início, fim da viagem ou último dia para cancelar), ou null se não há. */
 async function readAnchor(a: Session, kind: ArmKind, ids: Ids): Promise<string | null> {
+  if (kind === 'retro') {
+    const rows = must(
+      await a.client.from('trips').select('end_date, deleted_at').eq('id', ids.trip),
+      'viagem da retrospectiva',
+    );
+    const t = rows[0];
+    return t?.deleted_at === null ? t.end_date : null;
+  }
   if (kind === 'vespera') {
     const rows = must(
       await a.client.from('trips').select('start_date, deleted_at').eq('id', ids.trip),
@@ -90,7 +100,7 @@ async function judge(
   anchor: string,
   inbox: string,
 ): Promise<Check> {
-  const eventDate = eventDateOf(anchor);
+  const eventDate = eventDateOf(anchor, kind);
   const at = eventMoment(kind, eventDate);
   const keys = await deriveArmKeys(cfg.secret, armLabel(kind, eventDate));
   const rows = must(
@@ -169,9 +179,75 @@ async function arm(
   now: Date,
 ): Promise<{ at: Date }> {
   const eventDate = nextEventDate(kind, now);
-  const anchor = anchorOf(eventDate);
+  const anchor = anchorOf(eventDate, kind);
   const at = eventMoment(kind, eventDate);
-  if (kind === 'vespera') {
+  if (kind === 'retro') {
+    // uma viagem de um dia que termina na véspera do aviso, com uma parada concluída (sem parada
+    // concluída, a viagem não aconteceu e não ganha filme): dia e parada novos a cada ciclo
+    await syncPush(a.client, [
+      {
+        table: 'trips',
+        id: ids.trip,
+        op: 'upsert',
+        values: {
+          owner_id: a.uid,
+          name: TRIP_NAMES.retro,
+          start_date: anchor,
+          end_date: anchor,
+          deleted_at: null,
+        },
+      },
+    ]);
+    const dayId = await uuidV5(ids.trip, anchor);
+    const removedAt = new Date().toISOString();
+    const [oldStops, oldDays] = await Promise.all([
+      a.client.from('stops').select('id').eq('trip_id', ids.trip).is('deleted_at', null),
+      a.client
+        .from('trip_days')
+        .select('id')
+        .eq('trip_id', ids.trip)
+        .is('deleted_at', null)
+        .neq('id', dayId),
+    ]);
+    await syncPush(a.client, [
+      ...must(oldStops, 'paradas antigas da retrospectiva').map((r): Op => ({
+        table: 'stops',
+        id: r.id,
+        op: 'patch',
+        values: { deleted_at: removedAt },
+      })),
+      ...must(oldDays, 'dias antigos da retrospectiva').map((r): Op => ({
+        table: 'trip_days',
+        id: r.id,
+        op: 'patch',
+        values: { deleted_at: removedAt },
+      })),
+      {
+        table: 'trip_days',
+        id: dayId,
+        op: 'upsert',
+        values: { trip_id: ids.trip, date: anchor, title: 'Laboratório', deleted_at: null },
+      },
+      {
+        table: 'stops',
+        id: randomUUID(),
+        op: 'upsert',
+        values: {
+          trip_id: ids.trip,
+          trip_day_id: dayId,
+          position: 'a0',
+          kind: 'nature',
+          name: 'Parada do laboratório',
+          time: '10:00',
+          departed_at: null,
+          done_at: new Date(wallToInstant(anchor, '10:00')).toISOString(),
+          done_by: a.uid,
+          skipped: false,
+          deleted_at: null,
+        },
+      },
+    ]);
+  } else if (kind === 'vespera') {
     await syncPush(a.client, [
       {
         table: 'trips',
@@ -301,7 +377,7 @@ async function arm(
 async function cycle(a: Session, cfg: LabConfig, kind: ArmKind, now: Date): Promise<Check> {
   const ids = await idsOf(a, kind);
   const anchor = await readAnchor(a, kind, ids);
-  const label = anchor ? armLabel(kind, eventDateOf(anchor)) : null;
+  const label = anchor ? armLabel(kind, eventDateOf(anchor, kind)) : null;
   const inbox = label ? await inboxOf(a, label) : null;
   const armed = anchor !== null && inbox !== null && (await subscriptionExists(a, cfg, inbox));
   if (!armed || !anchor || !inbox) {
@@ -314,7 +390,7 @@ async function cycle(a: Session, cfg: LabConfig, kind: ArmKind, now: Date): Prom
       data: { armado: at.toISOString() },
     };
   }
-  const at = eventMoment(kind, eventDateOf(anchor));
+  const at = eventMoment(kind, eventDateOf(anchor, kind));
   if (at.getTime() > now.getTime()) {
     return {
       scenario: kind,
@@ -336,16 +412,22 @@ async function cycle(a: Session, cfg: LabConfig, kind: ArmKind, now: Date): Prom
 }
 
 /**
- * Antes do preparo: confere e rearma a véspera e o prazo. Um erro de servidor aqui vira falha do
- * cenário, nunca da execução inteira.
+ * Antes do preparo: confere e rearma a véspera, o prazo (do lab-a) e a retrospectiva (do lab-b). Um
+ * erro de servidor aqui vira falha do cenário, nunca da execução inteira.
  */
-export async function runArmed(cfg: LabConfig, a: Session, now = new Date()): Promise<ArmedResult> {
+export async function runArmed(
+  cfg: LabConfig,
+  a: Session,
+  b: Session,
+  now = new Date(),
+): Promise<ArmedResult> {
   const checks: Check[] = [];
   const tripIds = new Set<string>();
   for (const kind of ARM_KINDS) {
-    tripIds.add((await idsOf(a, kind)).trip);
+    const who = ARM[kind].owner === 'b' ? b : a;
+    tripIds.add((await idsOf(who, kind)).trip);
     try {
-      checks.push(await cycle(a, cfg, kind, now));
+      checks.push(await cycle(who, cfg, kind, now));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       log(`armado ${kind}: ${message}`);

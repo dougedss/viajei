@@ -18,6 +18,11 @@ export function localEnv(): Record<string, string> {
 }
 
 export async function criarUsuarioDescartavel(nome: string): Promise<string> {
+  return (await criarUsuario(nome)).email;
+}
+
+/** O usuário descartável com o id (para montar dados dele direto no banco). */
+export async function criarUsuario(nome: string): Promise<{ email: string; id: string }> {
   const env = localEnv();
   const apiUrl = env.API_URL;
   const secret = env.SECRET_KEY ?? env.SERVICE_ROLE_KEY;
@@ -38,5 +43,6 @@ export async function criarUsuarioDescartavel(nome: string): Promise<string> {
     }),
   });
   if (!res.ok) throw new Error(`admin/users ${res.status}: ${await res.text()}`);
-  return email;
+  const body = (await res.json()) as { id?: string };
+  return { email, id: body.id ?? '' };
 }

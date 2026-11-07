@@ -50,7 +50,7 @@ type Step = { step: string; ok: boolean; detail?: string };
 export const TIMEOUT = 20_000;
 
 /** O perfil de aparelho dos dois contextos: Pixel 7, pt-BR, fuso de São Paulo. */
-const DEVICE = {
+export const DEVICE = {
   ...devices['Pixel 7'],
   locale: 'pt-BR',
   timezoneId: 'America/Sao_Paulo',
@@ -81,11 +81,19 @@ export async function openPeer(
   password: string,
 ): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({ ...DEVICE, permissions: [] });
+  await context.addInitScript({ content: QUIET });
   const page = await context.newPage();
   page.setDefaultTimeout(TIMEOUT);
   await signInPage(page, appUrl, email, password);
   return { context, page };
 }
+
+/**
+ * Os cartões de conquista (fase 9) desligados neste aparelho: os cenários das fases anteriores
+ * passam por telas calmas (a visão geral, a garagem) e um cartão modal cobriria o botão do passo
+ * seguinte. Só o cenário da progressão liga (`app-progress.ts`).
+ */
+export const QUIET = `localStorage.setItem('viajei:celebrations', 'off');`;
 
 /** O `PushManager` do app passa a falar com o receptor do laboratório; a folha de compartilhar some (o .ics vira download). */
 function initScript(sub: AppTarget['subscription']): string {
@@ -121,6 +129,7 @@ export async function openApp(target: AppTarget): Promise<App> {
     acceptDownloads: true,
   });
   await context.addInitScript({ content: initScript(target.subscription) });
+  await context.addInitScript({ content: QUIET });
   const page = await context.newPage();
   page.setDefaultTimeout(TIMEOUT);
   // o Chromium sem tela responde "negado" a notificações que ninguém concedeu; num aparelho de

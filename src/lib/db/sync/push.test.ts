@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { insertable, makeTrip, TRIP_ID } from '@/test/factories.ts';
-import { mutate } from '../mutate.ts';
+import { mutate, setOfflineProbe } from '../mutate.ts';
 import { MAX_ATTEMPTS, type PushOp, type PushResult } from '../outbox.ts';
 import { db, syncKeys } from '../schema.ts';
 import { discardOp, pushOutbox, retryOp } from './push.ts';
@@ -26,6 +26,26 @@ describe('pushOutbox', () => {
     expect(rpc.mock.calls[0]![0]).toHaveLength(1); // upsert + patch fundidos
     expect(out).toMatchObject({ done: 2, failed: 0, offline: false });
     expect(await db.outbox.count()).toBe(0);
+  });
+
+  it('a primeira escrita sem sinal aceita fica guardada com a hora do envio e a viagem (offline_hero)', async () => {
+    expect(await db.sync_state.get(syncKeys.offlineSynced)).toBeUndefined();
+    await pushOutbox(db, answering('applied'), Date.parse('2026-12-12T15:00:00Z'));
+    // as do beforeEach nasceram com sinal: nada guardado
+    expect(await db.sync_state.get(syncKeys.offlineSynced)).toBeUndefined();
+    setOfflineProbe(() => true);
+    try {
+      await mutate.patch('trips', TRIP_ID, { notes: 'sem sinal' });
+    } finally {
+      setOfflineProbe(() => false);
+    }
+    expect((await db.outbox.toArray())[0]?.offline).toBe(true);
+    await pushOutbox(db, answering('applied'), Date.parse('2026-12-12T16:00:00Z'));
+    const saved = await db.sync_state.get(syncKeys.offlineSynced);
+    expect(JSON.parse(saved?.value ?? '{}')).toEqual({
+      at: '2026-12-12T16:00:00.000Z',
+      trip_id: TRIP_ID,
+    });
   });
 
   it('erro de regra numa operação vai para Pendentes com o motivo, sem contar tentativa', async () => {

@@ -649,3 +649,95 @@ Um pull do Realtime que encontra o lock ocupado pede um ciclo completo. `syncNow
 - O motor de sync roda sempre que o navegador não diz "sem rede", e atende o `onRetry` com um ciclo. A fila de fotos volta com ele, porque o ciclo bem-sucedido marca online.
 
 **Consequência.** Depois de uma queda, o app se recupera sozinho em segundos, sem recarregar e sem martelar o servidor. Testes: `connectivity.test.ts`.
+
+## Fase 9 · Progressão e retrospectiva (07/11/2026)
+
+### D112 · A 0009 a partir da DDL base, e o que mudou
+**Contexto.** A DDL base do Passo 0 (bloco 0007 de lá) vira a `0009_progressao.sql`.
+**Decisão.** As duas tabelas entram como somente-anexar (escopo `user`, rank 90), com o carimbo `stamp_synced`. Diferenças, cada uma com o porquê:
+- Índices `(trip_id, synced_at)` nas duas (C6): o pull da viagem filtra por elas.
+- Pontos amarrados ao tipo por `check`, espelhando a nova `XP_POINTS` em `_shared/constants.ts`: a missão de 10 a 30, os outros com o valor fixo da tabela 10.1 (a base aceitava de 1 a 200 em qualquer tipo). Não é antifraude, não há ranking: é o banco e a regra dizendo o mesmo.
+- O formato do `ref_id` conferido: id de linha nos tipos por linha, `<viagem>:before|pack` na lista completa e o próprio id da viagem na viagem concluída, amarrados ao `trip_id`. Com o `trip_id` nulo depois do expurgo, o `check` passa.
+- Ninguém grava XP de viagem de que não é membro: o insert exige `trip_id` e `is_trip_member`; a conquista aceita `trip_id` nulo ou de viagem minha. O `on delete set null` continua: o expurgo da fase 12 não apaga o XP de ninguém.
+- `unlocked_at` limitado a agora + 2 min (o teto do `sync_guard`): um relógio adiantado não grava o futuro.
+- `revoke update, delete, truncate` além da ausência de policy: somente-anexar dito duas vezes.
+- `lab_reset_progress()`: apaga a progressão de quem chama, e só de usuário de laboratório (executor em `lab_access` e e-mail `.invalid`). A conta real que está em `lab_access` é `viewer` e não tem e-mail `.invalid`: o pgTAP prova as duas recusas.
+- O aviso `retro_ready` no `due_notifications`, recriado inteiro (`create or replace`, mesma assinatura): `end_date + 1` às 9h de São Paulo, só para viagem com parada concluída, com dias e paradas concluídas em `data`. O texto, em `_shared/notifications.ts`: "A retrospectiva da viagem está pronta" · "4 dias, 17 paradas" (e o singular); o toque abre `/viagens/:tripId/retrospectiva`; `available: true`.
+
+**Consequência.** pgTAP `11_progressao` com 59 testes. O `sync_push` já tratava `mode = 'append'` (colisão vira `ignored`) e o `sync_pull` já trazia as tabelas de escopo `user` com `trip_id` (D16): nenhuma RPC mudou.
+
+### D113 · O nível do time vem do resumo público no perfil
+**Contexto.** O `TeamProgress` usa o maior nível e a união das conquistas dos membros aceitos, e o XP de cada um vem de todas as viagens dele. O pull da viagem só traz as linhas com o `trip_id` dela: somando as linhas, o aparelho de A calcularia o nível de B só pelas viagens em comum.
+**Decisão.** `profiles.xp_total` e `profiles.achievement_keys`, recalculados da fonte por trigger a cada insert (nunca somados: o resumo não se desvia das tabelas). O client não edita essas colunas (o grant de update do perfil continua só em nome e cor). O perfil de cada membro já viaja para o time pelo pull da viagem e funciona sem sinal. Para a própria pessoa, valem as linhas do aparelho, que incluem o que ainda não subiu (com o resumo do perfil por cima, quando ele estiver adiante, vindo de outro aparelho). A barra da viagem mostra o XP de quem está mais adiante, que é quem define o nível, sem nome.
+**Alternativa rejeitada.** O pull trazer as linhas dos membros de todas as viagens: o aparelho de cada um guardaria o histórico inteiro dos outros, e uma viagem nova de B mudaria o que A precisa puxar.
+**Consequência.** `useTeamProgress` trocou só a fonte (`standingOf`, `teamOf` em `team.ts`); a garagem e o cartão não mudaram. Um perfil puxado antes da 0009 vale zero até mudar de novo no servidor.
+
+### D114 · Realtime nas tabelas de progressão
+**Contexto.** O `enable_user_sync` não liga o aviso do Realtime: as tabelas de escopo `user` não avisavam ninguém.
+**Decisão.** `d_broadcast` no insert de `achievements` e `xp_events`, pelo `trip_id` da linha.
+**Consequência.** Quando B ganha o adesivo de câmera, a garagem de A mostra o adesivo liberado sem recarregar; o nível do cabeçalho anda junto. Um aviso por viagem por transação, como nas outras tabelas.
+
+### D115 · As regras exatas de XP e conquistas
+**Decisão.** Em `features/progression/rules.ts`, puro: o retrato do aparelho entra e sai o conjunto inteiro de XP e conquistas a que a pessoa tem direito, com ids `v5(user_id, kind:ref_id)` e `v5(user_id, 'achievement:' || key)`. Desmarcar não tira e remarcar não dá de novo: é o somente-anexar que garante.
+- "O time" são os membros aceitos. Cada aparelho grava só o da própria pessoa. **Quem entrou depois leva o que já tinha acontecido** (ok do Douglas): a equipe conquista junto e não há ranking; contar só o que veio depois do aceite exigiria uma coluna de hora do aceite que não existe.
+- **Saída:** uma parada com `departed_at`; o nó de saída só conta como saída própria no começo (nenhuma parada antes dele no dia saiu). "Hotel → Saída para Montenegro" é uma saída, a do hotel; a "Chegada em Papanduva" marcada pelo Partiu! não é saída. **"Sair às"** é a conta do "Agora" (D29): a próxima não pulada menos o deslocamento; sem deslocamento e com a próxima sendo nó de saída, o horário dela; num nó de saída, o dele. **Hora real:** todos os caminhos que gravam `departed_at` (botão, Partiu! da notificação, modo painel) usam a hora do toque ou da leitura; o catch-up nunca grava saída. Quando a trilha de alguém mostra o carro saindo do raio (150 m e depois 300 m, o critério da D47) até 60 min antes ou depois do toque, vale a hora da trilha. Sem "sair às", a saída é neutra: não conta nem quebra a sequência. Sair antes da hora é pontual.
+- **Viagem concluída:** o dia seguinte ao fim (São Paulo) com pelo menos uma parada concluída, o momento do `retro_ready`.
+- `stop_done` para cada parada concluída (inclusive origem e deslocamento); `checklist_item` só em Antes e Mala (a missão vale os pontos dela para o time, sem os 2); `checklist_complete` com a lista não vazia e toda marcada; `memory_photo` uma por parada, pela foto de quem fotografou.
+- `first_stop` na primeira conclusão; `early_bird` em saída antes das 7h; `on_time_3` em três pontuais seguidas na mesma viagem; `nature_3` e `photographer` somando as viagens (fotos em 5 paradas diferentes); `winery_2` no mesmo dia; `ready_to_go` com Antes e Mala não vazias e tudo marcado antes do primeiro dia; `on_budget` na viagem concluída com orçamento maior que zero, pelo menos um gasto e a soma em centavos dentro dele (`unlocked_at` = 0h do dia seguinte ao fim); `chronicler` num dia terminado (sem pendente ou já passado) em que toda concluída que não é nó de saída tem nota minha; `trip_done` sem parada pendente e com uma concluída — **parada pulada não impede** (ok do Douglas: pular é como o app registra "não deu" sem apagar a história); `team` com outro membro aceito, dos dois lados; `downhill` com 500 m de queda nos trechos rodados de um dia, pela rota guardada (sem rota, espera); `planner` com a entrada vazia até a fase 10.
+- `unlocked_at` é a hora do fato (o `done_at`, a saída, a chegada da foto ao servidor), nunca a da derivação.
+
+**Consequência.** Na viagem do seed, quem fizer tudo chega a uns 797 XP (o prompt previa 790). Cada regra tem teste positivo e negativo.
+
+### D116 · "Pé na areia" a 3 km do mar (divergência do prompt)
+**Contexto.** O prompt diz "a menos de 1 km do mar". A costa embutida erra de 1 a 2 km (D26), e as curiosidades só afirmam o mar a 3 km.
+**Decisão.** 3 km (`COAST_NEAR_M`, o mesmo `SEA_NEAR_M`), só com posição real (a leitura do catch-up e a trilha do modo painel, que já vão para `trip_tracks`), e a frase da prancha passou a "chegando a menos de 3 km do mar". A trilha de quem não compartilha a posição não entra. Ok do Douglas.
+
+### D117 · A derivação espera a janela do Desfazer
+**Contexto.** Conquista não se apaga. Um Partiu! tocado por engano às 6h50 e desfeito em 10 s daria o Madrugador para sempre.
+**Decisão.** O motor não deriva enquanto uma linha das regras (paradas, itens, gastos, memórias, reservas) foi tocada há menos de 12 s, aqui ou noutro aparelho (`updated_at`); reagenda para o fim da janela. A trilha não conta (o modo painel grava a cada minuto). O "+10" aparece na hora, pelas regras, e só quando a ação rende XP novo.
+**Consequência.** O "Desfazer" desfaz de verdade. O XP chega ao servidor uns 12 s depois da ação.
+
+### D118 · "Sem sinal, sem problema": a marca na outbox
+**Contexto.** A `mutate` é a mesma online e offline; a outbox não sabia se a escrita nasceu sem sinal.
+**Decisão.** Cada item da outbox ganha `offline`, posto pela `mutate` a partir da conectividade do app (`setOfflineProbe(() => !connectivity.isOnline())`); o service worker, sem React, usa o `navigator.onLine`. A marca sobrevive à fusão. Quando o `sync_push` devolve `applied` para uma escrita marcada numa tabela da viagem (não a trilha, não o XP), o aparelho guarda a hora do envio e a viagem (`progress:offline-synced`), e a regra lê dali. XP ou conquista recusados pelo servidor saem da fila em silêncio, sem ir para Pendentes: a próxima derivação recalcula.
+
+### D119 · Quando a comemoração aparece
+**Decisão.**
+- Cada aparelho comemora o que a própria pessoa ganhou (conquistas e subida de nível). O que o time ganhou aparece na garagem e no cabeçalho, sem cartão e sem nome.
+- **A primeira derivação** de um aparelho (inclusive ao publicar a fase) espera o primeiro ciclo completo do sync (o pull traz o que outros aparelhos já gravaram) e vira um **cartão na própria página**, calmo, sem confete: "Vocês já tinham conquistado 6 conquistas e 420 XP." Não é folha: não cobre nada.
+- Depois, uma **fila por aparelho** (`progress:queue`), um cartão por vez, com "mais N", no próximo momento calmo: ao abrir a visão geral, a garagem ou o perfil, ou ao fechar a folha "Como foi?" sem o modo painel. **Cada momento mostra só o que já esperava na fila quando ele começou**: nada salta no meio do que a pessoa está fazendo.
+- Nunca por cima de outra folha: a `Sheet` conta as folhas abertas (`sheet-stack.ts`) e o cartão espera. Nunca pelo toque numa notificação (que abre o Modo Viagem, onde o único momento é fechar o "Como foi?").
+- "Pronto para partir" já tinha o cartão da lista (D103) no instante em que ela fecha: ele virou a comemoração da `ready_to_go` (com "Usar no carro" quando o rack já está liberado), e a fila não repete.
+- Uma preferência por aparelho, "Cartões de conquista" (Avisos, junto do Som), ligada por padrão. Os testes de ponta a ponta antigos e o laboratório a desligam: os usuários do seed são os mesmos em testes paralelos, e um cartão modal que chega de outro teste cobriria um botão.
+
+### D120 · O cartão de desbloqueio e o "Usar no carro"
+**Decisão.** O cartão (folha com confete, sino e vibração, nada sob reduzir movimento) mostra o carro da viagem da tela (no Perfil, o da viagem da conquista) no palco da garagem, num chunk que já existe. O palco ganhou o modo `reveal`: monta já com o acessório (ou o modelo novo), para os shaders compilarem na abertura, volta sem ele num instante, e então o encaixe (ou a troca) anima — o mesmo preparo da D74. Sem WebGL ou com reduzir movimento, o `CarSide` já com o acessório. "Usar no carro" passa pelo `decide` da garagem (as faixas do teto, os 3 adesivos); a recusa aparece com "Abrir a garagem". "Agora não" deixa liberado. O nível novo usa o mesmo cartão, com o modelo.
+**Sem trigger no servidor conferindo o carro** (a pendência da D70): o carro sobe antes da conquista no push (rank 10 contra 90), e um trigger recusaria o "Usar no carro" feito sem sinal.
+
+### D121 · O filme sobre a viagem inteira
+**Decisão.** Um caminho só para a viagem (`spliceTrip`, puro): a rota real de cada dia cortada nas paradas, emendada por uma ponte reta entre o último nó de um dia e o primeiro do seguinte (a noite, fora dos números). Onde a trilha gravada cobre um trecho inteiro (do Partiu! ao Chegamos!), ela substitui a geometria do trecho; a altitude é a da rota. O `buildLayout` aceita isso sem mudança de contrato, com duas opções novas: um teto de comprimento maior (`zMax`, para a viagem não ficar espremida) e a leitura do lugar com até 12 partes. Sem a rota de algum dia, o caminho é estilizado. A cena reaproveita o cenário da maquete (`WorldScene` ganhou `controls`), com a câmera do filme no lugar da câmera parada: desce da viagem inteira até o carro, segue o carro e sobe no fim, com o carro estacionado na metade de cima. É a única câmera que percorre o caminho (6.7).
+**Rejeitado.** O corte por dia: montaria quatro cenas dentro de 15 s, engasgaria no celular e perderia o "cidade → interior → serra → praia" contínuo.
+**Roteiro (`planFilm`, puro).** Abertura de 2,2 s ("Viajei!", o nome e as datas); sobrevoo de 9,8 s, com o tempo dividido entre os dias pelo comprimento e no mínimo 1,2 s por dia, o chip "Dia 2 · sábado", até 6 fotos (a foto da memória mais bem avaliada de cada parada, 1,4 s cada, sem sobrepor, as de maior nota primeiro) e as missões feitas onde sobra lugar; card final de 3 s. O relógio é um só para a cena e para o desenho por cima. Com reduzir movimento, sem WebGL ou com `?render=list`: a sequência de cards.
+
+### D122 · O vídeo quadro a quadro com WebCodecs (divergência do prompt)
+**Contexto.** O prompt dizia MediaRecorder sobre o canvas. O MediaRecorder grava em tempo real: num celular que desenha a maquete a 40 fps, o vídeo sai engasgado. E WebM não entra nos stories do Instagram.
+**Decisão.** Cada um dos 450 quadros (15 s a 30 fps) é desenhado pelo relógio do filme, em 1080 × 1920, num alvo fora da tela (`renderer.setOutputRenderTarget`, que aplica o mesmo tone mapping e espaço de cor da tela), lido de volta da GPU (`readRenderTargetPixelsAsync`, igual em WebGPU e WebGL2; o WebGL vem de baixo para cima e é virado), composto com o desenho em Canvas 2D e entregue ao codificador, que dita o ritmo. Cadeia pela detecção (`chooseVideo`, pura): WebCodecs H.264 em MP4 → WebCodecs VP9/VP8 em WebM → MediaRecorder (MP4 se ele souber) → só os cards. O MP4 e o WebM saem da **`mediabunny` 1.62.1** (MPL-2.0; TypeScript puro, sem dependências de execução, sucessora do `mp4-muxer`, que o autor aposentou; publicada em 22/10, a mais nova com duas semanas), num chunk de 223 KB (58 KB gzip) carregado só ao exportar. **Sem som:** nos stories a pessoa põe a música dela, e o ronco sintetizado viraria ruído. O vídeo aparece na própria folha para conferir, e "Compartilhar" é outro toque (o Safari só abre a folha com o gesto).
+**Consequência.** O vídeo sai liso em qualquer aparelho; um celular lento só demora mais para gerar. Memória: um buffer de 8 MB reaproveitado por quadro e o arquivo montado na memória.
+
+### D123 · Os cards em Canvas 2D, sem `html-to-image` (divergência)
+**Decisão.** Abertura, números, conquistas e fotos, em 1080 × 1350 (feed) e 1080 × 1920 (stories), em JPEG, desenhados em Canvas 2D pelo mesmo código do filme (`draw.ts`): a Barlow pelo `FontFace`, as fotos do cache. O carro sai do próprio `CarSide`, serializado do DOM (`XMLSerializer`) como imagem, e não redesenhado em `Path2D`: é a mesma arte, o carro não tem texto (não depende de fonte) e não há `foreignObject`. O `html-to-image` da stack não está instalado e não entra: no Safari, o caminho por `foreignObject` costuma perder fontes e imagens.
+
+### D124 · Os números do card final
+**Decisão.** Paradas são as concluídas; km e horas somam só os trechos da rota real entre duas paradas concluídas (nunca horário inventado); o gasto em centavos contra o orçamento ("R$ 2.741 de R$ 3.000 · dentro do orçamento"). Ao abrir com rede, a tela busca as rotas e as fotos que faltam; sem rede, km e horas contam só o que o aparelho sabe (e sem rota nenhuma, não aparecem).
+
+### D125 · O laboratório da fase 9
+**Decisão.**
+- `app_progressao` roda antes de tudo: as paradas concluídas vivas de A ganham lápide, a progressão de A e B é zerada (`lab_reset_progress`), e A conclui a primeira parada de uma viagem fixa nova. O cartão do "Primeiro pé na estrada" aparece na visão geral (de madrugada o Madrugador vem junto e é dispensado), "Usar no carro" põe o rack, o servidor tem o XP de A e, depois que o navegador de B abre, o de B, e a garagem de B mostra o rack.
+- `app_retrospectiva` usa uma viagem fixa **do lab-b** (o lab-a precisa começar sem parada concluída), redatada para ter terminado ontem, com três paradas com coordenadas reais, uma memória com foto e um gasto. Roda no canal `chrome` do Playwright (o Chrome do runner, com H.264), o caminho do iPhone; a CI cobre o caminho de reserva no Chromium dela. Sem o Chrome, cai para o Chromium e diz qual canal usou.
+- `retro`, em dois dias, pelo mecanismo da D105, também na conta do lab-b: arma para **o próximo 9h que ainda está à frente** (com o agendamento das 3h07, a viagem terminou ontem e o aviso chega hoje às 9h; a execução seguinte confere).
+- Os cartões de conquista ficam desligados nos navegadores dos outros cenários (D119). As assinaturas armadas do lab-b passaram a ser poupadas no preparo e no fim.
+
+### D126 · Números medidos
+- Chunks do build: a retrospectiva 35,9 KB (14,1 KB gzip); o palco do filme 4 KB (o cenário é o da maquete, já em cache); a exportação do vídeo 223 KB (58,2 KB gzip, quase toda a `mediabunny`), carregada só ao tocar em "Vídeo"; o anfitrião dos cartões 14,6 KB; o Perfil 7,4 KB, a visão geral 15 KB, a garagem 11,6 KB, o Modo Viagem 51,9 KB. O chunk principal ficou em 503 KB (164 KB gzip); o `three`, igual (1.287 KB). Precache: 167 arquivos, 5,85 MB.
+- Na CI (Chromium do Playwright, WebGL2 por software): o vídeo pela sequência de cards saiu pelo caminho de reserva, **WebM · VP9** (esse Chromium não tem H.264), com os 450 quadros em 14 s; o arquivo lido no Node tem 15 s e 1080 × 1920. O vídeo em 3D, quadro a quadro, sai no ritmo do WebGL por software: o teste anota o ritmo e cancela, porque os 450 quadros não cabem no tempo da CI.
+- Testes: 616 Vitest em 81 arquivos (eram 538), 343 pgTAP (eram 284), 25 Playwright (eram 22).

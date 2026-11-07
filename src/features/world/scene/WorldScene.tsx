@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useThree } from '@react-three/fiber';
 import { Group, type WebGPURenderer } from 'three/webgpu';
 import { createEnvironment } from '@/art/environment.ts';
@@ -35,6 +35,11 @@ export type WorldSceneProps = {
   onMotionEvents: (events: MotionEvent[]) => void;
   onFrame: (now: number, dt_ms: number, moving: boolean) => void;
   onFirstFrame: () => void;
+  /**
+   * A câmera e o laço de outra cena sobre o mesmo cenário (o filme da retrospectiva, fase 9). Sem
+   * isto, a câmera parada do dia e o laço da maquete.
+   */
+  controls?: ReactNode;
 };
 
 export function WorldScene({
@@ -47,6 +52,7 @@ export function WorldScene({
   onMotionEvents,
   onFrame,
   onFirstFrame,
+  controls,
 }: WorldSceneProps) {
   const gl = useThree((s) => s.gl) as unknown as WebGPURenderer;
   const scene = useThree((s) => s.scene);
@@ -116,13 +122,17 @@ export function WorldScene({
         group={groups.objects}
       />
       <Car runtime={runtime} field={field} car={car} group={groups.objects} />
-      <CameraRig runtime={runtime} />
-      <SceneDriver
-        runtime={runtime}
-        onMotionEvents={onMotionEvents}
-        onFrame={onFrame}
-        onFirstFrame={onFirstFrame}
-      />
+      {controls ?? (
+        <>
+          <CameraRig runtime={runtime} />
+          <SceneDriver
+            runtime={runtime}
+            onMotionEvents={onMotionEvents}
+            onFrame={onFrame}
+            onFirstFrame={onFirstFrame}
+          />
+        </>
+      )}
     </>
   );
 }

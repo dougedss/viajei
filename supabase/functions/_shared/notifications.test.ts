@@ -192,6 +192,24 @@ describe('texto dos avisos', () => {
     });
   });
 
+  it('retrospectiva pronta: dias e paradas concluídas, no singular e no plural', () => {
+    const retro = (days: number, stops_done: number) =>
+      notificationText(
+        'retro_ready',
+        { trip_name: 'RS — concurso em Montenegro', days, stops_done },
+        TRIP,
+      );
+    expect(retro(4, 17)).toMatchObject({
+      title: 'A retrospectiva da viagem está pronta',
+      body: '4 dias, 17 paradas',
+      tag: `retro:${TRIP}`,
+      actions: [],
+      appBadge: null,
+      topic: null,
+    });
+    expect(retro(1, 1).body).toBe('1 dia, 1 parada');
+  });
+
   it('dia da semana sem fuso', () => {
     expect(weekdayName('2026-12-11')).toBe('sexta');
     expect(weekdayName('2026-12-13')).toBe('domingo');
@@ -277,5 +295,23 @@ describe('payload único', () => {
     expect(payload(3, 2)).toBe(`/viagens/${TRIP}/checklists?aba=antes`);
     expect(payload(0, 2)).toBe(`/viagens/${TRIP}/checklists?aba=mala`);
     expect(payload(0, 0)).toBe(`/viagens/${TRIP}/viagem`);
+  });
+
+  it('a retrospectiva pronta abre o filme da viagem', () => {
+    const p = buildPushPayload(
+      {
+        kind: 'retro_ready',
+        ref: TRIP,
+        trip_id: TRIP,
+        stop_id: null,
+        data: { trip_name: 'RS', days: 4, stops_done: 17 },
+      },
+      'https://viajei-mauve.vercel.app',
+    );
+    expect(pushPayloadSchema.parse(p)).toEqual(p);
+    expect(p.notification.data.navigate).toBe(`/viagens/${TRIP}/retrospectiva`);
+    expect(p.notification.navigate).toBe(
+      `https://viajei-mauve.vercel.app/viagens/${TRIP}/retrospectiva`,
+    );
   });
 });

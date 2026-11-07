@@ -139,25 +139,101 @@ export const CAR_COLORS = {
 export type CarColor = keyof typeof CAR_COLORS;
 
 /**
- * As conquistas da tabela 10.2: chave e nome. As regras de cada uma são da fase 9
- * (`features/progression/rules.ts`); aqui fica só o que a garagem precisa para dizer o que falta.
+ * As conquistas da tabela 10.2 (o `check` de `achievements.key`): nome, o que foi feito (`done`, a
+ * frase do cartão e do perfil), o ícone do lucide e a cor do selo. As regras de cada uma estão em
+ * `features/progression/rules.ts`; a frase do que falta é a do acessório que ela libera.
  */
 export const ACHIEVEMENTS = {
-  first_stop: { name: 'Primeiro pé na estrada' },
-  early_bird: { name: 'Madrugador' },
-  on_time_3: { name: 'Relógio suíço' },
-  nature_3: { name: 'Caçador de cascatas' },
-  winery_2: { name: 'Enólogo' },
-  offline_hero: { name: 'Sem sinal, sem problema' },
-  ready_to_go: { name: 'Pronto para partir' },
-  on_budget: { name: 'Dentro do orçamento' },
-  photographer: { name: 'Fotógrafo de estrada' },
-  chronicler: { name: 'Cronista' },
-  trip_done: { name: 'Viajei!' },
-  team: { name: 'Equipe formada' },
-  planner: { name: 'Planejador' },
-  coast: { name: 'Pé na areia' },
-  downhill: { name: 'Serra abaixo' },
+  first_stop: {
+    name: 'Primeiro pé na estrada',
+    done: 'A primeira parada da viagem foi concluída.',
+    icon: 'flag',
+    color: '#E8653A',
+  },
+  early_bird: {
+    name: 'Madrugador',
+    done: 'Um Partiu! antes das 7h.',
+    icon: 'sunrise',
+    color: '#D9922F',
+  },
+  on_time_3: {
+    name: 'Relógio suíço',
+    done: 'Três saídas no horário, seguidas.',
+    icon: 'alarm-clock-check',
+    color: '#3B8BD6',
+  },
+  nature_3: {
+    name: 'Caçador de cascatas',
+    done: 'Três paradas de natureza concluídas.',
+    icon: 'waves',
+    color: '#4A9A5B',
+  },
+  winery_2: {
+    name: 'Enólogo',
+    done: 'Duas vinícolas no mesmo dia.',
+    icon: 'grape',
+    color: '#8A4F8E',
+  },
+  offline_hero: {
+    name: 'Sem sinal, sem problema',
+    done: 'Algo marcado sem sinal chegou ao time.',
+    icon: 'signal-zero',
+    color: '#5B6474',
+  },
+  ready_to_go: {
+    name: 'Pronto para partir',
+    done: 'Antes e Mala completas antes da partida.',
+    icon: 'luggage',
+    color: '#6A62C9',
+  },
+  on_budget: {
+    name: 'Dentro do orçamento',
+    done: 'A viagem terminou dentro do orçamento.',
+    icon: 'piggy-bank',
+    color: '#1F9A66',
+  },
+  photographer: {
+    name: 'Fotógrafo de estrada',
+    done: 'Fotos guardadas em cinco paradas.',
+    icon: 'camera',
+    color: '#D6567C',
+  },
+  chronicler: {
+    name: 'Cronista',
+    done: 'Todas as paradas de um dia avaliadas.',
+    icon: 'star',
+    color: '#E9A23B',
+  },
+  trip_done: {
+    name: 'Viajei!',
+    done: 'Nenhuma parada da viagem ficou para trás.',
+    icon: 'party-popper',
+    color: '#E8653A',
+  },
+  team: {
+    name: 'Equipe formada',
+    done: 'Alguém aceitou o convite para viajar junto.',
+    icon: 'users',
+    color: '#2F8FC9',
+  },
+  planner: {
+    name: 'Planejador',
+    done: 'Um roteiro importado com a IA.',
+    icon: 'map',
+    color: '#3A8089',
+  },
+  coast: {
+    name: 'Pé na areia',
+    done: 'O carro chegou perto do mar.',
+    icon: 'umbrella',
+    color: '#2E9CB8',
+  },
+  downhill: {
+    name: 'Serra abaixo',
+    done: 'Uma descida de 500 m num dia.',
+    icon: 'mountain',
+    color: '#7A6A58',
+  },
 } as const;
 export type AchievementKey = keyof typeof ACHIEVEMENTS;
 export const ACHIEVEMENT_KEYS = Object.keys(ACHIEVEMENTS) as AchievementKey[];
@@ -208,7 +284,7 @@ export const CAR_ACCESSORIES = {
     roof: 'lane',
     achievement: 'coast',
     requires: ['rack'],
-    hint: 'chegando a menos de 1 km do mar',
+    hint: 'chegando a menos de 3 km do mar',
   },
   box: {
     label: 'Mala de teto',
@@ -321,6 +397,31 @@ export type TripRole = (typeof TRIP_ROLES)[number];
 export const MEMBER_STATUSES = ['pending', 'accepted'] as const;
 export type MemberStatus = (typeof MEMBER_STATUSES)[number];
 
+/**
+ * Os tipos de XP da tabela 10.1 e os pontos de cada um (o `check` de `xp_events.points` espelha esta
+ * tabela). A missão vale os pontos do item, de 10 a 30; os outros tipos têm valor fixo.
+ */
+export const XP_POINTS = {
+  stop_done: 10,
+  departure_on_time: 15,
+  memory_rating: 5,
+  memory_photo: 10,
+  checklist_item: 2,
+  checklist_complete: 20,
+  quest_done: { min: 10, max: 30 },
+  expense_logged: 2,
+  reservation_added: 5,
+  trip_completed: 100,
+} as const;
+export type XpKind = keyof typeof XP_POINTS;
+export const XP_KINDS = Object.keys(XP_POINTS) as [XpKind, ...XpKind[]];
+
+/** Os pontos válidos de um evento: o fixo do tipo, ou o intervalo da missão. */
+export function isValidXp(kind: XpKind, points: number): boolean {
+  const rule = XP_POINTS[kind];
+  return typeof rule === 'number' ? points === rule : points >= rule.min && points <= rule.max;
+}
+
 /** Níveis de XP: limiar e nome. */
 export const LEVELS = [
   { level: 1, xp: 0, name: 'Turista' },
@@ -401,10 +502,10 @@ export const NOTIFICATION_KINDS = {
   },
   retro_ready: {
     label: 'Retrospectiva pronta',
-    description: 'Quando o filme da viagem está pronto',
+    description: 'No dia seguinte ao fim da viagem, às 9h, com o filme',
     on: true,
     phase: 9,
-    available: false,
+    available: true,
   },
 } as const;
 export type NotificationKind = keyof typeof NOTIFICATION_KINDS;
@@ -414,6 +515,10 @@ export const NOTIFICATION_KIND_KEYS = Object.keys(NOTIFICATION_KINDS) as [
 ];
 export function isNotificationKind(value: string): value is NotificationKind {
   return Object.hasOwn(NOTIFICATION_KINDS, value);
+}
+/** O tipo já tem dados no servidor (aparece na tela de avisos). Desde a fase 9, todos têm. */
+export function isAvailableKind(kind: NotificationKind): boolean {
+  return NOTIFICATION_KINDS[kind].available;
 }
 
 /** Padrões de `notification_prefs`, iguais aos defaults das colunas no banco. */

@@ -8,19 +8,31 @@ import { importSubscriptionKeys, type SubscriptionKeys } from './webpush-decrypt
 
 /**
  * Os avisos que só se conferem de verdade em dois dias (exceção à D53): a véspera (19:00 da véspera
- * do início, com o que falta nas listas) e o prazo de cancelamento (10:00 da véspera do último dia).
+ * do início, com o que falta nas listas), o prazo de cancelamento (10:00 da véspera do último dia) e
+ * a retrospectiva pronta (9:00 do dia seguinte ao fim da viagem, fase 9).
  * Uma execução arma: deixa uma viagem e uma assinatura de laboratório vivas, só com aquele tipo
  * ligado; o cron de verdade manda na hora; a execução seguinte confere o que chegou, desarma e arma
  * o próximo ciclo. Puro: os horários, o rótulo e as chaves da assinatura, derivadas do LAB_SECRET
  * (nenhum segredo guardado em lugar nenhum).
  */
-export const ARM_KINDS = ['vespera', 'prazo'] as const;
+export const ARM_KINDS = ['vespera', 'prazo', 'retro'] as const;
 export type ArmKind = (typeof ARM_KINDS)[number];
 
+/**
+ * `offset`: quantos dias a data guardada na linha (o início, o último dia para cancelar, o fim da
+ * viagem) fica depois do dia do aviso. A véspera e o prazo avisam no dia anterior (+1); a
+ * retrospectiva avisa no dia seguinte ao fim (−1). `owner`: de quem é a viagem armada. A da
+ * retrospectiva é do lab-b, porque o lab-a começa cada execução sem parada concluída nenhuma (o
+ * cenário da progressão precisa do primeiro desbloqueio).
+ */
 export const ARM = {
-  vespera: { notification: 'eve_checklist', time: '19:00' },
-  prazo: { notification: 'cancel_deadline', time: '10:00' },
-} as const satisfies Record<ArmKind, { notification: NotificationKind; time: string }>;
+  vespera: { notification: 'eve_checklist', time: '19:00', offset: 1, owner: 'a' },
+  prazo: { notification: 'cancel_deadline', time: '10:00', offset: 1, owner: 'a' },
+  retro: { notification: 'retro_ready', time: '09:00', offset: -1, owner: 'b' },
+} as const satisfies Record<
+  ArmKind,
+  { notification: NotificationKind; time: string; offset: number; owner: 'a' | 'b' }
+>;
 
 /** O user-agent das assinaturas armadas: é por ele que o preparo e o fim da execução as poupam. */
 export const ARM_USER_AGENT = 'viajei-lab/arm';
@@ -41,9 +53,14 @@ export function eventMoment(kind: ArmKind, eventDate: string): Date {
   return new Date(wallToInstant(eventDate, ARM[kind].time));
 }
 
-/** A data que a linha guarda (início da viagem ou último dia para cancelar) é o dia seguinte ao do aviso. */
-export const anchorOf = (eventDate: string) => addDays(eventDate, 1);
-export const eventDateOf = (anchor: string) => addDays(anchor, -1);
+/**
+ * A data que a linha guarda (início da viagem ou último dia para cancelar) é o dia seguinte ao do
+ * aviso; na retrospectiva, o fim da viagem é o dia anterior ao do aviso.
+ */
+export const anchorOf = (eventDate: string, kind: ArmKind = 'vespera') =>
+  addDays(eventDate, ARM[kind].offset);
+export const eventDateOf = (anchor: string, kind: ArmKind = 'vespera') =>
+  addDays(anchor, -ARM[kind].offset);
 
 /**
  * O próximo dia em que dá para armar: hoje, se o aviso de hoje ainda está a 15 min ou mais; senão,
@@ -106,6 +123,14 @@ export function armExpected(
   kind: ArmKind,
   facts: { tripId: string; anchor: string; reservationId?: string; reservationName?: string },
 ): { title: string; body: string; navigate: string } {
+  if (kind === 'retro') {
+    // a viagem armada tem um dia e uma parada concluída
+    return {
+      title: 'A retrospectiva da viagem está pronta',
+      body: '1 dia, 1 parada',
+      navigate: `/viagens/${facts.tripId}/retrospectiva`,
+    };
+  }
   if (kind === 'vespera') {
     return {
       title: 'Amanhã é dia de viajar',

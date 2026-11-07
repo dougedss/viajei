@@ -172,6 +172,21 @@
   }
 }
 
+/* o "+10" de XP sobe um pouco e some onde a ação aconteceu (fase 9); sem movimento, fica parado */
+@keyframes xp-rise {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 4px);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -28px);
+  }
+}
+
 @utility num {
   font-family: var(--font-num);
   font-variant-numeric: tabular-nums;

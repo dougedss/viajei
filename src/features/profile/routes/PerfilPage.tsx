@@ -14,6 +14,11 @@ import { useToast } from '@/components/ui/toast-context.ts';
 import { nameSchema } from '@/lib/auth/schemas.ts';
 import { cx } from '@/lib/cx.ts';
 import { useLabRole } from '@/features/lab/queries.ts';
+import { AchievementGrid } from '@/features/progression/components/AchievementBadge.tsx';
+import { CelebrationHost } from '@/features/progression/components/CelebrationHost.tsx';
+import { LevelBar } from '@/features/progression/components/LevelBar.tsx';
+import { levelProgress } from '@/features/progression/level.ts';
+import { useMyProgress } from '@/features/progression/useTeamProgress.ts';
 import { useSession } from '@/lib/supabase/session.ts';
 import { signOutNow, trySignOut, useUpdateProfile } from '../actions.ts';
 import { asPersonColor, useProfile } from '../queries.ts';
@@ -25,6 +30,7 @@ export default function PerfilPage() {
   const { session } = useSession();
   const profile = useProfile();
   const labRole = useLabRole();
+  const mine = useMyProgress();
   const update = useUpdateProfile();
   const toast = useToast();
   const [leaving, setLeaving] = useState(false);
@@ -67,6 +73,8 @@ export default function PerfilPage() {
   return (
     <div className="grid gap-4">
       <h1 className="font-num text-[30px] leading-none font-semibold">Perfil</h1>
+      {/* abrir o perfil é um momento calmo: o resumo ou o cartão de desbloqueio sai aqui */}
+      <CelebrationHost active />
       <Card className="grid gap-5">
         <div className="flex items-center gap-4">
           <Avatar name={name || '?'} color={color} size="lg" />
@@ -121,6 +129,13 @@ export default function PerfilPage() {
           </Button>
         </form>
       </Card>
+      <section className="grid gap-3" aria-labelledby="h-progresso">
+        <h2 id="h-progresso" className="label-caps text-accent-ink">
+          Progresso
+        </h2>
+        <LevelBar progress={levelProgress(mine.xp)} who="me" />
+        <AchievementGrid mine={new Set(mine.achievements)} />
+      </section>
       {labRole.data ? (
         <ButtonLink to="/lab" variant="secondary">
           <FlaskConical className="size-5" aria-hidden="true" />

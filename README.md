@@ -91,7 +91,7 @@ As fotos das memórias ("Como foi?", no Modo Viagem e no diário) e os prints e 
 
 `/viagens/<id>/checklists`, com três abas: **Antes de viajar**, **Mala** e **Missões** (`src/features/checklists`), cada uma com o seu anel. Adicionar é um campo no fim da lista (Enter adiciona e mantém o foco, para digitar a mala de uma vez); marcar é um toque grande que grava quem e quando, na cor da pessoa; reordenar é pela alça (um arrasto, um patch na posição fracionária) ou por Subir e Descer no menu do item; excluir tem Desfazer. Tudo offline, pela outbox.
 
-- **Pronto para partir:** quando Antes e Mala chegam a 100% antes do início, o cartão com confete e sino aparece uma vez por viagem e aparelho. Na visão geral, os dois anéis e "Fechem as duas listas até 10/12 para ganhar a mala de teto" enquanto falta algo; o selo depois. A mala de teto em si chega com as conquistas (fase 9).
+- **Pronto para partir:** quando Antes e Mala chegam a 100% antes do início, o cartão com confete e sino aparece uma vez por viagem e aparelho. Na visão geral, os dois anéis e "Fechem as duas listas até 10/12 para ganhar a mala de teto" enquanto falta algo; o selo depois. O cartão é a comemoração da conquista "Pronto para partir": a mala de teto vai no rack, e o "Usar no carro" aparece quando o rack já está liberado.
 - **Sugestões por regra, calculadas e não gravadas** (`suggestions.ts`): uma missão por parada pelo tipo dela (natureza, vinícola, comida, cidade, evento; 10 a 20 pontos) e itens de mala pela geografia das rotas guardadas no aparelho (praia, serra) e pelas paradas de natureza. Aparecem esmaecidas, com "Adicionar" e "Dispensar"; só o toque grava, com id determinístico, e a dispensada nunca volta (é um status da linha, não uma lápide).
 - **Na estrada:** a folha "Como foi?" e a lista do dia mostram as missões da parada com "Feito". Nenhuma missão premia velocidade nem exige quem dirige; a de vinícola registra rótulo e foto, nunca consumo.
 - **O aviso de véspera** (19h do dia anterior) diz o que falta: "Amanhã é dia de viajar" · "3 itens de antes e 2 da mala faltando", e abre a lista que falta.
@@ -110,6 +110,25 @@ As fotos das memórias ("Como foi?", no Modo Viagem e no diário) e os prints e 
 
 - **"+ Gasto" no Modo Viagem:** um botão discreto ao lado de "Modo painel" abre o formulário já com a data do dia, a parada em que vocês estão e a categoria pelo tipo dela (na estrada, combustível). Nunca abre sozinho.
 - **"Lançar como gasto" na reserva com valor:** cria o gasto ligado à reserva com id determinístico `v5(reservation_id, 'expense')`; dois aparelhos que lançam a mesma reserva escrevem a mesma linha. Lançado, o botão diz "Gasto lançado" e leva a ele.
+
+## Progressão
+
+XP, níveis e as 15 conquistas (`src/features/progression`), sem ranking: a equipe conquista junto.
+
+- **Derivado dos dados, gravado como somente-anexar.** `rules.ts` (puro) recebe o que o aparelho sabe e devolve o conjunto inteiro de XP e conquistas da pessoa; o motor (`engine.ts`) grava só o que falta, pela outbox, com id determinístico (`v5(user_id, kind:ref_id)`, `v5(user_id, 'achievement:' || key)`). Desmarcar não tira XP, remarcar não dá de novo. Cada aparelho grava o da própria pessoa; o "todo o time" sai do estado compartilhado.
+- **A janela do Desfazer:** nada é gravado enquanto a ação tem menos de 12 s; um Partiu! desfeito não vira conquista. O "+10" aparece na hora, perto do botão.
+- **Nível:** cada pessoa pela soma do próprio XP (0, 150, 400, 900, 2000); o time (o que o carro usa) pelo maior nível dos membros, com os outros vindo do resumo público no perfil (`profiles.xp_total`, `achievement_keys`, mantidos por trigger). Barra na visão geral (o time) e no Perfil (a pessoa, com as conquistas e o que falta em cada uma).
+- **O cartão de desbloqueio** sai num momento calmo (abrir a visão geral, a garagem ou o perfil; fechar a "Como foi?" sem o modo painel), um por vez, nunca por cima de outra folha: o carro da viagem com o acessório encaixando, confete, sino e vibração, "Usar no carro" e "Agora não". A primeira derivação de um aparelho vira um resumo calmo na página. Os cartões têm um toggle por aparelho em Avisos.
+- **Regras e divergências:** `docs/decisoes.md`, D112 a D120 (inclusive "Pé na areia" a 3 km do mar e a pontualidade só com hora real).
+
+## Retrospectiva
+
+`/viagens/<id>/retrospectiva` (`src/features/retrospective`), do dia seguinte ao fim em diante, quando a viagem teve parada concluída. Às 9h desse dia chega o aviso "A retrospectiva da viagem está pronta".
+
+- **O filme "Viajei!", 15 s:** a maquete da viagem inteira (as rotas dos dias emendadas, a trilha gravada onde existe), a câmera descendo até o carro, o sobrevoo com o chip de cada dia, as fotos e as missões nos nós, e o card final com dias, paradas, horas de estrada e km (só dos trechos rodados, pela rota real), o gasto contra o orçamento, as conquistas da viagem e o time. `planFilm` é puro e testado. Com reduzir movimento, sem WebGL ou com `?render=list`, a sequência de cards.
+- **Vídeo vertical de 15 s, 1080 × 1920, sem som:** quadro a quadro, pelo relógio do filme, num alvo fora da tela, codificado pelo WebCodecs (H.264 em MP4; VP9 em WebM onde não há H.264; MediaRecorder só sem WebCodecs), montado pela `mediabunny` num chunk carregado só ao exportar.
+- **Cards como imagem:** abertura, números, conquistas e fotos, em feed (4:5) e stories (9:16), desenhados em Canvas 2D pelo mesmo código do filme.
+- **Compartilhar:** a folha com os arquivos onde o aparelho aceita; senão, download. Tudo funciona sem sinal.
 
 ## Onde se testa (sem stack local)
 

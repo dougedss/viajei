@@ -9,7 +9,12 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useParams, useSearchParams } from 'react-router';
-import { EXPENSE_CATEGORIES, PERSON_COLORS, type ExpenseCategory } from '@shared/constants.ts';
+import {
+  EXPENSE_CATEGORIES,
+  PERSON_COLORS,
+  XP_POINTS,
+  type ExpenseCategory,
+} from '@shared/constants.ts';
 import { NotFound } from '@/app/NotFound.tsx';
 import { Splash } from '@/app/Splash.tsx';
 import { Button } from '@/components/ui/Button.tsx';
@@ -18,6 +23,7 @@ import { PageHeader } from '@/components/ui/PageHeader.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { useTripDays, useTripStops } from '@/features/itinerary/queries.ts';
 import { asPersonColor } from '@/features/profile/queries.ts';
+import { gainXp } from '@/features/progression/xp-gain.ts';
 import { useTripReservations } from '@/features/reservations/queries.ts';
 import { useTrip, useTripMembers } from '@/features/trips/queries.ts';
 import { formatMoney, todayISO } from '@/features/trips/rules.ts';
@@ -161,7 +167,11 @@ export default function GastosPage() {
         onClose={close}
         onSave={(values) => {
           close();
-          void (opened ? updateExpense(opened.id, values) : createExpense(trip.id, uid, values));
+          if (opened) void updateExpense(opened.id, values);
+          else
+            void createExpense(trip.id, uid, values).then((id) =>
+              gainXp(uid, 'expense_logged', id, XP_POINTS.expense_logged, null),
+            );
         }}
         onRemove={(e) => {
           close();

@@ -105,7 +105,7 @@ describe('o time conquista junto', () => {
 describe('o que falta, em português de gente', () => {
   it('as frases do prompt e uma por item', () => {
     expect(accessoryHint('bike')).toBe('Bicicleta: quando alguém aceitar seu convite');
-    expect(accessoryHint('board')).toBe('Prancha: chegando a menos de 1 km do mar');
+    expect(accessoryHint('board')).toBe('Prancha: chegando a menos de 3 km do mar');
     expect(modelHint('sedan')).toBe('Sedã: no nível 2 (Viajante)');
     const hints = CAR_ACCESSORY_KEYS.map(accessoryHint);
     expect(new Set(hints).size).toBe(hints.length);

@@ -5,7 +5,33 @@ export type Database = {
   
   "public": {
           Tables: {
-            "attachments": {
+            "achievements": {
+                  Row: {
+                    "created_at": string,"id": string,"key": string,"synced_at": string,"trip_id": string | null,"unlocked_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"id": string,"key": string,"synced_at": string,"trip_id"?: string | null,"unlocked_at": string,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"key"?: string,"synced_at"?: string,"trip_id"?: string | null,"unlocked_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "achievements_trip_id_fkey"
+      columns: ["trip_id"]
+isOneToOne: false
+      referencedRelation: "trips"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "achievements_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"attachments": {
                   Row: {
                     "created_at": string,"created_by": string,"deleted_at": string | null,"field_versions": NonNullable<Json>,"filename": string,"height": number | null,"id": string,"kind": string,"mime": string,"placeholder": string | null,"reservation_id": string | null,"size_bytes": number,"stop_id": string | null,"storage_path": string,"synced_at": string,"trip_id": string,"updated_at": string,"width": number | null
                   }
@@ -273,14 +299,14 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "color": string,"created_at": string,"field_versions": NonNullable<Json>,"id": string,"name": string,"synced_at": string,"updated_at": string
+                    "achievement_keys": (string)[],"color": string,"created_at": string,"field_versions": NonNullable<Json>,"id": string,"name": string,"synced_at": string,"updated_at": string,"xp_total": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "color": string,"created_at"?: string,"field_versions"?: NonNullable<Json>,"id": string,"name": string,"synced_at": string,"updated_at": string
+                    "achievement_keys"?: (string)[],"color": string,"created_at"?: string,"field_versions"?: NonNullable<Json>,"id": string,"name": string,"synced_at": string,"updated_at": string,"xp_total"?: number
                   }
                   Update: {
-                    "color"?: string,"created_at"?: string,"field_versions"?: NonNullable<Json>,"id"?: string,"name"?: string,"synced_at"?: string,"updated_at"?: string
+                    "achievement_keys"?: (string)[],"color"?: string,"created_at"?: string,"field_versions"?: NonNullable<Json>,"id"?: string,"name"?: string,"synced_at"?: string,"updated_at"?: string,"xp_total"?: number
                   }
                   Relationships: [
                     
@@ -511,6 +537,32 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"xp_events": {
+                  Row: {
+                    "created_at": string,"id": string,"kind": string,"points": number,"ref_id": string,"synced_at": string,"trip_id": string | null,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"id": string,"kind": string,"points": number,"ref_id": string,"synced_at": string,"trip_id"?: string | null,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"kind"?: string,"points"?: number,"ref_id"?: string,"synced_at"?: string,"trip_id"?: string | null,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "xp_events_trip_id_fkey"
+      columns: ["trip_id"]
+isOneToOne: false
+      referencedRelation: "trips"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "xp_events_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 }
           }
           Views: {
@@ -544,6 +596,9 @@ isOneToOne: false
                            },
 "lab_grant":
 { Args: { "p_email": string,"p_role": string }; Returns: string
+                           },
+"lab_reset_progress":
+{ Args: Record<PropertyKey, never>; Returns: number
                            },
 "my_lab_role":
 { Args: Record<PropertyKey, never>; Returns: string

@@ -2,6 +2,7 @@ import { BellOff, BellRing, CalendarDays, Smartphone } from 'lucide-react';
 import { useState } from 'react';
 import { useParams } from 'react-router';
 import {
+  isAvailableKind,
   LEAD_MINUTE_OPTIONS,
   NOTIFICATION_KIND_KEYS,
   NOTIFICATION_KINDS,
@@ -13,6 +14,7 @@ import { Card } from '@/components/ui/Card.tsx';
 import { Chip } from '@/components/ui/Chip.tsx';
 import { PageHeader } from '@/components/ui/PageHeader.tsx';
 import { Switch } from '@/components/ui/Switch.tsx';
+import { useCelebrationsPref, writeCelebrationsPref } from '@/features/progression/prefs.ts';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { useTripDays, useTripStops } from '@/features/itinerary/queries.ts';
 import { InstallCard } from '@/features/pwa/components/InstallCard.tsx';
@@ -142,6 +144,7 @@ export default function AvisosPage() {
   const stops = useTripStops(tripId);
   const { prefs, row } = usePrefs(tripId);
   const sound = useSoundPref();
+  const celebrations = useCelebrationsPref();
   const toast = useToast();
   const uid = session?.user.id ?? '';
 
@@ -160,7 +163,7 @@ export default function AvisosPage() {
     day,
     stops: stops.filter((s) => s.trip_day_id === day.id),
   }));
-  const kinds = NOTIFICATION_KIND_KEYS.filter((k) => NOTIFICATION_KINDS[k].available);
+  const kinds = NOTIFICATION_KIND_KEYS.filter(isAvailableKind);
 
   return (
     <div className="grid gap-6">
@@ -239,18 +242,24 @@ export default function AvisosPage() {
       <section className="grid gap-3" aria-labelledby="h-sons">
         <div className="grid gap-0.5">
           <h2 id="h-sons" className="label-caps text-accent-ink">
-            Sons
+            Sons e conquistas
           </h2>
           <p className="text-[14px] text-ink-2">
-            Só neste aparelho. Mudos com "reduzir movimento".
+            Só neste aparelho. Sons mudos com "reduzir movimento".
           </p>
         </div>
-        <Card>
+        <Card className="grid gap-3">
           <Switch
             label="Sons do Modo Viagem"
             description="Buzina no Partiu!, sino no Chegamos!, ronco do motor no replay."
             checked={sound}
             onChange={writeSoundPref}
+          />
+          <Switch
+            label="Cartões de conquista"
+            description="Ao desbloquear, um cartão com o acessório encaixando no carro, num momento calmo."
+            checked={celebrations}
+            onChange={writeCelebrationsPref}
           />
         </Card>
       </section>

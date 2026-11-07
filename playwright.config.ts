@@ -7,6 +7,16 @@ import { defineConfig, devices } from '@playwright/test';
 // o build é o passo anterior.
 const iphone = { ...devices['iPhone 15'], defaultBrowserType: 'chromium' as const };
 
+/**
+ * Os cartões de conquista (fase 9) começam desligados em todo teste: os usuários do seed são os
+ * mesmos em testes paralelos, e um cartão que chega de outro teste cobriria um botão. Os testes da
+ * progressão ligam de volta (`e2e/helpers/celebrations.ts`).
+ */
+const quiet = (origin: string) => ({
+  cookies: [],
+  origins: [{ origin, localStorage: [{ name: 'viajei:celebrations', value: 'off' }] }],
+});
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -20,11 +30,20 @@ export default defineConfig({
     timezoneId: 'America/Sao_Paulo',
   },
   projects: [
-    { name: 'iphone', testIgnore: /\.pwa\.spec\.ts$/, use: iphone },
+    {
+      name: 'iphone',
+      testIgnore: /\.pwa\.spec\.ts$/,
+      use: { ...iphone, storageState: quiet('http://127.0.0.1:5173') },
+    },
     {
       name: 'pwa',
       testMatch: /\.pwa\.spec\.ts$/,
-      use: { ...iphone, baseURL: 'http://127.0.0.1:4173', serviceWorkers: 'allow' },
+      use: {
+        ...iphone,
+        baseURL: 'http://127.0.0.1:4173',
+        serviceWorkers: 'allow',
+        storageState: quiet('http://127.0.0.1:4173'),
+      },
     },
   ],
   webServer: [

@@ -24,7 +24,18 @@ export type GarageStageProps = {
   onFail: (reason: string) => void;
   /** o acessório pedido assentou */
   onSeat: () => void;
+  /**
+   * O cartão de desbloqueio (fase 9): o palco monta já com `car` (o acessório ou o modelo novo), para
+   * a compilação dos shaders cair na abertura, e no primeiro quadro volta para `reveal` sem animação;
+   * em seguida anima até `car`. Assim o encaixe nunca engasga com um material novo.
+   */
+  reveal?: CarSpec;
+  /** o palco já mostra `reveal` e vai animar (o cartão tira a cortina) */
+  onReady?: () => void;
 };
+
+/** quanto o palco espera, depois de voltar ao carro de antes, para animar o desbloqueio */
+const REVEAL_DELAY_MS = 650;
 
 const CAMERA: ThreeCamera = { fov: GARAGE_FOV, near: 0.1, far: 140, position: [8, 3, 8] };
 
@@ -47,7 +58,10 @@ export default function GarageStage(p: GarageStageProps) {
   const hostRef = useRef<HTMLDivElement>(null);
 
   // o carro a mostrar: o da viagem ou a prévia; a troca anima (sem movimento reduzido)
+  const { reveal, onReady } = p;
+  const revealing = reveal !== undefined;
   useEffect(() => {
+    if (revealing) return;
     runtime.show(car, {
       animate: !reducedMotion,
       onSeat,
@@ -56,7 +70,25 @@ export default function GarageStage(p: GarageStageProps) {
         setTimeout(stop, 900);
       },
     });
-  }, [runtime, car, reducedMotion, onSeat]);
+  }, [runtime, car, reducedMotion, onSeat, revealing]);
+
+  // o desbloqueio: no primeiro quadro, o carro de antes; depois, o encaixe ou a troca animada
+  useEffect(() => {
+    if (!drawn || !reveal) return;
+    runtime.show(reveal, { animate: false });
+    onReady?.();
+    const t = setTimeout(() => {
+      runtime.show(car, {
+        animate: !reducedMotion,
+        onSeat,
+        onSwap: () => {
+          const stop = audio.engineStart();
+          setTimeout(stop, 900);
+        },
+      });
+    }, REVEAL_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [drawn, reveal, runtime, car, reducedMotion, onSeat, onReady]);
 
   // o giro sozinho para com a aba escondida e sob reduzir movimento
   useEffect(() => {

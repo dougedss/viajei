@@ -47,6 +47,7 @@ import {
   type Received,
   type TripKey,
 } from './evaluate.ts';
+import { appProgressao, appRetrospectiva, type ProgressContext } from './app-progress.ts';
 import { roadScenarios, ROAD_SCENARIOS } from './app-road.ts';
 import { NOT_ARMED, runArmed } from './armed.ts';
 import { prepareRoad } from './road.ts';
@@ -309,7 +310,7 @@ async function prepare(
     'limpar assinaturas A',
   );
   ok(
-    await b.client.from('push_subscriptions').delete().eq('user_id', b.uid),
+    await b.client.from('push_subscriptions').delete().eq('user_id', b.uid).or(NOT_ARMED),
     'limpar assinaturas B',
   );
   const [main, gone] = await subscribe(a, cfg, [
@@ -448,7 +449,7 @@ async function finalize(a: Session, b: Session, ids: Ids | null): Promise<void> 
   }
   await step('apagar assinaturas', async () => {
     ok(await a.client.from('push_subscriptions').delete().eq('user_id', a.uid).or(NOT_ARMED), 'A');
-    ok(await b.client.from('push_subscriptions').delete().eq('user_id', b.uid), 'B');
+    ok(await b.client.from('push_subscriptions').delete().eq('user_id', b.uid).or(NOT_ARMED), 'B');
   });
 }
 
@@ -548,7 +549,7 @@ async function main(): Promise<number> {
   let ids: Ids | null = null;
   let app: App | null = null;
   // os avisos de dois dias primeiro: conferir o que a execução anterior armou e armar o próximo
-  const armed = await runArmed(cfg, a);
+  const armed = await runArmed(cfg, a, b);
   checks.push(...armed.checks);
   log(`armados: ${armed.checks.map((c) => `${c.scenario} ${c.status}`).join(', ')}`);
   const pending = (keys: readonly Check['scenario'][]) =>
@@ -567,6 +568,28 @@ async function main(): Promise<number> {
       );
     } else {
       const plan = planned;
+      // a progressão antes de tudo: o preparo dos outros cenários conclui paradas de A, e o cartão do
+      // primeiro desbloqueio só aparece com a progressão zerada e nenhuma parada concluída viva (D125)
+      const progress: ProgressContext = {
+        appUrl: cfg.appOrigin,
+        a,
+        b,
+        emails: { a: LAB_USERS.a.email, b: LAB_USERS.b.email },
+        passwords: {
+          a: await derivePassword(cfg.secret, LAB_USERS.a.email),
+          b: await derivePassword(cfg.secret, LAB_USERS.b.email),
+        },
+        artifactsDir: join(process.cwd(), 'lab-artifacts'),
+      };
+      if (withApp) {
+        const progressao = await appProgressao(progress, plan.today);
+        checks.push(progressao);
+        log(
+          `app: app_progressao ${progressao.status}${progressao.status === 'pass' ? '' : ` · ${progressao.detail}`}`,
+        );
+      } else {
+        checks.push(skipped('app_progressao', 'Sem navegador nesta execução.'));
+      }
       ids = await idsFor(a.uid, plan.today);
       const t0 = Date.now();
       let prepared: Awaited<ReturnType<typeof prepare>> | null = null;
@@ -739,6 +762,14 @@ async function main(): Promise<number> {
           );
         } else {
           appChecks.push(...ROAD_SCENARIOS.map((s) => skipped(s, 'Sem navegador nesta execução.')));
+        }
+        // a retrospectiva por último: exportar o vídeo é o passo mais longo da execução
+        if (withApp) {
+          const retro = await appRetrospectiva(progress);
+          appChecks.push(retro);
+          log(`app: app_retrospectiva ${retro.status} · ${retro.detail}`);
+        } else {
+          appChecks.push(skipped('app_retrospectiva', 'Sem navegador nesta execução.'));
         }
         checks.push(...appChecks);
       }

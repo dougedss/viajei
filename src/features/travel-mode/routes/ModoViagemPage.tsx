@@ -58,6 +58,9 @@ import { db, type Stop } from '@/lib/db/schema.ts';
 import { useTripMediaPrefetch } from '@/lib/media/hooks.ts';
 import { audio } from '@/lib/audio/index.ts';
 import { celebrateArrival } from '@/lib/celebrate.ts';
+import { XP_POINTS } from '@shared/constants.ts';
+import { CelebrationHost } from '@/features/progression/components/CelebrationHost.tsx';
+import { gainXp, tappedRect } from '@/features/progression/xp-gain.ts';
 import { currentDay, formatDayShort } from '@/lib/time/index.ts';
 import { arrive, arriveAt, depart, skip, type Undoable } from '../actions.ts';
 import { useCatchup } from '../catchup.ts';
@@ -231,6 +234,9 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
     .flatMap((m) => (m.profile ? [m.profile] : []));
   const [memoryStopId, setMemoryStopId] = useState<string | null>(null);
   const [reservationId, setReservationId] = useState<string | null>(null);
+  // o momento calmo do Modo Viagem: fechar a folha "Como foi?" (até o próximo Partiu!), nunca com o
+  // modo painel. Os cartões que já esperavam na fila nesse instante saem aí; os outros esperam.
+  const [calmSince, setCalmSince] = useState<number | null>(null);
   const sheetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
     () => () => {
@@ -249,6 +255,9 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
     setBusy(true);
     // a parada que este Chegamos! conclui, para a folha "Como foi?" saber de quem é
     const arriving = effect === 'arrive' ? state.next : null;
+    // o "+10" aparece onde o dedo tocou (a posição fica guardada antes do botão mudar)
+    const at = source === 'tap' ? tappedRect() : null;
+    if (effect === 'depart') setCalmSince(null);
     void action()
       .then(({ undo }) => {
         cuRef.current?.markSeen(seen);
@@ -256,6 +265,7 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
         if (effect === 'arrive') {
           audio.bell();
           celebrateArrival();
+          if (arriving && at) void gainXp(uid, 'stop_done', arriving.id, XP_POINTS.stop_done, at);
         }
         if (
           arriving &&
@@ -531,7 +541,16 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
         tripId={tripId}
         stop={sheetStop}
         uid={uid}
-        onClose={() => setMemoryStopId(null)}
+        onClose={() => {
+          setMemoryStopId(null);
+          setCalmSince(Date.now());
+        }}
+      />
+      <CelebrationHost
+        active={!panel.on && calmSince !== null}
+        since={calmSince ?? 0}
+        tripId={tripId}
+        showSummary={false}
       />
       <ExpenseSheet
         open={expenseDraft ? { draft: expenseDraft } : null}
@@ -543,7 +562,8 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
         onClose={() => setExpenseDraft(null)}
         onSave={(values) => {
           setExpenseDraft(null);
-          void createExpense(tripId, uid, values).then((id) =>
+          void createExpense(tripId, uid, values).then((id) => {
+            void gainXp(uid, 'expense_logged', id, XP_POINTS.expense_logged, null);
             toast.show({
               title: 'Gasto lançado',
               description: formatMoney(values.amount),
@@ -552,8 +572,8 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
                 label: 'Ver gastos',
                 onClick: () => void navigate(`/viagens/${tripId}/gastos?abrir=${id}`),
               },
-            }),
-          );
+            });
+          });
         }}
       />
       <ReservationSheet

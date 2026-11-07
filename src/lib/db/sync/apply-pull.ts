@@ -112,11 +112,29 @@ export type ApplyStats = { upserted: number; removed: number; revoked: boolean }
  * e as operações e envios que já não têm destino.
  */
 export async function wipeTrip(db: ViajeiDb, tripId: string): Promise<void> {
-  const stores = [...TRIP_SCOPED_TABLES, 'outbox', 'sync_state', 'blobs', 'uploads'];
+  const stores = [
+    ...TRIP_SCOPED_TABLES,
+    'achievements',
+    'xp_events',
+    'outbox',
+    'sync_state',
+    'blobs',
+    'uploads',
+  ];
   await db.transaction('rw', stores, async () => {
     for (const t of TRIP_SCOPED_TABLES) {
       if (t === 'trips') await db.trips.delete(tripId);
       else await db.syncTable(t).where('trip_id').equals(tripId).delete();
+    }
+    // a progressão dos outros membros nesta viagem sai junto; a da pessoa continua dela
+    const me = (await db.sync_state.get(syncKeys.uid))?.value;
+    for (const t of ['achievements', 'xp_events'] as const) {
+      await db
+        .syncTable(t)
+        .where('trip_id')
+        .equals(tripId)
+        .filter((row) => row.user_id !== me)
+        .delete();
     }
     await db.outbox.where('trip_id').equals(tripId).delete();
     await db.blobs.where('trip_id').equals(tripId).delete();

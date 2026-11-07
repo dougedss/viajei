@@ -40,6 +40,9 @@ export const notificationDataSchema = z.looseObject({
   /** véspera: itens de "antes" e da mala ainda sem marcar */
   before_left: z.number().nullish(),
   pack_left: z.number().nullish(),
+  /** retrospectiva: dias da viagem e paradas concluídas */
+  days: z.number().nullish(),
+  stops_done: z.number().nullish(),
 });
 export type NotificationData = z.infer<typeof notificationDataSchema>;
 
@@ -262,14 +265,15 @@ export function notificationText(
         topic: null,
       };
     }
-    case 'retro_ready': // fase 9
+    case 'retro_ready':
+      // o dia seguinte ao fim, às 9h: os fatos da viagem que aconteceu (só sai com parada concluída)
       return {
-        title: data.trip_name ?? 'Viajei',
-        body: '',
-        tag: `${kind}:${ref}`,
+        title: 'A retrospectiva da viagem está pronta',
+        body: `${plural(data.days ?? 1, 'dia', 'dias')}, ${plural(data.stops_done ?? 0, 'parada', 'paradas')}`,
+        tag: `retro:${ref}`,
         actions: [],
         appBadge: null,
-        ttlSeconds: 3600,
+        ttlSeconds: 12 * 3600,
         topic: null,
       };
   }
@@ -277,7 +281,8 @@ export function notificationText(
 
 /**
  * Caminho que o aviso abre: o "Agora" da viagem; o prazo de cancelamento abre a própria reserva; a
- * véspera com itens faltando abre a lista que falta (antes primeiro).
+ * véspera com itens faltando abre a lista que falta (antes primeiro); a retrospectiva pronta abre o
+ * filme da viagem.
  */
 export function navigatePath(
   row: Pick<ClaimedNotification, 'kind' | 'ref' | 'trip_id'> & {
@@ -288,6 +293,7 @@ export function navigatePath(
   if (row.kind === 'cancel_deadline') {
     return `/viagens/${row.trip_id}/reservas?abrir=${encodeURIComponent(row.ref)}`;
   }
+  if (row.kind === 'retro_ready') return `/viagens/${row.trip_id}/retrospectiva`;
   if (row.kind === 'eve_checklist') {
     const before = row.data?.before_left ?? 0;
     const pack = row.data?.pack_left ?? 0;

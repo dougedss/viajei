@@ -189,3 +189,52 @@ describe('resolveResults', () => {
     expect(describeError(undefined, undefined)).toMatch(/recusou/);
   });
 });
+
+describe('escrita sem sinal (offline_hero)', () => {
+  it('a marca sobrevive à fusão: basta uma das operações ter nascido sem sinal', () => {
+    const [merged] = coalesce([
+      op({ seq: 1, row_id: 'a', offline: false }),
+      op({ seq: 2, row_id: 'a', offline: true }),
+    ]);
+    expect(merged?.offline).toBe(true);
+  });
+
+  it('só conta a escrita aceita, da viagem e feita pela pessoa (a trilha e o XP não contam)', () => {
+    const base = { op: 'patch' as const, values: {}, versions: {}, updated_at: '', offline: true };
+    const batch: PushOp[] = [
+      { ...base, seq: 1, table: 'stops', id: 's', trip_id: 't', sources: [1] },
+      { ...base, seq: 2, table: 'trip_tracks', id: 'k', trip_id: 't', sources: [2] },
+      { ...base, seq: 3, table: 'xp_events', id: 'x', trip_id: null, sources: [3] },
+      { ...base, seq: 4, table: 'expenses', id: 'e', trip_id: 't', sources: [4] },
+      { ...base, seq: 5, table: 'contacts', id: 'c', trip_id: 't', sources: [5], offline: false },
+    ];
+    const r = resolveResults(batch, [
+      { seq: 1, status: 'applied' },
+      { seq: 2, status: 'applied' },
+      { seq: 3, status: 'applied' },
+      { seq: 4, status: 'ignored' },
+      { seq: 5, status: 'applied' },
+    ]);
+    expect(r.offline).toEqual([{ table: 'stops', id: 's', trip_id: 't' }]);
+  });
+
+  it('XP ou conquista recusados saem da fila sem ir para Pendentes', () => {
+    const r = resolveResults(
+      [
+        {
+          seq: 1,
+          table: 'xp_events',
+          id: 'x',
+          op: 'upsert',
+          values: {},
+          versions: {},
+          updated_at: '',
+          sources: [1],
+        },
+      ],
+      [{ seq: 1, status: 'error', code: '42501' }],
+    );
+    expect(r.done).toEqual([1]);
+    expect(r.failed).toEqual([]);
+  });
+});

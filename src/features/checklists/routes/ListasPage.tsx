@@ -17,6 +17,7 @@ import { TextField } from '@/components/ui/TextField.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { sortStops } from '@/features/itinerary/rules.ts';
 import { useTripDays, useTripStops } from '@/features/itinerary/queries.ts';
+import { gainXp, itemXp, tappedRect } from '@/features/progression/xp-gain.ts';
 import { useTrip, useTripMembers } from '@/features/trips/queries.ts';
 import { todayISO } from '@/features/trips/rules.ts';
 import type { ChecklistItem, Profile, Stop, TripDay } from '@/lib/db/schema.ts';
@@ -97,7 +98,15 @@ export default function ListasPage() {
       },
       { replace: true },
     );
-  const toggle = (item: ChecklistItem) => void setDone(item, uid, item.done_at === null);
+  const toggle = (item: ChecklistItem) => {
+    const at = tappedRect();
+    const done = item.done_at === null;
+    void setDone(item, uid, done);
+    if (done) {
+      const xp = itemXp(item);
+      void gainXp(uid, xp.kind, item.id, xp.points, at);
+    }
+  };
   const remove = async (item: ChecklistItem) => {
     setMenuId(null);
     const undo = await removeItem(item);

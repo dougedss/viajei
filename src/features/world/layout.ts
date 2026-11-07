@@ -104,6 +104,11 @@ export type LayoutInput = {
   route: Pick<DayRoute, 'geometry' | 'elevation' | 'legs'> | null;
   place: PlaceReading | null;
   viewport: LayoutViewport;
+  /**
+   * Até onde o z do caminho vai antes de comprimir (padrão `Z_MAX`, o dia inteiro na tela). O filme
+   * da retrospectiva usa mais, porque a câmera sobrevoa a viagem em vez de mostrá-la de uma vez.
+   */
+  zMax?: number;
 };
 
 export type WorldLayout = {
@@ -373,7 +378,8 @@ export function buildLayout(input: LayoutInput): WorldLayout {
   }
   // dias longos: comprime o z para o dia inteiro caber a uma distância legível, e abre o S
   const rawEnd = nodeXZ.at(-1)?.z ?? 0;
-  const zScale = rawEnd > Z_MAX ? Z_MAX / rawEnd : 1;
+  const zMax = input.zMax ?? Z_MAX;
+  const zScale = rawEnd > zMax ? zMax / rawEnd : 1;
   const zEnd = rawEnd * zScale;
   const xHalf = clamp(zEnd * 0.16, X_HALF, X_HALF_MAX);
   nodeXZ.forEach((nd, i) => {

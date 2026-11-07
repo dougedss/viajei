@@ -16,6 +16,10 @@ import { loadExampleTrip } from '@/features/itinerary/seed.ts';
 import { CalendarExport } from '@/features/notifications/components/CalendarExport.tsx';
 import { PushAskSheet } from '@/features/notifications/components/PushAskSheet.tsx';
 import { asPersonColor } from '@/features/profile/queries.ts';
+import { CelebrationHost } from '@/features/progression/components/CelebrationHost.tsx';
+import { LevelBar } from '@/features/progression/components/LevelBar.tsx';
+import { useTeamLevel } from '@/features/progression/useTeamProgress.ts';
+import { RetroEntry } from '@/features/retrospective/components/RetroEntry.tsx';
 import { deleteTrip } from '../actions.ts';
 import { useIsOwner, useTrip, useTripMembers } from '../queries.ts';
 import { TripHero } from '../components/TripHero.tsx';
@@ -48,6 +52,7 @@ export default function ViagemPage() {
   const items = useTripChecklist(tripId);
   const contacts = useTripContacts(tripId) ?? [];
   const expenses = useTripExpenses(tripId) ?? [];
+  const teamLevel = useTeamLevel(tripId);
 
   if (trip === undefined) return <Splash />;
   if (trip === null) return <NotFound />;
@@ -75,6 +80,13 @@ export default function ViagemPage() {
       />
 
       <TripHero trip={trip} today={today} />
+
+      {/* abrir a visão geral é um momento calmo: o resumo ou o cartão de desbloqueio sai aqui */}
+      <CelebrationHost active tripId={trip.id} />
+
+      <RetroEntry trip={trip} stops={stops} today={today} />
+
+      <LevelBar progress={teamLevel.progress} who="team" solo={teamLevel.solo} label="Time" />
 
       <ReadinessCard trip={trip} items={items ?? []} today={today} teamSize={team.length} />
 

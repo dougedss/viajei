@@ -56,6 +56,11 @@ export const LAB_SCENARIOS = {
     label: 'Prazo de cancelamento',
     description: 'Em dois dias: armado numa execução, chega às 10h da véspera do último dia',
   },
+  retro: {
+    label: 'Retrospectiva pronta',
+    description:
+      'Em dois dias: armado numa execução, chega às 9h do dia seguinte ao fim, com o filme',
+  },
   app_avisos: {
     label: 'App · ativar avisos',
     description:
@@ -112,6 +117,15 @@ export const LAB_SCENARIOS = {
   app_sair_pendente: {
     label: 'App · sair com pendência',
     description: '"Sair" com uma foto sem sinal avisa o que se perderia; ficar mantém tudo',
+  },
+  app_progressao: {
+    label: 'App · progressão',
+    description:
+      'A primeira parada dá o cartão; "Usar no carro" põe o rack; XP de A e de B no servidor; a garagem de B',
+  },
+  app_retrospectiva: {
+    label: 'App · retrospectiva',
+    description: 'O filme chega ao card final; o card em 1080 × 1920 e o vídeo de 15 s, no Chrome',
   },
 } as const;
 
