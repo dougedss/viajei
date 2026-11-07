@@ -143,6 +143,12 @@ async function runSteps(
 }
 
 const tripUrl = (t: AppTarget, path = 'viagem') => `${t.appUrl}/viagens/${t.tripId}/${path}`;
+/**
+ * O Modo Viagem sem a maquete. Desde a D61 quem conta o que aconteceu é um só: com maquete, o replay;
+ * sem ela (ou com "reduzir movimento"), o card "Desde a última vez". Os cenários do card abrem assim;
+ * a maquete tem o cenário dela (`appMaquete`).
+ */
+const listUrl = (t: AppTarget) => `${tripUrl(t)}?render=list`;
 
 /** Entrar, abrir o "Agora", a folha de avisos na segunda abertura, ativar e conferir em /avisos. */
 export function appAvisos(app: App): Promise<Check> {
@@ -324,18 +330,21 @@ export function appNotificacao(
   );
 }
 
-/** Ao reabrir: "Desde a última vez" mostra a saída; com a posição na parada, Chegamos! sozinho. */
+/**
+ * Ao reabrir, na lista: "Desde a última vez" mostra a saída; com a posição na parada, Chegamos!
+ * sozinho, e a pergunta "Como foi?" vira o card discreto, sem abrir a folha (D83).
+ */
 export function appReabrir(app: App, serverMarked: () => Promise<void>): Promise<Check> {
   const { page, target } = app;
   return runSteps(
     app,
     'app_reabrir',
-    '"Desde a última vez" mostrou a saída e a posição marcou Chegamos! no destino',
+    '"Desde a última vez" mostrou a saída; a posição marcou Chegamos! e o "Como foi?" veio como card',
     [
       [
-        'reabrir o "Agora"',
+        'reabrir o "Agora" na lista',
         async () => {
-          await page.goto(tripUrl(target));
+          await page.goto(listUrl(target));
           await page.getByRole('heading', { name: 'Agora' }).waitFor();
         },
       ],
@@ -359,6 +368,16 @@ export function appReabrir(app: App, serverMarked: () => Promise<void>): Promise
         },
       ],
       ['o servidor recebeu a chegada', serverMarked],
+      [
+        'o "Como foi?" vem como card, sem abrir a folha',
+        async () => {
+          const question = `Como foi ${target.destinationName}?`;
+          await page.getByRole('region', { name: question }).waitFor();
+          if ((await page.getByRole('dialog', { name: question }).count()) > 0) {
+            throw new Error('a folha abriu sozinha numa chegada pela posição');
+          }
+        },
+      ],
     ],
   );
 }
@@ -374,7 +393,7 @@ export function appExtras(app: App): Promise<Check> {
       [
         'abrir o "Agora"',
         async () => {
-          if (!page.url().startsWith(tripUrl(target))) await page.goto(tripUrl(target));
+          if (!page.url().startsWith(tripUrl(target))) await page.goto(listUrl(target));
           await page.getByRole('heading', { name: 'Agora' }).waitFor();
         },
       ],
@@ -411,4 +430,64 @@ export function appExtras(app: App): Promise<Check> {
       ],
     ],
   );
+}
+
+/** O SwiftShader do Chromium sem tela compila os shaders da cena devagar (o e2e espera 60 s). */
+const WORLD_TIMEOUT = 90_000;
+
+/**
+ * A maquete, sem prender o laboratório a fps: monta com um motor de verdade (WebGPU ou WebGL2), as
+ * pílulas aparecem por cima, e o "Rever o dia" anda até o fim. O movimento é medido pelo relógio,
+ * não por quadros: o "Pular" aparecer prova que o laço de quadros começou o movimento, e o "Rever o
+ * dia" voltar prova que ele terminou. O replay ao abrir não serve aqui: o `app_reabrir` já mostrou os
+ * eventos pelo card. Motor e tempos ficam em `data`, só como informação.
+ */
+export function appMaquete(app: App): Promise<Check> {
+  const { page, target } = app;
+  const info: Record<string, unknown> = {};
+  const world = page.locator('[data-world="webgl2"], [data-world="webgpu"]');
+  const hud = page.locator('[data-world-hud]');
+  return runSteps(app, 'app_maquete', 'A maquete montou com as pílulas e o "Rever o dia" andou', [
+    [
+      'abrir o "Agora" com a maquete',
+      async () => {
+        await page.goto(tripUrl(target));
+        await page.getByRole('heading', { name: 'Agora' }).waitFor();
+      },
+    ],
+    [
+      'a maquete monta com um motor de verdade',
+      async () => {
+        const t0 = Date.now();
+        await world.waitFor({ timeout: WORLD_TIMEOUT });
+        await page
+          .getByText('Montando a maquete…')
+          .waitFor({ state: 'hidden', timeout: WORLD_TIMEOUT });
+        info.motor = await world.getAttribute('data-world');
+        info.primeiro_quadro_ms = Date.now() - t0;
+      },
+    ],
+    [
+      'as pílulas das paradas por cima da cena',
+      async () => {
+        await hud.getByText(target.originName).first().waitFor();
+        await hud.getByText(target.destinationName).first().waitFor();
+      },
+    ],
+    [
+      '"Rever o dia" começa e anda até o fim',
+      async () => {
+        const review = page.getByRole('button', { name: 'Rever o dia', exact: true });
+        // um replay ao abrir, se houver, termina antes de o botão aparecer
+        await review.waitFor({ timeout: WORLD_TIMEOUT });
+        await review.click();
+        const t0 = Date.now();
+        await hud
+          .getByRole('button', { name: 'Pular', exact: true })
+          .waitFor({ timeout: WORLD_TIMEOUT });
+        await review.waitFor({ timeout: WORLD_TIMEOUT });
+        info.rever_ms = Date.now() - t0;
+      },
+    ],
+  ]).then((check) => ({ ...check, data: { ...check.data, ...info } }));
 }

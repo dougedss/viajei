@@ -26,6 +26,7 @@ import {
   closeApp,
   appAvisos,
   appExtras,
+  appMaquete,
   appNotificacao,
   appReabrir,
   openApp,
@@ -521,7 +522,13 @@ async function serverStop(
   }
 }
 
-const APP_SCENARIOS = ['app_avisos', 'app_notificacao', 'app_reabrir', 'app_extras'] as const;
+const APP_SCENARIOS = [
+  'app_avisos',
+  'app_notificacao',
+  'app_reabrir',
+  'app_extras',
+  'app_maquete',
+] as const;
 const skipped = (scenario: Check['scenario'], detail: string): Check => ({
   scenario,
   status: 'skip',
@@ -725,6 +732,7 @@ async function main(): Promise<number> {
               : skipped('app_reabrir', 'Depende do Partiu! na notificação.'),
           );
           appChecks.push(await appExtras(app));
+          appChecks.push(await appMaquete(app));
           log(`app: ${appChecks.map((c) => `${c.scenario} ${c.status}`).join(', ')}`);
         } else if (app) {
           appChecks.push(

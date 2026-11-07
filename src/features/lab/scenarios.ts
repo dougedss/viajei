@@ -58,11 +58,17 @@ export const LAB_SCENARIOS = {
   },
   app_reabrir: {
     label: 'App · reabrir',
-    description: '"Desde a última vez" mostra a saída; a posição no destino marca Chegamos!',
+    description:
+      'Na lista, "Desde a última vez" mostra a saída; a posição marca Chegamos! e vira o card "Como foi?"',
   },
   app_extras: {
     label: 'App · painel e calendário',
     description: 'Modo painel liga e desliga; o dia sai como .ics',
+  },
+  app_maquete: {
+    label: 'App · maquete',
+    description:
+      'A maquete monta (WebGPU ou WebGL2) com as pílulas, e o "Rever o dia" anda até o fim',
   },
 } as const;
 

@@ -522,3 +522,10 @@ Um pull do Realtime que encontra o lock ocupado pede um ciclo completo. `syncNow
 - O laboratório (D50 a D56) passa a ser o teste de aceitação na produção. A cada fase, os passos do roteiro manual que um navegador consegue fazer entram nele como cenários. Fica para o teste final só o que um aparelho julga: câmera, HEIC, o PDF no app instalado do iPhone, fps da maquete e da garagem, entrega pela Apple e pelo FCM, Wake Lock e GPS de verdade.
 
 **Consequência.** Hoje o laboratório cobre só a tela apagada da fase 4; as fases 5 a 7 ainda não têm cenários nele. A fase 7 é a primeira a passar pela CI na própria branch. Os cenários dela no laboratório são o próximo passo, com plano a aprovar.
+
+## Laboratório: o card e a maquete (07/11/2026)
+
+### D92 · O `app_reabrir` confere o card pela lista; a maquete ganha cenário próprio
+**Contexto.** A primeira execução agendada (06/11) ficou vermelha só no `app_reabrir`: o cenário, de antes da fase 5, abria o Modo Viagem sem `?render=list` e esperava o card "Desde a última vez". Desde a D61 quem conta o que aconteceu é um só, e com maquete é o replay; o print mostrou a maquete contando a saída. Não era defeito do app.
+**Decisão.** O `app_reabrir` abre a lista (`?render=list`), confere o card e ganha um passo: o Chegamos! pela posição vira o card discreto "Como foi?", sem abrir a folha (D83). Um cenário novo, `app_maquete`, confere a maquete: monta com WebGPU ou WebGL2, as pílulas aparecem por cima e o "Rever o dia" anda até o fim. O "Pular" aparecer prova que o laço de quadros começou o movimento; o "Rever o dia" voltar prova que ele terminou. O movimento é medido pelo relógio, então nada depende de fps; motor e tempos ficam em `data`, só como informação. O replay ao abrir não serve aqui porque o card já mostrou os eventos.
+**Consequência.** Os dois caminhos de "o que aconteceu" (card e maquete) são testados todo dia na produção, sem que a lentidão do SwiftShader do GitHub vire falha.
