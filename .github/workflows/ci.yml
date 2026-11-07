@@ -36,13 +36,32 @@ jobs:
       - name: Supabase local (Postgres, Auth, PostgREST, Realtime, Storage)
         run: pnpm exec supabase start -x studio,imgproxy,logflare,vector,mailpit
 
+      # uma falha do pgTAP não esconde o resto da volta: a CI segue e falha no fim (passo abaixo)
       - name: pgTAP
+        id: pgtap
+        continue-on-error: true
         run: pnpm exec supabase test db
 
-      - name: Tipos do banco batem com o commit
+      # Sem stack local (D91), os tipos do banco só nascem aqui. Se mudaram, o arquivo gerado vira o
+      # artefato "tipos-do-banco" e o resto da CI roda com ele; a CI falha no fim, para o arquivo ser
+      # commitado (`gh run download <id> -n tipos-do-banco -D src/lib/supabase`).
+      - name: Tipos do banco (gerados do Supabase desta CI)
+        id: tipos-banco
         run: |
           pnpm db:types
-          git diff --exit-code -- src/lib/supabase/database.types.ts
+          if git diff --quiet -- src/lib/supabase/database.types.ts; then
+            echo "mudou=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "mudou=true" >> "$GITHUB_OUTPUT"
+            git diff --stat -- src/lib/supabase/database.types.ts
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: steps.tipos-banco.outputs.mudou == 'true'
+        with:
+          name: tipos-do-banco
+          path: src/lib/supabase/database.types.ts
+          retention-days: 7
 
       - name: Tipos
         run: pnpm typecheck
@@ -63,6 +82,18 @@ jobs:
         run: |
           pnpm exec playwright install --with-deps chromium
           pnpm test:e2e
+
+      - name: Tipos do banco batem com o commit
+        if: steps.tipos-banco.outputs.mudou == 'true'
+        run: |
+          echo "::error file=src/lib/supabase/database.types.ts::não bate com o banco desta CI; baixe o artefato tipos-do-banco e commite"
+          exit 1
+
+      - name: pgTAP passou
+        if: steps.pgtap.outcome == 'failure'
+        run: |
+          echo "::error::o pgTAP falhou: veja o passo pgTAP acima"
+          exit 1
 
       - uses: actions/upload-artifact@v4
         if: failure()
