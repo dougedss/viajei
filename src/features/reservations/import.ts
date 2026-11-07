@@ -10,10 +10,10 @@ export type ImportedReservationRow = Omit<
 >;
 
 /**
- * Uma reserva do schema de importação como colunas. Puro: o carregador do exemplo usa hoje, e a
- * importação da fase 10 usa depois. `stop_ref` é o nome de uma parada da viagem e vence (a parada já
- * diz o dia); sem ela, `day_ref` é a data de um dia; os horários vêm em hora de parede de São Paulo,
- * sem fuso; o telefone vai para E.164 quando dá (senão fica de fora).
+ * Uma reserva do schema de importação como colunas. Puro: a importação com IA e o carregador do
+ * exemplo passam por aqui (`features/import/plan.ts`). `stop_ref` é o nome de uma parada e vence
+ * (a parada já diz o dia); sem ela, `day_ref` é a data de um dia; os horários vêm em hora de parede
+ * de São Paulo, sem fuso; o telefone vai para E.164 quando dá (senão fica de fora).
  */
 export function reservationFromImport(
   r: ImportReservation,

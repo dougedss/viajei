@@ -187,6 +187,18 @@
   }
 }
 
+/* o que chega da leitura do roteiro entra com um fade curto (fase 10); sem movimento, já aparece */
+@keyframes import-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @utility num {
   font-family: var(--font-num);
   font-variant-numeric: tabular-nums;

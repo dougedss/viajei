@@ -425,6 +425,14 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/push-receiver/index.ts"
 
+# import-itinerary lê o roteiro colado com a IA da Anthropic e devolve o JSON aos poucos (SSE). Roda
+# como o usuário (verify_jwt ligado, RLS vale, sem chave secreta do Supabase); a ANTHROPIC_API_KEY
+# existe só em `supabase secrets` (`pnpm remote:secrets-push`). Limite: 20 leituras por pessoa em 24 h.
+[functions.import-itinerary]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/import-itinerary/index.ts"
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

@@ -49,6 +49,8 @@ import {
 } from './evaluate.ts';
 import { appProgressao, appRetrospectiva, type ProgressContext } from './app-progress.ts';
 import { roadScenarios, ROAD_SCENARIOS } from './app-road.ts';
+import { appImportar } from './app-import.ts';
+import { measureImport } from './measure-import.ts';
 import { NOT_ARMED, runArmed } from './armed.ts';
 import { prepareRoad, resetRoad } from './road.ts';
 import { ensureTeamMember, kindsOnly, log, sleep, type Session } from './session.ts';
@@ -536,6 +538,10 @@ async function main(): Promise<number> {
   // o navegador roda contra o app publicado; no local, só com --app (precisa do pnpm preview)
   const withApp = target === 'production' ? !argv.includes('--sem-app') : argv.includes('--app');
   const cfg = await loadConfig(target);
+  // a medição do pensamento da importação (D133): só a função, sem navegador e sem os avisos
+  if (argv.includes('--medir-importacao')) {
+    return measureImport(cfg, await signIn(cfg, LAB_USERS.a));
+  }
   if (target === 'local') for (const l of await ensureLocalLab(cfg)) log(l);
   await probeReceiver(cfg);
 
@@ -587,6 +593,23 @@ async function main(): Promise<number> {
       );
     } else {
       checks.push(skipped('app_progressao', 'Sem navegador nesta execução.'));
+    }
+    // a importação com IA (fase 10): uma leitura de verdade por dia, numa viagem só dela (D139)
+    if (withApp) {
+      const importar = await appImportar(
+        {
+          appUrl: cfg.appOrigin,
+          a,
+          email: LAB_USERS.a.email,
+          password: progress.passwords.a,
+          artifactsDir: progress.artifactsDir,
+        },
+        planned.today,
+      );
+      checks.push(importar);
+      log(`app: app_importar ${importar.status} · ${importar.detail}`);
+    } else {
+      checks.push(skipped('app_importar', 'Sem navegador nesta execução.'));
     }
     planned = planRun(new Date());
   }

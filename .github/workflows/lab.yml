@@ -11,11 +11,20 @@ name: Laboratório
 # Desde a fase 8 o navegador também faz o roteiro das fases 7 e 8 (listas, missões, contatos, gastos,
 # reservas e fotos sem rede) e dois avisos são conferidos em dois dias (véspera e prazo): cada
 # execução confere o que a anterior armou e arma o próximo ciclo.
+# Desde a fase 10 o lab-a também lê um roteiro curto com a IA de verdade, uma vez por dia (D139); a
+# chave da Anthropic mora na função, e nenhum secret novo entra aqui. A tarefa `medir-importacao`
+# (Run workflow → tarefa) roda só a medição do pensamento da IA, sem os cenários (D133).
 # O laboratório testa só a produção: a fase chega a ele depois do merge (D106).
 on:
   schedule:
     - cron: '7 6 * * *'
   workflow_dispatch:
+    inputs:
+      tarefa:
+        description: 'laboratorio: os cenários de sempre; medir-importacao: a medição do pensamento da IA (D133)'
+        type: choice
+        options: [laboratorio, medir-importacao]
+        default: laboratorio
 
 concurrency:
   group: laboratorio
@@ -46,7 +55,7 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Laboratório
-        run: pnpm lab --target production
+        run: pnpm lab --target production ${{ inputs.tarefa == 'medir-importacao' && '--medir-importacao' || '' }}
         env:
           LAB_SECRET: ${{ secrets.LAB_SECRET }}
 

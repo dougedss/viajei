@@ -130,6 +130,19 @@ XP, níveis e as 15 conquistas (`src/features/progression`), sem ranking: a equi
 - **Cards como imagem:** abertura, números, conquistas e fotos, em feed (4:5) e stories (9:16), desenhados em Canvas 2D pelo mesmo código do filme.
 - **Compartilhar:** a folha com os arquivos onde o aparelho aceita; senão, download. Tudo funciona sem sinal.
 
+## Importar com IA
+
+`/viagens/<id>/importar` (`src/features/import`): a pessoa cola o roteiro (a conversa do WhatsApp, as notas, os e-mails de reserva), a IA lê e o roteiro aparece aos poucos. Nada entra na viagem sem a revisão.
+
+- **Entradas:** "Criar e colar roteiro" no formulário de viagem nova, "Colar roteiro" na visão geral de uma viagem vazia e "Acrescentar de um texto" no Roteiro. A importação acrescenta e nunca apaga.
+- **A função `import-itinerary`:** `claude-sonnet-5-5` com saída estruturada (o JSON Schema derivado do `importSchema`, sem coordenadas), `effort` médio e `fallbacks: "default"`. Roda como a pessoa (RLS vale, sem chave secreta do Supabase), repassa o JSON por SSE e para em 140 s (o limite do plano Free é 150 s). O texto colado e a resposta nunca vão para log nem para o banco: `ai_imports` guarda só o tamanho, os tokens, o modelo, o estado e um código curto.
+- **Limites:** 30.000 caracteres por leitura e 20 leituras por pessoa em 24 h, pela mesma `edge_call` da rota (com trava contra corrida). A recusa diz a hora em que a cota volta.
+- **Revisão:** cada parada, reserva, contato, item e missão entra ou não; campo vazio fica vazio ("sem horário no texto"); um dia fora das datas pede ampliar a viagem ou deixar de fora; parada repetida é marcada; cada "não classificado" vai para onde a pessoa mandar. O lugar vem de um link do Maps no texto ou da busca do Nominatim (1 por segundo, com cache), com escolha quando os resultados se espalham. O rascunho e a revisão ficam no aparelho até salvar.
+- **Salvar:** uma transação da `mutate` (`mutate.batch`), pela outbox; paradas e itens com `source: 'ai'`. A parada importada é o fato da conquista "Planejador". O carregador da viagem de exemplo (só em desenvolvimento) passa pelo mesmo caminho, sem IA.
+- **Custo:** perto de US$ 0,05 por importação do tamanho do seed (estimativa; o número medido entra em `docs/decisoes.md`, D140). O laboratório lê um roteiro curto por dia.
+- **A chave:** `ANTHROPIC_API_KEY`, da conta pessoal do Douglas (workspace Viajei, com limite de gasto), mora só em `supabase secrets` (`pnpm remote:secrets-push`). A CI não tem a chave: a função é testada com respostas gravadas e o e2e intercepta a rede.
+- **Decisões:** `docs/decisoes.md`, D127 a D140.
+
 ## Onde se testa (sem stack local)
 
 Nada roda neste Mac (D91). O caminho de uma fase:
@@ -142,23 +155,23 @@ Nada roda neste Mac (D91). O caminho de uma fase:
 
 ## Scripts
 
-| Comando                                          | O que faz                                                                                   |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| `pnpm dev` / `pnpm build` / `pnpm preview`       | Vite (o build gera os ícones do PWA e o service worker)                                     |
-| `pnpm lint` / `pnpm format` / `pnpm typecheck`   | ESLint, Prettier, `tsc -b`                                                                  |
-| `pnpm test`                                      | Vitest (lógica pura e Dexie com `fake-indexeddb`)                                           |
-| `pnpm test:e2e`                                  | Playwright, viewport de iPhone, contra o Supabase local (dev e o build; `pnpm build` antes) |
-| `pnpm db:start` / `db:stop` / `db:reset`         | Supabase local (migrations + `seed.sql`)                                                    |
-| `pnpm db:test`                                   | pgTAP (`supabase/tests`)                                                                    |
-| `pnpm db:types`                                  | regenera `src/lib/supabase/database.types.ts` (commitado; a CI confere)                     |
-| `pnpm remote:db-push`                            | aplica as migrations no projeto hospedado                                                   |
-| `pnpm remote:config-diff` / `remote:config-push` | mostra e aplica a configuração do Auth (`[remotes.production]`) no hospedado                |
-| `pnpm remote:functions-deploy`                   | publica as Edge Functions `route-day` e `send-notifications` no hospedado                   |
-| `pnpm remote:secrets-push`                       | grava `ORS_API_KEY`, `VAPID_PRIVATE_KEY` e `VAPID_SUBJECT` (só elas) nos secrets            |
-| `pnpm functions:serve`                           | Edge Functions no stack local (`-- --env-file ./.env.local` para ORS e VAPID)               |
-| `pnpm geo:build`                                 | regenera os dados geográficos embutidos (`docs/dados-geo.md`)                               |
-| `pnpm vapid:generate`                            | gera o par VAPID uma vez (`VITE_VAPID_PUBLIC_KEY` raw, `VAPID_PRIVATE_KEY` PKCS#8)          |
-| `pnpm db:vault-local`                            | grava URL e chave secreta locais no Vault, para o `pg_cron` (o `db:reset` já chama)         |
+| Comando                                          | O que faz                                                                                                                           |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev` / `pnpm build` / `pnpm preview`       | Vite (o build gera os ícones do PWA e o service worker)                                                                             |
+| `pnpm lint` / `pnpm format` / `pnpm typecheck`   | ESLint, Prettier, `tsc -b`                                                                                                          |
+| `pnpm test`                                      | Vitest (lógica pura e Dexie com `fake-indexeddb`)                                                                                   |
+| `pnpm test:e2e`                                  | Playwright, viewport de iPhone, contra o Supabase local (dev e o build; `pnpm build` antes)                                         |
+| `pnpm db:start` / `db:stop` / `db:reset`         | Supabase local (migrations + `seed.sql`)                                                                                            |
+| `pnpm db:test`                                   | pgTAP (`supabase/tests`)                                                                                                            |
+| `pnpm db:types`                                  | regenera `src/lib/supabase/database.types.ts` (commitado; a CI confere)                                                             |
+| `pnpm remote:db-push`                            | aplica as migrations no projeto hospedado                                                                                           |
+| `pnpm remote:config-diff` / `remote:config-push` | mostra e aplica a configuração do Auth (`[remotes.production]`) no hospedado                                                        |
+| `pnpm remote:functions-deploy`                   | publica as Edge Functions `route-day`, `send-notifications`, `push-receiver` e `import-itinerary` no hospedado                      |
+| `pnpm remote:secrets-push`                       | grava `ORS_API_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` e `ANTHROPIC_API_KEY` (só elas) nos secrets; recusa enviar variável vazia |
+| `pnpm functions:serve`                           | Edge Functions no stack local (`-- --env-file ./.env.local` para ORS e VAPID)                                                       |
+| `pnpm geo:build`                                 | regenera os dados geográficos embutidos (`docs/dados-geo.md`)                                                                       |
+| `pnpm vapid:generate`                            | gera o par VAPID uma vez (`VITE_VAPID_PUBLIC_KEY` raw, `VAPID_PRIVATE_KEY` PKCS#8)                                                  |
+| `pnpm db:vault-local`                            | grava URL e chave secreta locais no Vault, para o `pg_cron` (o `db:reset` já chama)                                                 |
 
 Os scripts `remote:*` carregam `.env.local` antes de chamar a CLI: é de lá que saem o token, a senha do banco e a chave do Resend que o `config push` usa.
 
@@ -170,5 +183,7 @@ Os scripts `remote:*` carregam `.env.local` antes de chamar a CLI: é de lá que
 ## Contas e segredos
 
 Há várias contas nesta máquina. O repositório usa um e-mail de commit local (`git config user.email`), o remote vai pelo alias SSH `github-dougedss`, e a CLI do Supabase lê `SUPABASE_ACCESS_TOKEN` e `SUPABASE_DB_PASSWORD` de `.env.local` em vez de trocar o login global. `RESEND_API_KEY` (conta da empresa, só envio) também fica em `.env.local`. Nenhuma chave secreta (Supabase, Anthropic, OpenRouteService, VAPID privada, Resend) entra no client ou no git.
+
+A `ANTHROPIC_API_KEY` (conta pessoal do Douglas, workspace Viajei com limite de gasto mensal) fica em `.env.local`, posta por ele, e no hospedado só em `supabase secrets`; nenhum valor passa pelo chat, pela CI ou pelo client.
 
 Variáveis do push: `VITE_VAPID_PUBLIC_KEY` (client; também na Vercel, Production e Preview), `VAPID_PRIVATE_KEY` e `VAPID_SUBJECT` (só em `supabase secrets`, via `pnpm remote:secrets-push`). O par é gerado uma vez por `pnpm vapid:generate` e nunca trocado: trocar invalida todas as assinaturas.

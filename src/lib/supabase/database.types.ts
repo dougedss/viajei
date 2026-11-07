@@ -31,6 +31,32 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"ai_imports": {
+                  Row: {
+                    "created_at": string,"error": string | null,"finished_at": string | null,"id": string,"input_chars": number,"input_tokens": number | null,"model": string,"output_tokens": number | null,"status": string,"trip_id": string | null,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"input_chars": number,"input_tokens"?: number | null,"model": string,"output_tokens"?: number | null,"status"?: string,"trip_id"?: string | null,"user_id"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"input_chars"?: number,"input_tokens"?: number | null,"model"?: string,"output_tokens"?: number | null,"status"?: string,"trip_id"?: string | null,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "ai_imports_trip_id_fkey"
+      columns: ["trip_id"]
+isOneToOne: false
+      referencedRelation: "trips"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "ai_imports_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"attachments": {
                   Row: {
                     "created_at": string,"created_by": string,"deleted_at": string | null,"field_versions": NonNullable<Json>,"filename": string,"height": number | null,"id": string,"kind": string,"mime": string,"placeholder": string | null,"reservation_id": string | null,"size_bytes": number,"stop_id": string | null,"storage_path": string,"synced_at": string,"trip_id": string,"updated_at": string,"width": number | null
@@ -403,14 +429,14 @@ isOneToOne: false
                   ]
                 },"stops": {
                   Row: {
-                    "address": string | null,"closes_at": string | null,"created_at": string,"deleted_at": string | null,"departed_at": string | null,"done_at": string | null,"done_by": string | null,"field_versions": NonNullable<Json>,"id": string,"kind": string,"lat": number | null,"lng": number | null,"name": string,"notes": string | null,"position": string,"skipped": boolean,"synced_at": string,"time": string | null,"travel_minutes_to_next": number | null,"trip_day_id": string,"trip_id": string,"updated_at": string,"url": string | null
+                    "address": string | null,"closes_at": string | null,"created_at": string,"deleted_at": string | null,"departed_at": string | null,"done_at": string | null,"done_by": string | null,"field_versions": NonNullable<Json>,"id": string,"kind": string,"lat": number | null,"lng": number | null,"name": string,"notes": string | null,"position": string,"skipped": boolean,"source": string,"synced_at": string,"time": string | null,"travel_minutes_to_next": number | null,"trip_day_id": string,"trip_id": string,"updated_at": string,"url": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "address"?: string | null,"closes_at"?: string | null,"created_at"?: string,"deleted_at"?: string | null,"departed_at"?: string | null,"done_at"?: string | null,"done_by"?: string | null,"field_versions"?: NonNullable<Json>,"id": string,"kind": string,"lat"?: number | null,"lng"?: number | null,"name": string,"notes"?: string | null,"position": string,"skipped"?: boolean,"synced_at": string,"time"?: string | null,"travel_minutes_to_next"?: number | null,"trip_day_id": string,"trip_id": string,"updated_at": string,"url"?: string | null
+                    "address"?: string | null,"closes_at"?: string | null,"created_at"?: string,"deleted_at"?: string | null,"departed_at"?: string | null,"done_at"?: string | null,"done_by"?: string | null,"field_versions"?: NonNullable<Json>,"id": string,"kind": string,"lat"?: number | null,"lng"?: number | null,"name": string,"notes"?: string | null,"position": string,"skipped"?: boolean,"source"?: string,"synced_at": string,"time"?: string | null,"travel_minutes_to_next"?: number | null,"trip_day_id": string,"trip_id": string,"updated_at": string,"url"?: string | null
                   }
                   Update: {
-                    "address"?: string | null,"closes_at"?: string | null,"created_at"?: string,"deleted_at"?: string | null,"departed_at"?: string | null,"done_at"?: string | null,"done_by"?: string | null,"field_versions"?: NonNullable<Json>,"id"?: string,"kind"?: string,"lat"?: number | null,"lng"?: number | null,"name"?: string,"notes"?: string | null,"position"?: string,"skipped"?: boolean,"synced_at"?: string,"time"?: string | null,"travel_minutes_to_next"?: number | null,"trip_day_id"?: string,"trip_id"?: string,"updated_at"?: string,"url"?: string | null
+                    "address"?: string | null,"closes_at"?: string | null,"created_at"?: string,"deleted_at"?: string | null,"departed_at"?: string | null,"done_at"?: string | null,"done_by"?: string | null,"field_versions"?: NonNullable<Json>,"id"?: string,"kind"?: string,"lat"?: number | null,"lng"?: number | null,"name"?: string,"notes"?: string | null,"position"?: string,"skipped"?: boolean,"source"?: string,"synced_at"?: string,"time"?: string | null,"travel_minutes_to_next"?: number | null,"trip_day_id"?: string,"trip_id"?: string,"updated_at"?: string,"url"?: string | null
                   }
                   Relationships: [
                     {

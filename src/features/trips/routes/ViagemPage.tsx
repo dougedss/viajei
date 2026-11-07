@@ -1,4 +1,4 @@
-import { Bell, Navigation, Pencil, Route, Trash2, Users } from 'lucide-react';
+import { Bell, ClipboardPaste, Navigation, Pencil, Route, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { NotFound } from '@/app/NotFound.tsx';
@@ -155,10 +155,14 @@ export default function ViagemPage() {
           <EmptyState
             icon={Route}
             title="Roteiro vazio"
-            text={`${tripDays.length} ${tripDays.length === 1 ? 'dia' : 'dias'} esperando paradas. Adicione a saída, as atrações e os hotéis de cada dia.`}
+            text={`${tripDays.length} ${tripDays.length === 1 ? 'dia' : 'dias'} esperando paradas. Cole o roteiro que vocês já têm (conversa, notas, e-mails de reserva) ou monte dia a dia.`}
             action={
               <div className="grid gap-2">
-                <ButtonLink to={`/viagens/${trip.id}/roteiro`} size="md">
+                <ButtonLink to={`/viagens/${trip.id}/importar`} size="md">
+                  <ClipboardPaste className="size-5" aria-hidden="true" />
+                  Colar roteiro
+                </ButtonLink>
+                <ButtonLink to={`/viagens/${trip.id}/roteiro`} variant="secondary" size="md">
                   Montar o roteiro
                 </ButtonLink>
                 {import.meta.env.DEV ? (

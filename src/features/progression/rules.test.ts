@@ -22,6 +22,7 @@ import {
   COAST_NEAR_M,
   departures,
   deriveProgress,
+  importsOf,
   isOnTime,
   isTripConcluded,
   maxDescent,
@@ -584,6 +585,39 @@ describe('time, sem sinal, costa e serra', () => {
       achOf(snap({ offlineSynced: { ...offlineSynced, trip_id: OTHER_TRIP } }), 'offline_hero')
         ?.trip_id,
     ).toBeNull();
+  });
+
+  it('Planejador: a primeira parada importada com a IA de cada viagem, para o time todo', () => {
+    const typed = newStop({ created_at: '2026-11-20T09:00:00.000Z' });
+    const first = newStop({ source: 'ai', created_at: '2026-11-21T10:00:00.000Z' });
+    const later = newStop({ source: 'ai', created_at: '2026-11-21T10:00:00.000Z' });
+    const elsewhere = newStop({
+      source: 'ai',
+      trip_id: OTHER_TRIP,
+      trip_day_id: OTHER_DAY,
+      created_at: '2026-11-19T08:00:00.000Z',
+    });
+    const stops = [typed, later, first, elsewhere];
+    expect(importsOf(stops)).toEqual([
+      { trip_id: OTHER_TRIP, at: '2026-11-19T08:00:00.000Z' },
+      { trip_id: TRIP_ID, at: '2026-11-21T10:00:00.000Z' },
+    ]);
+    // a viagem de que a pessoa não é membro conta sem viagem; a mais antiga decide
+    expect(achOf(snap({ imports: importsOf(stops) }), 'planner')).toEqual({
+      key: 'planner',
+      trip_id: null,
+      unlocked_at: '2026-11-19T08:00:00.000Z',
+    });
+    expect(achOf(snap({ imports: importsOf([typed, first]) }), 'planner')?.trip_id).toBe(TRIP_ID);
+    // quem viaja junto ganha o mesmo, pela mesma parada
+    expect(
+      keysOf(
+        snap({ uid: OTHER_UID, members: [makeMember(), otherMember], imports: importsOf([first]) }),
+      ),
+    ).toContain('planner');
+    // paradas digitadas não contam
+    expect(importsOf([typed])).toEqual([]);
+    expect(keysOf(snap({ imports: importsOf([typed]) }))).not.toContain('planner');
   });
 
   it('Pé na areia: um ponto real a até 3 km do mar; sem a distância da costa, espera', () => {

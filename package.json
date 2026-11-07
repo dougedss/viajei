@@ -28,8 +28,8 @@
     "remote:db-push": "set -a && . ./.env.local && set +a && supabase db push --remote",
     "remote:config-diff": "set -a && . ./.env.local && set +a && supabase config diff",
     "remote:config-push": "set -a && . ./.env.local && set +a && supabase config push",
-    "remote:functions-deploy": "set -a && . ./.env.local && set +a && supabase functions deploy route-day send-notifications push-receiver --use-api --import-map supabase/functions/deno.json",
-    "remote:secrets-push": "set -a && . ./.env.local && set +a && supabase secrets set ORS_API_KEY=\"$ORS_API_KEY\" VAPID_PRIVATE_KEY=\"$VAPID_PRIVATE_KEY\" VAPID_SUBJECT=\"$VAPID_SUBJECT\"",
+    "remote:functions-deploy": "set -a && . ./.env.local && set +a && supabase functions deploy route-day send-notifications push-receiver import-itinerary --use-api --import-map supabase/functions/deno.json",
+    "remote:secrets-push": "set -a && . ./.env.local && set +a && supabase secrets set ORS_API_KEY=\"${ORS_API_KEY:?}\" VAPID_PRIVATE_KEY=\"${VAPID_PRIVATE_KEY:?}\" VAPID_SUBJECT=\"${VAPID_SUBJECT:?}\" ANTHROPIC_API_KEY=\"${ANTHROPIC_API_KEY:?}\"",
     "geo:build": "node scripts/geo/build-data.ts",
     "db:vault-local": "node scripts/db/vault-local.ts",
     "vapid:generate": "node scripts/vapid/generate.ts",
@@ -56,6 +56,7 @@
     "lucide-react": "1.68.0",
     "mediabunny": "1.62.1",
     "motion": "14.9.1",
+    "partial-json": "0.1.7",
     "pdfjs-dist": "6.4.299",
     "react": "19.3.1",
     "react-dom": "19.3.1",
@@ -66,6 +67,7 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "1.3.0",
     "@babel/core": "8.1.0",
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.64.1",

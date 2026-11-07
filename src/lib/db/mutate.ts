@@ -69,6 +69,44 @@ function newOp(
   };
 }
 
+type InsertRow<T extends SyncTable> = Omit<RowOf<T>, 'synced_at'>;
+type PatchChanges<T extends SyncTable> = Partial<
+  Omit<RowOf<T>, 'id' | 'synced_at' | 'created_at' | 'updated_at'>
+>;
+
+/** Uma escrita de um lote (`mutate.batch`), tipada pela tabela. */
+export type BatchWrite = {
+  [T in SyncTable]:
+    | { kind: 'insert'; table: T; row: InsertRow<T> }
+    | { kind: 'patch'; table: T; id: string; changes: PatchChanges<T> };
+}[SyncTable];
+
+/** As duas escritas, para rodar dentro de uma transação que já inclui a tabela e a outbox. */
+async function putInsert(table: SyncTable, row: Record<string, unknown>, now: string) {
+  const values = Object.fromEntries(
+    Object.entries(row).filter(([col]) => !SERVER_COLUMNS.has(col) && col !== 'updated_at'),
+  );
+  await tableOf(table).put({ ...row, id: String(row.id), synced_at: null, updated_at: now });
+  await db.outbox.add(newOp(table, row, 'upsert', values, now));
+}
+
+async function putPatch(
+  table: SyncTable,
+  id: string,
+  changes: Record<string, unknown>,
+  now: string,
+): Promise<boolean> {
+  const values = Object.fromEntries(
+    Object.entries(changes).filter(([col]) => !SERVER_COLUMNS.has(col) && col !== 'id'),
+  );
+  if (Object.keys(values).length === 0) return false;
+  const current = await tableOf(table).get(id);
+  if (!current) throw new Error(`${table}/${id} não existe localmente`);
+  await tableOf(table).put({ ...current, ...values, updated_at: now });
+  await db.outbox.add(newOp(table, current, 'patch', values, now));
+  return true;
+}
+
 /**
  * A única porta de escrita nas tabelas sincronizadas. Atualiza a linha local e enfileira na
  * outbox na mesma transação Dexie, online ou offline: UI e fila nunca divergem. Perfil não passa
@@ -76,16 +114,9 @@ function newOp(
  */
 export const mutate = {
   /** Linha nova, com id gerado no client. Vai como `upsert` com todas as colunas. */
-  async insert<T extends SyncTable>(table: T, row: Omit<RowOf<T>, 'synced_at'>): Promise<void> {
+  async insert<T extends SyncTable>(table: T, row: InsertRow<T>): Promise<void> {
     const now = new Date().toISOString();
-    const values = Object.fromEntries(
-      Object.entries(row).filter(([col]) => !SERVER_COLUMNS.has(col) && col !== 'updated_at'),
-    );
-    const op = newOp(table, row, 'upsert', values, now);
-    await db.transaction('rw', [table, 'outbox'], async () => {
-      await tableOf(table).put({ ...row, synced_at: null, updated_at: now });
-      await db.outbox.add(op);
-    });
+    await db.transaction('rw', [table, 'outbox'], () => putInsert(table, row, now));
     notify(table);
   },
 
@@ -93,42 +124,45 @@ export const mutate = {
    * Várias linhas novas da mesma tabela numa transação e com um aviso só: a progressão grava de uma
    * vez tudo o que a derivação achou (na primeira, dezenas de eventos de XP).
    */
-  async insertMany<T extends SyncTable>(
-    table: T,
-    rows: readonly Omit<RowOf<T>, 'synced_at'>[],
-  ): Promise<void> {
+  async insertMany<T extends SyncTable>(table: T, rows: readonly InsertRow<T>[]): Promise<void> {
     if (rows.length === 0) return;
     const now = new Date().toISOString();
     await db.transaction('rw', [table, 'outbox'], async () => {
-      for (const row of rows) {
-        const values = Object.fromEntries(
-          Object.entries(row).filter(([col]) => !SERVER_COLUMNS.has(col) && col !== 'updated_at'),
-        );
-        await tableOf(table).put({ ...row, synced_at: null, updated_at: now });
-        await db.outbox.add(newOp(table, row, 'upsert', values, now));
-      }
+      for (const row of rows) await putInsert(table, row, now);
     });
     notify(table);
   },
 
   /** Só as colunas tocadas, cada uma com a hora desta edição. */
-  async patch<T extends SyncTable>(
-    table: T,
-    id: string,
-    changes: Partial<Omit<RowOf<T>, 'id' | 'synced_at' | 'created_at' | 'updated_at'>>,
-  ): Promise<void> {
+  async patch<T extends SyncTable>(table: T, id: string, changes: PatchChanges<T>): Promise<void> {
     const now = new Date().toISOString();
-    const values = Object.fromEntries(
-      Object.entries(changes).filter(([col]) => !SERVER_COLUMNS.has(col) && col !== 'id'),
+    const wrote = await db.transaction('rw', [table, 'outbox'], () =>
+      putPatch(table, id, changes, now),
     );
-    if (Object.keys(values).length === 0) return;
-    await db.transaction('rw', [table, 'outbox'], async () => {
-      const current = await tableOf(table).get(id);
-      if (!current) throw new Error(`${table}/${id} não existe localmente`);
-      await tableOf(table).put({ ...current, ...values, updated_at: now });
-      await db.outbox.add(newOp(table, current, 'patch', values, now));
+    if (wrote) notify(table);
+  },
+
+  /**
+   * Linhas novas e edições de várias tabelas numa transação só, na ordem dada, com um aviso por
+   * tabela: a importação grava a viagem inteira de uma vez (dias, paradas, reservas, contatos e
+   * listas). Ou tudo entra no aparelho e na outbox, ou nada. Os itens sobem juntos no próximo
+   * `sync_push`, que roda numa transação do banco: um broadcast por viagem para o time.
+   */
+  async batch(writes: readonly BatchWrite[]): Promise<void> {
+    if (writes.length === 0) return;
+    const now = new Date().toISOString();
+    const tables = [...new Set(writes.map((w) => w.table))];
+    const touched = await db.transaction('rw', [...tables, 'outbox'], async () => {
+      const wrote = new Set<SyncTable>();
+      for (const w of writes) {
+        if (w.kind === 'insert') {
+          await putInsert(w.table, w.row, now);
+          wrote.add(w.table);
+        } else if (await putPatch(w.table, w.id, w.changes, now)) wrote.add(w.table);
+      }
+      return wrote;
     });
-    notify(table);
+    for (const table of touched) notify(table);
   },
 
   /** Exclusão é soft: um patch em `deleted_at`. A lápide volta pelo pull e aí a linha some do aparelho. */
@@ -151,7 +185,7 @@ export const mutate = {
    * Projeção local de uma linha que o servidor deriva sozinho (ex.: a participação do dono, criada
    * por trigger). Entra no Dexie para a UI, sem outbox; o pull a substitui pela versão do servidor.
    */
-  async project<T extends SyncTable>(table: T, row: Omit<RowOf<T>, 'synced_at'>): Promise<void> {
+  async project<T extends SyncTable>(table: T, row: InsertRow<T>): Promise<void> {
     await tableOf(table).put({ ...row, synced_at: null });
   },
 };

@@ -6,7 +6,7 @@ import { db, syncKeys } from '@/lib/db/schema.ts';
 import { syncEngine } from '@/lib/db/sync/engine.ts';
 import { missingRows, progressRows } from './ids.ts';
 import { mergeQueue, planCelebrations, type Celebration, type Summary } from './moments.ts';
-import { deriveProgress, totalXp, type ProgressSnapshot } from './rules.ts';
+import { deriveProgress, importsOf, totalXp, type ProgressSnapshot } from './rules.ts';
 import { isAchievementKey } from './team.ts';
 
 /**
@@ -101,7 +101,7 @@ async function readSnapshot(me: string, now: number): Promise<ProgressSnapshot> 
     tracks,
     routes,
     offlineSynced: parse<{ at: string; trip_id: string } | null>(offline?.value, null),
-    imports: [],
+    imports: importsOf(stops),
     coastDistance,
   };
 }

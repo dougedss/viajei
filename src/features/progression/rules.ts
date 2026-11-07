@@ -56,7 +56,7 @@ export type ProgressSnapshot = {
   routes: readonly DayRoute[];
   /** a primeira escrita feita sem sinal que o servidor aceitou (a marca da outbox) */
   offlineSynced: { at: string; trip_id: string } | null;
-  /** roteiros importados com a IA pela pessoa (fase 10); vazio até lá */
+  /** os roteiros importados com a IA, um por viagem, pela hora da importação (`importsOf`) */
   imports: readonly { trip_id: string; at: string }[];
   /** distância até a costa em metros (lib/geo, carregada sob demanda); sem ela, `coast` espera */
   coastDistance: ((lng: number, lat: number) => number) | null;
@@ -69,6 +69,26 @@ export type AchievementGrant = {
   unlocked_at: string;
 };
 export type Progress = { xp: XpGrant[]; achievements: AchievementGrant[] };
+
+/**
+ * Os roteiros importados com a IA (fase 10): a parada com `source = 'ai'` mais antiga de cada
+ * viagem marca a hora da importação. O fato sincroniza com as próprias paradas e se lê sem sinal; a
+ * equipe conquista junto (D115), como a primeira parada concluída: quem importou e quem viaja junto.
+ * Uma parada importada que depois saiu do roteiro continua contando enquanto o aparelho a conhece.
+ */
+export function importsOf(
+  stops: readonly Pick<Stop, 'trip_id' | 'source' | 'created_at'>[],
+): { trip_id: string; at: string }[] {
+  const first = new Map<string, string>();
+  for (const s of stops) {
+    if (s.source !== 'ai') continue;
+    const seen = first.get(s.trip_id);
+    if (seen === undefined || s.created_at < seen) first.set(s.trip_id, s.created_at);
+  }
+  return [...first]
+    .map(([trip_id, at]) => ({ trip_id, at }))
+    .sort((a, b) => byTime(a.at, b.at) || byTime(a.trip_id, b.trip_id));
+}
 
 // ------------------------------------------------------------------ limiares
 /** Partiu! até 5 min depois do "sair às" é pontual; antes da hora também (nada premia velocidade). */

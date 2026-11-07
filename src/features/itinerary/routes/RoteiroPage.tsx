@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronRight, Navigation } from 'lucide-react';
+import { CalendarDays, ChevronRight, ClipboardPaste, Navigation } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 import { NotFound } from '@/app/NotFound.tsx';
 import { Splash } from '@/app/Splash.tsx';
@@ -80,6 +80,16 @@ export default function RoteiroPage() {
           })}
         </ol>
       )}
+
+      {days.length > 0 ? (
+        <Link
+          to={`/viagens/${trip.id}/importar`}
+          className="inline-flex min-h-12 items-center justify-center gap-2 text-[15px] font-semibold text-accent-ink"
+        >
+          <ClipboardPaste className="size-5" aria-hidden="true" />
+          {stops.length === 0 ? 'Colar roteiro' : 'Acrescentar de um texto'}
+        </Link>
+      ) : null}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { insertable, makeMember, makeTrip, TRIP_ID } from '@/test/factories.ts';
+import { insertable, makeDay, makeMember, makeStop, makeTrip, TRIP_ID } from '@/test/factories.ts';
 import { mutate, onMutate } from './mutate.ts';
 import { db } from './schema.ts';
 
@@ -76,5 +76,63 @@ describe('mutate', () => {
     );
     await mutate.insert('trip_members', member);
     expect((await db.outbox.toArray())[0]?.trip_id).toBe(TRIP_ID);
+  });
+});
+
+describe('mutate.batch', () => {
+  it('várias tabelas numa transação, na ordem dada, com um aviso por tabela', async () => {
+    await mutate.insert('trips', insertable(makeTrip()));
+    const listener = vi.fn<(table: string) => void>();
+    const off = onMutate(listener);
+    await mutate.batch([
+      { kind: 'patch', table: 'trips', id: TRIP_ID, changes: { end_date: '2026-12-15' } },
+      { kind: 'insert', table: 'trip_days', row: insertable(makeDay({ id: 'd1' })) },
+      {
+        kind: 'insert',
+        table: 'stops',
+        row: insertable(makeStop({ id: 's1', trip_day_id: 'd1' })),
+      },
+      {
+        kind: 'insert',
+        table: 'stops',
+        row: insertable(makeStop({ id: 's2', trip_day_id: 'd1' })),
+      },
+      { kind: 'patch', table: 'trip_days', id: 'd1', changes: { title: 'Ida' } },
+    ]);
+    off();
+    expect((await db.trips.get(TRIP_ID))?.end_date).toBe('2026-12-15');
+    expect((await db.trip_days.get('d1'))?.title).toBe('Ida');
+    expect(await db.stops.count()).toBe(2);
+    const ops = (await db.outbox.orderBy('seq').toArray()).slice(1);
+    expect(ops.map((o) => `${o.table}:${o.op}:${o.row_id}`)).toEqual([
+      `trips:patch:${TRIP_ID}`,
+      'trip_days:upsert:d1',
+      'stops:upsert:s1',
+      'stops:upsert:s2',
+      'trip_days:patch:d1',
+    ]);
+    // todas com a mesma hora: uma escrita só, vista pelo time de uma vez
+    expect(new Set(ops.map((o) => o.updated_at)).size).toBe(1);
+    expect(listener.mock.calls.map(([t]) => t).sort()).toEqual(['stops', 'trip_days', 'trips']);
+  });
+
+  it('tudo ou nada: uma escrita que falha desfaz o lote inteiro, no aparelho e na outbox', async () => {
+    await expect(
+      mutate.batch([
+        { kind: 'insert', table: 'trip_days', row: insertable(makeDay({ id: 'd1' })) },
+        { kind: 'patch', table: 'stops', id: 'nao-existe', changes: { name: 'x' } },
+      ]),
+    ).rejects.toThrow('não existe');
+    expect(await db.trip_days.count()).toBe(0);
+    expect(await db.outbox.count()).toBe(0);
+  });
+
+  it('lote vazio não escreve nem avisa', async () => {
+    const listener = vi.fn();
+    const off = onMutate(listener);
+    await mutate.batch([]);
+    off();
+    expect(listener).not.toHaveBeenCalled();
+    expect(await db.outbox.count()).toBe(0);
   });
 });

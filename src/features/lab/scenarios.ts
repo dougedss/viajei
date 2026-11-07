@@ -123,6 +123,11 @@ export const LAB_SCENARIOS = {
     description:
       'A primeira parada dá o cartão; "Usar no carro" põe o rack; XP de A e de B no servidor; a garagem de B',
   },
+  app_importar: {
+    label: 'App · importar',
+    description:
+      'Cola um roteiro curto, a IA lê de verdade, a revisão salva; horário, telefone e código exatos no servidor',
+  },
   app_retrospectiva: {
     label: 'App · retrospectiva',
     description: 'O filme chega ao card final; o card em 1080 × 1920 e o vídeo de 15 s, no Chrome',

@@ -6,9 +6,9 @@ import type { ChecklistItem, Contact, Stop } from '@/lib/db/schema.ts';
 import { positionsBetween } from '@/lib/ids/position.ts';
 
 /**
- * Contatos, listas e missões do arquivo de importação como colunas. Puro, sem efeito colateral: o
- * carregador do exemplo usa hoje, a importação da fase 10 usa depois. Id, viagem, autoria e carimbos
- * são de quem grava (como em `reservationFromImport`).
+ * Contatos, listas e missões do arquivo de importação como colunas. Puro, sem efeito colateral: a
+ * importação com IA e o carregador do exemplo passam por aqui (`features/import/plan.ts`). Id,
+ * viagem, autoria e carimbos são de quem grava (como em `reservationFromImport`).
  */
 export type ImportedContactRow = Pick<Contact, 'name' | 'phone' | 'type' | 'notes'>;
 export type ImportedItemRow = Pick<
@@ -35,11 +35,14 @@ export function contactsFromImport(contacts: ImportData['contacts']): ImportedCo
 /**
  * Antes, mala e missões, cada lista depois das posições que já existem nela. A missão se liga à
  * parada pelo nome (`stop_ref`) e vale os pontos da regra do tipo da parada; sem parada, 10.
+ * `source`: 'ai' quando a lista veio de uma importação com IA, já revisada pela pessoa no preview
+ * (por isso `active`, e não `suggested`); 'user' no carregador do exemplo.
  */
 export function listItemsFromImport(
   data: Pick<ImportData, 'checklist_before' | 'checklist_pack' | 'quests'>,
   stops: readonly Pick<Stop, 'id' | 'name' | 'kind' | 'deleted_at'>[],
   lastPosition: Partial<Record<ChecklistKind, string | null>> = {},
+  source: 'user' | 'ai' = 'user',
 ): ImportedItemRow[] {
   const norm = (s: string) => s.trim().toLocaleLowerCase('pt-BR');
   const plain = (kind: 'before' | 'pack', texts: readonly string[]): ImportedItemRow[] => {
@@ -51,7 +54,7 @@ export function listItemsFromImport(
       position: positions[i] ?? '',
       points: 0,
       stop_id: null,
-      source: 'user',
+      source,
       status: 'active',
     }));
   };
@@ -70,7 +73,7 @@ export function listItemsFromImport(
         position: questPositions[i] ?? '',
         points: (stop && QUEST_RULES[stop.kind as StopKind]?.points) ?? QUEST_POINTS_DEFAULT,
         stop_id: stop?.id ?? null,
-        source: 'user',
+        source,
         status: 'active',
       };
     }),

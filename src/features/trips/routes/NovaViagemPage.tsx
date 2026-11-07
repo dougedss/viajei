@@ -25,6 +25,16 @@ export default function NovaViagemPage() {
           });
           await navigate(`/viagens/${id}`, { replace: true });
         }}
+        alternate={{
+          label: 'Criar e colar roteiro',
+          onSubmit: async (values) => {
+            if (!session) return;
+            const id = await createTrip(values, session.user.id);
+            // a visão geral fica atrás: o "Voltar" da importação leva à viagem, não ao formulário
+            await navigate(`/viagens/${id}`, { replace: true });
+            await navigate(`/viagens/${id}/importar`);
+          },
+        }}
       />
     </div>
   );

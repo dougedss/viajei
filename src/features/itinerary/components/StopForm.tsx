@@ -16,8 +16,23 @@ import { stopFormSchema, type StopFormInput, type StopFormValues } from '../sche
 import { KIND_TEXT } from '../stop-kinds.ts';
 import { StopKindIcon } from './StopKindIcon.tsx';
 
+/** O que o formulário lê de uma parada: a do roteiro ou a da revisão de uma importação. */
+export type StopFormSource = Pick<
+  Stop,
+  | 'kind'
+  | 'name'
+  | 'time'
+  | 'closes_at'
+  | 'address'
+  | 'lat'
+  | 'lng'
+  | 'travel_minutes_to_next'
+  | 'notes'
+  | 'url'
+>;
+
 type Props = {
-  stop?: Stop;
+  stop?: StopFormSource;
   submitLabel: string;
   onSubmit: (values: StopFormValues) => Promise<void>;
 };
@@ -35,7 +50,7 @@ const EMPTY: StopFormInput = {
   url: '',
 };
 
-function fromStop(stop: Stop): StopFormInput {
+function fromStop(stop: StopFormSource): StopFormInput {
   return {
     kind: stop.kind as StopFormInput['kind'],
     name: stop.name,

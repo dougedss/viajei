@@ -114,6 +114,7 @@ export async function createStop(
     done_at: null,
     done_by: null,
     skipped: false,
+    source: 'user',
     created_at: now,
     updated_at: now,
     deleted_at: null,

@@ -9,6 +9,8 @@ type Props = {
   defaultValues?: TripFormInput;
   submitLabel: string;
   onSubmit: (values: TripFormValues) => Promise<void>;
+  /** um segundo caminho de envio, com as mesmas validações (ex.: "Criar e colar roteiro") */
+  alternate?: { label: string; onSubmit: (values: TripFormValues) => Promise<void> };
 };
 
 const EMPTY: TripFormInput = {
@@ -21,22 +23,24 @@ const EMPTY: TripFormInput = {
 };
 
 /** Nome, datas, origem, orçamento e observações. O carro da viagem fica para a garagem (fase 6). */
-export function TripForm({ defaultValues = EMPTY, submitLabel, onSubmit }: Props) {
+export function TripForm({ defaultValues = EMPTY, submitLabel, onSubmit, alternate }: Props) {
   const form = useForm<TripFormInput, unknown, TripFormValues>({
     resolver: zodResolver(tripFormSchema),
     defaultValues,
   });
   const { errors, isSubmitting } = form.formState;
 
-  const submit = form.handleSubmit(async (values) => {
-    try {
-      await onSubmit(values);
-    } catch (err) {
-      form.setError('root', {
-        message: err instanceof Error ? err.message : 'Não deu para salvar. Tente de novo.',
-      });
-    }
-  });
+  const submitWith = (send: (values: TripFormValues) => Promise<void>) =>
+    form.handleSubmit(async (values) => {
+      try {
+        await send(values);
+      } catch (err) {
+        form.setError('root', {
+          message: err instanceof Error ? err.message : 'Não deu para salvar. Tente de novo.',
+        });
+      }
+    });
+  const submit = submitWith(onSubmit);
 
   return (
     <form onSubmit={(e) => void submit(e)} noValidate className="grid gap-4">
@@ -94,6 +98,15 @@ export function TripForm({ defaultValues = EMPTY, submitLabel, onSubmit }: Props
       <Button type="submit" loading={isSubmitting}>
         {submitLabel}
       </Button>
+      {alternate ? (
+        <Button
+          variant="secondary"
+          disabled={isSubmitting}
+          onClick={(e) => void submitWith(alternate.onSubmit)(e)}
+        >
+          {alternate.label}
+        </Button>
+      ) : null}
     </form>
   );
 }
