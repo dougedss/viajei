@@ -109,7 +109,8 @@ test('sugestão adicionada vira missão; dispensada não volta depois de recarre
   // a parada de natureza sugere a missão e o repelente; nada disso é gravado antes do toque
   await page.goto(`${tripUrl}/checklists?aba=missoes`);
   const quest = page.getByRole('listitem', { name: 'Sugestão: Foto do time com a paisagem' });
-  await expect(quest).toBeVisible();
+  // a primeira visita à rota compila a página e a leitura do cenário no Vite de dev
+  await expect(quest).toBeVisible({ timeout: 15_000 });
   expect(await linhas('checklist_items', `trip_id=eq.${tripId}&select=id`)).toHaveLength(0);
   await quest.getByRole('button', { name: 'Adicionar' }).click();
   await expect(page.getByRole('checkbox', { name: /^Foto do time com a paisagem/ })).toBeVisible();
