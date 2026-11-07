@@ -625,3 +625,14 @@ Um pull do Realtime que encontra o lock ocupado pede um ciclo completo. `syncNow
 **Contexto.** A republicação das funções da fase 8 falhou na `route-day`: com o Docker fechado (D91), a CLI empacota no hospedado, e o empacotador de lá não acha o `deno.json` da pasta `functions`. O Deno local o acha subindo de pasta; o do servidor só recebe os arquivos que a CLI manda. O `zod` ficou sem mapa.
 **Decisão.** O `remote:functions-deploy` publica as três funções numa chamada só, com `--use-api` (empacota sempre no servidor) e `--import-map supabase/functions/deno.json` (o mapa vai junto). O comentário do `config.toml` explica por quê.
 **Consequência.** O deploy dá o mesmo resultado com ou sem Docker, e publicar continua sem pedir stack local.
+
+### D109 · Uma viagem cujo primeiro pull falhou volta no ciclo seguinte
+**Contexto.** Achado pelo laboratório da fase 8. Num aparelho novo, o primeiro ciclo grava as participações e o cursor do usuário e depois puxa as viagens uma por uma. As viagens `listas` e `estrada` eram as últimas da fila, e o laboratório navegou logo depois de entrar, o que cortou o fetch em andamento. O ciclo seguinte já tinha o cursor adiante, e a regra da D49 só olhava as viagens locais e as participações recém-chegadas. Resultado: as duas viagens nunca chegaram, e o app mostrou "Página não encontrada" por minutos. O mesmo pegaria um celular novo com rede ruim, ou que recarregasse no primeiro sync. O defeito existia desde a fase 3; o código de aplicar o pull estava certo, conferido com os dados reais do lab-a num IndexedDB em memória.
+**Decisão.**
+- `tripsKnownToServer` decide tudo pelo que está no aparelho: as viagens carimbadas pelo servidor e as participações aceitas da pessoa que vieram dele (`synced_at`). A participação é gravada antes do pull da viagem, então a viagem que faltou volta no ciclo seguinte.
+- A proteção da D49 continua: a participação do dono de uma viagem criada aqui é só projeção, sem `synced_at`, e a viagem apagada aqui fica de fora.
+- No ciclo, cada viagem é puxada por si. Um erro de rede para o ciclo, e o resto fica para o próximo. Qualquer outro erro vira `lastError`, sem segurar as viagens seguintes.
+- `applyUserPull` devolve só as viagens deixadas, porque as aceitas já estão no Dexie.
+
+**Consequência.** Nenhuma viagem se perde por um pull interrompido. Testes: `known-trips.test.ts` (viagem que faltou, projeção do dono, participação de outra pessoa, pendente, lápide, viagem apagada aqui).
+

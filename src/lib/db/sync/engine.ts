@@ -95,8 +95,9 @@ async function lockReleased(): Promise<void> {
   await running?.catch(() => undefined);
 }
 
-async function tripIdsToPull(extra: string[]): Promise<string[]> {
-  return tripsKnownToServer(await db.trips.toArray(), extra);
+async function tripIdsToPull(userId: string): Promise<string[]> {
+  const [trips, memberships] = await Promise.all([db.trips.toArray(), db.trip_members.toArray()]);
+  return tripsKnownToServer(trips, memberships, userId);
 }
 
 async function pullOne(tripId: string): Promise<void> {
@@ -107,7 +108,8 @@ async function pullOne(tripId: string): Promise<void> {
 
 /** Um ciclo completo: push, pull do usuário, pull de cada viagem. */
 async function cycle(): Promise<void> {
-  if (!uid) return;
+  const me = uid;
+  if (!me) return;
   setState({ phase: 'syncing' });
   try {
     const push = await pushOutbox(db, rpcPush);
@@ -125,9 +127,19 @@ async function cycle(): Promise<void> {
         emit({ kind: 'revoked', tripId, tripName: trip.name });
       }
     }
-    for (const tripId of await tripIdsToPull(memberships.accepted)) await pullOne(tripId);
-    watchTrips(await tripIdsToPull([]), (id) => schedulePull(id));
-    setState({ lastSyncAt: Date.now(), lastError: null });
+    // cada viagem por si: a que falha não segura as seguintes; sem rede, o resto fica para o
+    // próximo ciclo, que a encontra de novo pela participação gravada
+    const errors: string[] = [];
+    for (const tripId of await tripIdsToPull(me)) {
+      try {
+        await pullOne(tripId);
+      } catch (err) {
+        if (isNetworkError(err)) throw err;
+        errors.push(err instanceof Error ? err.message : String(err));
+      }
+    }
+    watchTrips(await tripIdsToPull(me), (id) => schedulePull(id));
+    setState({ lastSyncAt: Date.now(), lastError: errors[0] ?? null });
   } catch (err) {
     if (isNetworkError(err)) connectivity.markOffline();
     else setState({ lastError: err instanceof Error ? err.message : String(err) });

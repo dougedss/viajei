@@ -7,7 +7,14 @@ import {
   TRIP_SCOPED_TABLES,
   type SyncTable,
 } from '../registry.ts';
-import { syncKeys, type Profile, type RowOf, type Trip, type ViajeiDb } from '../schema.ts';
+import {
+  syncKeys,
+  type Profile,
+  type RowOf,
+  type Trip,
+  type TripMember,
+  type ViajeiDb,
+} from '../schema.ts';
 
 /** O envelope do pull é validado; as linhas em si vêm do nosso banco, com os tipos gerados. */
 const rowSchema = z.looseObject({ id: z.string(), deleted_at: z.string().nullable().optional() });
@@ -147,38 +154,55 @@ export async function applyTripPull(
   return stats;
 }
 
-export type MembershipChange = { accepted: string[]; left: string[] };
+export type MembershipChange = { left: string[] };
 
 /**
- * As viagens que vale puxar: as locais que o servidor já carimbou (`synced_at`) e as participações
- * que o pull do usuário acabou de confirmar. Uma viagem criada neste aparelho e ainda não enviada
- * fica de fora: o servidor responderia "não é membro" e o aparelho a apagaria como `revoked`
- * antes do push (D49).
+ * As viagens que vale puxar, todas a partir do que está no aparelho: as viagens que o servidor já
+ * carimbou (`synced_at`) e as participações aceitas da pessoa que vieram do servidor. A participação
+ * fica gravada assim que o pull do usuário a traz, antes do pull da viagem; por isso uma viagem cujo
+ * primeiro pull foi interrompido (rede, recarga, aba fechada) volta no ciclo seguinte, mesmo com o
+ * cursor do usuário já adiante. Ficam de fora a viagem apagada aqui e a criada aqui e ainda não
+ * enviada (a participação do dono é só projeção, sem `synced_at`): o servidor responderia "não é
+ * membro" e o aparelho a apagaria como `revoked` antes do push (D49).
  */
 export function tripsKnownToServer(
-  local: readonly Pick<Trip, 'id' | 'deleted_at' | 'synced_at'>[],
-  accepted: readonly string[],
+  trips: readonly Pick<Trip, 'id' | 'deleted_at' | 'synced_at'>[],
+  memberships: readonly Pick<
+    TripMember,
+    'trip_id' | 'user_id' | 'status' | 'deleted_at' | 'synced_at'
+  >[],
+  uid: string,
 ): string[] {
-  const known = local.filter((t) => t.deleted_at === null && t.synced_at !== null).map((t) => t.id);
-  return [...new Set([...known, ...accepted])];
+  const deletedHere = new Set(trips.filter((t) => t.deleted_at !== null).map((t) => t.id));
+  const stamped = trips
+    .filter((t) => t.deleted_at === null && t.synced_at !== null)
+    .map((t) => t.id);
+  const joined = memberships
+    .filter(
+      (m) =>
+        m.user_id === uid &&
+        m.status === 'accepted' &&
+        m.deleted_at === null &&
+        m.synced_at !== null &&
+        !deletedHere.has(m.trip_id),
+    )
+    .map((m) => m.trip_id);
+  return [...new Set([...stamped, ...joined])];
 }
 
 /**
  * Aplica o pull do usuário: as próprias participações (é por elas que um aparelho novo descobre as
- * viagens) e as tabelas de escopo `user`. Devolve as viagens em que a pessoa está (para puxar) e as
- * que deixou (lápide ou convite recusado: para apagar localmente).
+ * viagens; as aceitas ficam gravadas e daí entram em `tripsKnownToServer`) e as tabelas de escopo
+ * `user`. Devolve as viagens que a pessoa deixou (lápide ou convite recusado: para apagar localmente).
  */
 export async function applyUserPull(db: ViajeiDb, pull: UserPull): Promise<MembershipChange> {
-  const change: MembershipChange = { accepted: [], left: [] };
+  const change: MembershipChange = { left: [] };
   const tables = [...db.tables.map((t) => t.name)];
   await db.transaction('rw', tables, async () => {
     for (const m of pull.memberships) {
       const tripId = typeof m.trip_id === 'string' ? m.trip_id : null;
       const accepted = m.status === 'accepted' && m.deleted_at == null;
-      if (tripId) {
-        if (accepted) change.accepted.push(tripId);
-        else if (m.deleted_at != null) change.left.push(tripId);
-      }
+      if (tripId && m.deleted_at != null) change.left.push(tripId);
       if (m.deleted_at != null) await db.trip_members.delete(m.id);
       else if (accepted) await applyRow(db, 'trip_members', m);
       // convite pendente não entra no Dexie: a tela inicial o lê pela RPC my_pending_invites

@@ -110,7 +110,7 @@ describe('applyTripPull', () => {
 });
 
 describe('applyUserPull', () => {
-  it('participação aceita entra no Dexie e vai para a lista de viagens a puxar; lápide vai para "saiu"', async () => {
+  it('participação aceita entra no Dexie (é por ela que a viagem é puxada); lápide vai para "saiu"', async () => {
     const change = await applyUserPull(
       db,
       parseUserPull({
@@ -122,8 +122,8 @@ describe('applyUserPull', () => {
         ],
       }),
     );
-    expect(change).toEqual({ accepted: [TRIP_ID], left: ['outra'] });
-    expect(await db.trip_members.count()).toBe(1);
+    expect(change).toEqual({ left: ['outra'] });
+    expect((await db.trip_members.toArray()).map((m) => m.trip_id)).toEqual([TRIP_ID]);
     expect((await db.sync_state.get(syncKeys.userCursor))?.value).toBe(SERVER_TIME);
   });
 });
