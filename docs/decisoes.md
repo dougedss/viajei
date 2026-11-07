@@ -640,3 +640,12 @@ Um pull do Realtime que encontra o lock ocupado pede um ciclo completo. `syncNow
 **Contexto.** Desde a fase 7, a viagem real do Douglas ("RS — concurso em Montenegro", `0faf1ff2-…`) tinha só dias e paradas. O resto do seed esperava a resposta dele.
 **Decisão.** O Douglas disse sim em 07/11/2026. Depois da 0008 no hospedado, entraram as 2 hospedagens, os 6 contatos, os 5 itens de Antes, os 6 da Mala e as 4 missões. O caminho foi o do app: as linhas saíram das mesmas funções puras do carregador do exemplo (`reservationFromImport`, `contactsFromImport`, `listItemsFromImport`), e as 23 operações foram montadas como a `mutate.insert` monta. Elas passaram pelo `sync_push` como ele, pelo pooler `aws-1`, com RLS valendo e ensaio em `rollback` antes. A senha dele não foi usada.
 **Consequência.** As missões se ligaram às paradas pelo nome: Cascata do Caracol e Casa Valduga com +20, Gramado com +15, e o almoço de domingo, sem parada, com +10. O aviso de prazo do Vila Suzana chega em 07/12 às 10h, e o de véspera em 10/12 às 19h, contando o que faltar nas listas.
+
+### D111 · Uma falha de rede não prende o app em "Sem conexão"
+**Contexto.** Achado pelo laboratório na produção, logo depois do merge da fase 8 (cenário `app_sair_pendente`). A rede voltou, alguma requisição falhou na volta, e o app ficou "Sem conexão · 131" por mais de um minuto, com a foto na fila. Uma falha de rede marcava o app offline, e só o evento `online` do navegador ou uma resposta do servidor o traziam de volta. Mas, com o navegador dizendo "online", o evento não vem, e o motor de sync e a fila de fotos não tentavam nada enquanto o app se achava offline. O app ficava preso até recarregar. Na estrada é o caso comum: sinal fraco, túnel, Wi-Fi sem internet, tudo com `navigator.onLine` verdadeiro.
+**Decisão.**
+- `connectivity` separa duas coisas. Só o "sem rede" do navegador impede tentar (`canTry`). Uma falha de requisição marca o app sem conexão (`isOnline`, que a UI mostra) e agenda uma nova tentativa (`onRetry`) em 3 s, 10 s, 30 s e daí a cada 60 s.
+- A primeira resposta do servidor marca online, cancela a tentativa e zera a espera. O evento `offline` do navegador cancela a tentativa, e a volta vem pelo `online`.
+- O motor de sync roda sempre que o navegador não diz "sem rede", e atende o `onRetry` com um ciclo. A fila de fotos volta com ele, porque o ciclo bem-sucedido marca online.
+
+**Consequência.** Depois de uma queda, o app se recupera sozinho em segundos, sem recarregar e sem martelar o servidor. Testes: `connectivity.test.ts`.

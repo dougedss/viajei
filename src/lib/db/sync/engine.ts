@@ -150,7 +150,9 @@ async function cycle(): Promise<void> {
 
 /** Um laço de ciclos por aba (D86): pedido no meio vira mais um ciclo; lock ocupado espera soltar. */
 const runner = new CycleRunner({
-  canRun: () => uid !== null && connectivity.isOnline(),
+  // depois de uma falha de rede o motor segue tentando (é ele quem descobre que a rede voltou);
+  // só o "sem rede" do navegador o segura (D111)
+  canRun: () => uid !== null && connectivity.canTry(),
   withLock,
   lockReleased,
   cycle,
@@ -176,7 +178,7 @@ export function schedulePull(tripId: string, delayMs = 800): void {
     tripId,
     setTimeout(() => {
       pullTimers.delete(tripId);
-      if (!uid || !connectivity.isOnline()) return;
+      if (!uid || !connectivity.canTry()) return;
       void withLock(() =>
         pullOne(tripId).catch((err: unknown) => {
           if (isNetworkError(err)) connectivity.markOffline();
@@ -222,6 +224,7 @@ export async function start(userId: string): Promise<void> {
     connectivity.subscribe(() => {
       if (connectivity.isOnline()) schedule();
     }),
+    connectivity.onRetry(() => schedule(0)),
     () => window.removeEventListener('focus', onWake),
     () => window.removeEventListener('online', onWake),
     () => document.removeEventListener('visibilitychange', onVisible),
