@@ -529,3 +529,73 @@ Um pull do Realtime que encontra o lock ocupado pede um ciclo completo. `syncNow
 **Contexto.** A primeira execução agendada (06/11) ficou vermelha só no `app_reabrir`: o cenário, de antes da fase 5, abria o Modo Viagem sem `?render=list` e esperava o card "Desde a última vez". Desde a D61 quem conta o que aconteceu é um só, e com maquete é o replay; o print mostrou a maquete contando a saída. Não era defeito do app.
 **Decisão.** O `app_reabrir` abre a lista (`?render=list`), confere o card e ganha um passo: o Chegamos! pela posição vira o card discreto "Como foi?", sem abrir a folha (D83). Um cenário novo, `app_maquete`, confere a maquete: monta com WebGPU ou WebGL2, as pílulas aparecem por cima e o "Rever o dia" anda até o fim. O "Pular" aparecer prova que o laço de quadros começou o movimento; o "Rever o dia" voltar prova que ele terminou. O movimento é medido pelo relógio, então nada depende de fps; motor e tempos ficam em `data`, só como informação. O replay ao abrir não serve aqui porque o card já mostrou os eventos.
 **Consequência.** Os dois caminhos de "o que aconteceu" (card e maquete) são testados todo dia na produção, sem que a lentidão do SwiftShader do GitHub vire falha.
+
+## Fase 8 · Listas, missões, contatos e gastos (07/11/2026)
+
+### D93 · A 0008 a partir da DDL base, e o que mudou
+**Contexto.** A DDL base do Passo 0 (bloco 0006 de lá) vira a `0008_listas_contatos_gastos.sql`.
+**Decisão.** As três tabelas entram pelo `enable_trip_sync`, com as FKs compostas. Diferenças, cada uma com o porquê:
+- `checklist_items.status` ganha `dismissed` (D96). `suggested` fica para o desfazer do "Dispensar" e para a IA da fase 10.
+- `created_by` em itens e gastos, com policy restritiva de insert: o XP de quem criou (fase 9) é derivável dos dados. Ele é **preservado** por trigger (`a_keep_creator`), e não recusado pelo `sync_guard` (D95).
+- Só missão se liga a parada; missão vale de 10 a 30 pontos e o resto vale 0; `done_by` e `done_at` andam juntos (quem e quando).
+- `contacts.type` ganha `restaurant`, que a importação já tinha. As constantes com rótulo (`CONTACT_TYPES`, `EXPENSE_CATEGORIES`, `CHECKLIST_KINDS`, `EMERGENCY_NUMBERS`) moram em `_shared/constants.ts`.
+- `expenses.reservation_id` (FK composta, opcional) e o `check` que amarra o id ao `v5(reservation_id, 'expense')` (D97). `reservation_id` fica fora das imutáveis: a FK precisa poder anulá-la; trocar de reserva já cai no `check`.
+- As FKs de parada e de reserva usam `on delete set null (coluna)` (Postgres 15+): o expurgo da fase 12 nunca apaga dinheiro nem a missão de alguém em cascata.
+- Limite de texto em observações (500).
+
+**Consequência.** O `sync_pull` devolve as três tabelas pelo D16, sem mudar a RPC. pgTAP `10_listas_contatos_gastos` com 64 testes.
+
+### D94 · "Quem pagou é do time": trigger, não a policy da base
+**Contexto.** A base tinha uma policy restritiva `for all` conferindo `paid_by`. Ela vale em todo update: se quem pagou sai da viagem, ninguém mais consegue editar nem excluir aquele gasto.
+**Decisão.** O trigger `a_paid_by` confere o membro aceito só no insert e quando `paid_by` muda (o padrão da D23).
+**Consequência.** O gasto de quem saiu continua editável; trocar para quem não é do time (convite pendente, removido, estranho) é recusado com 42501.
+
+### D95 · `created_by` preservado, não recusado
+**Contexto.** Linhas de id determinístico (a sugestão respondida, o gasto de uma reserva) existem justamente para duas pessoas escreverem a mesma linha sem colidir. Com `created_by` nas imutáveis do `sync_guard`, a segunda escrita, de outra pessoa, viraria erro e iria para Pendentes.
+**Decisão.** O trigger `a_keep_creator` devolve o valor antigo de `created_by` em qualquer update, em silêncio. A policy restritiva continua recusando um insert com `created_by` de outra pessoa.
+**Consequência.** Quem criou primeiro fica (é quem leva o XP de "quem lançou" na fase 9); a última resposta vale para o resto (LWW por coluna). O pgTAP prova a segunda escrita pelo `sync_push`.
+
+### D96 · Sugestões calculadas; "Dispensar" é status, nunca lápide (divergência do prompt)
+**Contexto.** O prompt (4.5) diz "sugestões nascem com `status = 'suggested'`". Gravar a sugestão antes da ação faria dois aparelhos criarem a mesma linha, e um ressuscitaria a que o outro dispensou. O prompt da fase propunha "dispensar grava com `deleted_at`", mas a lápide que volta pelo pull **apaga a linha do aparelho** (`apply-pull.ts`): a sugestão reapareceria no próximo sync, até no aparelho que dispensou.
+**Decisão.** As sugestões são calculadas por uma tabela de regras pura (`features/checklists/suggestions.ts`) e só viram linha pelo toque, com id determinístico: missão `v5(stop_id, 'quest:' || regra)`, mala `v5(trip_id, 'pack:' || regra)`. "Adicionar" grava `active`; "Dispensar" grava `dismissed`, uma linha viva; desfazer devolve `suggested`, e a linha volta a aparecer como sugestão. Excluir um item nascido de sugestão também vira `dismissed`. O desfazer de uma exclusão comum regrava a linha inteira (`mutate.restore`), porque com rede a lápide some do aparelho antes de um patch alcançá-la.
+**Consequência.** Nenhuma lápide em linha de id determinístico; o que um aparelho respondeu vale em todos. As contas (progresso, véspera) só olham `active`.
+
+### D97 · As regras das sugestões
+**Decisão.**
+- Missão por tipo de parada, uma por parada, nenhuma em parada que já tem missão viva, concluída ou pulada: natureza "Foto do time com a paisagem" (20), vinícola "Registrar o rótulo preferido, com foto" (20, nunca consumo), comida "Provar o prato da casa" (15), cidade "Um cartão-postal na foto" (15), evento "A foto do momento" (10). Origem, deslocamento, hotel e "outro" não ganham.
+- Os textos não levam o nome da parada: "na Cascata", "no Park", "nas Cascatas" pediriam deduzir o artigo pelo nome (D43). A parada aparece embaixo da missão, e a de sistema sempre tem parada.
+- Mala pela leitura do lugar das rotas guardadas no aparelho (`classifySegments`, import dinâmico): praia, "Protetor solar" e "Roupa de banho"; serra, "Blusa" e "Calçado com aderência"; parada de natureza, "Repelente". Uma linha da mala que já cobre a sugestão por palavra-chave, sem acento ("Blusa fina" cobre "Blusa"), segura a sugestão.
+- O seed passou de "Registrar o vinho preferido" para "Registrar o **rótulo** preferido na Casa Valduga", pela regra de nunca falar de consumo.
+
+### D98 · O que vai junto ao excluir uma parada
+**Decisão.** `stopRemovalPlan` (puro): a missão de sistema da parada sai; a missão de uma pessoa ou da IA e o gasto ficam, sem o vínculo (o dinheiro foi gasto de verdade); o gasto de uma reserva continua ligado a ela. Na lápide local, itens e gastos não são filhos da parada (nem o gasto da reserva): são filhos da viagem.
+**Consequência.** Encurtar a viagem não bloqueia por nada desta fase; um gasto com data fora do novo período aparece num grupo "Fora das datas da viagem".
+
+### D99 · Contatos: emergência constante, telefones das reservas derivados, WhatsApp só para celular
+**Decisão.** SAMU 192, Bombeiros 193, Polícia Militar 190 e PRF 191 são constantes no topo da lista, só com ligar: funcionam sem cadastro e sem internet. Os telefones das reservas entram na lista derivados ("da reserva"), sem repetir um E.164 que já é contato (o contato diz "também na reserva"). O botão de WhatsApp só aparece para celular brasileiro (9 na frente) ou número de fora: o `wa.me` de um fixo abre uma conversa que não existe.
+
+### D100 · `.vcf` em vCard 3.0, não 4.0
+**Contexto.** O prompt citava a RFC 6350 (vCard 4.0). Os Contatos do iPhone importam o 3.0 sem surpresa; o telefone do 4.0, como URI `tel:`, é o campo que costuma se perder.
+**Decisão.** vCard 3.0 gerado à mão, como o `.ics` (D44): FN, N, TEL, ORG (o nome da viagem) e NOTE, com os escapes e a dobra em 75 octetos do `.ics`, que saíram para `lib/text/content-lines.ts`. A entrega (folha de compartilhar ou download) saiu para `lib/files/deliver.ts`, a mesma do `.ics`.
+**Consequência.** O teste final nos aparelhos confirma a importação no iPhone e no Android.
+
+### D101 · Gastos: centavos, a barra e o "+ Gasto"
+**Decisão.**
+- Somas em centavos inteiros: somar reais em ponto flutuante erra no centavo.
+- A barra usa os tokens de estado: no horário até 80%, aperta até 100%, atrasado acima, sempre com o valor e a porcentagem em texto. A porcentagem arredonda para baixo antes de 100% (99,6% não vira 100%).
+- `expenses` com rank 55, depois das reservas (50): a reserva e o gasto dela criados sem sinal podem subir no mesmo lote.
+- O "+ Gasto" do Modo Viagem é um botão discreto ao lado de "Modo painel", que nunca abre sozinho. Parado numa parada, ela e a categoria pelo tipo dela; na estrada, nenhuma parada e combustível.
+- "Lançar como gasto" cria o gasto com o valor, a categoria pelo tipo da reserva, a data do check-in em São Paulo (dentro da viagem) e quem tocou como quem pagou. Lançado, o botão diz "Gasto lançado" e leva a ele.
+
+### D102 · O aviso de véspera completo
+**Decisão.** A 0008 recria o `due_notifications` inteiro (`create or replace`, mesma assinatura; os outros ramos iguais aos da 0007). O ramo `eve_checklist` conta os itens ativos de "antes" e de "mala" sem `done_at` (`before_left`, `pack_left` em `data`) e só calcula para as viagens que começam amanhã (o `between` do `cancel_deadline`). O texto, em `_shared/notifications.ts`: com itens faltando, "Amanhã é dia de viajar" · "3 itens de antes e 2 da mala faltando" (e as variantes de uma lista só e do singular), e o toque abre a lista que falta (`/checklists?aba=antes`); sem nada faltando, o texto da fase 4.
+**Consequência.** A `send-notifications` é republicada, porque o texto mora em `_shared`.
+
+### D103 · "Pronto para partir"
+**Decisão.** Antes e Mala, cada uma com pelo menos um item e tudo marcado, antes do `start_date`. O cartão aparece uma vez por viagem e aparelho (`sync_state['ready:<tripId>']`), com confete, sino e vibração (nada disso sob reduzir movimento), e mostra o carro da viagem com a mala de teto em prévia. A marca é gravada e a folha abre a partir dela, sem estado do React escrito dentro de efeito (React Compiler). Na visão geral, os dois anéis e a frase "Fechem as duas listas até 10/12 para ganhar a mala de teto" (no singular para quem viaja sozinho; o prazo é a véspera), e o selo depois; na viagem, o cartão some.
+**Consequência.** A conquista `ready_to_go` da fase 9 é derivável dos dados (os `done_at` contra o início).
+
+### D104 · Os tipos do banco vêm da CI
+**Contexto.** Sem stack local (D91), `supabase gen types` não roda aqui.
+**Decisão.** A CI gera o `database.types.ts` no Supabase dela; se mudou, guarda como artefato `tipos-do-banco`, roda tipos, Vitest, build e Playwright **com o arquivo gerado** e falha só no fim. O arquivo é baixado (`gh run download`) e commitado. As tabelas novas entram à mão primeiro, só para os tipos fecharem localmente.
+**Consequência.** Uma volta da CI diz tudo, em vez de parar no primeiro passo.

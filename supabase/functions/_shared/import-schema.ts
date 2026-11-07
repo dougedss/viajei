@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { RESERVATION_TYPE_KEYS, STOP_KIND_KEYS } from './constants.ts';
+import { CONTACT_TYPE_KEYS, RESERVATION_TYPE_KEYS, STOP_KIND_KEYS } from './constants.ts';
 
 /**
  * Schema de importação de roteiro: o formato do seed (`supabase/seed/viagem-rs.json`), do botão
@@ -54,11 +54,10 @@ export const importReservationSchema = z.object({
 });
 export type ImportReservation = z.infer<typeof importReservationSchema>;
 
-export const CONTACT_TYPES = ['hotel', 'attraction', 'restaurant', 'emergency', 'other'] as const;
 export const importContactSchema = z.object({
   name: z.string(),
   phone: nullable(z.string()),
-  type: z.enum(CONTACT_TYPES),
+  type: z.enum(CONTACT_TYPE_KEYS),
   notes: nullable(z.string()),
 });
 

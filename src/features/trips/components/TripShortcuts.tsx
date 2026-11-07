@@ -1,4 +1,13 @@
-import { BookOpen, CarFront, Route, Ticket, type LucideIcon } from 'lucide-react';
+import {
+  BookOpen,
+  CarFront,
+  ListChecks,
+  Phone,
+  Route,
+  Ticket,
+  Wallet,
+  type LucideIcon,
+} from 'lucide-react';
 import { Link } from 'react-router';
 import { CAR_MODELS } from '@shared/constants.ts';
 import { normalizeCar } from '@/features/garage/rules.ts';
@@ -6,19 +15,24 @@ import type { Trip } from '@/lib/db/schema.ts';
 
 /**
  * Os atalhos da visão geral, como no style tile: cada um com a sua cor e um número que diz o estado
- * (paradas, reservas, o diário, o carro). Listas, contatos, gastos e mapa entram nas fases deles.
+ * (paradas, reservas, listas, contatos, gastos, o diário, o carro). O mapa entra na fase 11.
  */
 type Props = {
   trip: Trip;
   stops: number;
   reservations: number;
+  /** "7 de 11": antes e mala juntas */
+  lists: string;
+  contacts: number;
+  /** o total gasto, já formatado */
+  spent: string;
   /** paradas concluídas: o diário tem o que mostrar */
   diary: number;
 };
 
 type Tile = { to: string; label: string; value: string; icon: LucideIcon; color: string };
 
-export function TripShortcuts({ trip, stops, reservations, diary }: Props) {
+export function TripShortcuts({ trip, stops, reservations, lists, contacts, spent, diary }: Props) {
   const car = normalizeCar(trip);
   const tiles: Tile[] = [
     {
@@ -34,6 +48,27 @@ export function TripShortcuts({ trip, stops, reservations, diary }: Props) {
       value: String(reservations),
       icon: Ticket,
       color: '#6A62C9',
+    },
+    {
+      to: `/viagens/${trip.id}/checklists`,
+      label: 'Listas',
+      value: lists,
+      icon: ListChecks,
+      color: '#1F9A66',
+    },
+    {
+      to: `/viagens/${trip.id}/contatos`,
+      label: 'Contatos',
+      value: String(contacts),
+      icon: Phone,
+      color: '#2F8FC9',
+    },
+    {
+      to: `/viagens/${trip.id}/gastos`,
+      label: 'Gastos',
+      value: spent,
+      icon: Wallet,
+      color: '#D9922F',
     },
     {
       to: `/viagens/${trip.id}/diario`,

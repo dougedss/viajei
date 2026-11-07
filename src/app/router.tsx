@@ -79,6 +79,18 @@ export const router = createBrowserRouter([
                 lazy: page(() => import('@/features/reservations/routes/ReservaFormPage.tsx')),
               },
               {
+                path: '/viagens/:tripId/checklists',
+                lazy: page(() => import('@/features/checklists/routes/ListasPage.tsx')),
+              },
+              {
+                path: '/viagens/:tripId/contatos',
+                lazy: page(() => import('@/features/contacts/routes/ContatosPage.tsx')),
+              },
+              {
+                path: '/viagens/:tripId/gastos',
+                lazy: page(() => import('@/features/expenses/routes/GastosPage.tsx')),
+              },
+              {
                 path: '/viagens/:tripId/diario',
                 lazy: page(() => import('@/features/memories/routes/DiarioPage.tsx')),
               },

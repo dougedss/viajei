@@ -164,6 +164,34 @@ describe('texto dos avisos', () => {
     expect(dayMonth('x')).toBe('');
   });
 
+  it('véspera com itens faltando: as contagens das duas listas, no singular e no plural', () => {
+    const eve = (before_left: number, pack_left: number) =>
+      notificationText(
+        'eve_checklist',
+        {
+          trip_name: 'RS — concurso em Montenegro',
+          first_time: '07:00',
+          first_kind: 'origin',
+          before_left,
+          pack_left,
+        },
+        TRIP,
+      );
+    expect(eve(3, 2)).toMatchObject({
+      title: 'Amanhã é dia de viajar',
+      body: '3 itens de antes e 2 da mala faltando',
+      tag: `trip:${TRIP}`,
+    });
+    expect(eve(1, 1).body).toBe('1 item de antes e 1 da mala faltando');
+    expect(eve(2, 0).body).toBe('2 itens de antes faltando');
+    expect(eve(0, 1).body).toBe('1 item da mala faltando');
+    // nada faltando (ou listas vazias): o texto da fase 4
+    expect(eve(0, 0)).toMatchObject({
+      title: 'Amanhã começa RS — concurso em Montenegro',
+      body: 'Primeira saída às 07:00',
+    });
+  });
+
   it('dia da semana sem fuso', () => {
     expect(weekdayName('2026-12-11')).toBe('sexta');
     expect(weekdayName('2026-12-13')).toBe('domingo');
@@ -232,5 +260,22 @@ describe('payload único', () => {
       `https://viajei-mauve.vercel.app/viagens/${TRIP}/reservas?abrir=${ref}`,
     );
     expect(p.actions).toEqual([]);
+  });
+
+  it('a véspera com itens faltando abre a lista que falta; sem nada faltando, o "Agora"', () => {
+    const payload = (before_left: number, pack_left: number) =>
+      buildPushPayload(
+        {
+          kind: 'eve_checklist',
+          ref: TRIP,
+          trip_id: TRIP,
+          stop_id: null,
+          data: { trip_name: 'RS', before_left, pack_left },
+        },
+        'https://viajei-mauve.vercel.app',
+      ).notification.data.navigate;
+    expect(payload(3, 2)).toBe(`/viagens/${TRIP}/checklists?aba=antes`);
+    expect(payload(0, 2)).toBe(`/viagens/${TRIP}/checklists?aba=mala`);
+    expect(payload(0, 0)).toBe(`/viagens/${TRIP}/viagem`);
   });
 });

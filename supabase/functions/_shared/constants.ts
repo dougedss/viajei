@@ -45,6 +45,63 @@ export const RESERVATION_TYPE_KEYS = Object.keys(RESERVATION_TYPES) as [
 ];
 
 /**
+ * As três listas da viagem (o `check` de `checklist_items.kind`): o nome da aba, o nome curto do
+ * anel e o slug da URL (`/checklists?aba=`).
+ */
+export const CHECKLIST_KINDS = {
+  before: { label: 'Antes de viajar', short: 'Antes', slug: 'antes' },
+  pack: { label: 'Mala', short: 'Mala', slug: 'mala' },
+  quest: { label: 'Missões', short: 'Missões', slug: 'missoes' },
+} as const;
+export type ChecklistKind = keyof typeof CHECKLIST_KINDS;
+export const CHECKLIST_KIND_KEYS = Object.keys(CHECKLIST_KINDS) as [
+  ChecklistKind,
+  ...ChecklistKind[],
+];
+/** Pontos de uma missão (o `check` do banco aceita de 10 a 30); a pessoa escolhe um destes. */
+export const QUEST_POINT_OPTIONS = [10, 20, 30] as const;
+export const QUEST_POINTS_DEFAULT = 10;
+
+/**
+ * Tipos de contato (o `check` de `contacts.type` e o schema de importação), com o rótulo, o título
+ * do grupo na lista e o ícone do lucide.
+ */
+export const CONTACT_TYPES = {
+  hotel: { label: 'Hotel', group: 'Hotéis', icon: 'bed-double' },
+  attraction: { label: 'Atração', group: 'Atrações', icon: 'ticket' },
+  restaurant: { label: 'Restaurante', group: 'Restaurantes', icon: 'utensils-crossed' },
+  emergency: { label: 'Emergência', group: 'Emergência', icon: 'siren' },
+  other: { label: 'Outro', group: 'Outros', icon: 'phone' },
+} as const;
+export type ContactType = keyof typeof CONTACT_TYPES;
+export const CONTACT_TYPE_KEYS = Object.keys(CONTACT_TYPES) as [ContactType, ...ContactType[]];
+
+/**
+ * Emergência, sempre e sem sinal: constantes, não linhas do banco. Ligar só precisa do número; não
+ * há WhatsApp para estes serviços.
+ */
+export const EMERGENCY_NUMBERS = [
+  { number: '192', name: 'SAMU' },
+  { number: '193', name: 'Bombeiros' },
+  { number: '190', name: 'Polícia Militar' },
+  { number: '191', name: 'Polícia Rodoviária Federal' },
+] as const;
+
+/** Categorias de gasto (o `check` de `expenses.category`), com rótulo, ícone e cor da barra. */
+export const EXPENSE_CATEGORIES = {
+  lodging: { label: 'Hospedagem', icon: 'bed-double', color: '#6A62C9' },
+  fuel: { label: 'Combustível', icon: 'fuel', color: '#D9922F' },
+  food: { label: 'Comida', icon: 'utensils-crossed', color: '#E8653A' },
+  attractions: { label: 'Atrações', icon: 'ticket', color: '#1F9A66' },
+  other: { label: 'Outro', icon: 'receipt', color: '#5B6474' },
+} as const;
+export type ExpenseCategory = keyof typeof EXPENSE_CATEGORIES;
+export const EXPENSE_CATEGORY_KEYS = Object.keys(EXPENSE_CATEGORIES) as [
+  ExpenseCategory,
+  ...ExpenseCategory[],
+];
+
+/**
  * Fotos e anexos: os mesmos números dos `check` de `attachments` e do bucket `attachments`. A foto
  * sempre vira JPEG no client (C8); os prints de reserva também.
  */
@@ -323,7 +380,7 @@ export const NOTIFICATION_KINDS = {
   },
   eve_checklist: {
     label: 'Véspera',
-    description: 'Amanhã começa a viagem',
+    description: 'Às 19h da véspera, com o que falta nas listas Antes e Mala',
     on: true,
     phase: 4,
     available: true,

@@ -4,6 +4,7 @@ import { formatPhone } from '@shared/phone.ts';
 import { ButtonLink } from '@/components/ui/ButtonLink.tsx';
 import { Sheet } from '@/components/ui/Sheet.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
+import { LaunchExpense } from '@/features/expenses/components/LaunchExpense.tsx';
 import { MediaThumb } from '@/features/media/components/MediaThumb.tsx';
 import { MediaViewer } from '@/features/media/components/MediaViewer.tsx';
 import { formatMoney } from '@/features/trips/rules.ts';
@@ -166,6 +167,8 @@ function Body({ r, stop, today }: { r: Reservation; stop: Props['stop']; today: 
             {r.notes ? `${r.amount !== null || r.booked_via ? '\n' : ''}${r.notes}` : ''}
           </p>
         ) : null}
+
+        <LaunchExpense reservation={r} />
 
         <ButtonLink
           to={`/viagens/${r.trip_id}/reservas/${r.id}/editar`}

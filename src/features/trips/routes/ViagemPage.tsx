@@ -21,6 +21,13 @@ import { useIsOwner, useTrip, useTripMembers } from '../queries.ts';
 import { TripHero } from '../components/TripHero.tsx';
 import { TripShortcuts } from '../components/TripShortcuts.tsx';
 import { useTripReservations } from '@/features/reservations/queries.ts';
+import { ReadinessCard, ReadyCelebration } from '@/features/checklists/components/Readiness.tsx';
+import { useTripChecklist } from '@/features/checklists/queries.ts';
+import { listsProgress, shortcutValue } from '@/features/checklists/rules.ts';
+import { useTripContacts } from '@/features/contacts/queries.ts';
+import { contactCount, contactGroups } from '@/features/contacts/rules.ts';
+import { useTripExpenses } from '@/features/expenses/queries.ts';
+import { formatMoneyShort, totals } from '@/features/expenses/rules.ts';
 import { todayISO } from '../rules.ts';
 import { useSession } from '@/lib/supabase/session.ts';
 
@@ -38,6 +45,9 @@ export default function ViagemPage() {
   const stops = useTripStops(tripId);
   const [loadingExample, setLoadingExample] = useState(false);
   const reservations = useTripReservations(tripId) ?? [];
+  const items = useTripChecklist(tripId);
+  const contacts = useTripContacts(tripId) ?? [];
+  const expenses = useTripExpenses(tripId) ?? [];
 
   if (trip === undefined) return <Splash />;
   if (trip === null) return <NotFound />;
@@ -66,12 +76,18 @@ export default function ViagemPage() {
 
       <TripHero trip={trip} today={today} />
 
+      <ReadinessCard trip={trip} items={items ?? []} today={today} teamSize={team.length} />
+
       <TripShortcuts
         trip={trip}
         stops={stops.length}
         reservations={reservations.length}
+        lists={shortcutValue(listsProgress(items ?? []))}
+        contacts={contactCount(contactGroups(contacts, reservations))}
+        spent={formatMoneyShort(totals(expenses).total)}
         diary={stops.filter((s) => s.done_at !== null).length}
       />
+      <ReadyCelebration trip={trip} items={items} today={today} />
 
       {trip.notes ? (
         <Card>
@@ -144,7 +160,7 @@ export default function ViagemPage() {
                         .then((r) =>
                           toast.show({
                             title: 'Viagem de exemplo carregada',
-                            description: `${r.days} dias, ${r.stops} paradas e ${r.reservations} reservas.`,
+                            description: `${r.days} dias, ${r.stops} paradas, ${r.reservations} reservas, ${r.contacts} contatos e ${r.items} itens de lista.`,
                             kind: 'ok',
                           }),
                         )

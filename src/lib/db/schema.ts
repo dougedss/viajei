@@ -23,6 +23,9 @@ export type NotificationPref = LocalRow<Tables['notification_prefs']['Row']>;
 export type Reservation = LocalRow<Tables['reservations']['Row']>;
 export type StopMemory = LocalRow<Tables['stop_memories']['Row']>;
 export type Attachment = LocalRow<Tables['attachments']['Row']>;
+export type ChecklistItem = LocalRow<Tables['checklist_items']['Row']>;
+export type Contact = LocalRow<Tables['contacts']['Row']>;
+export type Expense = LocalRow<Tables['expenses']['Row']>;
 
 export type RowOf<T extends SyncTable> = {
   trips: Trip;
@@ -34,6 +37,9 @@ export type RowOf<T extends SyncTable> = {
   reservations: Reservation;
   stop_memories: StopMemory;
   attachments: Attachment;
+  checklist_items: ChecklistItem;
+  contacts: Contact;
+  expenses: Expense;
 }[T];
 
 export type OutboxState = 'pending' | 'failed';
@@ -146,7 +152,9 @@ export type GeocodeEntry = { query: string; results: GeocodeResult[]; fetched_at
  * `notification_prefs` pela correção C11 e `travel_state` do replay). Versão 2 (fase 3): índice
  * simples `trip_day_id` em `stops`, para a lápide de um dia remover as paradas, e a store
  * `geocode`. Versão 3 (fase 7): `blobs` ganha o índice `trip_id` (a viagem que sai leva os
- * arquivos dela) e nasce `uploads`, a fila de envio de fotos e documentos sem sinal. Caches
+ * arquivos dela) e nasce `uploads`, a fila de envio de fotos e documentos sem sinal. A fase 8 não
+ * sobe a versão: `checklist_items`, `contacts` e `expenses` já tinham os índices de que precisa (o
+ * gasto de uma reserva se acha pelo id determinístico, sem índice). Caches
  * recalculáveis (`routes`, `geocode`, `travel_state`, `blobs`, `weather`) nunca sincronizam. A
  * `outbox` nunca é apagada sem ter sido enviada; a `uploads` também não, pelo mesmo motivo.
  */
@@ -161,6 +169,9 @@ export class ViajeiDb extends Dexie {
   reservations!: EntityTable<Reservation, 'id'>;
   stop_memories!: EntityTable<StopMemory, 'id'>;
   attachments!: EntityTable<Attachment, 'id'>;
+  checklist_items!: EntityTable<ChecklistItem, 'id'>;
+  contacts!: EntityTable<Contact, 'id'>;
+  expenses!: EntityTable<Expense, 'id'>;
   blobs!: EntityTable<BlobEntry, 'attachment_id'>;
   uploads!: EntityTable<MediaJob, 'attachment_id'>;
   routes!: EntityTable<DayRoute, 'trip_day_id'>;

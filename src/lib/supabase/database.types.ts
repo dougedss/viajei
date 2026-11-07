@@ -43,6 +43,64 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"checklist_items": {
+                  Row: {
+                    "created_at": string,"created_by": string,"deleted_at": string | null,"done_at": string | null,"done_by": string | null,"field_versions": NonNullable<Json>,"id": string,"kind": string,"points": number,"position": string,"source": string,"status": string,"stop_id": string | null,"synced_at": string,"text": string,"trip_id": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"created_by": string,"deleted_at"?: string | null,"done_at"?: string | null,"done_by"?: string | null,"field_versions"?: NonNullable<Json>,"id": string,"kind": string,"points"?: number,"position": string,"source"?: string,"status"?: string,"stop_id"?: string | null,"synced_at": string,"text": string,"trip_id": string,"updated_at": string
+                  }
+                  Update: {
+                    "created_at"?: string,"created_by"?: string,"deleted_at"?: string | null,"done_at"?: string | null,"done_by"?: string | null,"field_versions"?: NonNullable<Json>,"id"?: string,"kind"?: string,"points"?: number,"position"?: string,"source"?: string,"status"?: string,"stop_id"?: string | null,"synced_at"?: string,"text"?: string,"trip_id"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "checklist_items_created_by_fkey"
+      columns: ["created_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "checklist_items_done_by_fkey"
+      columns: ["done_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "checklist_items_stop_id_trip_id_fkey"
+      columns: ["stop_id","trip_id"]
+isOneToOne: false
+      referencedRelation: "stops"
+      referencedColumns: ["id","trip_id"]
+    },{
+      foreignKeyName: "checklist_items_trip_id_fkey"
+      columns: ["trip_id"]
+isOneToOne: false
+      referencedRelation: "trips"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"contacts": {
+                  Row: {
+                    "created_at": string,"deleted_at": string | null,"field_versions": NonNullable<Json>,"id": string,"name": string,"notes": string | null,"phone": string,"synced_at": string,"trip_id": string,"type": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"deleted_at"?: string | null,"field_versions"?: NonNullable<Json>,"id": string,"name": string,"notes"?: string | null,"phone": string,"synced_at": string,"trip_id": string,"type": string,"updated_at": string
+                  }
+                  Update: {
+                    "created_at"?: string,"deleted_at"?: string | null,"field_versions"?: NonNullable<Json>,"id"?: string,"name"?: string,"notes"?: string | null,"phone"?: string,"synced_at"?: string,"trip_id"?: string,"type"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "contacts_trip_id_fkey"
+      columns: ["trip_id"]
+isOneToOne: false
+      referencedRelation: "trips"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"edge_calls": {
                   Row: {
                     "created_at": string,"fn": string,"id": string,"user_id": string
@@ -60,6 +118,50 @@ isOneToOne: false
       columns: ["user_id"]
 isOneToOne: false
       referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"expenses": {
+                  Row: {
+                    "amount": number,"category": string,"created_at": string,"created_by": string,"date": string,"deleted_at": string | null,"field_versions": NonNullable<Json>,"id": string,"notes": string | null,"paid_by": string,"reservation_id": string | null,"stop_id": string | null,"synced_at": string,"trip_id": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "amount": number,"category": string,"created_at"?: string,"created_by": string,"date": string,"deleted_at"?: string | null,"field_versions"?: NonNullable<Json>,"id": string,"notes"?: string | null,"paid_by": string,"reservation_id"?: string | null,"stop_id"?: string | null,"synced_at": string,"trip_id": string,"updated_at": string
+                  }
+                  Update: {
+                    "amount"?: number,"category"?: string,"created_at"?: string,"created_by"?: string,"date"?: string,"deleted_at"?: string | null,"field_versions"?: NonNullable<Json>,"id"?: string,"notes"?: string | null,"paid_by"?: string,"reservation_id"?: string | null,"stop_id"?: string | null,"synced_at"?: string,"trip_id"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "expenses_created_by_fkey"
+      columns: ["created_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "expenses_paid_by_fkey"
+      columns: ["paid_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "expenses_reservation_id_trip_id_fkey"
+      columns: ["reservation_id","trip_id"]
+isOneToOne: false
+      referencedRelation: "reservations"
+      referencedColumns: ["id","trip_id"]
+    },{
+      foreignKeyName: "expenses_stop_id_trip_id_fkey"
+      columns: ["stop_id","trip_id"]
+isOneToOne: false
+      referencedRelation: "stops"
+      referencedColumns: ["id","trip_id"]
+    },{
+      foreignKeyName: "expenses_trip_id_fkey"
+      columns: ["trip_id"]
+isOneToOne: false
+      referencedRelation: "trips"
       referencedColumns: ["id"]
     }
                   ]

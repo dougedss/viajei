@@ -1,16 +1,25 @@
 import { validateImport } from '@shared/import-schema.ts';
 import { reservationFromImport } from '@/features/reservations/import.ts';
+import { comparePosition } from '@/lib/ids/position.ts';
 import { mutate } from '@/lib/db/mutate.ts';
 import { db, type Trip } from '@/lib/db/schema.ts';
 import { uuidV4 } from '@/lib/ids/uuid.ts';
 import { createStop, dayId, syncDays, updateDay } from './actions.ts';
+import { contactsFromImport, listItemsFromImport } from './import-rows.ts';
 
 /**
  * "Carregar viagem de exemplo": só em desenvolvimento. Lê `supabase/seed/viagem-rs.json` pelo
- * schema de importação e grava dias, paradas e as hospedagens pela `mutate`. Contatos e listas
- * entram quando as fases deles existirem: este carregador é estendido por fase.
+ * schema de importação e grava dias, paradas, as hospedagens, os contatos, as duas listas e as
+ * missões pela `mutate`. As linhas vêm de funções puras (`import-rows.ts`, `reservationFromImport`),
+ * que a importação da fase 10 reaproveita. Rodar duas vezes não duplica nada.
  */
-export type LoadResult = { days: number; stops: number; reservations: number };
+export type LoadResult = {
+  days: number;
+  stops: number;
+  reservations: number;
+  contacts: number;
+  items: number;
+};
 
 export async function loadExampleTrip(trip: Trip, uid: string): Promise<LoadResult> {
   const { default: raw } = await import('../../../supabase/seed/viagem-rs.json');
@@ -73,5 +82,60 @@ export async function loadExampleTrip(trip: Trip, uid: string): Promise<LoadResu
     });
     reservations += 1;
   }
-  return { days: data.days.length, stops, reservations };
+  // contatos, uma vez por telefone
+  const known = new Set(
+    (await db.contacts.where('trip_id').equals(trip.id).toArray())
+      .filter((c) => c.deleted_at === null)
+      .map((c) => c.phone),
+  );
+  let contacts = 0;
+  for (const c of contactsFromImport(data.contacts)) {
+    if (known.has(c.phone)) continue;
+    known.add(c.phone);
+    const now = new Date().toISOString();
+    await mutate.insert('contacts', {
+      id: uuidV4(),
+      trip_id: trip.id,
+      ...c,
+      created_at: now,
+      updated_at: now,
+      deleted_at: null,
+    });
+    contacts += 1;
+  }
+
+  // antes, mala e missões, uma vez por texto em cada lista, depois do que já existe
+  const existing = (await db.checklist_items.where('trip_id').equals(trip.id).toArray()).filter(
+    (i) => i.deleted_at === null,
+  );
+  const lastOf = (kind: string) =>
+    existing
+      .filter((i) => i.kind === kind)
+      .map((i) => i.position)
+      .sort(comparePosition)
+      .at(-1) ?? null;
+  const written = new Set(existing.map((i) => `${i.kind}:${i.text}`));
+  const liveStops = await db.stops.where('trip_id').equals(trip.id).toArray();
+  let items = 0;
+  for (const row of listItemsFromImport(data, liveStops, {
+    before: lastOf('before'),
+    pack: lastOf('pack'),
+    quest: lastOf('quest'),
+  })) {
+    if (written.has(`${row.kind}:${row.text}`)) continue;
+    const now = new Date().toISOString();
+    await mutate.insert('checklist_items', {
+      id: uuidV4(),
+      trip_id: trip.id,
+      ...row,
+      done_by: null,
+      done_at: null,
+      created_by: uid,
+      created_at: now,
+      updated_at: now,
+      deleted_at: null,
+    });
+    items += 1;
+  }
+  return { days: data.days.length, stops, reservations, contacts, items };
 }

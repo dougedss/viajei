@@ -20,6 +20,9 @@ export const SYNC_TABLES = {
       { table: 'trip_members', fk: 'trip_id' },
       { table: 'trip_days', fk: 'trip_id' },
       { table: 'reservations', fk: 'trip_id' },
+      { table: 'contacts', fk: 'trip_id' },
+      { table: 'checklist_items', fk: 'trip_id' },
+      { table: 'expenses', fk: 'trip_id' },
     ],
   },
   trip_members: { scope: 'trip', rank: 20, children: [] },
@@ -53,6 +56,15 @@ export const SYNC_TABLES = {
   },
   stop_memories: { scope: 'trip', rank: 50, children: [] },
   attachments: { scope: 'trip', rank: 60, children: [] },
+  contacts: { scope: 'trip', rank: 30, children: [] },
+  /**
+   * Itens das listas e gastos não são filhos da parada (nem o gasto é filho da reserva): excluir uma
+   * parada leva só a missão de sistema dela e solta o resto (`features/itinerary/actions.ts`). Se a
+   * lápide da parada levasse tudo, a missão de alguém e o dinheiro gasto sumiriam do aparelho.
+   */
+  checklist_items: { scope: 'trip', rank: 50, children: [] },
+  /** 55: depois das reservas (50), porque o gasto de uma reserva tem FK para ela e podem subir juntos. */
+  expenses: { scope: 'trip', rank: 55, children: [] },
   /** preferências de aviso: da pessoa (escopo user), uma linha por viagem; chega pelo pull do usuário */
   notification_prefs: { scope: 'user', rank: 25, children: [] },
 } as const satisfies Record<

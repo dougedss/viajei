@@ -85,6 +85,40 @@ As fotos das memórias ("Como foi?", no Modo Viagem e no diário) e os prints e 
 - **PDF no iPhone instalado:** abre num visualizador próprio (pdf.js, carregado só quando um PDF abre e guardado no precache), porque o Safari no modo app não abre PDF de Blob. "Compartilhar" leva a outro app ou a Arquivos.
 - **Testes:** `pnpm test:e2e` tem dois projetos: `iphone` (Vite de dev) e `pwa` (o build pelo `vite preview`, com service worker, para os testes que recarregam sem rede). Rode `pnpm build` antes. Roteiro nos aparelhos: [`docs/teste-manual-fase-7.md`](docs/teste-manual-fase-7.md).
 
+## Listas e missões
+
+`/viagens/<id>/checklists`, com três abas: **Antes de viajar**, **Mala** e **Missões** (`src/features/checklists`), cada uma com o seu anel. Adicionar é um campo no fim da lista (Enter adiciona e mantém o foco, para digitar a mala de uma vez); marcar é um toque grande que grava quem e quando, na cor da pessoa; reordenar é pela alça (um arrasto, um patch na posição fracionária) ou por Subir e Descer no menu do item; excluir tem Desfazer. Tudo offline, pela outbox.
+
+- **Pronto para partir:** quando Antes e Mala chegam a 100% antes do início, o cartão com confete e sino aparece uma vez por viagem e aparelho. Na visão geral, os dois anéis e "Fechem as duas listas até 10/12 para ganhar a mala de teto" enquanto falta algo; o selo depois. A mala de teto em si chega com as conquistas (fase 9).
+- **Sugestões por regra, calculadas e não gravadas** (`suggestions.ts`): uma missão por parada pelo tipo dela (natureza, vinícola, comida, cidade, evento; 10 a 20 pontos) e itens de mala pela geografia das rotas guardadas no aparelho (praia, serra) e pelas paradas de natureza. Aparecem esmaecidas, com "Adicionar" e "Dispensar"; só o toque grava, com id determinístico, e a dispensada nunca volta (é um status da linha, não uma lápide).
+- **Na estrada:** a folha "Como foi?" e a lista do dia mostram as missões da parada com "Feito". Nenhuma missão premia velocidade nem exige quem dirige; a de vinícola registra rótulo e foto, nunca consumo.
+- **O aviso de véspera** (19h do dia anterior) diz o que falta: "Amanhã é dia de viajar" · "3 itens de antes e 2 da mala faltando", e abre a lista que falta.
+
+## Contatos
+
+`/viagens/<id>/contatos` (`src/features/contacts`): os contatos da viagem por tipo, com **Ligar** (`tel:`) e **WhatsApp** (`wa.me`, só para celular) em botões de 48 px. O telefone é digitado à brasileira e vira E.164.
+
+- **Emergência sempre no topo:** SAMU 192, Bombeiros 193, Polícia Militar 190 e Polícia Rodoviária Federal 191, como constantes (sem cadastro e sem internet; ligar só precisa de sinal de voz).
+- **Os telefones das reservas aparecem sozinhos**, marcados "da reserva", sem repetir o número que já é um contato.
+- **Salvar no celular:** um `.vcf` (vCard 3.0, gerado à mão) de um contato ou de todos, pela folha de compartilhar ou por download.
+
+## Gastos
+
+`/viagens/<id>/gastos` (`src/features/expenses`): a barra do total contra o orçamento da viagem (verde até 80%, âmbar até 100%, vermelha acima, sempre com o valor e a porcentagem em texto), os totais por categoria e a lista por dia com quem pagou na cor da pessoa. As somas são em centavos.
+
+- **"+ Gasto" no Modo Viagem:** um botão discreto ao lado de "Modo painel" abre o formulário já com a data do dia, a parada em que vocês estão e a categoria pelo tipo dela (na estrada, combustível). Nunca abre sozinho.
+- **"Lançar como gasto" na reserva com valor:** cria o gasto ligado à reserva com id determinístico `v5(reservation_id, 'expense')`; dois aparelhos que lançam a mesma reserva escrevem a mesma linha. Lançado, o botão diz "Gasto lançado" e leva a ele.
+
+## Onde se testa (sem stack local)
+
+Nada roda neste Mac (D91). O caminho de uma fase:
+
+1. **CI da branch** (`.github/workflows/ci.yml`, em todo push de `fase-*`): lint, formatação, pgTAP, tipos do banco, tipos, Vitest, build e Playwright, no Supabase que a própria CI sobe.
+2. **Tipos do banco:** quando uma migration muda o schema, a CI gera o `src/lib/supabase/database.types.ts`, guarda como artefato `tipos-do-banco`, roda o resto com ele e falha no fim. Baixe e commite: `gh run download <id> -n tipos-do-banco -D src/lib/supabase`.
+3. **Hospedado:** com a CI verde e o ok, `SUPABASE_YES=1 pnpm remote:db-push` e `SUPABASE_YES=1 pnpm remote:functions-deploy`.
+4. **Laboratório:** os cenários da fase rodam no app publicado (`gh workflow run lab.yml --repo dougedss/viajei --ref <branch>`), contra a produção ou, com o bypass de automação da Vercel, contra o preview da branch antes do merge.
+5. **Aparelhos:** uma vez, na versão final, pelos roteiros `docs/teste-manual-fase-*.md`.
+
 ## Scripts
 
 | Comando                                          | O que faz                                                                                   |

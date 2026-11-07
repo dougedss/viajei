@@ -4,6 +4,7 @@ import { removeAllMedia } from '@/lib/media/actions.ts';
 import { mergeMedia } from '@/lib/media/hooks.ts';
 import { positionAtEnd, positionForMove } from '@/lib/ids/position.ts';
 import { uuidV4, uuidV5 } from '@/lib/ids/uuid.ts';
+import { stopRemovalPlan } from './removal.ts';
 import { blockedMessage, planDays, sortStops, type DaysPlan } from './rules.ts';
 import type { StopFormValues } from './schemas.ts';
 
@@ -128,17 +129,24 @@ export async function updateStop(stopId: string, values: StopFormValues): Promis
  * Excluir a parada. A reserva ligada a ela continua (a hospedagem existe mesmo fora do roteiro) e
  * passa para o dia da parada. A memória e as fotos da própria pessoa saem junto; as dos outros só a
  * RLS de cada um tiraria, então ficam no servidor sem parada (o expurgo leva) e somem deste
- * aparelho com a lápide da parada.
+ * aparelho com a lápide da parada. Listas e gastos seguem `stopRemovalPlan`: a missão de sistema
+ * sai, a missão de alguém e o gasto ficam sem o vínculo (o dinheiro foi gasto de verdade).
  */
 export async function removeStop(stopId: string, uid: string, isOwner: boolean): Promise<void> {
   const stop = await db.stops.get(stopId);
   if (!stop) return;
-  const [reservations, memories, rows, jobs] = await Promise.all([
+  const [reservations, memories, rows, jobs, items, expenses] = await Promise.all([
     db.reservations.where('stop_id').equals(stopId).toArray(),
     db.stop_memories.where('stop_id').equals(stopId).toArray(),
     db.attachments.where('stop_id').equals(stopId).toArray(),
     db.uploads.where('trip_id').equals(stop.trip_id).toArray(),
+    db.checklist_items.where('stop_id').equals(stopId).toArray(),
+    db.expenses.where('stop_id').equals(stopId).toArray(),
   ]);
+  const plan = stopRemovalPlan(stopId, items, expenses);
+  for (const id of plan.removeItems) await mutate.remove('checklist_items', id);
+  for (const id of plan.unlinkItems) await mutate.patch('checklist_items', id, { stop_id: null });
+  for (const id of plan.unlinkExpenses) await mutate.patch('expenses', id, { stop_id: null });
   for (const r of reservations.filter((x) => x.deleted_at === null)) {
     await mutate.patch('reservations', r.id, { stop_id: null, trip_day_id: stop.trip_day_id });
   }

@@ -103,6 +103,17 @@ export const mutate = {
   },
 
   /**
+   * Desfazer uma exclusão: a linha volta inteira, pelo mesmo id, como `upsert`. Um patch não serviria:
+   * com rede, o pull traz a lápide em um segundo e a linha já não existe no aparelho para receber o
+   * patch. A versão nova de cada coluna vence a lápide no servidor.
+   */
+  async restore<T extends SyncTable>(table: T, row: RowOf<T>): Promise<void> {
+    const values: Record<string, unknown> = { ...row, deleted_at: null };
+    delete values.synced_at;
+    await mutate.insert(table, values as Omit<RowOf<T>, 'synced_at'>);
+  },
+
+  /**
    * Projeção local de uma linha que o servidor deriva sozinho (ex.: a participação do dono, criada
    * por trigger). Entra no Dexie para a UI, sem outbox; o pull a substitui pela versão do servidor.
    */

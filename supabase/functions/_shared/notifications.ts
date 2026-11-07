@@ -37,6 +37,9 @@ export const notificationDataSchema = z.looseObject({
   reservation_name: z.string().nullish(),
   reservation_type: z.string().nullish(),
   cancel_until: z.string().nullish(),
+  /** véspera: itens de "antes" e da mala ainda sem marcar */
+  before_left: z.number().nullish(),
+  pack_left: z.number().nullish(),
 });
 export type NotificationData = z.infer<typeof notificationDataSchema>;
 
@@ -140,6 +143,19 @@ function roadBody(data: NotificationData): string {
   return parts.join(' · ');
 }
 
+/**
+ * O que falta nas listas na véspera: "3 itens de antes e 2 da mala faltando", só uma das listas, ou
+ * null quando nada falta (o aviso volta a ser o da fase 4, com a primeira saída).
+ */
+export function checklistMissing(data: NotificationData): string | null {
+  const before = data.before_left ?? 0;
+  const pack = data.pack_left ?? 0;
+  if (before <= 0 && pack <= 0) return null;
+  const item = (n: number) => `${n} ${n === 1 ? 'item' : 'itens'}`;
+  if (before > 0 && pack > 0) return `${item(before)} de antes e ${pack} da mala faltando`;
+  return before > 0 ? `${item(before)} de antes faltando` : `${item(pack)} da mala faltando`;
+}
+
 /** "08/12" a partir de 'YYYY-MM-DD', sem passar por Date (nada de fuso). */
 export function dayMonth(date: string): string {
   const [, m, d] = date.split('-');
@@ -207,18 +223,22 @@ export function notificationText(
         topic: null,
       };
     }
-    case 'eve_checklist':
+    case 'eve_checklist': {
+      const missing = checklistMissing(data);
       return {
-        title: `Amanhã começa ${data.trip_name ?? 'a viagem'}`,
-        body: data.first_time
-          ? `Primeira ${isDepartureKind(data.first_kind ?? '') ? 'saída' : 'parada'} às ${data.first_time}`
-          : 'Confira o roteiro do primeiro dia',
+        title: missing ? 'Amanhã é dia de viajar' : `Amanhã começa ${data.trip_name ?? 'a viagem'}`,
+        body:
+          missing ??
+          (data.first_time
+            ? `Primeira ${isDepartureKind(data.first_kind ?? '') ? 'saída' : 'parada'} às ${data.first_time}`
+            : 'Confira o roteiro do primeiro dia'),
         tag: `trip:${ref}`,
         actions: [],
         appBadge: null,
         ttlSeconds: 3 * 3600,
         topic: null,
       };
+    }
     case 'team_arrived':
       return {
         title: `${data.actor_name ?? 'Alguém do time'} ${departureNode ? 'partiu' : 'chegou'}`,
@@ -255,11 +275,24 @@ export function notificationText(
   }
 }
 
-/** Caminho que o aviso abre: o "Agora" da viagem; o prazo de cancelamento abre a própria reserva. */
-export function navigatePath(row: Pick<ClaimedNotification, 'kind' | 'ref' | 'trip_id'>): string {
+/**
+ * Caminho que o aviso abre: o "Agora" da viagem; o prazo de cancelamento abre a própria reserva; a
+ * véspera com itens faltando abre a lista que falta (antes primeiro).
+ */
+export function navigatePath(
+  row: Pick<ClaimedNotification, 'kind' | 'ref' | 'trip_id'> & {
+    data?: Pick<NotificationData, 'before_left' | 'pack_left'>;
+  },
+): string {
   if (!row.trip_id) return '/';
   if (row.kind === 'cancel_deadline') {
     return `/viagens/${row.trip_id}/reservas?abrir=${encodeURIComponent(row.ref)}`;
+  }
+  if (row.kind === 'eve_checklist') {
+    const before = row.data?.before_left ?? 0;
+    const pack = row.data?.pack_left ?? 0;
+    if (before > 0) return `/viagens/${row.trip_id}/checklists?aba=antes`;
+    if (pack > 0) return `/viagens/${row.trip_id}/checklists?aba=mala`;
   }
   return `/viagens/${row.trip_id}/viagem`;
 }

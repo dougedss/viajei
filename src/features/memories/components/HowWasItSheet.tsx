@@ -8,6 +8,8 @@ import { TextArea } from '@/components/ui/TextArea.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { FilePickers } from '@/features/media/components/FilePickers.tsx';
 import { MediaThumb } from '@/features/media/components/MediaThumb.tsx';
+import { QuestChecks } from '@/features/checklists/components/QuestChecks.tsx';
+import { useStopQuests } from '@/features/checklists/queries.ts';
 import { useIsOwner, useTrip } from '@/features/trips/queries.ts';
 import { db, type Stop } from '@/lib/db/schema.ts';
 import { removeMedia } from '@/lib/media/actions.ts';
@@ -26,7 +28,8 @@ type Props = {
 
 /**
  * "Como foi?": nota de 1 a 5, até 3 fotos e uma memória curta. Tudo opcional e por pessoa; fica no
- * diário da viagem. Offline como tudo: a foto entra na fila e aparece na hora.
+ * diário da viagem. Offline como tudo: a foto entra na fila e aparece na hora. As missões da parada
+ * aparecem no topo, com "Feito".
  */
 export function HowWasItSheet({ tripId, stop, uid, onClose }: Props) {
   return (
@@ -82,6 +85,8 @@ function Body({ tripId, stop, uid, onClose }: Props & { stop: Pick<Stop, 'id' | 
   const [preparing, setPreparing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [store] = useState(() => new Drafts());
+  // as missões da parada entram aqui com "Feito": marcar não é salvar a memória, grava na hora
+  const quests = useStopQuests(stop.id);
 
   // a memória já gravada entra uma vez, quando chega do Dexie
   if (!loaded && existing !== undefined) {
@@ -130,6 +135,7 @@ function Body({ tripId, stop, uid, onClose }: Props & { stop: Pick<Stop, 'id' | 
 
   return (
     <div className="grid max-h-[70dvh] gap-4 overflow-y-auto px-0.5 pb-1">
+      <QuestChecks quests={quests} uid={uid} />
       <StarRating value={rating} onChange={setRating} />
 
       <div className="grid gap-2">

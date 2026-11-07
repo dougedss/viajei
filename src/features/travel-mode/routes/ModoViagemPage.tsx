@@ -5,25 +5,31 @@ import {
   ChevronLeft,
   ChevronRight,
   CalendarOff,
+  Plus,
   Route as RouteIcon,
   Star,
   Ticket,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import { NotFound } from '@/app/NotFound.tsx';
 import { Splash } from '@/app/Splash.tsx';
 import { ButtonLink } from '@/components/ui/ButtonLink.tsx';
 import { EmptyState } from '@/components/ui/EmptyState.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
-import { useDayStops, useTripDays } from '@/features/itinerary/queries.ts';
+import { QuestChecks } from '@/features/checklists/components/QuestChecks.tsx';
+import { useTripChecklist } from '@/features/checklists/queries.ts';
+import { createExpense } from '@/features/expenses/actions.ts';
+import { ExpenseSheet, type ExpenseDraft } from '@/features/expenses/components/ExpenseSheet.tsx';
+import { expenseDefaults } from '@/features/expenses/rules.ts';
+import { useDayStops, useTripDays, useTripStops } from '@/features/itinerary/queries.ts';
 import { useDayRoute } from '@/features/itinerary/route.ts';
 import { legsByStop } from '@/features/itinerary/rules.ts';
 import { applyBadge, badgeCount } from '@/features/notifications/badge.ts';
 import { CalendarExport } from '@/features/notifications/components/CalendarExport.tsx';
 import { PushAskSheet } from '@/features/notifications/components/PushAskSheet.tsx';
 import { useTrip, useTripMembers, type MemberWithProfile } from '@/features/trips/queries.ts';
-import { todayISO, tripStatus } from '@/features/trips/rules.ts';
+import { formatMoney, todayISO, tripStatus } from '@/features/trips/rules.ts';
 import type { Profile, Trip } from '@/lib/db/schema.ts';
 import { cx } from '@/lib/cx.ts';
 import { useSession } from '@/lib/supabase/session.ts';
@@ -191,6 +197,7 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
   const stops = useDayStops(dayId);
   const { route, status: routeStatus, loaded: routeLoaded } = useDayRoute(tripId, dayId, stops);
   const toast = useToast();
+  const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const state = dayState({ date: day.date }, stops, now);
   const legs = legsByStop(stops, route);
@@ -212,6 +219,16 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
   );
   useTripMediaPrefetch(tripId);
   const answered = answeredStops(memories, uid);
+  // as missões da viagem (as da parada aparecem na lista do dia) e o "+ Gasto" do passageiro
+  const quests = (useTripChecklist(tripId) ?? []).filter(
+    (i) => i.kind === 'quest' && i.status === 'active' && i.stop_id !== null,
+  );
+  const tripDays = useTripDays(tripId) ?? [];
+  const tripStops = useTripStops(tripId);
+  const [expenseDraft, setExpenseDraft] = useState<ExpenseDraft | null>(null);
+  const team = members
+    .filter((m) => m.member.status === 'accepted')
+    .flatMap((m) => (m.profile ? [m.profile] : []));
   const [memoryStopId, setMemoryStopId] = useState<string | null>(null);
   const [reservationId, setReservationId] = useState<string | null>(null);
   const sheetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -366,7 +383,15 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
     const mine = memories.filter((m) => m.stop_id === stop.id);
     const res = reservationsOfStop(stop.id, reservations);
     const canRemember = stop.done_at !== null && !isDepartureNode(stop) && !stop.skipped;
-    if (res.length === 0 && !canRemember && !mine.some((m) => m.rating !== null)) return null;
+    const stopQuests = quests.filter((q) => q.stop_id === stop.id);
+    if (
+      res.length === 0 &&
+      !canRemember &&
+      !mine.some((m) => m.rating !== null) &&
+      stopQuests.length === 0
+    ) {
+      return null;
+    }
     const pill =
       'inline-flex min-h-10 items-center gap-1.5 rounded-full bg-card px-3 text-[14px] font-semibold text-accent-ink shadow-[inset_0_0_0_1.5px_var(--color-line)]';
     return (
@@ -392,6 +417,7 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
             {answered.has(stop.id) ? 'Minha memória' : 'Como foi?'}
           </button>
         ) : null}
+        <QuestChecks quests={stopQuests} uid={uid} className="w-full" />
       </div>
     );
   };
@@ -446,6 +472,14 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
           <div className="flex flex-wrap gap-2">
             <PanelToggle panel={panel} />
             <CalendarExport trip={trip} day={day} stops={stops} label="Exportar o dia" />
+            <button
+              type="button"
+              onClick={() => setExpenseDraft({ date: day.date, ...expenseDefaults(state) })}
+              className="inline-flex min-h-12 items-center gap-1.5 rounded-full bg-card px-4 text-[15px] font-semibold text-ink-2 shadow-[inset_0_0_0_1.5px_var(--color-line)]"
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              Gasto
+            </button>
           </div>
         </div>
       ) : (
@@ -498,6 +532,29 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
         stop={sheetStop}
         uid={uid}
         onClose={() => setMemoryStopId(null)}
+      />
+      <ExpenseSheet
+        open={expenseDraft ? { draft: expenseDraft } : null}
+        trip={trip}
+        days={tripDays}
+        stops={tripStops}
+        team={team}
+        uid={uid}
+        onClose={() => setExpenseDraft(null)}
+        onSave={(values) => {
+          setExpenseDraft(null);
+          void createExpense(tripId, uid, values).then((id) =>
+            toast.show({
+              title: 'Gasto lançado',
+              description: formatMoney(values.amount),
+              kind: 'ok',
+              action: {
+                label: 'Ver gastos',
+                onClick: () => void navigate(`/viagens/${tripId}/gastos?abrir=${id}`),
+              },
+            }),
+          );
+        }}
       />
       <ReservationSheet
         reservation={openReservation}

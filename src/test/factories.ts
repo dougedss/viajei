@@ -1,5 +1,8 @@
 import type {
   Attachment,
+  ChecklistItem,
+  Contact,
+  Expense,
   Reservation,
   Stop,
   StopMemory,
@@ -174,6 +177,70 @@ export function makeAttachment(over: Partial<Attachment> = {}): Attachment {
     width: kind === 'photo' ? 1600 : null,
     height: kind === 'photo' ? 1200 : null,
     placeholder: null,
+    created_by: UID,
+    created_at: '2026-11-01T10:00:00.000Z',
+    updated_at: '2026-11-01T10:00:00.000Z',
+    synced_at: '2026-11-01T10:00:01.000Z',
+    deleted_at: null,
+    ...over,
+  };
+}
+
+let itemSeq = 0;
+export function makeItem(over: Partial<ChecklistItem> = {}): ChecklistItem {
+  itemSeq += 1;
+  return {
+    id: `c${String(itemSeq).padStart(7, '0')}-0000-4000-8000-000000000000`,
+    trip_id: TRIP_ID,
+    kind: 'before',
+    text: `Item ${itemSeq}`,
+    position: `a${itemSeq}`,
+    points: 0,
+    stop_id: null,
+    source: 'user',
+    status: 'active',
+    done_by: null,
+    done_at: null,
+    created_by: UID,
+    created_at: '2026-11-01T10:00:00.000Z',
+    updated_at: '2026-11-01T10:00:00.000Z',
+    synced_at: '2026-11-01T10:00:01.000Z',
+    deleted_at: null,
+    ...over,
+  };
+}
+
+let contactSeq = 0;
+export function makeContact(over: Partial<Contact> = {}): Contact {
+  contactSeq += 1;
+  return {
+    id: `d${String(contactSeq).padStart(7, '0')}-0000-4000-8000-000000000000`,
+    trip_id: TRIP_ID,
+    name: `Contato ${contactSeq}`,
+    phone: '+5551997527596',
+    type: 'other',
+    notes: null,
+    created_at: '2026-11-01T10:00:00.000Z',
+    updated_at: '2026-11-01T10:00:00.000Z',
+    synced_at: '2026-11-01T10:00:01.000Z',
+    deleted_at: null,
+    ...over,
+  };
+}
+
+let expenseSeq = 0;
+export function makeExpense(over: Partial<Expense> = {}): Expense {
+  expenseSeq += 1;
+  return {
+    id: `e${String(expenseSeq).padStart(7, '0')}-0000-4000-8000-000000000000`,
+    trip_id: TRIP_ID,
+    stop_id: null,
+    reservation_id: null,
+    amount: 100,
+    category: 'other',
+    date: '2026-12-11',
+    paid_by: UID,
+    notes: null,
     created_by: UID,
     created_at: '2026-11-01T10:00:00.000Z',
     updated_at: '2026-11-01T10:00:00.000Z',

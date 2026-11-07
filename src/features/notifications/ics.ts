@@ -2,6 +2,9 @@ import { activeStops } from '@/features/itinerary/rules.ts';
 import type { Stop, Trip, TripDay } from '@/lib/db/schema.ts';
 import { googleMapsUrl } from '@/lib/links/index.ts';
 import { formatDayShort, hhmm } from '@/lib/time/index.ts';
+import { escapeText, foldLine } from '@/lib/text/content-lines.ts';
+
+export { escapeText, foldLine };
 
 /**
  * Exportar para o calendário: um `.ics` (RFC 5545) gerado à mão, sem dependência. Um VEVENT por
@@ -12,38 +15,6 @@ import { formatDayShort, hhmm } from '@/lib/time/index.ts';
  */
 export const ICS_TZID = 'America/Sao_Paulo';
 export const ICS_ALARM_LEAD_MINUTES = 15;
-const LINE_OCTETS = 75;
-
-/** Escapes da RFC 5545 para valores de texto. */
-export function escapeText(text: string): string {
-  return text
-    .replaceAll('\\', '\\\\')
-    .replaceAll(';', '\\;')
-    .replaceAll(',', '\\,')
-    .replaceAll(/\r?\n/g, '\\n');
-}
-
-/** Dobra em 75 octetos, sem partir um caractere multibyte; continuação começa com espaço. */
-export function foldLine(line: string): string {
-  const encoder = new TextEncoder();
-  const parts: string[] = [];
-  let current = '';
-  let octets = 0;
-  for (const ch of line) {
-    const size = encoder.encode(ch).length;
-    const limit = parts.length === 0 ? LINE_OCTETS : LINE_OCTETS - 1;
-    if (octets + size > limit) {
-      parts.push(current);
-      current = ch;
-      octets = size;
-    } else {
-      current += ch;
-      octets += size;
-    }
-  }
-  parts.push(current);
-  return parts.map((p, i) => (i === 0 ? p : ` ${p}`)).join('\r\n');
-}
 
 /** 'YYYY-MM-DD' + 'HH:mm' → 'YYYYMMDDTHHmm00' (hora de parede, com TZID). */
 function localStamp(date: string, time: string): string {

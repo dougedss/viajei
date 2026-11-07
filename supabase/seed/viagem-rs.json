@@ -305,7 +305,7 @@
   ],
   "quests": [
     { "text": "Foto na Cascata do Caracol", "stop_ref": "Cascata do Caracol" },
-    { "text": "Registrar o vinho preferido na Casa Valduga", "stop_ref": "Casa Valduga" },
+    { "text": "Registrar o rótulo preferido na Casa Valduga", "stop_ref": "Casa Valduga" },
     { "text": "Tomar um mate em Gramado", "stop_ref": "Gramado" },
     { "text": "Lançar o gasto do almoço de domingo", "stop_ref": null }
   ],
