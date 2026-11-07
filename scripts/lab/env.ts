@@ -3,6 +3,7 @@ import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { toBase64Url } from '../../supabase/functions/_shared/vapid.ts';
+import { previewOrigin } from './preview.ts';
 
 /**
  * Onde o laboratório roda e com que credenciais. Produção é o alvo de verdade (o agente agendado);
@@ -44,6 +45,8 @@ export type LabConfig = {
   /** a origem do app que "assinou": o navigate dos avisos volta para ela */
   appOrigin: string;
   secret: string;
+  /** o segredo do bypass da Vercel, só quando o alvo é o preview de uma branch */
+  bypass: string | null;
 };
 
 export function parseTarget(argv: readonly string[]): Target {
@@ -138,8 +141,10 @@ export async function loadConfig(
       receiverProbe: `${url}/functions/v1/push-receiver`,
       appOrigin: 'http://localhost:4173',
       secret: LOCAL_SECRET,
+      bypass: null,
     };
   }
+  const app = appTarget();
   const url = process.env.LAB_SUPABASE_URL ?? PRODUCTION.url;
   const receiverBase = `${url}/functions/v1/push-receiver`;
   return {
@@ -149,7 +154,36 @@ export async function loadConfig(
     receiverBase,
     receiverOrigin: new URL(url).origin,
     receiverProbe: receiverBase,
-    appOrigin: process.env.LAB_APP_ORIGIN ?? PRODUCTION.appOrigin,
+    appOrigin: app.origin,
     secret: await productionSecret({ create: options.createSecret ?? false }),
+    bypass: app.bypass,
   };
+}
+
+/**
+ * Qual app o navegador abre: a produção (padrão) ou, com `LAB_ALVO=preview`, o preview da branch
+ * (`LAB_BRANCH` ou a do GitHub Actions), que fica atrás do login da Vercel e só abre com o segredo do
+ * "Protection Bypass for Automation" (`VERCEL_AUTOMATION_BYPASS_SECRET`). O banco é o mesmo da
+ * produção. O segredo nunca é impresso.
+ */
+function appTarget(): { origin: string; bypass: string | null } {
+  // vazio conta como ausente (o formulário do GitHub manda string vazia no agendamento)
+  const env = (name: string) => {
+    const value = process.env[name]?.trim();
+    return value === '' ? undefined : value;
+  };
+  const alvo = env('LAB_ALVO') ?? 'producao';
+  if (alvo === 'producao') {
+    return { origin: process.env.LAB_APP_ORIGIN ?? PRODUCTION.appOrigin, bypass: null };
+  }
+  if (alvo !== 'preview') throw new Error(`LAB_ALVO=${alvo}: use producao ou preview`);
+  const bypass = env('VERCEL_AUTOMATION_BYPASS_SECRET');
+  if (!bypass) {
+    throw new Error(
+      'O preview fica atrás do login da Vercel: grave o secret VERCEL_AUTOMATION_BYPASS_SECRET no ' +
+        'repositório (Vercel → Settings → Deployment Protection → Protection Bypass for Automation).',
+    );
+  }
+  const branch = env('LAB_BRANCH') ?? env('GITHUB_REF_NAME') ?? '';
+  return { origin: previewOrigin(branch), bypass };
 }

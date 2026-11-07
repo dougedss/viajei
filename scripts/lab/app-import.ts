@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { chromium, type Browser, type Page } from '@playwright/test';
 import { uuidV5 } from '../../src/lib/ids/uuid.ts';
-import { DEVICE, QUIET, signInPage, TIMEOUT } from './app.ts';
+import { DEVICE, enterPreview, QUIET, signInPage, TIMEOUT } from './app.ts';
 import { addDays } from './arm.ts';
 import { must, syncPush } from './client.ts';
 import type { Check } from './evaluate.ts';
@@ -19,6 +19,8 @@ import { sleep, type Session } from './session.ts';
  */
 export type ImportContext = {
   appUrl: string;
+  /** o segredo do bypass da Vercel, quando o navegador abre o preview da branch (D106) */
+  bypass: string | null;
   a: Session;
   email: string;
   password: string;
@@ -97,6 +99,7 @@ export async function appImportar(ctx: ImportContext, today: string): Promise<Ch
     page = await context.newPage();
     page.setDefaultTimeout(TIMEOUT);
     const p = page;
+    await enterPreview(p, appUrl, ctx.bypass);
 
     await step('A entra', () => signInPage(p, appUrl, ctx.email, ctx.password));
     await step('cola o texto e lê', async () => {

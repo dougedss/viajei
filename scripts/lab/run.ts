@@ -506,7 +506,9 @@ function commitSha(): string | null {
 const ICON = { pass: '✓', fail: '✗', skip: '–' } as const;
 
 async function report(cfg: LabConfig, checks: readonly Check[], status: string, summary: string) {
-  console.log(`\nLaboratório · ${cfg.target} · ${summary}`);
+  // o banco é sempre o da produção; o preview muda só o app que o navegador abre (D106)
+  const where = cfg.bypass ? `${cfg.target} · app no preview ${cfg.appOrigin}` : cfg.target;
+  console.log(`\nLaboratório · ${where} · ${summary}`);
   for (const c of checks) {
     const latency = c.latency_ms === null ? '' : ` (${formatMs(c.latency_ms)})`;
     console.log(
@@ -517,7 +519,7 @@ async function report(cfg: LabConfig, checks: readonly Check[], status: string, 
   if (!file) return;
   const head = status === 'pass' ? '✅' : status === 'fail' ? '❌' : '⏭️';
   const lines = [
-    `## ${head} Laboratório · ${cfg.target}`,
+    `## ${head} Laboratório · ${where}`,
     '',
     summary,
     '',
@@ -549,6 +551,7 @@ async function main(): Promise<number> {
   const startedAt = new Date();
   const a = await signIn(cfg, LAB_USERS.a);
   const b = await signIn(cfg, LAB_USERS.b);
+  if (cfg.bypass) log(`navegador no preview ${cfg.appOrigin} (com o bypass da Vercel)`);
   log(`entrou como ${LAB_USERS.a.email} e ${LAB_USERS.b.email} em ${cfg.url}`);
 
   const checks: Check[] = [];
@@ -565,6 +568,7 @@ async function main(): Promise<number> {
   // viva (D125); o navegador leva minutos, então os horários dos avisos se contam depois dele
   const progress: ProgressContext = {
     appUrl: cfg.appOrigin,
+    bypass: cfg.bypass,
     a,
     b,
     emails: { a: LAB_USERS.a.email, b: LAB_USERS.b.email },
@@ -599,6 +603,7 @@ async function main(): Promise<number> {
       const importar = await appImportar(
         {
           appUrl: cfg.appOrigin,
+          bypass: cfg.bypass,
           a,
           email: LAB_USERS.a.email,
           password: progress.passwords.a,
@@ -683,6 +688,7 @@ async function main(): Promise<number> {
               subs.app.keys,
             ),
             artifactsDir: join(process.cwd(), 'lab-artifacts'),
+            bypass: cfg.bypass,
           });
           appChecks.push(await appAvisos(app));
           log(
@@ -775,6 +781,7 @@ async function main(): Promise<number> {
                   email: LAB_USERS.b.email,
                   password: await derivePassword(cfg.secret, LAB_USERS.b.email),
                 },
+                bypass: cfg.bypass,
               })),
             );
           } catch (err) {

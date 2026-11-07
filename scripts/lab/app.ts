@@ -35,6 +35,13 @@ export type AppTarget = {
   destination: { latitude: number; longitude: number };
   subscription: { endpoint: string; p256dh: string; auth: string };
   artifactsDir: string;
+  /**
+   * O segredo do "Protection Bypass for Automation" da Vercel, só para testar o preview de uma
+   * branch. Vai uma vez, na primeira navegação de cada contexto, como parâmetro: a Vercel grava um
+   * cookie e o resto (inclusive o service worker) entra por ele. Nunca como cabeçalho extra, que
+   * iria também para o Supabase e cairia no CORS.
+   */
+  bypass: string | null;
 };
 
 export type App = {
@@ -55,6 +62,29 @@ export const DEVICE = {
   locale: 'pt-BR',
   timezoneId: 'America/Sao_Paulo',
 } as const;
+
+/** De onde vem a barra de ferramentas que a Vercel injeta nos previews. */
+const VERCEL_TOOLBAR = 'https://vercel.live/**';
+
+/**
+ * A primeira navegação de um contexto no preview de uma branch. O segredo do bypass vai como
+ * parâmetro, e a Vercel grava um cookie. A barra de ferramentas da Vercel flutua na borda direita,
+ * por cima de botões do app, e por isso o script dela fica bloqueado no contexto. O cabeçalho
+ * `x-vercel-skip-toolbar` da documentação não serve: iria também ao Supabase, e o `index.html`
+ * guardado pelo service worker já viria com a barra.
+ */
+export async function enterPreview(
+  page: Page,
+  appUrl: string,
+  bypass: string | null,
+): Promise<void> {
+  if (!bypass) return;
+  await page.context().route(VERCEL_TOOLBAR, (route) => route.abort('blockedbyclient'));
+  const url = new URL(appUrl);
+  url.searchParams.set('x-vercel-protection-bypass', bypass);
+  url.searchParams.set('x-vercel-set-bypass-cookie', 'true');
+  await page.goto(url.toString());
+}
 
 /** Entrar pela tela de entrar, como uma pessoa. */
 export async function signInPage(
@@ -77,6 +107,7 @@ export async function signInPage(
 export async function openPeer(
   browser: Browser,
   appUrl: string,
+  bypass: string | null,
   email: string,
   password: string,
 ): Promise<{ context: BrowserContext; page: Page }> {
@@ -84,6 +115,7 @@ export async function openPeer(
   await context.addInitScript({ content: QUIET });
   const page = await context.newPage();
   page.setDefaultTimeout(TIMEOUT);
+  await enterPreview(page, appUrl, bypass);
   await signInPage(page, appUrl, email, password);
   return { context, page };
 }
@@ -143,6 +175,7 @@ export async function openApp(target: AppTarget): Promise<App> {
     ...(targetInfo.browserContextId ? { browserContextId: targetInfo.browserContextId } : {}),
   });
   await session.detach();
+  await enterPreview(page, target.appUrl, target.bypass);
   return { browser, context, page, target, cdp: null, registrationId: null };
 }
 

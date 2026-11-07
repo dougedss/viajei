@@ -41,6 +41,7 @@ export type RoadContext = {
   road: Road;
   /** o lab-b no navegador: e-mail e senha derivada */
   peer: { email: string; password: string };
+  bypass: string | null;
 };
 
 type Step = { step: string; ok: boolean; detail?: string };
@@ -107,6 +108,7 @@ class RoadRun {
     this.#peer ??= openPeer(
       this.ctx.app.browser,
       this.url,
+      this.ctx.bypass,
       this.ctx.peer.email,
       this.ctx.peer.password,
     );

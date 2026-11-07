@@ -14,7 +14,11 @@ name: Laboratório
 # Desde a fase 10 o lab-a também lê um roteiro curto com a IA de verdade, uma vez por dia (D139); a
 # chave da Anthropic mora na função, e nenhum secret novo entra aqui. A tarefa `medir-importacao`
 # (Run workflow → tarefa) roda só a medição do pensamento da IA, sem os cenários (D133).
-# O laboratório testa só a produção: a fase chega a ele depois do merge (D106).
+# O laboratório testa o preview da branch antes do merge e a produção depois (D106). O agendado
+# testa sempre a produção. Para a branch (o preview da Vercel, atrás do login dela, com o mesmo banco):
+#   gh workflow run lab.yml --repo dougedss/viajei --ref fase-11 -f alvo=preview
+# Precisa do secret VERCEL_AUTOMATION_BYPASS_SECRET (Vercel → Settings → Deployment Protection →
+# Protection Bypass for Automation); o segredo vai só na primeira navegação, nunca nos logs.
 on:
   schedule:
     - cron: '7 6 * * *'
@@ -25,6 +29,11 @@ on:
         type: choice
         options: [laboratorio, medir-importacao]
         default: laboratorio
+      alvo:
+        description: 'Onde o navegador abre o app: a produção ou o preview da branch escolhida acima (D106)'
+        type: choice
+        options: [producao, preview]
+        default: producao
 
 concurrency:
   group: laboratorio
@@ -35,7 +44,7 @@ permissions:
 
 jobs:
   laboratorio:
-    name: avisos de ponta a ponta na produção
+    name: os cenários de ponta a ponta
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -58,6 +67,10 @@ jobs:
         run: pnpm lab --target production ${{ inputs.tarefa == 'medir-importacao' && '--medir-importacao' || '' }}
         env:
           LAB_SECRET: ${{ secrets.LAB_SECRET }}
+          # agendado: sempre a produção; sob demanda: a escolha do formulário
+          LAB_ALVO: ${{ inputs.alvo || 'producao' }}
+          LAB_BRANCH: ${{ github.ref_name }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 
       - uses: actions/upload-artifact@v4
         if: failure()

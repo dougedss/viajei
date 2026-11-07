@@ -5,7 +5,7 @@ import { chromium, type Browser, type BrowserContext, type Page } from '@playwri
 import type { LabScenario } from '../../src/features/lab/scenarios.ts';
 import { uuidV5 } from '../../src/lib/ids/uuid.ts';
 import { wallToInstant } from '../../src/lib/time/zone.ts';
-import { DEVICE, QUIET, signInPage, TIMEOUT } from './app.ts';
+import { DEVICE, enterPreview, QUIET, signInPage, TIMEOUT } from './app.ts';
 import { addDays } from './arm.ts';
 import { must, ok, syncPush, type Op } from './client.ts';
 import { wall, type Check } from './evaluate.ts';
@@ -26,6 +26,8 @@ import { ensureTeamMember, log, sleep, type Session } from './session.ts';
  */
 export type ProgressContext = {
   appUrl: string;
+  /** o segredo do bypass da Vercel, quando o navegador abre o preview da branch (D106) */
+  bypass: string | null;
   a: Session;
   b: Session;
   passwords: { a: string; b: string };
@@ -100,6 +102,7 @@ async function runSteps(
 
 async function newContext(
   browser: Browser,
+  target: Pick<ProgressContext, 'appUrl' | 'bypass'>,
   celebrations: boolean,
   downloads = false,
 ): Promise<{ context: BrowserContext; page: Page }> {
@@ -118,6 +121,7 @@ async function newContext(
   });
   const page = await context.newPage();
   page.setDefaultTimeout(TIMEOUT);
+  await enterPreview(page, target.appUrl, target.bypass);
   return { context, page };
 }
 
@@ -264,7 +268,7 @@ export async function appProgressao(ctx: ProgressContext, today: string): Promis
   const url = (path = '') => `${appUrl}/viagens/${trip}${path}`;
   try {
     browser = await chromium.launch({ channel: 'chromium' });
-    const A = await newContext(browser, true);
+    const A = await newContext(browser, ctx, true);
     pageA = A.page;
     const pa = A.page;
     return await runSteps(
@@ -354,7 +358,7 @@ export async function appProgressao(ctx: ProgressContext, today: string): Promis
           'B abre a viagem e o servidor tem o XP de B',
           async () => {
             if (!browser) throw new Error('sem navegador');
-            const B = await newContext(browser, false);
+            const B = await newContext(browser, ctx, false);
             pageB = B.page;
             await signInPage(B.page, appUrl, ctx.emails.b, ctx.passwords.b);
             await B.page.goto(url());
@@ -608,7 +612,7 @@ export async function appRetrospectiva(ctx: ProgressContext): Promise<Check> {
   }
   const launched = await launchChrome();
   data.canal = launched.channel;
-  const { context, page } = await newContext(launched.browser, false, true);
+  const { context, page } = await newContext(launched.browser, ctx, false, true);
   // o runner desenha o 3D por software: a qualidade Leve (a mesma de um celular modesto)
   await context.addInitScript({
     content: `localStorage.setItem('viajei:world:quality', JSON.stringify({ mode: 'leve' }));`,

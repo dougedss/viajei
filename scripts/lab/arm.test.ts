@@ -12,6 +12,7 @@ import {
   nextEventDate,
 } from './arm.ts';
 import { makePdf } from './files.ts';
+import { branchSlug, previewOrigin } from './preview.ts';
 import { generateSubscriptionKeys } from './webpush-decrypt.ts';
 
 const SECRET = 'segredo-de-teste';
@@ -123,6 +124,18 @@ describe('o que os avisos armados têm de dizer', () => {
       body: 'Pousada do prazo · até 08/12',
       navigate: '/viagens/t/reservas?abrir=r',
     });
+  });
+});
+
+describe('o preview da branch', () => {
+  it('o endereço da Vercel pela branch', () => {
+    expect(branchSlug('fase-8')).toBe('fase-8');
+    expect(branchSlug('Fase_8/Laboratório')).toBe('fase-8-laborat-rio');
+    expect(previewOrigin('fase-8')).toBe(
+      'https://viajei-git-fase-8-qimkt38-gmailcoms-projects.vercel.app',
+    );
+    expect(() => previewOrigin('')).toThrow();
+    expect(() => previewOrigin('uma-branch-com-um-nome-comprido-demais')).toThrow();
   });
 });
 
