@@ -636,3 +636,7 @@ Um pull do Realtime que encontra o lock ocupado pede um ciclo completo. `syncNow
 
 **Consequência.** Nenhuma viagem se perde por um pull interrompido. Testes: `known-trips.test.ts` (viagem que faltou, projeção do dono, participação de outra pessoa, pendente, lápide, viagem apagada aqui).
 
+### D110 · Os dados do seed na viagem real
+**Contexto.** Desde a fase 7, a viagem real do Douglas ("RS — concurso em Montenegro", `0faf1ff2-…`) tinha só dias e paradas. O resto do seed esperava a resposta dele.
+**Decisão.** O Douglas disse sim em 07/11/2026. Depois da 0008 no hospedado, entraram as 2 hospedagens, os 6 contatos, os 5 itens de Antes, os 6 da Mala e as 4 missões. O caminho foi o do app: as linhas saíram das mesmas funções puras do carregador do exemplo (`reservationFromImport`, `contactsFromImport`, `listItemsFromImport`), e as 23 operações foram montadas como a `mutate.insert` monta. Elas passaram pelo `sync_push` como ele, pelo pooler `aws-1`, com RLS valendo e ensaio em `rollback` antes. A senha dele não foi usada.
+**Consequência.** As missões se ligaram às paradas pelo nome: Cascata do Caracol e Casa Valduga com +20, Gramado com +15, e o almoço de domingo, sem parada, com +10. O aviso de prazo do Vila Suzana chega em 07/12 às 10h, e o de véspera em 10/12 às 19h, contando o que faltar nas listas.
