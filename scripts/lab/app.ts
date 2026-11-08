@@ -57,6 +57,38 @@ export type App = {
 type Step = { step: string; ok: boolean; detail?: string };
 export const TIMEOUT = 20_000;
 
+/**
+ * Por que a folha "Avisos da viagem" não apareceu (fase 13): o que a regra `shouldOfferPush` olha,
+ * lido do app na hora da falha (o service worker, a permissão, as marcas de primeira abertura e de
+ * "já perguntei" no `sync_state`, os diálogos abertos). Sem valores de linha.
+ */
+const PUSH_ASK_DIAG = `(async () => {
+  const reg = await navigator.serviceWorker.getRegistration().catch(() => null);
+  const db = await new Promise((resolve, reject) => {
+    const req = indexedDB.open('viajei');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  const rows = await new Promise((resolve) => {
+    const all = db.transaction('sync_state').objectStore('sync_state').getAll();
+    all.onsuccess = () => resolve(all.result);
+    all.onerror = () => resolve([]);
+  });
+  db.close();
+  const titles = [...document.querySelectorAll('[role=dialog]')].map((d) => {
+    const id = d.getAttribute('aria-labelledby');
+    return (id && document.getElementById(id)?.textContent) || d.getAttribute('aria-label') || '?';
+  });
+  return {
+    sw: !!reg,
+    controlado: !!navigator.serviceWorker.controller,
+    permissao: typeof Notification === 'undefined' ? 'sem Notification' : Notification.permission,
+    chaves: rows.map((r) => r.key).filter((k) => k.startsWith('app:') || k.startsWith('push:')),
+    dialogos: titles,
+    standalone: matchMedia('(display-mode: standalone)').matches,
+  };
+})()`;
+
 /** O perfil de aparelho dos dois contextos: Pixel 7, pt-BR, fuso de São Paulo. */
 export const DEVICE = {
   ...devices['Pixel 7'],
@@ -211,7 +243,7 @@ export async function runSteps(
       done.push({ step, ok: true });
     } catch (err) {
       const message = (err instanceof Error ? err.message : String(err)).split('\n')[0] ?? '';
-      done.push({ step, ok: false, detail: message.slice(0, 300) });
+      done.push({ step, ok: false, detail: message.slice(0, 700) });
       await app.page
         .screenshot({ path: join(app.target.artifactsDir, `${scenario}.png`), fullPage: true })
         .catch(() => undefined);
@@ -265,7 +297,13 @@ export function appAvisos(app: App): Promise<Check> {
         'folha "Avisos da viagem"',
         async () => {
           const sheet = page.getByRole('dialog', { name: 'Avisos da viagem' });
-          await sheet.waitFor();
+          try {
+            await sheet.waitFor();
+          } catch (err) {
+            const diag: unknown = await page.evaluate(PUSH_ASK_DIAG).catch(() => null);
+            const message = err instanceof Error ? (err.message.split('\n')[0] ?? '') : String(err);
+            throw new Error(`${message}; o app: ${JSON.stringify(diag)}`, { cause: err });
+          }
           // o "Permitir" do navegador, no toque em "Ativar avisos"
           await app.context.grantPermissions(['notifications'], { origin: target.appUrl });
           await sheet.getByRole('button', { name: 'Ativar avisos' }).click();
