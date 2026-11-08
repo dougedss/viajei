@@ -12,12 +12,11 @@ function setup(opts: {
   pushes?: PushOutcome[];
 }) {
   const calls: string[] = [];
-  let pending = false;
+  let requests = 0;
   const pushes = [...(opts.pushes ?? [])];
   const deps: CycleDeps = {
     push: () => {
       calls.push('push');
-      pending = false;
       return Promise.resolve(pushes.shift() ?? sent());
     },
     pullUser: () => {
@@ -31,12 +30,18 @@ function setup(opts: {
       opts.during?.[id]?.();
       return Promise.resolve();
     },
-    hasPendingRequest: () => pending,
+    requests: () => requests,
     isNetworkError: (err) => err instanceof TypeError,
     onPushed: () => undefined,
     trace: () => undefined,
   };
-  return { deps, calls, write: () => (pending = true) };
+  return {
+    deps,
+    calls,
+    write: () => {
+      requests++;
+    },
+  };
 }
 
 describe('um ciclo do motor de sync', () => {
@@ -58,6 +63,31 @@ describe('um ciclo do motor de sync', () => {
     const t = setup({ trips: ['a', 'b', 'c'] });
     await runCycle(t.deps);
     expect(t.calls.filter((c) => c === 'push')).toHaveLength(1);
+  });
+
+  it('um pedido no meio pede um push só, não um antes de cada pull restante; dois pedidos, dois', async () => {
+    const t = setup({
+      trips: ['a', 'b', 'c', 'd'],
+      during: { a: () => t.write(), c: () => t.write() },
+    });
+    await runCycle(t.deps);
+    expect(t.calls).toEqual([
+      'push',
+      'pull user',
+      'pull a',
+      'push',
+      'pull b',
+      'pull c',
+      'push',
+      'pull d',
+    ]);
+  });
+
+  it('o pedido que chegou antes do push do começo já foi atendido por ele', async () => {
+    const t = setup({ trips: ['a', 'b'] });
+    t.write();
+    await runCycle(t.deps);
+    expect(t.calls).toEqual(['push', 'pull user', 'pull a', 'pull b']);
   });
 
   it('o push do meio que fica sem rede para o ciclo; o resto fica para o próximo', async () => {

@@ -17,8 +17,8 @@ export type CycleDeps = {
   leaveTrip: (tripId: string) => Promise<void>;
   tripsToPull: () => Promise<string[]>;
   pullTrip: (tripId: string) => Promise<void>;
-  /** chegou um pedido de ciclo enquanto este roda (uma escrita, a rede de volta, o foco) */
-  hasPendingRequest: () => boolean;
+  /** quantos pedidos de ciclo já chegaram: muda quando chega um novo (uma escrita, a rede de volta, o foco) */
+  requests: () => number;
   isNetworkError: (err: unknown) => boolean;
   /** cada push que saiu, para os avisos (edições superadas, pendências) */
   onPushed: (outcome: PushOutcome) => void;
@@ -51,6 +51,8 @@ export async function runCycle(deps: CycleDeps): Promise<CycleResult> {
     result.offline = true;
     return result;
   }
+  // os pedidos até aqui o push de cima atendeu; um novo, no meio dos pulls, pede outro
+  let seen = deps.requests();
   const t1 = Date.now();
   const memberships = await deps.pullUser();
   deps.trace('pull do usuário', Date.now() - t1);
@@ -59,9 +61,12 @@ export async function runCycle(deps: CycleDeps): Promise<CycleResult> {
   // ciclo, que a encontra de novo pela participação gravada (D109)
   for (const tripId of await deps.tripsToPull()) {
     // a escrita que chegou enquanto puxávamos sobe agora, não depois de todas as viagens
-    if (deps.hasPendingRequest() && !(await push('push no meio'))) {
-      result.offline = true;
-      return result;
+    if (deps.requests() !== seen) {
+      seen = deps.requests();
+      if (!(await push('push no meio'))) {
+        result.offline = true;
+        return result;
+      }
     }
     try {
       await deps.pullTrip(tripId);

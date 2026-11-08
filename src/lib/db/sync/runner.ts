@@ -21,6 +21,7 @@ export type RunnerDeps = {
 export class CycleRunner {
   #deps: RunnerDeps;
   #queued = false;
+  #requests = 0;
   #loop: Promise<void> | null = null;
 
   constructor(deps: RunnerDeps) {
@@ -30,6 +31,12 @@ export class CycleRunner {
   /** Marca que é preciso mais um ciclo (escrita, rede de volta, foco, abrir o app). */
   request(): void {
     this.#queued = true;
+    this.#requests++;
+  }
+
+  /** Quantos pedidos já chegaram: o ciclo em andamento compara para saber se chegou um novo. */
+  get requests(): number {
+    return this.#requests;
   }
 
   /** Esquece o pedido (o motor parou). */

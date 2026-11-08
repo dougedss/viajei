@@ -147,7 +147,7 @@ async function cycle(): Promise<void> {
       },
       tripsToPull: () => tripIdsToPull(me),
       pullTrip: pullOne,
-      hasPendingRequest: () => runner.pending,
+      requests: () => runner.requests,
       isNetworkError,
       onPushed: (push) => {
         for (const n of push.notices) emit({ kind: 'superseded', ...n });
