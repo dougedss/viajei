@@ -1,5 +1,5 @@
 import { isDepartureKind } from '@shared/constants.ts';
-import { waypointsHashOf } from '@/features/itinerary/route-hash.ts';
+import { waypointsHashOf } from '@/features/itinerary/route-cache.ts';
 import { activeStops, isLocated, type LocatedStop } from '@/features/itinerary/rules.ts';
 import { parseTrackPoints } from '@/features/travel-mode/track.ts';
 import { dayState, statusOf, type StopStatus } from '@/features/travel-mode/rules.ts';

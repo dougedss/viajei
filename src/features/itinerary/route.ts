@@ -8,7 +8,7 @@ import {
 } from '@shared/route-schema.ts';
 import { connectivity, useOnline } from '@/lib/db/connectivity.ts';
 import { db, type DayRoute, type LngLat, type Stop } from '@/lib/db/schema.ts';
-import { waypointsHash } from './route-hash.ts';
+import { missingRoutes, waypointsHash } from './route-cache.ts';
 import { supabase } from '@/lib/supabase/client.ts';
 import { useCachedRoute } from './queries.ts';
 import { routeWaypoints } from './rules.ts';
@@ -26,7 +26,7 @@ export class RouteRequestError extends Error {
   }
 }
 
-export { waypointsHash } from './route-hash.ts';
+export { missingRoutes, waypointsHash } from './route-cache.ts';
 
 export async function fetchDayRoute(
   tripId: string,
@@ -118,35 +118,39 @@ export function useDayRoute(tripId: string, dayId: string, stops: readonly Stop[
 }
 
 /**
- * As rotas que faltam na viagem, ou que não valem mais para as paradas de agora (outro hash), uma por
- * vez. Serve às telas que mostram a viagem inteira (o mapa e a retrospectiva, D124): o resto do app
- * busca a rota do dia aberto pelo `useDayRoute`.
+ * Busca, uma por vez, as rotas que faltam. Serve às telas que mostram a viagem inteira (o mapa e a
+ * retrospectiva, D124): o resto do app busca a rota do dia aberto pelo `useDayRoute`.
  */
 export async function fetchMissingRoutes(
   tripId: string,
   days: readonly { day: { id: string }; stops: readonly Stop[] }[],
   routes: readonly Pick<DayRoute, 'trip_day_id' | 'hash'>[],
 ): Promise<void> {
-  for (const { day, stops } of days) {
-    const wps = routeWaypoints(stops).map((w) => w.lngLat);
-    if (wps.length < 2) continue;
-    const hash = waypointsHash(wps);
-    if (routes.some((r) => r.trip_day_id === day.id && r.hash === hash)) continue;
-    await fetchDayRoute(tripId, day.id, wps).catch(() => undefined);
+  for (const m of missingRoutes(days, routes)) {
+    await fetchDayRoute(tripId, m.dayId, m.waypoints).catch(() => undefined);
   }
 }
 
-/** Uma vez por tela aberta, com rede e com as paradas e as rotas guardadas já lidas. */
+/**
+ * Com rede, as rotas que faltam, enquanto a tela está aberta: cada dia (com o hash das paradas de
+ * agora) é pedido uma vez. Os dias que chegam depois (a viagem que ainda estava no primeiro sync de um
+ * aparelho novo, a parada que mudou de lugar) também são pedidos; uma falha não insiste.
+ */
 export function useMissingRoutes(
   tripId: string,
   days: readonly { day: { id: string }; stops: readonly Stop[] }[],
   routes: readonly Pick<DayRoute, 'trip_day_id' | 'hash'>[] | undefined,
   ready: boolean,
 ): void {
-  const asked = useRef(false);
+  const asked = useRef(new Set<string>());
   useEffect(() => {
-    if (asked.current || !ready || !routes || !connectivity.canTry()) return;
-    asked.current = true;
-    void fetchMissingRoutes(tripId, days, routes);
+    if (!ready || !routes || !connectivity.canTry()) return;
+    const todo = missingRoutes(days, routes).filter((m) => !asked.current.has(m.key));
+    if (todo.length === 0) return;
+    for (const m of todo) asked.current.add(m.key);
+    void (async () => {
+      for (const m of todo)
+        await fetchDayRoute(tripId, m.dayId, m.waypoints).catch(() => undefined);
+    })();
   }, [tripId, days, routes, ready]);
 }

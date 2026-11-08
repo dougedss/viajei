@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { waypointsHashOf } from '@/features/itinerary/route-hash.ts';
+import { waypointsHashOf } from '@/features/itinerary/route-cache.ts';
 import type { DayRoute, Stop } from '@/lib/db/schema.ts';
 import { DAY_ID, makeDay, makeStop, makeTrip, TRIP_ID, UID } from '@/test/factories.ts';
 import {
