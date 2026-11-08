@@ -3,8 +3,11 @@ import { cx } from '@/lib/cx.ts';
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
+// só o toque anima (`transition-transform`): o estado desabilitado troca de uma vez. Com `transition`
+// em tudo, a opacidade de `disabled:opacity-60` voltava a 1 num fade de 150 ms em que o botão já era
+// clicável e o texto a 60% ficava abaixo de 4,5:1 (o axe pegou o "Atualizar rota" nesse instante; fase 13)
 const base =
-  'inline-flex items-center justify-center gap-2 rounded-button font-num font-bold tracking-wide transition active:scale-[.97] disabled:pointer-events-none disabled:opacity-60';
+  'inline-flex items-center justify-center gap-2 rounded-button font-num font-bold tracking-wide transition-transform active:scale-[.97] disabled:pointer-events-none disabled:opacity-60';
 const variants: Record<ButtonVariant, string> = {
   primary: 'bg-sunset-deep text-white shadow-[0_6px_16px_-6px_rgb(232_101_58/0.7)]',
   secondary: 'bg-card text-ink shadow-[inset_0_0_0_1.5px_var(--color-line)]',
