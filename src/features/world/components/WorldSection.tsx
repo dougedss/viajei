@@ -21,7 +21,6 @@ import { buildLayout, type WorldLayout } from '../layout.ts';
 import { MotionController, type MotionEvent } from '../motion.ts';
 import { OPENING_TIMELINE, OPENING_TOTAL_MS, openedKey, planOpening } from '../opening.ts';
 import { tierFor } from '../quality.ts';
-import { projectNodes } from '../project.ts';
 import { PHOTO_CARD_MS, planLiveAdvance, planReplay, planReview } from '../replay.ts';
 import { WorldRuntime, type Opening } from '../scene/runtime.ts';
 import { WorldCanvas } from '../scene/WorldCanvas.tsx';
@@ -29,6 +28,7 @@ import { WorldScene } from '../scene/WorldScene.tsx';
 import { ListView, NOW_BAR_INSET, type WorldSlotProps } from '../WorldSlot.tsx';
 import { RAIN_LIKELY } from '@shared/weather.ts';
 import { WeatherChip } from './WeatherChip.tsx';
+import { useWorldAnchor } from './anchor.ts';
 import { HUD_BOTTOM, HUD_TOP, WorldHud, type PhotoCard, type TeamChip } from './WorldHud.tsx';
 
 /**
@@ -167,7 +167,13 @@ function WorldStage(p: StageProps) {
   const night = nightOverride ?? p.night;
   const placement = placeCar({ state, position: catchup.position, layout });
   const stops = new Map<string, Stop>(state.stops.map((s) => [s.id, s]));
-  const nodes = useMemo(() => projectNodes(layout, p.size), [layout, p.size]);
+  // o palco em px, para o HUD projetar pelo enquadramento atual (a câmera segue o carro)
+  useEffect(() => {
+    runtime.setViewport(p.size);
+  }, [runtime, p.size]);
+  // o chip do clima grande, preso à origem na abertura
+  const firstNode = layout.nodes[0]?.position ?? null;
+  const weatherAnchor = useWorldAnchor(runtime, firstNode, 3);
 
   const statusKey = state.stops
     .map((s) => `${s.id}:${hidden.has(s.id) ? 'pending' : statusOf(s, state)}`)
@@ -496,7 +502,8 @@ function WorldStage(p: StageProps) {
         </p>
       ) : null}
       <WorldHud
-        nodes={nodes}
+        runtime={runtime}
+        nodes={layout.nodes}
         stops={stops}
         statuses={statuses}
         pops={pops}
@@ -509,12 +516,17 @@ function WorldStage(p: StageProps) {
         rainy={rainy}
       />
       {weatherBig ? (
-        <WeatherChip
-          summary={p.weather?.summary ?? null}
-          size="big"
-          anchor={nodes[0] ? { x: nodes[0].x, y: nodes[0].y } : null}
-          reducedMotion={reducedMotion}
-        />
+        <div
+          ref={weatherAnchor}
+          className="pointer-events-none absolute z-40 -translate-x-1/2 -translate-y-full"
+          hidden
+        >
+          <WeatherChip
+            summary={p.weather?.summary ?? null}
+            size="big"
+            reducedMotion={reducedMotion}
+          />
+        </div>
       ) : null}
       {/* a faixa de cima: clima, diagnóstico, fora da rota e "+N paradas" à esquerda; "Rever o dia"
           ou o "Pular" do replay à direita (a barra do "Agora" ocupa o pé da maquete, fase 14) */}

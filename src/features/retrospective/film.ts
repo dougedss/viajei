@@ -66,6 +66,7 @@ function mix(a: CameraFrame, b: CameraFrame, k: number): CameraFrame {
     ],
     distance: lerp(a.distance, b.distance, k),
     tilt: lerp(a.tilt, b.tilt, k),
+    yaw: lerp(a.yaw ?? 0, b.yaw ?? 0, k),
     fov: lerp(a.fov, b.fov, k),
   };
 }

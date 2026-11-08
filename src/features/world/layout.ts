@@ -68,7 +68,8 @@ export type LayoutFeature =
   | { kind: 'coast'; side: -1 | 1; from_s: number; to_s: number; offset: number }
   | { kind: 'vineyard'; x: number; z: number; angle: number; half: number; rowStep: number }
   | { kind: 'hotel'; x: number; z: number; angle: number }
-  | { kind: 'blocks'; from_s: number; to_s: number; density: number };
+  /** quadras de cidade em volta de uma parada de cidade, hotel ou comida (fase 14) */
+  | { kind: 'blocks'; x: number; z: number; radius: number; density: number };
 
 export type LayoutCuriosity = {
   kind: CuriosityKind;
@@ -170,6 +171,10 @@ export const OVER_TILT = (64 * Math.PI) / 180;
 export const FOV = 30;
 /** espaço horizontal fora dos nós para as pílulas, em unidades da cena */
 export const PILL_MARGIN = 14;
+/** até onde as quadras de cidade vão em volta de uma parada de cidade, hotel ou comida */
+export const BLOCKS_RADIUS = 16;
+/** os tipos de parada que trazem prédios (fase 14: poucas cidades, mais detalhadas) */
+export const BLOCK_KINDS: readonly StopKind[] = ['city', 'hotel', 'food'];
 export const LAKE_RE = /represa|lago|lagoa|barragem|açude/i;
 
 const SAMPLES_PER_UNIT = 5;
@@ -517,8 +522,6 @@ export function buildLayout(input: LayoutInput): WorldLayout {
     };
   });
 
-  // faixas de cenário
-  const bands = buildBands(input.place?.segments ?? null, axis, totalKm, kmToS);
   const weightsAtKm = (km: number): SceneryWeights => {
     const w = zeroWeights();
     let sum = 0;
@@ -534,6 +537,9 @@ export function buildLayout(input: LayoutInput): WorldLayout {
     for (const k of SCENERY_KINDS) w[k] /= sum;
     return w;
   };
+
+  // faixas de cenário
+  const bands = buildBands(input.place?.segments ?? null, axis, totalKm, kmToS);
 
   // acidentes
   const features: LayoutFeature[] = [];
@@ -561,6 +567,13 @@ export function buildLayout(input: LayoutInput): WorldLayout {
     } else if (node.touch === 'hotel') {
       features.push({ kind: 'hotel', x: x + side * 6.5, z: z + 3, angle: -side * 0.25 });
     }
+    if (BLOCK_KINDS.includes(node.kind)) {
+      // a densidade pela cidade do lugar (a faixa de cenário em que o nó cai), quando a leitura a dá
+      const band = bands.find((b) => node.km >= b.from_km && node.km <= b.to_km);
+      const density =
+        band?.kind === 'city' && band.pop ? clamp((Math.log10(band.pop) - 4.5) / 1.3, 0.3, 1) : 0.5;
+      features.push({ kind: 'blocks', x, z, radius: BLOCKS_RADIUS, density });
+    }
   }
   let seaLevel: number | null = null;
   for (const band of bands) {
@@ -586,9 +599,6 @@ export function buildLayout(input: LayoutInput): WorldLayout {
       for (const p of path) if (p.s >= band.from_s && p.s <= band.to_s) minY = Math.min(minY, p.y);
       if (!Number.isFinite(minY)) minY = pathAt(mid).y;
       seaLevel = Math.min(seaLevel ?? Number.POSITIVE_INFINITY, minY - 0.3);
-    } else if (band.kind === 'city') {
-      const density = band.pop ? clamp((Math.log10(band.pop) - 4.5) / 1.3, 0.2, 1) : 0.5;
-      features.push({ kind: 'blocks', from_s: band.from_s, to_s: band.to_s, density });
     }
   }
 
@@ -845,10 +855,12 @@ function terrainBounds(
   xHalf: number,
 ): WorldLayout['bounds'] {
   const aspect = Math.max(0.3, viewport.width / Math.max(1, viewport.height));
+  // a câmera que segue o carro (fase 14) olha para a frente a partir de cada nó: folga para o
+  // horizonte depois do último e para a posição dela antes do primeiro
   let x0 = -(xHalf + 30);
   let x1 = xHalf + 30;
-  let z0 = -(STUB + 8);
-  let z1 = zEnd + STUB + 28;
+  let z0 = -(STUB + 30);
+  let z1 = zEnd + STUB + 70;
   for (const [sx, sy] of [
     [-1, -1],
     [1, -1],
@@ -867,8 +879,8 @@ function terrainBounds(
   return {
     x0: Math.max(-300, Math.floor(x0 - padX)),
     x1: Math.min(300, Math.ceil(x1 + padX)),
-    z0: Math.max(-80, Math.floor(z0 - padZ)),
-    z1: Math.min(zEnd + 160, Math.ceil(z1 + padZ)),
+    z0: Math.max(-90, Math.floor(z0 - padZ)),
+    z1: Math.min(zEnd + 180, Math.ceil(z1 + padZ)),
   };
 }
 

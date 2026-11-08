@@ -2,6 +2,8 @@ import type { OpeningPlan } from '../opening.ts';
 import type { MotionController } from '../motion.ts';
 import type { WorldLayout } from '../layout.ts';
 import type { CarPlacement } from '../car-position.ts';
+import type { CameraFrame } from '../math.ts';
+import { projectWorld } from '../project.ts';
 
 /**
  * O estado compartilhado entre a cena e o HUD, mutável e fora do React: o que muda a cada quadro
@@ -22,8 +24,12 @@ export class WorldRuntime {
   opening: Opening | null = null;
   /** o carro está fora da rota: deslocamento perpendicular e a distância */
   offRoute: CarPlacement['offRoute'] = null;
-  /** distância atual da câmera ao alvo (muda só no mergulho) */
+  /** distância atual da câmera ao alvo */
   cameraDistance: number;
+  /** o enquadramento atual, já suavizado (a câmera segue o carro, fase 14): o HUD projeta por ele */
+  view: CameraFrame;
+  /** o tamanho do palco em px, para projetar */
+  viewport: { width: number; height: number } = { width: 1, height: 1 };
   /** algum objeto ainda está em transição e quer mais um quadro; o laço zera antes de cada quadro */
   needsFrame = false;
   private readonly updaters = new Set<Updater>();
@@ -34,6 +40,7 @@ export class WorldRuntime {
     this.motion = motion;
     this.night = { t: night ? 1 : 0, target: night ? 1 : 0 };
     this.cameraDistance = layout.camera.distance;
+    this.view = { ...layout.camera, target: [...layout.camera.target] };
   }
 
   /** O R3F entrega o `invalidate` quando o Canvas nasce. */
@@ -73,6 +80,21 @@ export class WorldRuntime {
 
   setCameraDistance(distance: number): void {
     this.cameraDistance = distance;
+  }
+
+  /** A câmera gravou o enquadramento deste quadro. */
+  setView(view: CameraFrame): void {
+    this.view = view;
+    this.cameraDistance = view.distance;
+  }
+
+  setViewport(viewport: { width: number; height: number }): void {
+    this.viewport = viewport;
+  }
+
+  /** Um ponto do mundo em px do palco, pelo enquadramento atual. */
+  project(point: [number, number, number]): ReturnType<typeof projectWorld> {
+    return projectWorld(this.view, this.viewport, point);
   }
 
   /** Um objeto da cena pede mais um quadro (transição em curso). */

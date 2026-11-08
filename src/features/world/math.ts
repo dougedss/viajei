@@ -19,17 +19,27 @@ export function vnorm(a: Vec3): Vec3 {
   return [a[0] / l, a[1] / l, a[2] / l];
 }
 
-/** Onde a câmera fica e para onde olha: `tilt` é o ângulo acima do chão, em radianos. */
+/**
+ * Onde a câmera fica e para onde olha: `tilt` é o ângulo acima do chão, em radianos; `yaw` gira a
+ * câmera em torno do alvo (0: a câmera em +z olhando para −z, o quadro parado do dia inteiro;
+ * π: atrás do carro, olhando para +z, para onde o caminho avança).
+ */
 export type CameraFrame = {
   target: Vec3;
   distance: number;
   tilt: number;
+  yaw?: number;
   /** vertical, em graus */
   fov: number;
 };
 
 export function cameraPosition(frame: CameraFrame): Vec3 {
-  const off: Vec3 = [0, Math.sin(frame.tilt), Math.cos(frame.tilt)];
+  const yaw = frame.yaw ?? 0;
+  const off: Vec3 = [
+    Math.sin(yaw) * Math.cos(frame.tilt),
+    Math.sin(frame.tilt),
+    Math.cos(yaw) * Math.cos(frame.tilt),
+  ];
   return vadd(frame.target, vscale(off, frame.distance));
 }
 

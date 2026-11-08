@@ -127,14 +127,14 @@ function applyNight(
   scene.userData.windowGlow = 1.4 * smooth(0.3, 0.9, t);
 }
 
-/** O sol acompanha o alvo da câmera; a névoa, a distância dela. */
+/** O sol acompanha o alvo da câmera (a que segue o carro, fase 14); a névoa, a distância dela. */
 function followCamera(
   handle: LightingHandle,
   runtime: WorldRuntime,
   nightT: number,
   target: Vector3,
 ): void {
-  const cam = runtime.layout.camera;
+  const cam = runtime.view;
   target.set(cam.target[0], runtime.layout.yMid, cam.target[2]);
   handle.sun.position.copy(target).add(SUN_OFF);
   handle.sun.target.position.copy(target);

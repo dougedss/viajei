@@ -1,5 +1,6 @@
-import { Check, CloudRain } from 'lucide-react';
+import { ArrowUp, Check, CloudRain } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useEffect, useRef } from 'react';
 import { PERSON_COLORS } from '@shared/constants.ts';
 import { asPersonColor } from '@/features/profile/queries.ts';
 import { useBlobUrl } from '@/lib/media/hooks.ts';
@@ -8,22 +9,28 @@ import type { StopStatus } from '@/features/travel-mode/rules.ts';
 import type { Stop } from '@/lib/db/schema.ts';
 import { cx } from '@/lib/cx.ts';
 import { hhmm } from '@/lib/time/index.ts';
+import type { LayoutNode } from '../layout.ts';
 import type { OpeningPlan } from '../opening.ts';
-import type { ProjectedNode } from '../project.ts';
+import { PILL_LIFT } from '../project.ts';
+import type { WorldRuntime } from '../scene/runtime.ts';
 
 /**
- * O HTML por cima da cena: pílulas das paradas projetadas uma vez por layout (ícone, nome, horário,
- * estado), o chip "Ana · 14:02" nas marcações do time e a legenda da curiosidade. Nítidos no sol,
- * nada de texto em textura. "Fora da rota", "+N paradas" e o "Pular" do replay moram na faixa de
- * cima do palco (a barra do "Agora" ocupa o pé da maquete, fase 14). O canvas por baixo é
- * `aria-hidden`; o conteúdo acessível é a lista do dia.
+ * O HTML por cima da cena: pílulas das paradas (ícone, nome, horário, estado), o chip "Ana · 14:02"
+ * nas marcações do time e a legenda da curiosidade. Nítidos no sol, nada de texto em textura. Com a
+ * câmera que segue o carro (fase 14) a posição de cada pílula é posta pelo laço da cena, a cada
+ * quadro em movimento, direto no DOM (`data-pill`): o React só redesenha o que muda de verdade
+ * (estado, chips). Só os nós em cena têm pílula; a da próxima parada fica presa à borda de cima
+ * quando está fora da cena, para a pessoa saber para onde vai. "Fora da rota", "+N paradas" e o
+ * "Pular" do replay moram na faixa de cima do palco. O canvas por baixo é `aria-hidden`; o conteúdo
+ * acessível é a lista do dia.
  */
 export type TeamChip = { name: string; time: string | null };
 /** O cartão de foto do "Rever o dia": a primeira foto do nó, na cor de quem tirou, e "+N". */
 export type PhotoCard = { attachment_id: string; color: string; extra: number; at: number };
 
 type Props = {
-  nodes: ProjectedNode[];
+  runtime: WorldRuntime;
+  nodes: readonly LayoutNode[];
   stops: Map<string, Stop>;
   statuses: Record<string, StopStatus>;
   pops: Record<string, number>;
@@ -36,18 +43,71 @@ type Props = {
   reducedMotion: boolean;
   /** as paradas em que é mais provável chover no horário delas (a previsão guardada) */
   rainy?: ReadonlySet<string>;
+  /** tocar na pílula abre a folha da parada */
+  onOpenStop?: ((stopId: string) => void) | undefined;
 };
 
 export const HUD_TOP = 44;
 export const HUD_BOTTOM = 72;
+/** a pílula presa ao topo fica logo abaixo da faixa de cima do palco */
+const PINNED_TOP = HUD_TOP + 52;
+const PINNED_MARGIN_X = 56;
+
+/**
+ * Põe cada pílula onde o nó dela está na tela, pelo enquadramento atual: só as em cena; a da próxima
+ * parada presa ao topo quando está fora. Roda a cada quadro em movimento e uma vez ao montar.
+ */
+function placePills(
+  root: HTMLElement,
+  runtime: WorldRuntime,
+  nodes: readonly LayoutNode[],
+  nextId: string | null,
+): void {
+  const { width } = runtime.viewport;
+  for (const node of nodes) {
+    const el = root.querySelector<HTMLElement>(`[data-pill="${node.stop_id}"]`);
+    if (!el) continue;
+    const [x, y, z] = node.position;
+    const p = runtime.project([x, y + PILL_LIFT, z]);
+    const pinned = !p.visible && p.depth > 0 && node.stop_id === nextId;
+    if (p.visible) {
+      el.style.left = `${String(Math.round(p.x))}px`;
+      el.style.top = `${String(Math.round(p.y))}px`;
+      el.hidden = false;
+      el.dataset.pinned = 'false';
+    } else if (pinned) {
+      const px = Math.min(width - PINNED_MARGIN_X, Math.max(PINNED_MARGIN_X, p.x));
+      el.style.left = `${String(Math.round(px))}px`;
+      el.style.top = `${String(PINNED_TOP)}px`;
+      el.hidden = false;
+      el.dataset.pinned = 'true';
+    } else {
+      el.hidden = true;
+    }
+    el.dataset.placed = 'true';
+  }
+}
 
 export function WorldHud(props: Props) {
-  const { nodes, stops, statuses, pops, teamChips, hidePills, opening, reducedMotion } = props;
+  const { runtime, nodes, stops, statuses, pops, teamChips, hidePills, opening, reducedMotion } =
+    props;
+  const root = useRef<HTMLDivElement>(null);
+  const nextId = Object.entries(statuses).find(([, s]) => s === 'next')?.[0] ?? null;
+
+  // a posição das pílulas pelo laço da cena: um atualizador por quadro, e uma vez ao montar ou
+  // quando os nós ou a próxima mudam
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    placePills(el, runtime, nodes, nextId);
+    return runtime.register(() => placePills(el, runtime, nodes, nextId));
+  }, [runtime, nodes, nextId]);
+
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden" data-world-hud>
+    <div ref={root} className="pointer-events-none absolute inset-0 overflow-hidden" data-world-hud>
       {nodes.map((node, i) => {
         const stop = stops.get(node.stop_id);
-        if (!stop || !node.visible) return null;
+        if (!stop) return null;
         const status = statuses[node.stop_id] ?? 'pending';
         // o HUD nasce junto com a abertura: o atraso de cada pino é o do plano
         const pin = opening?.plan.pins.find((p) => p.stop_id === node.stop_id);
@@ -55,11 +115,14 @@ export function WorldHud(props: Props) {
         const chip = teamChips[node.stop_id];
         const photo = props.photoCards?.[node.stop_id];
         return (
-          /* a âncora usa a propriedade CSS `translate`; o `transform` fica livre para a animação */
+          /* a âncora é posicionada pelo laço (`left`/`top`); a propriedade CSS `translate` centra
+             a pílula sobre o nó e deixa `transform` livre para a animação do motion */
           <div
             key={node.stop_id}
-            className="absolute -translate-x-1/2 -translate-y-full"
-            style={{ left: node.x, top: node.y, zIndex: 10 + i }}
+            className="group absolute -translate-x-1/2 -translate-y-full"
+            style={{ zIndex: 10 + i }}
+            data-pill={node.stop_id}
+            hidden
           >
             <motion.div
               className={cx('flex flex-col items-center gap-0.5', hidePills && 'opacity-0')}
@@ -68,50 +131,62 @@ export function WorldHud(props: Props) {
               transition={{ delay, type: 'spring', stiffness: 420, damping: 26 }}
             >
               {photo ? <PhotoCardView key={photo.at} card={photo} /> : null}
-              <motion.span
-                key={pops[node.stop_id] ?? 'still'}
-                initial={
-                  pops[node.stop_id] !== undefined && !reducedMotion ? { scale: 1.35 } : false
-                }
-                animate={{ scale: 1 }}
-                transition={{ type: 'spring', stiffness: 500, damping: 18 }}
-                className={cx(
-                  'flex min-h-[26px] items-center gap-1.5 rounded-full border bg-hud px-2.5 mv-text-13 font-semibold whitespace-nowrap text-hud-ink backdrop-blur-sm',
-                  status === 'done' && 'border-on-time/60',
-                  status === 'next' && 'border-sunset shadow-[0_0_0_3px_rgb(232_101_58/0.3)]',
-                  status === 'pending' && 'border-white/10',
-                  status === 'skipped' && 'border-white/10 opacity-60',
-                )}
-                data-status={status}
+              {/* o botão tem 48 px de alto (o alvo do toque); a pílula visível fica embaixo dele */}
+              <button
+                type="button"
+                className="pointer-events-auto flex min-h-12 min-w-12 flex-col items-center justify-end"
+                onClick={() => props.onOpenStop?.(node.stop_id)}
+                aria-label={`${stop.name}${stop.time ? `, ${hhmm(stop.time)}` : ''}: abrir a parada`}
+                disabled={!props.onOpenStop}
               >
-                {status === 'done' ? (
-                  <Check className="size-3.5 text-on-time" aria-hidden="true" />
-                ) : (
-                  <StopKindIcon kind={stop.kind} className="size-3.5 text-hud-muted" />
-                )}
-                <span
-                  className={cx('max-w-[38vw] truncate', status === 'skipped' && 'line-through')}
+                <motion.span
+                  key={pops[node.stop_id] ?? 'still'}
+                  initial={
+                    pops[node.stop_id] !== undefined && !reducedMotion ? { scale: 1.35 } : false
+                  }
+                  animate={{ scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 18 }}
+                  className={cx(
+                    'relative flex min-h-[26px] items-center gap-1.5 rounded-full border bg-hud px-2.5 mv-text-13 font-semibold whitespace-nowrap text-hud-ink backdrop-blur-sm',
+                    status === 'done' && 'border-on-time/60',
+                    status === 'next' && 'border-sunset shadow-[0_0_0_3px_rgb(232_101_58/0.3)]',
+                    status === 'pending' && 'border-white/10',
+                    status === 'skipped' && 'border-white/10 opacity-60',
+                  )}
+                  data-status={status}
                 >
-                  {stop.name}
-                </span>
-                {stop.time ? (
-                  <time className="num mv-text-13 text-hud-muted">{hhmm(stop.time)}</time>
-                ) : null}
-                {props.rainy?.has(node.stop_id) ? (
-                  <CloudRain
-                    className="size-3.5 text-person-sky"
-                    role="img"
-                    aria-label="previsão de chuva"
-                    data-pill-rain
-                  />
-                ) : null}
-                {status === 'next' ? (
+                  <span className="hidden group-data-[pinned=true]:inline" aria-hidden="true">
+                    <ArrowUp className="size-3.5 text-sunset" />
+                  </span>
+                  {status === 'done' ? (
+                    <Check className="size-3.5 text-on-time" aria-hidden="true" />
+                  ) : (
+                    <StopKindIcon kind={stop.kind} className="size-3.5 text-hud-muted" />
+                  )}
                   <span
-                    aria-hidden="true"
-                    className="absolute inset-0 -z-10 animate-ping rounded-full bg-sunset/30 motion-reduce:animate-none"
-                  />
-                ) : null}
-              </motion.span>
+                    className={cx('max-w-[38vw] truncate', status === 'skipped' && 'line-through')}
+                  >
+                    {stop.name}
+                  </span>
+                  {stop.time ? (
+                    <time className="num mv-text-13 text-hud-muted">{hhmm(stop.time)}</time>
+                  ) : null}
+                  {props.rainy?.has(node.stop_id) ? (
+                    <CloudRain
+                      className="size-3.5 text-person-sky"
+                      role="img"
+                      aria-label="previsão de chuva"
+                      data-pill-rain
+                    />
+                  ) : null}
+                  {status === 'next' ? (
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-0 -z-10 animate-ping rounded-full bg-sunset/30 motion-reduce:animate-none"
+                    />
+                  ) : null}
+                </motion.span>
+              </button>
               {chip ? (
                 <motion.span
                   initial={reducedMotion ? false : { y: -6, opacity: 0 }}
@@ -124,7 +199,7 @@ export function WorldHud(props: Props) {
               ) : null}
               <span
                 className={cx(
-                  'h-2.5 w-0.5 rounded-sm bg-white/60',
+                  'h-2.5 w-0.5 rounded-sm bg-white/60 group-data-[pinned=true]:hidden',
                   status === 'next' && 'bg-sunset',
                 )}
                 aria-hidden="true"

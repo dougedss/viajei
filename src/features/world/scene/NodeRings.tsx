@@ -3,9 +3,9 @@ import { useThree } from '@react-three/fiber';
 import { Color, Mesh, MeshStandardMaterial, TorusGeometry, type Group } from 'three/webgpu';
 import type { Palette } from '@/art/palette.ts';
 import type { StopStatus } from '@/features/travel-mode/rules.ts';
-import { lerp, smooth } from '../noise.ts';
+import { farness } from '../camera.ts';
+import { lerp } from '../noise.ts';
 import { stepProgress } from '../opening.ts';
-import { MOMENT_DIST } from './Car.tsx';
 import type { WorldRuntime } from './runtime.ts';
 
 /**
@@ -45,12 +45,8 @@ function animate(
 ): void {
   const op = runtime.opening;
   const elapsed = runtime.openingElapsed(now);
-  // o dia inteiro na tela pede anéis maiores; no mergulho eles voltam ao tamanho natural
-  let scale = lerp(
-    1,
-    1.9,
-    smooth(MOMENT_DIST, runtime.layout.camera.distance, runtime.cameraDistance),
-  );
+  // de perto, o anel no tamanho natural; quando a câmera recua, cresce para continuar legível
+  let scale = lerp(1, 1.9, farness(runtime.cameraDistance));
   let visible = true;
   if (op) {
     const pin = op.plan.pins.find((p) => p.stop_id === ring.stopId);

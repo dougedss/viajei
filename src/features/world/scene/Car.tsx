@@ -9,7 +9,7 @@ import {
   type Group,
 } from 'three/webgpu';
 import { buildCar, type CarRig, type CarSpec } from '@/art/cars/index.ts';
-import { lerp, smooth } from '../noise.ts';
+import { carScale } from '../camera.ts';
 import { OPENING_TIMELINE } from '../opening.ts';
 import { heightAt, type HeightField } from './heightfield.ts';
 import type { WorldRuntime } from './runtime.ts';
@@ -17,8 +17,8 @@ import type { WorldRuntime } from './runtime.ts';
 /**
  * O carro da viagem na estrada: posição pelo `s` do controlador de movimento, orientado pela
  * tangente, rodas girando com o deslocamento, faróis pela noite. Fora da rota, sai do traçado na
- * perpendicular, com uma linha tracejada até a estrada. Escala pela distância da câmera, para
- * continuar legível quando o dia inteiro está na tela e não ficar gigante no mergulho.
+ * perpendicular, com uma linha tracejada até a estrada. A escala é fixa de perto (a câmera segue o
+ * carro, fase 14) e cresce um pouco quando ela recua, para o carro continuar legível de longe.
  */
 type Props = {
   runtime: WorldRuntime;
@@ -26,8 +26,6 @@ type Props = {
   car: CarSpec;
   group: Group;
 };
-
-export const MOMENT_DIST = 105;
 
 type Tether = Line<BufferGeometry, LineDashedMaterial>;
 
@@ -76,8 +74,7 @@ function drive(
   rig.setNight(runtime.night.t);
   // um acessório encaixando (a fase 9 chama `attach` quando uma conquista sai) pede mais quadros
   if (rig.update(now)) runtime.requestFrame();
-  const far = smooth(MOMENT_DIST, layout.camera.distance, runtime.cameraDistance);
-  rig.group.scale.setScalar(lerp(1.3, 2.4, far));
+  rig.group.scale.setScalar(carScale(runtime.cameraDistance));
   // na abertura o carro só entra na hora dele
   const visible = !runtime.opening || runtime.openingElapsed(now) >= OPENING_TIMELINE.car[0];
   rig.group.visible = visible;

@@ -13,7 +13,7 @@ import {
   type Matrix4,
   type Texture,
 } from 'three/webgpu';
-import { fbm, smooth } from '../noise.ts';
+import { fbm } from '../noise.ts';
 import { mulberry32 } from '../seed.ts';
 import type { WorldLayout } from '../layout.ts';
 import { heightAt, PATCH, sampleField, type HeightField } from './heightfield.ts';
@@ -23,7 +23,9 @@ import { heightAt, PATCH, sampleField, type HeightField } from './heightfield.ts
  * pela população), casas e árvores no interior, talhões, silos e lavouras na plantação, pinheiros e
  * rochas na serra, coqueiros, guarda-sóis e casas claras na praia; mais os toques do roteiro:
  * parreirais em fileiras ao redor da vinícola e a miniatura do hotel. Cada instância é gravada em
- * ordem embaralhada: o nível Leve reduz o `count` e afina o cenário por igual.
+ * ordem embaralhada: o nível Leve reduz o `count` e afina o cenário por igual. Fase 14: o relevo
+ * quieto, sem enfeite longe da estrada (`PROP_REACH`), e prédios só em volta das paradas de cidade,
+ * hotel e comida (os acidentes `blocks` do layout).
  */
 type Placed = { m: Matrix4; c: Color | null };
 type Bucket = { mesh: InstancedMesh; items: Placed[]; total: number; shadows: boolean };
@@ -39,10 +41,10 @@ export type BuiltProps = {
 };
 
 const GRID = 1.5;
+/** até onde da estrada a decoração vai, em unidades da cena */
+export const PROP_REACH = 45;
 
 const TREES = new Set(['cone', 'round', 'trunk', 'palmTrunk', 'fronds']);
-/** o que cresce quando a câmera está longe; lavoura, quadras e miniaturas ficam no lugar */
-const SCALED = new Set([...TREES, 'wall', 'roof', 'silo', 'rock', 'umbrella']);
 
 function up(g: BufferGeometry, y: number): BufferGeometry {
   g.translate(0, y, 0);
@@ -63,7 +65,6 @@ export function buildProps(
   layout: WorldLayout,
   field: HeightField,
   textures: PropTextures,
-  propScale = 1,
 ): BuiltProps {
   const rng = mulberry32(layout.seed ^ 0x9e3779b9);
   const helper = new Object3D();
@@ -96,10 +97,9 @@ export function buildProps(
   ) => {
     const b = buckets.get(key);
     if (!b || b.items.length >= b.mesh.instanceMatrix.count) return;
-    const k = SCALED.has(key) ? propScale : 1;
     helper.position.set(x, y, z);
     helper.rotation.set(0, ry, 0);
-    helper.scale.set(sx * k, sy * k, sz * k);
+    helper.scale.set(sx, sy, sz);
     helper.updateMatrix();
     b.items.push({ m: helper.matrix.clone(), c: color ?? null });
   };
@@ -253,12 +253,15 @@ export function buildProps(
     place('palmTrunk', x, y - 0.2, z, r * 6.28, s, s, s);
     place('fronds', x, y - 0.2, z, r * 6.28, s, s, s, pick(frondCols, rng()));
   };
-  const blocksDensity = (s: number): number => {
+  /** a densidade de quadras num ponto: a do acidente `blocks` mais perto que o alcança, senão zero */
+  const blocksDensity = (x: number, z: number): number => {
     let d = 0;
     for (const f of layout.features) {
-      if (f.kind === 'blocks' && s >= f.from_s && s <= f.to_s) d = Math.max(d, f.density);
+      if (f.kind !== 'blocks') continue;
+      const r = Math.hypot(x - f.x, z - f.z) / f.radius;
+      if (r <= 1) d = Math.max(d, f.density * (1 - 0.5 * r));
     }
-    return d || 0.5;
+    return d;
   };
 
   const { bounds } = layout;
@@ -267,18 +270,18 @@ export function buildProps(
       const x = gx + (rng() - 0.5) * 1.1;
       const z = gz + (rng() - 0.5) * 1.1;
       const t = sampleField(field, x, z);
-      if (t.water !== 'none' || t.dist < roadClear) continue;
+      if (t.water !== 'none' || t.dist < roadClear || t.dist > PROP_REACH) continue;
       const w = t.weights;
       const y = ground(x, z);
       const r = rng();
       const ix = Math.round(gx / GRID);
       const iz = Math.round(gz / GRID);
-      if (w.city > 0.35) {
-        const dens = blocksDensity(t.s);
+      // prédios só em volta das paradas de cidade, hotel e comida; o resto da cidade fica no chão
+      const dens = blocksDensity(x, z);
+      if (dens > 0) {
         const block = ix % 3 === 0 && iz % 3 === 0;
-        const near = 1 - smooth(10, 70, t.dist);
-        if (block && r < 0.62 * w.city * dens * (0.35 + 0.65 * near)) {
-          const h = 1.4 + (1.5 + 8 * w.city * dens * near) * (0.3 + 0.7 * rng());
+        if (block && r < 0.7 * dens) {
+          const h = 1.4 + (1.5 + 8 * dens) * (0.3 + 0.7 * rng());
           place(
             'tower',
             gx,
@@ -292,7 +295,7 @@ export function buildProps(
           );
           continue;
         }
-        if (!block && r < 0.12 * w.city) {
+        if (!block && r < 0.14 * dens) {
           place(
             'tower',
             x,
@@ -306,11 +309,16 @@ export function buildProps(
           );
           continue;
         }
-        if (rng() < 0.06 * w.city) {
+        if (rng() < 0.08) {
           placeTree('round', x, y, z, 0.8 + rng() * 0.4);
           continue;
         }
-        if (w.city > 0.6) continue;
+        continue;
+      }
+      if (w.city > 0.6) {
+        // a cidade sem parada: o chão da cidade, umas árvores, sem torres
+        if (rng() < 0.04 * w.city) placeTree('round', x, y, z, 0.8 + rng() * 0.4);
+        continue;
       }
       if (w.interior > 0.2) {
         const vila = fbm(x * 0.06 + 11, z * 0.06 + 5, 2);
@@ -392,7 +400,8 @@ export function buildProps(
           const x = cx + u * ca - v * sa;
           const z = cz + u * sa + v * ca;
           const t = sampleField(field, x, z);
-          if (t.water !== 'none' || t.dist < roadClear || t.weights.field < 0.2) continue;
+          if (t.water !== 'none' || t.dist < roadClear || t.dist > PROP_REACH) continue;
+          if (t.weights.field < 0.2) continue;
           const y = ground(x, z);
           if (kind === 2) placeTree('round', x, y, z, 0.5 + rng() * 0.12);
           else if (kind === 3)

@@ -13,8 +13,6 @@ type Props = {
    * `layoutId` faz o motion levar o grande até o pequeno.
    */
   size: 'big' | 'small';
-  /** onde o carro estaciona (o primeiro nó, projetado): o chip grande nasce ali */
-  anchor?: { x: number; y: number } | null;
   reducedMotion: boolean;
 };
 
@@ -22,20 +20,20 @@ type Props = {
  * O chip do clima da maquete: a previsão do dia guardada no aparelho (funciona sem rede), em HTML por
  * cima da cena. Nada do tempo entra no 3D. Com reduzir movimento, aparece pequeno, sem animação.
  */
-export function WeatherChip({ summary, size, anchor, reducedMotion }: Props) {
+export function WeatherChip({ summary, size, reducedMotion }: Props) {
   const name = usePlaceName(summary?.start ?? null, null);
   if (!summary) return null;
   const range = rangeText(summary.day);
   // com reduzir movimento, nada voa: sem `layoutId`, a troca é seca
   const layout = reducedMotion ? {} : { layoutId: 'weather-chip' };
 
-  if (size === 'big' && anchor) {
+  if (size === 'big') {
+    // quem o prende à origem é o palco (`useWorldAnchor`), pelo enquadramento atual
     const [carFrom] = OPENING_TIMELINE.car;
     return (
       <motion.span
         {...layout}
-        className="pointer-events-none absolute z-40 inline-flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/15 bg-hud px-3.5 py-2 mv-text-15 font-semibold whitespace-nowrap text-hud-ink shadow-[0_10px_24px_-10px_rgb(0_0_0/0.6)] backdrop-blur-sm"
-        style={{ left: anchor.x, top: Math.max(8, anchor.y - 76) }}
+        className="pointer-events-none inline-flex items-center gap-2 rounded-full border border-white/15 bg-hud px-3.5 py-2 mv-text-15 font-semibold whitespace-nowrap text-hud-ink shadow-[0_10px_24px_-10px_rgb(0_0_0/0.6)] backdrop-blur-sm"
         initial={{ opacity: 0, y: 8, scale: 0.9 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ delay: carFrom / 1000, type: 'spring', stiffness: 380, damping: 26 }}

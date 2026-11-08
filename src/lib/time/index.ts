@@ -64,7 +64,7 @@ export { TRIP_TIME_ZONE, isoToWall, localStampToISO, wallToISO, wallToInstant } 
 // formatDuration vive em _shared/format.ts: o texto dos avisos (servidor) e o "Agora" usam a mesma função
 export { formatDuration } from '@shared/format.ts';
 
-const WEEKDAYS_SHORT = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'] as const;
+export const WEEKDAYS_SHORT = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'] as const;
 
 /** "sex 11/12" (a abreviação do date-fns em pt-BR varia entre versões; aqui é fixa) */
 export function formatDayShort(date: string): string {

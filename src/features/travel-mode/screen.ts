@@ -1,6 +1,6 @@
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { currentDay } from '@/lib/time/index.ts';
+import { currentDay, WEEKDAYS_SHORT } from '@/lib/time/index.ts';
 
 /**
  * As regras puras da tela da viagem (fase 14): que dia a barra do topo mostra e quando "Hoje"
@@ -25,9 +25,11 @@ export type DayBarState<T extends DayLike> = {
   canNext: boolean;
 };
 
-/** "sáb, 12 dez" em pt-BR (no date-fns pt-BR o dia curto é `EEEEEE`; `EEE` é o nome inteiro). */
+/** "sáb, 12 dez": o dia da semana é o do app (o do date-fns em pt-BR varia e perde o acento). */
 export function formatDayBar(date: string): string {
-  return format(parseISO(date), 'EEEEEE, d MMM', { locale: ptBR }).replace(/\./g, '').toLowerCase();
+  const d = parseISO(date);
+  const month = format(d, 'd MMM', { locale: ptBR }).replace(/\./g, '').toLowerCase();
+  return `${WEEKDAYS_SHORT[d.getDay()] ?? ''}, ${month}`;
 }
 
 export function dayLabel(date: string, index: number): string {
