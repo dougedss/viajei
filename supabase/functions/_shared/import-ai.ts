@@ -142,6 +142,7 @@ export const IMPORT_SYSTEM_PROMPT = `Você lê roteiros de viagem de carro que u
   - winery: vinícola;
   - city: passeio por uma cidade ou um centro;
   - event: compromisso marcado (prova, show, casamento, reunião);
+  - fuel: posto de combustível, abastecer ("abastecer em Lages", "posto na saída da cidade");
   - other: na dúvida.
 - address: o endereço ou a cidade que o texto dá para a parada.
 - closes_at: só se o texto disser até quando o lugar abre ("fecha 17h", "até 18h30").

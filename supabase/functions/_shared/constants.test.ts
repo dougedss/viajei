@@ -23,7 +23,7 @@ describe('constantes compartilhadas', () => {
     }
   });
 
-  it('tipos de parada: os 9 do banco, com ícone', () => {
+  it('tipos de parada: os 10 do banco (o Posto desde a 0013), com ícone', () => {
     expect(Object.keys(STOP_KINDS)).toEqual([
       'origin',
       'transit',
@@ -33,6 +33,7 @@ describe('constantes compartilhadas', () => {
       'food',
       'event',
       'city',
+      'fuel',
       'other',
     ]);
     for (const k of Object.values(STOP_KINDS)) expect(k.icon).toMatch(/^[a-z0-9-]+$/);

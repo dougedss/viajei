@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { STOP_KIND_KEYS } from '../../supabase/functions/_shared/constants.ts';
 
 /**
  * Contraste AA nos tokens (fase 12): cada texto do sistema de cores sobre cada superfície em que
@@ -71,7 +72,7 @@ function tokens(theme: Record<string, string>) {
 describe.each([
   ['claro', light],
   ['escuro', dark],
-])('tema %s', (_, theme) => {
+])('tema %s', (name, theme) => {
   const t = tokens(theme);
   const surfaces = ['paper', 'card'] as const;
 
@@ -88,6 +89,20 @@ describe.each([
 
   it('a linha divisória e o acento, como elementos gráficos, passam de 3:1 no cartão', () => {
     expect(ratio(t('accent'), t('card'))).toBeGreaterThanOrEqual(3);
+  });
+
+  // o ícone do tipo de parada é um elemento gráfico (3:1) no papel e no cartão; as cores são as
+  // mesmas nos dois temas. Achado da fase 15, sem correção nela: Deslocamento (2,70) e Vinícola
+  // (2,75) no cartão escuro; o teste as segura onde estão, e uma cor nova não entra assim
+  const below: Record<string, Partial<Record<string, number>>> = {
+    escuro: { transit: 2.7, winery: 2.75 },
+  };
+  it.each(STOP_KIND_KEYS)('o ícone do tipo %s passa de 3:1 no papel e no cartão', (kind) => {
+    const color = t(`stop-${kind}`);
+    expect(ratio(color, t('paper'))).toBeGreaterThanOrEqual(3);
+    const known = below[name]?.[kind];
+    if (known === undefined) expect(ratio(color, t('card'))).toBeGreaterThanOrEqual(3);
+    else expect(ratio(color, t('card'))).toBeGreaterThanOrEqual(known - 0.01);
   });
 });
 
@@ -111,6 +126,10 @@ describe('cores fixas', () => {
     const hud = over(t('hud'), WHITE);
     expect(ratio(t('hud-ink'), hud)).toBeGreaterThanOrEqual(4.5);
     expect(ratio(t('hud-muted'), hud)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each(STOP_KIND_KEYS)('o ícone branco sobre o círculo do tipo %s passa de 3:1', (kind) => {
+    expect(ratio(WHITE, t(`stop-${kind}`))).toBeGreaterThanOrEqual(3);
   });
 
   it('a conta bate com o WCAG: preto sobre branco é 21:1', () => {

@@ -535,8 +535,13 @@ export function evaluate(ctx: EvalContext): Check[] {
       continue;
     }
     const n = r.payload.notification;
-    const want = `${ctx.appOrigin}/viagens/${n.data.tripId ?? ''}/viagem`;
-    if (n.navigate !== want) payloadProblems.push(`navigate ${n.navigate}`);
+    // a tela da viagem (`/viagens/:id`, fase 15); a rota antiga `/viagem` redireciona para ela (D174)
+    // e é o que a função publicada antes da fase 15 manda: a função e o laboratório da `main` sobem
+    // em momentos diferentes, e as duas abrem a mesma tela
+    const screen = `${ctx.appOrigin}/viagens/${n.data.tripId ?? ''}`;
+    if (n.navigate !== screen && n.navigate !== `${screen}/viagem`) {
+      payloadProblems.push(`navigate ${n.navigate}`);
+    }
     if (r.content_encoding !== 'aes128gcm')
       payloadProblems.push(`Content-Encoding ${r.content_encoding ?? '?'}`);
     if (r.size_bytes > 4096) payloadProblems.push(`${r.size_bytes} bytes`);

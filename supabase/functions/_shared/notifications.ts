@@ -293,9 +293,10 @@ export function notificationText(
 }
 
 /**
- * Caminho que o aviso abre: o "Agora" da viagem; o prazo de cancelamento abre a própria reserva; a
- * véspera com itens faltando abre a lista que falta (antes primeiro); a retrospectiva pronta abre o
- * filme da viagem.
+ * Caminho que o aviso abre: a tela da viagem (o mapa, `/viagens/:id`, desde a fase 14; a rota antiga
+ * `/viagem` continua redirecionando os avisos que já foram); o prazo de cancelamento abre a própria
+ * reserva; a véspera com itens faltando abre a lista que falta (antes primeiro); a retrospectiva
+ * pronta abre o filme da viagem.
  */
 export function navigatePath(
   row: Pick<ClaimedNotification, 'kind' | 'ref' | 'trip_id'> & {
@@ -313,7 +314,7 @@ export function navigatePath(
     if (before > 0) return `/viagens/${row.trip_id}/checklists?aba=antes`;
     if (pack > 0) return `/viagens/${row.trip_id}/checklists?aba=mala`;
   }
-  return `/viagens/${row.trip_id}/viagem`;
+  return `/viagens/${row.trip_id}`;
 }
 
 /** O payload para uma assinatura: `navigate` absoluto na origem que assinou (produção, preview ou localhost). */

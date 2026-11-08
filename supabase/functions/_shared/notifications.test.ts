@@ -236,13 +236,13 @@ describe('payload único', () => {
     const p = buildPushPayload(row, 'https://viajei-mauve.vercel.app/');
     expect(pushPayloadSchema.parse(p)).toEqual(p);
     expect(p.web_push).toBe(8030);
-    expect(p.notification.navigate).toBe(`https://viajei-mauve.vercel.app/viagens/${TRIP}/viagem`);
+    expect(p.notification.navigate).toBe(`https://viajei-mauve.vercel.app/viagens/${TRIP}`);
     expect(p.notification.app_badge).toBe('1');
     expect(p.notification.data).toEqual({
       kind: 'departure_soon',
       tripId: TRIP,
       stopId: STOP,
-      navigate: `/viagens/${TRIP}/viagem`,
+      navigate: `/viagens/${TRIP}`,
     });
     expect(p.actions).toEqual([{ action: 'departed', title: 'Partiu!' }]);
   });
@@ -257,7 +257,7 @@ describe('payload único', () => {
       'http://localhost:4173',
     );
     expect(p.notification).not.toHaveProperty('app_badge');
-    expect(p.notification.navigate).toBe(`http://localhost:4173/viagens/${TRIP}/viagem`);
+    expect(p.notification.navigate).toBe(`http://localhost:4173/viagens/${TRIP}`);
   });
 
   it('o prazo de cancelamento abre a própria reserva', () => {
@@ -294,7 +294,7 @@ describe('payload único', () => {
       ).notification.data.navigate;
     expect(payload(3, 2)).toBe(`/viagens/${TRIP}/checklists?aba=antes`);
     expect(payload(0, 2)).toBe(`/viagens/${TRIP}/checklists?aba=mala`);
-    expect(payload(0, 0)).toBe(`/viagens/${TRIP}/viagem`);
+    expect(payload(0, 0)).toBe(`/viagens/${TRIP}`);
   });
 
   it('a retrospectiva pronta abre o filme da viagem', () => {

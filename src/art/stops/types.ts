@@ -28,6 +28,7 @@ export const MINIATURE_BOX: Record<StopKind, Box> = {
   food: { w: 3.6, h: 2.4, d: 3.0 },
   event: { w: 4.2, h: 2.6, d: 3.4 },
   city: { w: 4.4, h: 4.2, d: 4.4 },
+  fuel: { w: 3.6, h: 2.4, d: 2.6 },
   other: { w: 1.0, h: 2.2, d: 0.4 },
 };
 

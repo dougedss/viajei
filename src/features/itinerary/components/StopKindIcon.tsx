@@ -1,6 +1,7 @@
 import {
   BedDouble,
   Building2,
+  Fuel,
   Grape,
   House,
   MapPin,
@@ -23,6 +24,7 @@ const ICONS: Record<StopKind, LucideIcon> = {
   food: UtensilsCrossed,
   event: Star,
   city: Building2,
+  fuel: Fuel,
   other: MapPin,
 };
 

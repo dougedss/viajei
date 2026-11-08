@@ -17,8 +17,8 @@ import { MINIATURE_BOX, type Box, type Miniature } from './types.ts';
 /**
  * Os construtores das miniaturas, um por tipo de parada: casa (origem), um marco baixo
  * (deslocamento), um grupo de árvores (natureza), a parreira com o barril (vinícola), o hotel de
- * dois andares, o restaurante com toldo e mesa, o palco (evento), um quarteirão (cidade) e a placa
- * (outro). Low-poly, com sombreamento chapado e os materiais dos carros (vidro, cromado, borracha,
+ * dois andares, o restaurante com toldo e mesa, o palco (evento), um quarteirão (cidade), o posto
+ * com a cobertura e as bombas (fase 15) e a placa (outro). Low-poly, com sombreamento chapado e os materiais dos carros (vidro, cromado, borracha,
  * plástico escuro). O `seed` só varia o que não muda a caixa: cores e pequenos giros.
  */
 type Palette = {
@@ -37,6 +37,7 @@ type Palette = {
   concrete2: MeshStandardMaterial;
   stage: MeshStandardMaterial;
   barrel: MeshStandardMaterial;
+  amber: MeshStandardMaterial;
   cars: CarMaterials;
 };
 
@@ -61,6 +62,8 @@ function palette(kit: Kit): Palette {
     concrete2: own(flat(0xaab3bf, 0.7)),
     stage: own(flat(0x22252b, 0.8)),
     barrel: own(flat(0x7a5230, 0.85)),
+    // o âmbar do Posto (`--color-stop-fuel`): a faixa da cobertura e as bombas
+    amber: own(flat(0xc27c1a, 0.7)),
     cars: carMaterials(),
   };
 }
@@ -244,6 +247,25 @@ function cityBlock(ctx: Ctx): void {
   block(ctx, 4.2, 0.1, 4.2, p.cars.trim);
 }
 
+function fuelStation(ctx: Ctx): void {
+  const { p } = ctx;
+  // a ilha de concreto com duas bombas, cada uma com o visor e a mangueira
+  block(ctx, 2.6, 0.12, 1.1, p.concrete, -0.1, 0, 0);
+  for (const x of [-0.8, 0.6]) {
+    block(ctx, 0.42, 0.95, 0.34, p.amber, x, 0.12, 0);
+    block(ctx, 0.3, 0.22, 0.04, p.cars.glass, x, 0.72, 0.18);
+    block(ctx, 0.06, 0.5, 0.06, p.cars.rubber, x + 0.25, 0.3, 0.1);
+  }
+  // a cobertura sobre duas colunas, com a faixa âmbar na borda
+  for (const x of [-1.4, 1.2]) block(ctx, 0.16, 1.85, 0.16, p.cars.chrome, x, 0.12, 0);
+  block(ctx, 3.3, 0.24, 2.3, p.wall, -0.1, 1.97, 0);
+  block(ctx, 3.32, 0.1, 2.32, p.amber, -0.1, 2.04, 0);
+  // o totem dos preços na frente, à direita
+  block(ctx, 0.1, 1.3, 0.1, p.cars.trim, 1.5, 0, 0.95);
+  block(ctx, 0.5, 0.75, 0.1, p.wall, 1.5, 1.3, 0.95);
+  block(ctx, 0.52, 0.16, 0.11, p.amber, 1.5, 1.85, 0.95);
+}
+
 function signpost(ctx: Ctx): void {
   const { p } = ctx;
   mesh(ctx, new CylinderGeometry(0.05, 0.05, 1.5, 6), p.cars.trim, 0, 0.75, 0);
@@ -260,6 +282,7 @@ const BUILDERS: Record<StopKind, (ctx: Ctx) => void> = {
   food: restaurant,
   event: stage,
   city: cityBlock,
+  fuel: fuelStation,
   other: signpost,
 };
 

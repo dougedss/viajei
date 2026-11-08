@@ -22,6 +22,7 @@ const BY_STOP_KIND: Record<StopKind, ExpenseCategory> = {
   city: 'attractions',
   origin: 'fuel',
   transit: 'fuel',
+  fuel: 'fuel',
   other: 'other',
 };
 

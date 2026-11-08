@@ -24,6 +24,7 @@ export const STOP_KINDS = {
   food: { label: 'Comida', icon: 'utensils-crossed' },
   event: { label: 'Evento', icon: 'star' },
   city: { label: 'Cidade', icon: 'building-2' },
+  fuel: { label: 'Posto', icon: 'fuel' },
   other: { label: 'Outro', icon: 'map-pin' },
 } as const;
 export type StopKind = keyof typeof STOP_KINDS;

@@ -111,6 +111,8 @@
   --color-stop-food: #d6567c;
   --color-stop-event: #2f8fc9;
   --color-stop-city: #3a8089;
+  /* o âmbar do combustível, mais fundo que o do gasto: 3:1 no papel claro e no cartão escuro */
+  --color-stop-fuel: #c27c1a;
   --color-stop-other: #7c8494;
 
   /* cenários da maquete */

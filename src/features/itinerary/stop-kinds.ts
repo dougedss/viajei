@@ -10,6 +10,7 @@ export const KIND_TEXT: Record<StopKind, string> = {
   food: 'text-stop-food',
   event: 'text-stop-event',
   city: 'text-stop-city',
+  fuel: 'text-stop-fuel',
   other: 'text-stop-other',
 };
 export const KIND_BG: Record<StopKind, string> = {
@@ -21,6 +22,7 @@ export const KIND_BG: Record<StopKind, string> = {
   food: 'bg-stop-food',
   event: 'bg-stop-event',
   city: 'bg-stop-city',
+  fuel: 'bg-stop-fuel',
   other: 'bg-stop-other',
 };
 
