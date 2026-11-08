@@ -75,8 +75,11 @@ export async function appImportar(ctx: ImportContext, today: string): Promise<Ch
   let trip = '';
   let keepDays: string[] = [];
   let since = new Date().toISOString();
+  // o limite diário de leituras do lab-a (D24), gasto pelo próprio laboratório num dia de muitas
+  // execuções: o app mostra o aviso certo, e a leitura fica para depois (não é defeito do app)
+  const quota: { message: string | null } = { message: null };
   const step = async (name: string, run: () => Promise<void>) => {
-    if (steps.some((s) => !s.ok)) return;
+    if (steps.some((s) => !s.ok) || quota.message) return;
     try {
       await run();
       steps.push({ step: name, ok: true });
@@ -111,8 +114,13 @@ export async function appImportar(ctx: ImportContext, today: string): Promise<Ch
       // a primeira parada que aparece no preview, ou a revisão, se tudo chegou de uma vez
       const firstStop = p.getByRole('list', { name: 'Dias que chegaram' }).locator('li li');
       const review = p.getByRole('heading', { name: 'Revisar o roteiro', exact: true });
+      const limit = p.getByText(/^Você já leu \d+ roteiros nas últimas 24 horas/);
       for (;;) {
         if ((await firstStop.count()) > 0 || (await review.isVisible())) break;
+        if (await limit.isVisible()) {
+          quota.message = (await limit.textContent())?.trim() ?? 'limite do dia';
+          return;
+        }
         if (Date.now() - t0 > READ_TIMEOUT) throw new Error('nenhuma parada chegou');
         await sleep(200);
       }
@@ -211,6 +219,15 @@ export async function appImportar(ctx: ImportContext, today: string): Promise<Ch
 
   const failed = steps.find((s) => !s.ok);
   const first = data.primeira_parada_ms;
+  if (!failed && quota.message) {
+    return {
+      scenario: 'app_importar',
+      status: 'skip',
+      latency_ms: Date.now() - startedAt,
+      detail: `O lab-a gastou as leituras do dia nas execuções de hoje; o app mostrou o limite: "${quota.message}"`,
+      data: { ...data, limite: quota.message, passos: steps },
+    };
+  }
   return {
     scenario: 'app_importar',
     status: failed ? 'fail' : 'pass',
