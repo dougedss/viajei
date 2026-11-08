@@ -71,6 +71,10 @@ async function viagemDeHoje(
       travel_minutes_to_next: null,
       lat: PARQUE.latitude,
       lng: PARQUE.longitude,
+      // as mesmas chaves da Casa: o PostgREST exige num insert de várias linhas
+      done_at: null,
+      done_by: null,
+      departed_at: null,
       updated_at: now,
     },
   ]);
