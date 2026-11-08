@@ -19,7 +19,7 @@ const FOLHA_POR_CIMA = `(() => {
     const r = title.getBoundingClientRect();
     points.push(['título', r.left + r.width / 2, r.top + r.height / 2]);
   }
-  const body = dialog.querySelector('[data-map-sheet]');
+  const body = dialog.querySelector('[data-stop-sheet]');
   if (body) {
     const r = body.getBoundingClientRect();
     points.push(['corpo', r.left + r.width / 2, r.top + r.height / 2]);

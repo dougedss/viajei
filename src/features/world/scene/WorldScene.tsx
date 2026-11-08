@@ -12,6 +12,7 @@ import { Car } from './Car.tsx';
 import { CameraRig } from './CameraRig.tsx';
 import { buildHeightField } from './heightfield.ts';
 import { Lighting, type LightingHandle } from './Lighting.tsx';
+import { Miniatures } from './Miniatures.tsx';
 import { NodeRings } from './NodeRings.tsx';
 import { Props } from './Props.tsx';
 import { Road } from './Road.tsx';
@@ -35,9 +36,11 @@ export type WorldSceneProps = {
   onMotionEvents: (events: MotionEvent[]) => void;
   onFrame: (now: number, dt_ms: number, moving: boolean) => void;
   onFirstFrame: () => void;
+  /** tocar numa miniatura abre a folha da parada (fase 14) */
+  onTapStop?: ((stopId: string) => void) | undefined;
   /**
    * A câmera e o laço de outra cena sobre o mesmo cenário (o filme da retrospectiva, fase 9). Sem
-   * isto, a câmera parada do dia e o laço da maquete.
+   * isto, a câmera que segue o carro e o laço da maquete.
    */
   controls?: ReactNode;
 };
@@ -52,6 +55,7 @@ export function WorldScene({
   onMotionEvents,
   onFrame,
   onFirstFrame,
+  onTapStop,
   controls,
 }: WorldSceneProps) {
   const gl = useThree((s) => s.gl) as unknown as WebGPURenderer;
@@ -122,6 +126,7 @@ export function WorldScene({
         group={groups.objects}
       />
       <Car runtime={runtime} field={field} car={car} group={groups.objects} />
+      <Miniatures runtime={runtime} field={field} onTap={onTapStop} />
       {controls ?? (
         <>
           <CameraRig runtime={runtime} />

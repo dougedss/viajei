@@ -11,8 +11,10 @@ type Props = {
   state: DayState;
   legs: Map<string, RouteLeg>;
   profiles: Map<string, Profile>;
-  /** o que mais cada parada mostra no Modo Viagem: notas do time, "Ver reserva", "Como foi?" */
+  /** o que mais cada parada mostra na tela da viagem: notas do time, "Ver reserva", "Como foi?" */
   stopExtras?: ((stop: Stop) => ReactNode) | undefined;
+  /** tocar no nome abre a folha da parada (fase 14); sem isto, o nome é só texto */
+  onOpenStop?: ((stopId: string) => void) | undefined;
 };
 
 const STATUS_LABEL: Record<StopStatus, string> = {
@@ -49,7 +51,7 @@ function Node({ status, stop }: { status: StopStatus; stop: Stop }) {
  * A lista acessível da trilha: a mesma informação da maquete (fase 5), em lista, para leitor de
  * tela e como fallback permanente. O carro está no último nó concluído; o halo pulsa no próximo.
  */
-export function TrailList({ state, legs, profiles, stopExtras }: Props) {
+export function TrailList({ state, legs, profiles, stopExtras, onOpenStop }: Props) {
   return (
     <ol className="grid gap-0" aria-label="Trilha do dia">
       {state.stops.map((stop, i) => {
@@ -71,11 +73,22 @@ export function TrailList({ state, legs, profiles, stopExtras }: Props) {
                 {stop.time ? (
                   <span className="num mv-text-20 font-semibold">{hhmm(stop.time)}</span>
                 ) : null}
-                <span
-                  className={`mv-text-17 font-semibold ${status === 'skipped' ? 'line-through' : ''}`}
-                >
-                  {stop.name}
-                </span>
+                {onOpenStop ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenStop(stop.id)}
+                    className={`inline-flex min-h-12 items-center text-left mv-text-17 font-semibold text-accent-ink ${status === 'skipped' ? 'line-through' : ''}`}
+                    data-stop-row={stop.id}
+                  >
+                    {stop.name}
+                  </button>
+                ) : (
+                  <span
+                    className={`mv-text-17 font-semibold ${status === 'skipped' ? 'line-through' : ''}`}
+                  >
+                    {stop.name}
+                  </span>
+                )}
                 <span className="sr-only">, {STATUS_LABEL[status]}</span>
               </p>
               <p className="mv-text-15 text-ink-2">

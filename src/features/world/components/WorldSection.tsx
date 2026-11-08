@@ -491,6 +491,7 @@ function WorldStage(p: StageProps) {
           onMotionEvents={onMotionEvents}
           onFrame={quality.onFrame}
           onFirstFrame={onFirstFrame}
+          onTapStop={p.onOpenStop}
         />
       </WorldCanvas>
       {!firstFrame ? (
@@ -514,6 +515,7 @@ function WorldStage(p: StageProps) {
         opening={opening}
         reducedMotion={reducedMotion}
         rainy={rainy}
+        onOpenStop={p.onOpenStop}
       />
       {weatherBig ? (
         <div

@@ -142,6 +142,7 @@ export async function pageDiagnosis(app: App, at: number): Promise<string> {
   });
 }
 export const TIMEOUT = 20_000;
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
  * Por que a folha "Avisos da viagem" não apareceu (fase 13): o que a regra `shouldOfferPush` olha,
@@ -730,48 +731,74 @@ export function appMaquete(app: App): Promise<Check> {
   const info: Record<string, unknown> = {};
   const world = page.locator('[data-world="webgl2"], [data-world="webgpu"]');
   const hud = page.locator('[data-world-hud]');
-  return runSteps(app, 'app_maquete', 'A maquete montou com as pílulas e o "Rever o dia" andou', [
+  return runSteps(
+    app,
+    'app_maquete',
+    'A maquete montou com as pílulas e as miniaturas, a folha abriu ao toque e o "Rever o dia" andou',
     [
-      'abrir o "Agora" com a maquete',
-      async () => {
-        await page.goto(tripUrl(target));
-        await page.getByRole('heading', { name: 'Agora' }).waitFor();
-      },
+      [
+        'abrir o "Agora" com a maquete',
+        async () => {
+          await page.goto(tripUrl(target));
+          await page.getByRole('heading', { name: 'Agora' }).waitFor();
+        },
+      ],
+      [
+        'a maquete monta com um motor de verdade',
+        async () => {
+          const t0 = Date.now();
+          await world.waitFor({ timeout: WORLD_TIMEOUT });
+          await page
+            .getByText('Montando a maquete…')
+            .waitFor({ state: 'hidden', timeout: WORLD_TIMEOUT });
+          info.motor = await world.getAttribute('data-world');
+          info.primeiro_quadro_ms = Date.now() - t0;
+        },
+      ],
+      [
+        'as pílulas das paradas por cima da cena',
+        async () => {
+          await hud.getByText(target.originName).first().waitFor();
+          await hud.getByText(target.destinationName).first().waitFor();
+          // a captura da maquete, com as miniaturas e os ícones das pílulas lado a lado, para o
+          // Douglas ver (o artefato sobe sempre, não só na falha)
+          await page
+            .screenshot({ path: join(target.artifactsDir, 'maquete.png') })
+            .catch(() => undefined);
+        },
+      ],
+      [
+        'tocar na pílula abre a folha da parada',
+        async () => {
+          await hud
+            .getByRole('button', { name: new RegExp(`^${esc(target.destinationName)}`) })
+            .click();
+          const sheet = page.getByRole('dialog', { name: target.destinationName });
+          await sheet.waitFor();
+          await sheet.getByRole('link', { name: 'Ver no roteiro' }).waitFor();
+          await page
+            .screenshot({ path: join(target.artifactsDir, 'maquete-folha.png') })
+            .catch(() => undefined);
+          await page.keyboard.press('Escape');
+          await sheet.waitFor({ state: 'detached' });
+        },
+      ],
+      [
+        '"Rever o dia" começa e anda até o fim',
+        async () => {
+          const review = page.getByRole('button', { name: 'Rever o dia', exact: true });
+          // um replay ao abrir, se houver, termina antes de o botão aparecer
+          await review.waitFor({ timeout: WORLD_TIMEOUT });
+          await review.click();
+          const t0 = Date.now();
+          // o "Pular" do replay mora na faixa de cima do palco (fase 14), no lugar do "Rever o dia"
+          await page
+            .getByRole('button', { name: 'Pular', exact: true })
+            .waitFor({ timeout: WORLD_TIMEOUT });
+          await review.waitFor({ timeout: WORLD_TIMEOUT });
+          info.rever_ms = Date.now() - t0;
+        },
+      ],
     ],
-    [
-      'a maquete monta com um motor de verdade',
-      async () => {
-        const t0 = Date.now();
-        await world.waitFor({ timeout: WORLD_TIMEOUT });
-        await page
-          .getByText('Montando a maquete…')
-          .waitFor({ state: 'hidden', timeout: WORLD_TIMEOUT });
-        info.motor = await world.getAttribute('data-world');
-        info.primeiro_quadro_ms = Date.now() - t0;
-      },
-    ],
-    [
-      'as pílulas das paradas por cima da cena',
-      async () => {
-        await hud.getByText(target.originName).first().waitFor();
-        await hud.getByText(target.destinationName).first().waitFor();
-      },
-    ],
-    [
-      '"Rever o dia" começa e anda até o fim',
-      async () => {
-        const review = page.getByRole('button', { name: 'Rever o dia', exact: true });
-        // um replay ao abrir, se houver, termina antes de o botão aparecer
-        await review.waitFor({ timeout: WORLD_TIMEOUT });
-        await review.click();
-        const t0 = Date.now();
-        // o "Pular" do replay mora na faixa de cima do palco (fase 14), no lugar do "Rever o dia"
-        await page
-          .getByRole('button', { name: 'Pular', exact: true })
-          .waitFor({ timeout: WORLD_TIMEOUT });
-        await review.waitFor({ timeout: WORLD_TIMEOUT });
-        info.rever_ms = Date.now() - t0;
-      },
-    ],
-  ]).then((check) => ({ ...check, data: { ...check.data, ...info } }));
+  ).then((check) => ({ ...check, data: { ...check.data, ...info } }));
 }

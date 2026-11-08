@@ -4,6 +4,7 @@ import { asStopKind } from '@/features/itinerary/stop-kinds.ts';
 import type { DayRoute, Stop } from '@/lib/db/schema.ts';
 import type { CuriosityKind, PlaceReading, SceneryKind, Segment } from '@/lib/geo/index.ts';
 import { cameraPosition, groundHit, projectPoint, type CameraFrame, type Vec3 } from './math.ts';
+import { MINIATURE_BOX, MINIATURE_ROAD_GAP } from '@/art/stops/types.ts';
 import { clamp, fbm, lerp, smooth } from './noise.ts';
 import { hashSeed, mulberry32 } from './seed.ts';
 
@@ -39,7 +40,7 @@ export type PathSample = {
   tz: number;
 };
 
-export type NodeTouch = 'lake' | 'vineyard' | 'hotel' | null;
+export type NodeTouch = 'lake' | 'vineyard' | null;
 
 export type LayoutNode = {
   stop_id: string;
@@ -67,7 +68,8 @@ export type LayoutFeature =
   | { kind: 'lake'; x: number; z: number; rx: number; rz: number; level: number }
   | { kind: 'coast'; side: -1 | 1; from_s: number; to_s: number; offset: number }
   | { kind: 'vineyard'; x: number; z: number; angle: number; half: number; rowStep: number }
-  | { kind: 'hotel'; x: number; z: number; angle: number }
+  /** a miniatura 3D da parada, ao lado da estrada, virada para ela (fase 14) */
+  | { kind: 'miniature'; stop_id: string; stop: StopKind; x: number; z: number; angle: number }
   /** quadras de cidade em volta de uma parada de cidade, hotel ou comida (fase 14) */
   | { kind: 'blocks'; x: number; z: number; radius: number; density: number };
 
@@ -541,6 +543,9 @@ export function buildLayout(input: LayoutInput): WorldLayout {
   // faixas de cenário
   const bands = buildBands(input.place?.segments ?? null, axis, totalKm, kmToS);
 
+  // a estrada: de perto (a câmera segue o carro, fase 14) a largura natural
+  const roadHalfWidth = ROAD_HALF_WIDTH;
+
   // acidentes
   const features: LayoutFeature[] = [];
   for (const node of nodes) {
@@ -564,9 +569,18 @@ export function buildLayout(input: LayoutInput): WorldLayout {
         half: 7,
         rowStep: 1.3,
       });
-    } else if (node.touch === 'hotel') {
-      features.push({ kind: 'hotel', x: x + side * 6.5, z: z + 3, angle: -side * 0.25 });
     }
+    // a miniatura do tipo, do lado de fora do S, com a caixa inteira fora da estrada e a frente
+    // virada para ela (um pequeno giro pela semente, para não ficarem todas iguais)
+    const box = MINIATURE_BOX[node.kind];
+    features.push({
+      kind: 'miniature',
+      stop_id: node.stop_id,
+      stop: node.kind,
+      x: x + side * (roadHalfWidth + MINIATURE_ROAD_GAP + box.d / 2),
+      z: z + 1.5,
+      angle: -side * (Math.PI / 2) + (rng() - 0.5) * 0.3,
+    });
     if (BLOCK_KINDS.includes(node.kind)) {
       // a densidade pela cidade do lugar (a faixa de cenário em que o nó cai), quando a leitura a dá
       const band = bands.find((b) => node.km >= b.from_km && node.km <= b.to_km);
@@ -617,12 +631,11 @@ export function buildLayout(input: LayoutInput): WorldLayout {
     .filter((c) => axis.hasRoute && c.km >= 0 && c.km <= totalKm)
     .sort((a, b) => a.s - b.s);
 
-  // câmera: o dia inteiro entre as faixas do HUD
+  // câmera: o quadro largo do dia inteiro entre as faixas do HUD (a abertura; a câmera que segue o
+  // carro sai de `camera.ts`)
   const yMid = path.reduce((acc, p) => acc + p.y, 0) / Math.max(1, path.length);
   const camera = fitCamera(input.viewport, zEnd, yMid, xHalf);
   const bounds = terrainBounds(camera, input.viewport, zEnd, yMid, xHalf);
-  // de longe, a estrada precisa ser mais larga para continuar visível
-  const roadHalfWidth = ROAD_HALF_WIDTH * clamp(camera.distance / 400, 1, 1.6);
 
   // terreno: amostras grossas da trilha com o cenário de cada uma
   const coarse = path
@@ -772,7 +785,6 @@ export function buildLayout(input: LayoutInput): WorldLayout {
 function touchOf(stop: Stop): NodeTouch {
   const kind = asStopKind(stop.kind);
   if (kind === 'winery') return 'vineyard';
-  if (kind === 'hotel') return 'hotel';
   if (kind === 'nature' && LAKE_RE.test(stop.name)) return 'lake';
   return null;
 }

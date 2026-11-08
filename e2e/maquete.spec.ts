@@ -60,8 +60,17 @@ test('a tela da viagem monta a maquete e "Ver como lista" persiste', async ({ pa
   await expect(maquete).toBeVisible({ timeout: 60_000 });
   // o 3D é decorativo: o canvas fica escondido do leitor de tela
   await expect(page.locator('[aria-hidden="true"] canvas')).toHaveCount(1);
-  // as pílulas em HTML por cima da cena
-  await expect(page.locator('[data-world-hud]').getByText('Parque')).toBeVisible();
+  // as pílulas em HTML por cima da cena; tocar numa abre a folha da parada (fase 14)
+  const hud = page.locator('[data-world-hud]');
+  await expect(hud.getByText('Parque')).toBeVisible();
+  await hud.getByRole('button', { name: /^Parque/ }).click();
+  const folha = page.getByRole('dialog', { name: 'Parque' });
+  await expect(folha).toBeVisible();
+  await expect(folha).toContainText('Natureza · Dia 1 · 2ª parada');
+  await expect(folha.getByRole('link', { name: 'Ver no roteiro' })).toBeVisible();
+  await expect(folha.getByRole('button', { name: 'Gasto' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(folha).toBeHidden();
 
   // a lista do dia não está na tela: entra no lugar da maquete pelo botão do topo
   await expect(page.getByRole('list', { name: 'Trilha do dia' })).toHaveCount(0);
@@ -88,4 +97,12 @@ test('?render=list força a lista, sem canvas e sem o botão de alternar', async
   await expect(page.getByRole('list', { name: 'Trilha do dia' })).toBeVisible();
   await expect(page.locator('canvas')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Ver a maquete' })).toHaveCount(0);
+
+  // a linha da lista abre a mesma folha da parada
+  await page.getByRole('button', { name: 'Saída de casa', exact: true }).click();
+  const folha = page.getByRole('dialog', { name: 'Saída de casa' });
+  await expect(folha).toBeVisible();
+  await expect(folha).toContainText('Origem · Dia 1 · saída');
+  await page.keyboard.press('Escape');
+  await expect(folha).toBeHidden();
 });

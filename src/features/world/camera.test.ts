@@ -120,7 +120,7 @@ describe('a câmera que segue o carro', () => {
     expect(followDistance(null, false)).toBe(FOLLOW_NEAR);
     expect(followDistance(100, true)).toBe(FOLLOW_NEAR);
     expect(followDistance(10, false)).toBe(FOLLOW_NEAR);
-    expect(followDistance(80, false)).toBeCloseTo(80 * FOLLOW_GAP_K, 6);
+    expect(followDistance(50, false)).toBeCloseTo(50 * FOLLOW_GAP_K, 6);
     expect(followDistance(500, false)).toBe(FOLLOW_FAR);
     const far = followCamera({ layout: flat, s: 0, nextS: 500, parked: false });
     expect(far.distance).toBe(FOLLOW_FAR);

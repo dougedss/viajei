@@ -688,13 +688,19 @@ function appGastos(r: RoadRun): Promise<Check> {
   const page = r.page;
   return r.run(
     'app_gastos',
-    '"+ Gasto" na cascata: R$ 85 em Atrações, e a barra âmbar em 85% do orçamento',
+    '"+ Gasto" na folha da cascata: R$ 85 em Atrações, e a barra âmbar em 85% do orçamento',
     [
       [
-        'o "+ Gasto" já vem com a parada e Atrações',
+        'o "+ Gasto" da folha da parada já vem com a parada e Atrações',
         async () => {
+          // a folha da parada abre pela linha da lista (fase 14): o gasto acontece na parada
           await r.goA(`${r.trip(estrada.trip)}?render=list`);
-          await page.getByRole('button', { name: 'Gasto', exact: true }).click({ timeout: SLOW });
+          await page
+            .getByRole('button', { name: ROAD.estrada.nature, exact: true })
+            .click({ timeout: SLOW });
+          const folha = page.getByRole('dialog', { name: ROAD.estrada.nature });
+          await folha.waitFor();
+          await folha.getByRole('button', { name: 'Gasto', exact: true }).click();
           const sheet = page.getByRole('dialog', { name: 'Novo gasto' });
           await sheet.waitFor();
           const pressed = await sheet

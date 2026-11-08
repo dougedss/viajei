@@ -4,6 +4,7 @@ import { readPlace, type PlaceReading } from '@/lib/geo/index.ts';
 import type { DayRoute } from '@/lib/db/schema.ts';
 import { makeStop } from '@/test/factories.ts';
 import { gemeoStops } from '@/test/fixtures/dia-gemeo.ts';
+import { MINIATURE_BOX } from '@/art/stops/types.ts';
 import {
   buildLayout,
   fitCamera,
@@ -120,9 +121,21 @@ describe('layout com rota real (dia 1 do seed)', () => {
     }
   });
 
-  it('hotel vira miniatura e o toque entra como acidente', () => {
-    expect(layout.nodes[2]?.touch).toBe('hotel');
-    expect(layout.features.some((f) => f.kind === 'hotel')).toBe(true);
+  it('cada parada vira uma miniatura do tipo, fora da estrada e do lado de fora do S', () => {
+    const minis = layout.features.filter((f) => f.kind === 'miniature');
+    expect(minis.map((m) => m.stop)).toEqual(['origin', 'nature', 'hotel', 'food']);
+    for (const node of layout.nodes) {
+      const m = minis.find((f) => f.stop_id === node.stop_id)!;
+      // do lado de fora do S, com a caixa inteira fora da estrada
+      expect(Math.sign(m.x - node.position[0])).toBe(node.side);
+      const box = MINIATURE_BOX[m.stop];
+      expect(Math.abs(m.x - node.position[0]) - box.d / 2).toBeGreaterThan(layout.roadHalfWidth);
+      // virada para a estrada: a frente (+z local) aponta para o lado oposto ao de fora
+      expect(Math.sign(Math.sin(m.angle))).toBe(-node.side);
+    }
+    // as quadras só em volta do hotel e do restaurante (cidade, hotel e comida)
+    const blocks = layout.features.filter((f) => f.kind === 'blocks');
+    expect(blocks).toHaveLength(2);
     expect(layout.features.some((f) => f.kind === 'lake')).toBe(false);
   });
 
@@ -202,8 +215,8 @@ describe('layout sem rota', () => {
     expect(layout.fractionToS(1)).toBeCloseTo(layout.nodes[3]?.s ?? -1, 6);
   });
 
-  it('planta o lago, os parreirais e a miniatura do hotel ao lado dos nós', () => {
-    expect(layout.nodes.map((n) => n.touch)).toEqual([null, 'lake', 'vineyard', 'hotel']);
+  it('planta o lago e os parreirais ao lado dos nós', () => {
+    expect(layout.nodes.map((n) => n.touch)).toEqual([null, 'lake', 'vineyard', null]);
     const lake = layout.features.find((f) => f.kind === 'lake');
     expect(lake && layout.terrainAt(lake.x, lake.z).water).toBe('lake');
     // o lago fica do lado de fora do S, longe da estrada

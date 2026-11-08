@@ -1,21 +1,35 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { BookOpen, CalendarOff, SlidersHorizontal, Star, Sun, Ticket } from 'lucide-react';
+import {
+  BookOpen,
+  CalendarOff,
+  Check,
+  Plus,
+  SlidersHorizontal,
+  Star,
+  Sun,
+  Ticket,
+} from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useLocation, useParams } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 import { NotFound } from '@/app/NotFound.tsx';
 import { Splash } from '@/app/Splash.tsx';
+import { Button } from '@/components/ui/Button.tsx';
 import { ButtonLink } from '@/components/ui/ButtonLink.tsx';
 import { EmptyState } from '@/components/ui/EmptyState.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { QuestChecks } from '@/features/checklists/components/QuestChecks.tsx';
 import { useTripChecklist } from '@/features/checklists/queries.ts';
-import { useDayStops, useTripDays } from '@/features/itinerary/queries.ts';
+import { createExpense } from '@/features/expenses/actions.ts';
+import { ExpenseSheet, type ExpenseDraft } from '@/features/expenses/components/ExpenseSheet.tsx';
+import { categoryForStop } from '@/features/expenses/rules.ts';
+import { StopSheet } from '@/features/itinerary/components/StopSheet.tsx';
+import { useDayStops, useTripDays, useTripStops } from '@/features/itinerary/queries.ts';
 import { useDayRoute } from '@/features/itinerary/route.ts';
 import { legsByStop } from '@/features/itinerary/rules.ts';
 import { applyBadge, badgeCount } from '@/features/notifications/badge.ts';
 import { PushAskSheet } from '@/features/notifications/components/PushAskSheet.tsx';
 import { useTrip, useTripMembers, type MemberWithProfile } from '@/features/trips/queries.ts';
-import { todayISO, tripStatus } from '@/features/trips/rules.ts';
+import { formatMoney, todayISO, tripStatus } from '@/features/trips/rules.ts';
 import type { Profile, Trip } from '@/lib/db/schema.ts';
 import { cx } from '@/lib/cx.ts';
 import { useSession } from '@/lib/supabase/session.ts';
@@ -230,7 +244,13 @@ function DayView({
   const stops = loadedStops ?? [];
   const { route, status: routeStatus, loaded: routeLoaded } = useDayRoute(tripId, dayId, stops);
   const toast = useToast();
+  const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
+  // a folha da parada (a miniatura, a pílula ou a linha da lista) e o gasto que nasce dela
+  const [openStopId, setOpenStopId] = useState<string | null>(null);
+  const [expenseDraft, setExpenseDraft] = useState<ExpenseDraft | null>(null);
+  const tripDays = useTripDays(tripId) ?? [];
+  const tripStops = useTripStops(tripId);
   const state = dayState({ date: day.date }, stops, now);
   const legs = legsByStop(stops, route);
   const teamTracks = useTeamTracks(dayId, uid, members);
@@ -261,6 +281,9 @@ function DayView({
   const quests = (useTripChecklist(tripId) ?? []).filter(
     (i) => i.kind === 'quest' && i.status === 'active' && i.stop_id !== null,
   );
+  const team = members
+    .filter((m) => m.member.status === 'accepted')
+    .flatMap((m) => (m.profile ? [m.profile] : []));
   const [memoryStopId, setMemoryStopId] = useState<string | null>(null);
   const [reservationId, setReservationId] = useState<string | null>(null);
   // o momento calmo da tela: fechar a folha "Como foi?" (até o próximo Partiu!). Os cartões que já
@@ -403,6 +426,9 @@ function DayView({
   const prompts = pendingPrompts(stops, answered, dismissedPrompts, sheetStop?.id ?? null);
   const promptStop = prompts[0] ?? null;
   const openReservation = reservations.find((r) => r.id === reservationId) ?? null;
+  const openStop = openStopId ? (stops.find((s) => s.id === openStopId) ?? null) : null;
+  const openStopIndex = openStop ? stops.findIndex((s) => s.id === openStop.id) : -1;
+  const dayIndex = tripDays.findIndex((d) => d.id === dayId);
   const cached = new Set(localBlobs);
   const dayStopIds = new Set(stops.map((s) => s.id));
   const reviewPhotos: ReviewPhoto[] = photos
@@ -502,6 +528,7 @@ function DayView({
             onEventsOwner={setOwner}
             stopExtras={stopExtras}
             reviewPhotos={reviewPhotos}
+            onOpenStop={setOpenStopId}
             weather={{ summary: daySummary(forecast), stops: forecast?.stops ?? {} }}
           />
         )}
@@ -594,6 +621,79 @@ function DayView({
         </div>
       </div>
 
+      {/* a folha da parada, por cima do canvas: a mesma do mapa 2D, mais Chegamos! e o gasto */}
+      <StopSheet
+        stop={openStop}
+        tripId={tripId}
+        day={{ id: dayId, index: Math.max(0, dayIndex) }}
+        position={openStopIndex >= 0 ? openStopIndex + 1 : null}
+        weather={{ entry: forecast, updatedAt: weather.updatedAt }}
+        onClose={() => setOpenStopId(null)}
+        actions={
+          openStop ? (
+            <div className="flex flex-wrap gap-2">
+              {active && state.arriveAvailable && state.next?.id === openStop.id ? (
+                <Button
+                  size="md"
+                  className="flex-1"
+                  loading={busy}
+                  onClick={() => {
+                    setOpenStopId(null);
+                    run(
+                      `Chegamos: ${openStop.name}`,
+                      () => arrive(state, uid),
+                      arriveSeen,
+                      'arrive',
+                    );
+                  }}
+                >
+                  <Check className="size-5" aria-hidden="true" />
+                  Chegamos!
+                </Button>
+              ) : null}
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={() => {
+                  setOpenStopId(null);
+                  setExpenseDraft({
+                    date: day.date,
+                    stop_id: openStop.id,
+                    category: categoryForStop(openStop.kind),
+                  });
+                }}
+              >
+                <Plus className="size-5" aria-hidden="true" />
+                Gasto
+              </Button>
+            </div>
+          ) : null
+        }
+      />
+      <ExpenseSheet
+        open={expenseDraft ? { draft: expenseDraft } : null}
+        trip={trip}
+        days={tripDays}
+        stops={tripStops}
+        team={team}
+        uid={uid}
+        onClose={() => setExpenseDraft(null)}
+        onSave={(values) => {
+          setExpenseDraft(null);
+          void createExpense(tripId, uid, values).then((id) => {
+            void gainXp(uid, 'expense_logged', id, XP_POINTS.expense_logged, null);
+            toast.show({
+              title: 'Gasto lançado',
+              description: formatMoney(values.amount),
+              kind: 'ok',
+              action: {
+                label: 'Ver gastos',
+                onClick: () => void navigate(`/viagens/${tripId}/gastos?abrir=${id}`),
+              },
+            });
+          });
+        }}
+      />
       <HowWasItSheet
         tripId={tripId}
         stop={sheetStop}

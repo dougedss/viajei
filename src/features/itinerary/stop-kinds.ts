@@ -1,4 +1,4 @@
-import { STOP_KINDS, type StopKind } from '@shared/constants.ts';
+import { isDepartureKind, STOP_KINDS, type StopKind } from '@shared/constants.ts';
 
 /** Classes completas, para o Tailwind enxergar cada cor de tipo de parada. */
 export const KIND_TEXT: Record<StopKind, string> = {
@@ -30,4 +30,10 @@ export function asStopKind(value: string): StopKind {
 
 export function kindLabel(kind: string): string {
   return STOP_KINDS[asStopKind(kind)].label;
+}
+
+/** "saída" para a origem e o deslocamento; "3ª parada" para as demais (a posição na lista do dia). */
+export function stopRole(kind: string, position: number | null): string {
+  if (isDepartureKind(kind)) return 'saída';
+  return position === null ? 'parada' : `${String(position)}ª parada`;
 }

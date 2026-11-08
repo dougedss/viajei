@@ -73,9 +73,12 @@ jobs:
           LAB_BRANCH: ${{ github.ref_name }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 
+      # sempre: além dos prints das falhas e dos relatórios das medições, a captura da maquete com
+      # as miniaturas (fase 14), para o Douglas ver
       - uses: actions/upload-artifact@v4
-        if: failure() || inputs.tarefa == 'medir-desempenho' || inputs.tarefa == 'medir-sync'
+        if: always()
         with:
           name: laboratorio
           path: lab-artifacts
           retention-days: 14
+          if-no-files-found: ignore

@@ -1,4 +1,4 @@
-import { isDepartureKind } from '@shared/constants.ts';
+import { stopRole } from '@/features/itinerary/stop-kinds.ts';
 import { waypointsHashOf } from '@/features/itinerary/route-cache.ts';
 import { activeStops, isLocated, type LocatedStop } from '@/features/itinerary/rules.ts';
 import { parseTrackPoints } from '@/features/travel-mode/track.ts';
@@ -198,5 +198,5 @@ export function initialSelection(
 
 /** O rótulo da parada na folha: "3ª parada" ou "saída", como a lista diria. */
 export function pinRole(pin: Pick<MapPin, 'number' | 'stop'>): string {
-  return isDepartureKind(pin.stop.kind) ? 'saída' : `${String(pin.number)}ª parada`;
+  return stopRole(pin.stop.kind, pin.number);
 }

@@ -43,6 +43,8 @@ export type WorldSlotProps = {
   stopExtras?: ((stop: Stop) => ReactNode) | undefined;
   /** as fotos de memória com arquivo no aparelho, para o "Rever o dia" */
   reviewPhotos?: readonly ReviewPhoto[] | undefined;
+  /** tocar numa parada (a miniatura, a pílula, a linha da lista) abre a folha dela (fase 14) */
+  onOpenStop?: ((stopId: string) => void) | undefined;
   /**
    * A previsão do dia guardada no aparelho (funciona sem rede): o chip do clima na abertura e na faixa
    * de cima, e a chuva nas pílulas. Só HTML: nada do tempo entra na cena 3D.
@@ -90,7 +92,8 @@ export function ListView({
   route,
   notice,
   stopExtras,
-}: Pick<WorldSlotProps, 'state' | 'legs' | 'profiles' | 'route' | 'stopExtras'> & {
+  onOpenStop,
+}: Pick<WorldSlotProps, 'state' | 'legs' | 'profiles' | 'route' | 'stopExtras' | 'onOpenStop'> & {
   notice?: string;
 }) {
   return (
@@ -101,6 +104,7 @@ export function ListView({
       route={route}
       notice={notice}
       stopExtras={stopExtras}
+      onOpenStop={onOpenStop}
       bottomInset={NOW_BAR_INSET}
     />
   );

@@ -22,7 +22,7 @@ import { heightAt, PATCH, sampleField, type HeightField } from './heightfield.ts
  * A decoração instanciada por cenário, portada do protótipo: torres e quadras na cidade (densidade
  * pela população), casas e árvores no interior, talhões, silos e lavouras na plantação, pinheiros e
  * rochas na serra, coqueiros, guarda-sóis e casas claras na praia; mais os toques do roteiro:
- * parreirais em fileiras ao redor da vinícola e a miniatura do hotel. Cada instância é gravada em
+ * parreirais em fileiras ao redor da vinícola (as miniaturas das paradas são de `art/stops`). Cada instância é gravada em
  * ordem embaralhada: o nível Leve reduz o `count` e afina o cenário por igual. Fase 14: o relevo
  * quieto, sem enfeite longe da estrada (`PROP_REACH`), e prédios só em volta das paradas de cidade,
  * hotel e comida (os acidentes `blocks` do layout).
@@ -199,21 +199,6 @@ export function buildProps(
     up(new CylinderGeometry(0.03, 0.03, 1.3, 4), 0.65),
   ]);
   make('umbrella', umbGeo, new MeshStandardMaterial({ roughness: 0.8 }), 350, false);
-  make(
-    'hotel',
-    up(new BoxGeometry(3.2, 1, 2.2), 0.5),
-    new MeshStandardMaterial({ color: 0xf1ebe0, roughness: 0.8 }),
-    8,
-  );
-  const hotelRoof = new ConeGeometry(2.1, 0.8, 4);
-  hotelRoof.rotateY(Math.PI / 4);
-  hotelRoof.translate(0, 2.6, 0);
-  make(
-    'hotelRoof',
-    hotelRoof,
-    new MeshStandardMaterial({ color: 0x8f4a37, roughness: 0.9, flatShading: true }),
-    8,
-  );
 
   const towerCols = colors(['#d9dad4', '#c9c6bd', '#b7bcc4', '#e1d6c3', '#aab3bf', '#cfd6dd']);
   const wallCols = colors(['#f1ebe0', '#e8dcc7', '#d8d3c8', '#f4f0e8', '#dbc9b0']);
@@ -431,10 +416,6 @@ export function buildProps(
             place('post', x, ground(x, z) - 0.05, z, f.angle, 1, 1, 1);
         }
       }
-    } else if (f.kind === 'hotel') {
-      const y = ground(f.x, f.z);
-      place('hotel', f.x, y - 0.2, f.z, f.angle, 1, 2.1, 1);
-      place('hotelRoof', f.x, y - 0.2, f.z, f.angle, 1, 1, 1);
     }
   }
 

@@ -1,32 +1,27 @@
-import { ListOrdered, MapPinOff, WifiOff } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { MapPinOff, WifiOff } from 'lucide-react';
+import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { NotFound } from '@/app/NotFound.tsx';
 import { Splash } from '@/app/Splash.tsx';
 import { ButtonLink } from '@/components/ui/ButtonLink.tsx';
 import { EmptyState } from '@/components/ui/EmptyState.tsx';
 import { PageHeader } from '@/components/ui/PageHeader.tsx';
-import { Sheet } from '@/components/ui/Sheet.tsx';
 import { PERSON_COLORS } from '@shared/constants.ts';
 import { normalizeCar } from '@/features/garage/rules.ts';
-import { NavLinks } from '@/features/itinerary/components/StopCard.tsx';
+import { StopSheet } from '@/features/itinerary/components/StopSheet.tsx';
 import { useTripDays } from '@/features/itinerary/queries.ts';
 import { useMissingRoutes } from '@/features/itinerary/route.ts';
-import { kindLabel } from '@/features/itinerary/stop-kinds.ts';
 import { asPersonColor } from '@/features/profile/queries.ts';
 import { useNow } from '@/features/travel-mode/hooks.ts';
 import { todayISO } from '@/features/trips/rules.ts';
 import { useTrip, useTripMembers } from '@/features/trips/queries.ts';
-import { StopForecast } from '@/features/weather/components/StopForecast.tsx';
-import { WeatherCredit } from '@/features/weather/components/WeatherCredit.tsx';
 import { useTripWeather } from '@/features/weather/queries.ts';
-import { stopForecast } from '@/features/weather/rules.ts';
 import { weekdayShortOf } from '@/features/weather/format.ts';
 import { useOnline } from '@/lib/db/connectivity.ts';
 import { cx } from '@/lib/cx.ts';
 import { useReducedMotion } from '@/lib/reduced-motion.ts';
 import { useSession } from '@/lib/supabase/session.ts';
-import { formatStamp, hhmm } from '@/lib/time/index.ts';
+import { formatStamp } from '@/lib/time/index.ts';
 import TripMap, { type TrackLine } from '../components/TripMap.tsx';
 import { useMapStops, useMapTracks, useTripRoutes } from '../queries.ts';
 import {
@@ -34,7 +29,6 @@ import {
   initialSelection,
   lastSeen,
   mapDay,
-  pinRole,
   trackLines,
   visiblePoints,
   type MapDay,
@@ -78,18 +72,16 @@ export default function MapaPage() {
   // com rede, as rotas que faltam (ou que não valem mais para as paradas de agora)
   useMissingRoutes(tripId, dayData, routes, days !== undefined && stops !== undefined);
 
-  const onReady = useCallback(() => {
+  // o React Compiler memoiza estes dois (a memoização à mão deixou de casar com a dele na fase 14)
+  const onReady = () => {
     setReady(true);
     if (import.meta.env.DEV) {
       console.info(
         `viajei: mapa no primeiro quadro em ${String(Math.round(performance.now() - mountedAt))} ms`,
       );
     }
-  }, [mountedAt]);
-  const onSelect = useCallback(
-    (stopId: string, dayId: string) => setSelected({ stopId, dayId }),
-    [],
-  );
+  };
+  const onSelect = (stopId: string, dayId: string) => setSelected({ stopId, dayId });
 
   if (trip === undefined || days === undefined || stops === undefined) return <Splash />;
   if (trip === null) return <NotFound />;
@@ -243,53 +235,18 @@ export default function MapaPage() {
         </p>
       ) : null}
 
-      <Sheet
-        open={pick !== undefined}
+      {/* a mesma folha da parada que a maquete abre (fase 14) */}
+      <StopSheet
+        stop={pick?.stop ?? null}
+        tripId={trip.id}
+        day={pickDay ? { id: pickDay.day_id, index: pickDay.index } : null}
+        position={pick?.number ?? null}
+        weather={{
+          entry: pickDay ? weather.entries.get(pickDay.day_id) : undefined,
+          updatedAt: weather.updatedAt,
+        }}
         onClose={() => setSelected(null)}
-        title={pick?.stop.name ?? ''}
-        {...(pick && pickDay
-          ? {
-              description: `${kindLabel(pick.stop.kind)} · Dia ${String(pickDay.index + 1)} · ${pinRole(pick)}`,
-            }
-          : {})}
-      >
-        {pick && pickDay ? (
-          <div className="grid gap-3" data-map-sheet={pick.stop.id}>
-            {pick.stop.time || pick.stop.closes_at ? (
-              <p className="flex flex-wrap items-baseline gap-x-2 text-[16px]">
-                {pick.stop.time ? (
-                  <span className="num text-[22px] font-semibold">{hhmm(pick.stop.time)}</span>
-                ) : null}
-                {pick.stop.closes_at ? (
-                  <span className="text-ink-2">fecha às {hhmm(pick.stop.closes_at)}</span>
-                ) : null}
-              </p>
-            ) : null}
-            {pick.stop.address ? (
-              <p className="text-[15px] text-ink-2">{pick.stop.address}</p>
-            ) : null}
-            {pick.stop.time ? (
-              <StopForecast
-                forecast={stopForecast(weather.entries.get(pickDay.day_id), pick.stop.id)}
-                at={`às ${hhmm(pick.stop.time)}`}
-                className="text-[15px]"
-              />
-            ) : null}
-            <NavLinks stop={pick.stop} />
-            <ButtonLink
-              to={`/viagens/${trip.id}/roteiro/${pickDay.day_id}`}
-              variant="secondary"
-              size="md"
-            >
-              <ListOrdered className="size-5" aria-hidden="true" />
-              Ver no roteiro
-            </ButtonLink>
-            {stopForecast(weather.entries.get(pickDay.day_id), pick.stop.id) ? (
-              <WeatherCredit updatedAt={weather.updatedAt} />
-            ) : null}
-          </div>
-        ) : null}
-      </Sheet>
+      />
     </div>
   );
 }

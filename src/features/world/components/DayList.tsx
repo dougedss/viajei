@@ -19,11 +19,22 @@ type Props = {
   /** um aviso discreto quando a maquete não pôde ser desenhada */
   notice?: string | undefined;
   stopExtras?: ((stop: Stop) => ReactNode) | undefined;
+  /** tocar no nome de uma parada abre a folha dela */
+  onOpenStop?: ((stopId: string) => void) | undefined;
   /** o espaço reservado embaixo para a barra do "Agora", em px */
   bottomInset: number;
 };
 
-export function DayList({ state, legs, profiles, route, notice, stopExtras, bottomInset }: Props) {
+export function DayList({
+  state,
+  legs,
+  profiles,
+  route,
+  notice,
+  stopExtras,
+  onOpenStop,
+  bottomInset,
+}: Props) {
   const done = progress(state.stops);
   const distance = route ? route.legs.reduce((acc, l) => acc + l.distance_m, 0) : null;
   const duration = route ? route.legs.reduce((acc, l) => acc + l.duration_s, 0) / 60 : null;
@@ -51,7 +62,13 @@ export function DayList({ state, legs, profiles, route, notice, stopExtras, bott
       {state.stops.length === 0 ? (
         <p className="mv-text-17 text-ink-2">Nenhuma parada neste dia.</p>
       ) : (
-        <TrailList state={state} legs={legs} profiles={profiles} stopExtras={stopExtras} />
+        <TrailList
+          state={state}
+          legs={legs}
+          profiles={profiles}
+          stopExtras={stopExtras}
+          onOpenStop={onOpenStop}
+        />
       )}
       {route && distance !== null && duration !== null ? (
         <p className="border-t border-line pt-3 mv-text-15 text-ink-2">
