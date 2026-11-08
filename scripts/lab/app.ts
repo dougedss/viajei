@@ -788,7 +788,15 @@ export function appMaquete(app: App): Promise<Check> {
         'as pílulas das paradas em cena por cima dela',
         async () => {
           // a câmera segue o carro (fase 14, D177): só os nós em cena têm pílula. Depois do
-          // `app_reabrir` o carro está parado no destino, e a origem ficou para trás, fora da cena
+          // `app_reabrir` o carro está parado no destino, e a origem ficou para trás, fora da cena.
+          // O cartão da vez (o "Como foi?" daquela chegada) cobre o pé da maquete, onde o carro e a
+          // pílula do destino estão, e nenhuma pílula fica por baixo do que está sobre a maquete
+          // (D177): dispensa-se o cartão antes, como a pessoa faria
+          const dismiss = page.getByRole('button', { name: 'Dispensar' });
+          if (await dismiss.isVisible()) {
+            await dismiss.click();
+            await dismiss.waitFor({ state: 'detached' });
+          }
           await hud.getByText(target.destinationName).first().waitFor();
           info.pilulas_em_cena = await hud.locator('[data-pill]:not([hidden])').count();
           // a captura da maquete, com as miniaturas e os ícones das pílulas lado a lado, para o
@@ -801,13 +809,6 @@ export function appMaquete(app: App): Promise<Check> {
       [
         'tocar na pílula abre a folha da parada',
         async () => {
-          // o cartão da vez (o "Como foi?" da chegada do `app_reabrir`) cobre o pé da maquete, onde
-          // a pílula do destino está: dispensa-se antes de tocar, como a pessoa faria
-          const dismiss = page.getByRole('button', { name: 'Dispensar' });
-          if (await dismiss.isVisible()) {
-            await dismiss.click();
-            await dismiss.waitFor({ state: 'detached' });
-          }
           await hud
             .getByRole('button', { name: new RegExp(`^${esc(target.destinationName)}`) })
             .click();
