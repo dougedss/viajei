@@ -36,6 +36,25 @@ export type ProgressContext = {
 };
 
 const SLOW = 90_000;
+
+/**
+ * A fila do aparelho (a outbox do Dexie `viajei`), para a falha dizer por que algo não subiu: a
+ * tabela, o estado, as tentativas, quando volta a tentar e o último erro do servidor. Sem valores.
+ */
+const OUTBOX = `async () => {
+  const db = await new Promise((resolve, reject) => {
+    const req = indexedDB.open('viajei');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  const rows = await new Promise((resolve) => {
+    const all = db.transaction('outbox').objectStore('outbox').getAll();
+    all.onsuccess = () => resolve(all.result);
+    all.onerror = () => resolve([]);
+  });
+  db.close();
+  return rows.map((o) => [o.table, o.op, o.state, o.attempts, Math.round((o.next_at - Date.now()) / 1000) + 's', o.last_error].join(' '));
+}`;
 const removedAt = () => new Date().toISOString();
 const tomb =
   (table: string) =>
@@ -79,7 +98,7 @@ async function runSteps(
       done.push({ step, ok: true });
     } catch (err) {
       const message = (err instanceof Error ? err.message : String(err)).split('\n')[0] ?? '';
-      done.push({ step, ok: false, detail: message.slice(0, 300) });
+      done.push({ step, ok: false, detail: message.slice(0, 600) });
       let i = 0;
       for (const page of pages()) {
         i++;
@@ -343,15 +362,23 @@ export async function appProgressao(ctx: ProgressContext, today: string): Promis
             const card = pa.getByRole('dialog', { name: 'Primeiro pé na estrada' });
             await card.getByRole('button', { name: 'Usar no carro' }).click();
             await card.waitFor({ state: 'detached' });
-            await until(
-              async () =>
-                must(
-                  await a.client.from('trips').select('car_accessories').eq('id', trip),
-                  'carro da viagem',
-                )[0]?.car_accessories ?? [],
-              (acc) => acc.includes('rack'),
-              'o rack não chegou ao carro no servidor',
-            );
+            try {
+              await until(
+                async () =>
+                  must(
+                    await a.client.from('trips').select('car_accessories').eq('id', trip),
+                    'carro da viagem',
+                  )[0]?.car_accessories ?? [],
+                (acc) => acc.includes('rack'),
+                'o rack não chegou ao carro no servidor',
+              );
+            } catch (err) {
+              const fila: unknown = await pa.evaluate(`(${OUTBOX})()`).catch(() => null);
+              const message = err instanceof Error ? err.message : String(err);
+              throw new Error(`${message}; a fila do aparelho: ${JSON.stringify(fila)}`, {
+                cause: err,
+              });
+            }
           },
         ],
         [
