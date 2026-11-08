@@ -21,9 +21,14 @@ const PARQUE = { latitude: -26.31, longitude: -50.144 };
 /** 40 m do Parque: dentro do raio de 150 m */
 const PARQUE_PERTO = { latitude: -26.31036, longitude: -50.144 };
 
-async function viagemDeHoje(userId: string): Promise<{ tripId: string; nome: string }> {
+/** A viagem de hoje: Casa → Parque; com `casaFeita`, a Casa já concluída e deixada há 30 min (na estrada). */
+async function viagemDeHoje(
+  userId: string,
+  { casaFeita = false }: { casaFeita?: boolean } = {},
+): Promise<{ tripId: string; nome: string }> {
   const tripId = uuidV4();
   const now = new Date().toISOString();
+  const before = new Date(Date.now() - 30 * 60_000).toISOString();
   const today = dateInSaoPaulo(0);
   const nome = `GPS ${String(Date.now())}`;
   await inserir('trips', [
@@ -50,6 +55,9 @@ async function viagemDeHoje(userId: string): Promise<{ tripId: string; nome: str
       travel_minutes_to_next: 60,
       lat: CASA.latitude,
       lng: CASA.longitude,
+      done_at: casaFeita ? before : null,
+      done_by: casaFeita ? userId : null,
+      departed_at: casaFeita ? before : null,
       updated_at: now,
     },
     {
@@ -136,6 +144,45 @@ test('com o mapa aberto, a posição marca Partiu! e Chegamos! sozinha, com Desf
     await expect(page.getByRole('button', { name: 'Chegamos!' })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('region', { name: 'Agora' })).not.toContainText('Dia concluído');
   });
+
+  await context.close();
+});
+
+test('ao reabrir no destino, "Usar posição" marca Chegamos! na hora, pela leitura única', async ({
+  browser,
+}: {
+  browser: Browser;
+}) => {
+  test.setTimeout(90_000);
+  const user = await criarUsuario('Gps');
+  // na estrada: a Casa concluída e deixada; o carro (o celular) já está no Parque
+  await viagemDeHoje(user.id, { casaFeita: true });
+  const context = await browser.newContext({
+    ...test.info().project.use,
+    geolocation: PARQUE,
+    permissions: ['geolocation'],
+  });
+  const page = await context.newPage();
+  await page.addInitScript(() => localStorage.setItem('viajei:world:render', 'list'));
+
+  await page.goto('/entrar');
+  await page.getByLabel('E-mail').fill(user.email);
+  await page.getByLabel('Senha', { exact: true }).fill(SENHA);
+  await page.getByRole('button', { name: 'Entrar' }).click();
+  await expect(page.getByRole('region', { name: 'Agora' })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('button', { name: 'Chegamos!' })).toBeVisible({ timeout: 15_000 });
+
+  // a leitura única ao permitir (o catch-up): no raio do Parque, Chegamos! na hora, com Desfazer; a
+  // presença de 3 min é do acompanhamento, que começa junto e não precisa esperar aqui
+  await page.getByRole('button', { name: 'Usar posição' }).click();
+  await expect(page.locator('[data-gps][data-read-at]')).toBeAttached({ timeout: 15_000 });
+  await expect(page.getByText('Chegamos: Parque', { exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByRole('button', { name: 'Desfazer' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Como foi Parque?' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Como foi Parque?' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Agora' })).toContainText('Dia concluído');
 
   await context.close();
 });

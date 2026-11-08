@@ -170,6 +170,7 @@ export function PositionLine({
   lowPower = false,
   denied = false,
   fixAt = null,
+  readAt = null,
 }: {
   position: CatchupPosition | null;
   tracking?: boolean;
@@ -178,12 +179,15 @@ export function PositionLine({
   denied?: boolean;
   /** a hora da última leitura do acompanhamento (só como marca, para os testes saberem que ela chegou) */
   fixAt?: number | null;
+  /** a hora da leitura única do catch-up (ao abrir, ao permitir), como diagnóstico, igual a `fixAt` */
+  readAt?: number | null;
 }) {
   const gps = tracking ? (
     <span
       className="inline-flex items-center gap-1 font-semibold text-on-time-ink"
       data-gps
       data-fix-at={fixAt ?? undefined}
+      data-read-at={readAt ?? undefined}
     >
       <span className="size-2 rounded-full bg-on-time" aria-hidden="true" />
       GPS{lowPower ? ' econômico' : ''}

@@ -653,6 +653,7 @@ function DayView({
                   lowPower={live.lowPower}
                   denied={live.denied}
                   fixAt={live.fix?.t ?? null}
+                  readAt={cu.readFix?.t ?? null}
                 />
               ) : null
             }
