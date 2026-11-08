@@ -73,12 +73,14 @@ export function useCatchup(args: CatchupArgs): Catchup {
   const [gpsFix, setGpsFix] = useState<Fix | null>(null);
   const lastRunRef = useRef(0);
   const seenRef = useRef(new Set<string>());
-  const latest = useRef({ state, route });
-  useEffect(() => {
-    latest.current = { state, route };
-  }, [state, route]);
-
   const fix = liveFix && (!gpsFix || liveFix.t >= gpsFix.t) ? liveFix : gpsFix;
+  // o que o `save` lê sem entrar nas dependências dele: com `fix` nelas, cada leitura do
+  // acompanhamento refazia o efeito de montagem, que chama `run()`, que lia a posição de novo (uma
+  // leitura única nova a cada leitura do GPS), e o Chegamos! do catch-up disparava sem os 3 min
+  const latest = useRef({ state, route, fix });
+  useEffect(() => {
+    latest.current = { state, route, fix };
+  }, [state, route, fix]);
 
   // a posição e as "passadas" pela leitura mais nova; o Chegamos! automático só pela leitura única
   // ao abrir: com o mapa aberto, quem decide a chegada é a presença de 3 min (`live-rules.ts`), e
@@ -110,18 +112,18 @@ export function useCatchup(args: CatchupArgs): Catchup {
   );
 
   const save = useCallback(async () => {
-    const { state: s, route: r } = latest.current;
+    const { state: s, route: r, fix: f } = latest.current;
     // antes da primeira leitura, ou com as paradas ainda por carregar, o snapshot seria vazio e apagaria o anterior
     if (!loadedRef.current || s.stops.length === 0) return;
     const fraction =
-      r && fix
-        ? (catchup({ stops: s.stops, at: s.at, next: s.next, route: r, fix, teamTracks: [] })
+      r && f
+        ? (catchup({ stops: s.stops, at: s.at, next: s.next, route: r, fix: f, teamTracks: [] })
             .position?.fraction ?? null)
         : null;
     await saveTravelState(
       snapshotTravelState(dayId, tripId, s.stops, s.at, fraction, [...seenRef.current], new Date()),
     );
-  }, [dayId, tripId, fix]);
+  }, [dayId, tripId]);
 
   /** Lê o estado anterior e, com permissão, a posição. Sem setState: quem chama aplica no `.then`. */
   const reading = useCallback(async (): Promise<Reading | null> => {
