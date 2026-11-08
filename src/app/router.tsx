@@ -1,6 +1,5 @@
 import type { ComponentType } from 'react';
 import { createBrowserRouter } from 'react-router';
-import { AppLayout } from './layouts/AppLayout.tsx';
 import { AuthLayout } from './layouts/AuthLayout.tsx';
 import { NotFound } from './NotFound.tsx';
 import { RequireSession } from './RequireSession.tsx';
@@ -39,9 +38,18 @@ export const router = createBrowserRouter([
         element: <RequireSession />,
         children: [
           {
-            element: <AppLayout />,
+            // o layout de quem entrou (cabeçalho, motor de sync, Dexie, progressão, fila de fotos)
+            // também é lazy: a tela de entrar não o baixa. O roteador carrega em paralelo o layout e a
+            // tela, então quem já entrou não espera um depois do outro.
+            lazy: async () => ({ Component: (await import('./layouts/AppLayout.tsx')).AppLayout }),
             children: [
+              // `/` é a abertura do app (durante a viagem, cai no Modo Viagem: D33); `/viagens` é a
+              // lista, que nunca redireciona (os links "Início" e "Voltar" apontam para ela)
               { path: '/', lazy: page(() => import('@/features/trips/routes/HomePage.tsx')) },
+              {
+                path: '/viagens',
+                lazy: page(() => import('@/features/trips/routes/HomePage.tsx')),
+              },
               {
                 path: '/viagens/nova',
                 lazy: page(() => import('@/features/trips/routes/NovaViagemPage.tsx')),

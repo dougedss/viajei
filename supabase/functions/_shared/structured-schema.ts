@@ -15,7 +15,7 @@ import { z } from 'zod';
  * da IA que vira `null`, em `import-schema.ts`) entra pelo lado de lá, e a união que ele evita não
  * conta no limite de 16 da API.
  */
-export type JsonSchemaNode = { [key: string]: unknown };
+export type JsonSchemaNode = Record<string, unknown>;
 
 const FORMATS = new Set([
   'date-time',

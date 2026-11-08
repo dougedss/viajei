@@ -1,5 +1,7 @@
 # Teste manual · Fase 11 (mapa e clima)
 
+> **Para o teste nos aparelhos, use o [roteiro final](teste-final.md).** Este roteiro da fase 11 fica como registro; tudo dele está lá.
+
 Roteiro para o iPhone (primeiro) e para um Android. Aqui fica só o que um navegador de laboratório
 não julga: o dedo no mapa (pinça e arrastar), a atribuição com a barra de baixo e a área segura de
 verdade, o mapa no tema escuro, o mapa sem rede depois de visto num aparelho de verdade, o clima

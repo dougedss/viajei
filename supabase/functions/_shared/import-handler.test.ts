@@ -57,7 +57,10 @@ function fakeAnthropic(recording: Recording, options: FakeOptions = {}) {
     const abortError = () => new Anthropic.APIUserAbortError();
     const wait = () =>
       new Promise<void>((resolve, reject) => {
-        if (signal.aborted) return reject(abortError());
+        if (signal.aborted) {
+          reject(abortError());
+          return;
+        }
         const t = setTimeout(resolve, options.delay ?? 0);
         signal.addEventListener('abort', () => {
           clearTimeout(t);

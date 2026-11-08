@@ -80,7 +80,7 @@ export async function verifyVapidAuthorization(
   const claims = readClaims(decodeJson(p));
   if (head?.alg !== 'ES256') return { ok: false, error: 'alg não é ES256', claims };
 
-  let valid = false;
+  let valid: boolean;
   try {
     const key = await subtle.importKey('raw', fromBase64Url(parsed.k), ECDSA, false, ['verify']);
     valid = await subtle.verify(SIGN, key, fromBase64Url(s), encoder.encode(`${h}.${p}`));

@@ -14,7 +14,8 @@ jobs:
   verificar:
     name: lint, tipos, Vitest, pgTAP, build e Playwright
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # o WebKit, o fluxo principal, o uso sem sinal e a acessibilidade (fase 12) somaram uns 10 min
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
 
@@ -35,6 +36,10 @@ jobs:
 
       - name: Supabase local (Postgres, Auth, PostgREST, Realtime, Storage)
         run: pnpm exec supabase start -x studio,imgproxy,logflare,vector,mailpit
+
+      # os avisos do plpgsql_check nas funções do banco (fase 12, D163): o primeiro aviso reprova
+      - name: Lint do banco
+        run: pnpm exec supabase db lint --level warning --fail-on warning --schema public,private
 
       # uma falha do pgTAP não esconde o resto da volta: a CI segue e falha no fim (passo abaixo)
       - name: pgTAP
@@ -78,9 +83,14 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # nenhum segredo no client (regra 9): chave secreta do Supabase, da Anthropic, do ORS, JWT de
+      # service_role ou chave privada (VAPID). Diz o arquivo e o tipo, nunca o valor.
+      - name: Segredos no dist
+        run: node scripts/security/scan-dist.ts dist
+
       - name: Playwright
         run: |
-          pnpm exec playwright install --with-deps chromium
+          pnpm exec playwright install --with-deps chromium webkit
           pnpm test:e2e
 
       - name: Tipos do banco batem com o commit
@@ -95,8 +105,9 @@ jobs:
           echo "::error::o pgTAP falhou: veja o passo pgTAP acima"
           exit 1
 
+      # também quando a volta é cancelada (o teto do job): o relatório diz onde ela parou
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: failure() || cancelled()
         with:
           name: playwright-report
           path: playwright-report

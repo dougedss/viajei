@@ -124,7 +124,7 @@ export function TripShortcuts({
           >
             <t.icon className="size-5" />
           </span>
-          <b className="text-[13px] font-semibold">{t.label}</b>
+          <b className="text-[13px] font-semibold">{t.label}</b>{' '}
           <small className="-mt-0.5 font-num text-[13px] font-semibold text-ink-2">{t.value}</small>
         </Link>
       ))}

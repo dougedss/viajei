@@ -69,16 +69,16 @@ export function TrailList({ state, legs, profiles, stopExtras }: Props) {
             <div className={`min-w-0 pb-1 ${status === 'skipped' ? 'opacity-60' : ''}`}>
               <p className="flex flex-wrap items-baseline gap-x-2">
                 {stop.time ? (
-                  <span className="num text-[20px] font-semibold">{hhmm(stop.time)}</span>
+                  <span className="num mv-text-20 font-semibold">{hhmm(stop.time)}</span>
                 ) : null}
                 <span
-                  className={`text-[17px] font-semibold ${status === 'skipped' ? 'line-through' : ''}`}
+                  className={`mv-text-17 font-semibold ${status === 'skipped' ? 'line-through' : ''}`}
                 >
                   {stop.name}
                 </span>
                 <span className="sr-only">, {STATUS_LABEL[status]}</span>
               </p>
-              <p className="text-[15px] text-ink-2">
+              <p className="mv-text-15 text-ink-2">
                 {status === 'done' && stop.done_at
                   ? `chegamos ${formatStamp(stop.done_at)}${by ? ` · ${by}` : ''}${
                       stop.departed_at ? ` · saímos ${formatStamp(stop.departed_at)}` : ''
@@ -92,13 +92,13 @@ export function TrailList({ state, legs, profiles, stopExtras }: Props) {
                         : ''}
               </p>
               {maps || waze ? (
-                <p className="flex gap-3 text-[15px] font-semibold text-accent-ink">
+                <p className="flex gap-3 mv-text-15 font-semibold text-accent-ink">
                   {maps ? (
                     <a
                       href={maps}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex min-h-10 items-center gap-1"
+                      className="inline-flex min-h-12 items-center gap-1"
                     >
                       <ExternalLink className="size-4" aria-hidden="true" />
                       Maps
@@ -109,7 +109,7 @@ export function TrailList({ state, legs, profiles, stopExtras }: Props) {
                       href={waze}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex min-h-10 items-center gap-1"
+                      className="inline-flex min-h-12 items-center gap-1"
                     >
                       <ExternalLink className="size-4" aria-hidden="true" />
                       Waze
@@ -122,7 +122,7 @@ export function TrailList({ state, legs, profiles, stopExtras }: Props) {
             {!isLast ? (
               <>
                 <span className="mx-auto h-full min-h-8 w-0.5 bg-line" aria-hidden="true" />
-                <p className="pb-3 text-[14px] text-ink-2">
+                <p className="pb-3 mv-text-14 text-ink-2">
                   {stop.travel_minutes_to_next !== null
                     ? formatDuration(stop.travel_minutes_to_next)
                     : leg

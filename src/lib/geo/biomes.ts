@@ -1,4 +1,5 @@
-import { biomes, type Polyline } from './data.ts';
+import { biomes } from './biomes-data.ts';
+import type { Polyline } from './polyline.ts';
 import type { BiomeCode } from './codec.ts';
 
 function inBbox(lng: number, lat: number, ring: Polyline): boolean {
@@ -35,4 +36,4 @@ export function biomeAt(lng: number, lat: number): BiomeCode | null {
   return null;
 }
 
-export { biomes } from './data.ts';
+export { biomes } from './biomes-data.ts';

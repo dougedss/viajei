@@ -168,7 +168,7 @@ function DiaryDaySection({
               <button
                 type="button"
                 onClick={() => onEdit(e.stop)}
-                className="inline-flex min-h-11 w-fit items-center gap-1.5 text-[15px] font-semibold text-accent-ink"
+                className="inline-flex min-h-12 w-fit items-center gap-1.5 text-[15px] font-semibold text-accent-ink"
               >
                 {mine ? (
                   <>
@@ -212,7 +212,7 @@ function MemoryBlock({
         <Avatar name={name} color={color} size="sm" />
         <span className="text-[15px] font-semibold">{name}</span>
         {memory.rating !== null ? (
-          <span className="ml-auto flex" aria-label={`${memory.rating} de 5`}>
+          <span className="ml-auto flex" role="img" aria-label={`${String(memory.rating)} de 5`}>
             {[1, 2, 3, 4, 5].map((n) => (
               <Star
                 key={n}

@@ -648,7 +648,7 @@ function TopBar({
       {timeRef ? <span className="font-num text-[15px] tabular-nums">0:15</span> : null}
       <Link
         to={`/viagens/${tripId}`}
-        className="grid size-10 place-items-center rounded-full bg-white/15"
+        className="grid size-12 place-items-center rounded-full bg-white/15"
         aria-label="Fechar a retrospectiva"
       >
         <X className="size-5" aria-hidden="true" />

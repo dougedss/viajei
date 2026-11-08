@@ -40,7 +40,7 @@ export function InstallCard({ lead, persistent = false, onDismiss }: Props) {
         type="button"
         aria-label="Agora não"
         onClick={dismiss}
-        className="absolute top-3 right-3 grid size-9 place-items-center rounded-full text-hud-muted"
+        className="absolute top-1 right-1 grid size-12 place-items-center rounded-full text-hud-muted"
       >
         <X className="size-4" aria-hidden="true" />
       </button>
@@ -49,10 +49,10 @@ export function InstallCard({ lead, persistent = false, onDismiss }: Props) {
           <Smartphone className="size-5" aria-hidden="true" />
         </span>
         <div className="grid gap-0.5">
-          <p className="font-num text-[20px] leading-tight font-semibold">
+          <p className="font-num mv-text-20 leading-tight font-semibold">
             Leve o Viajei na tela de início
           </p>
-          <p className="text-[14px] text-hud-muted">
+          <p className="mv-text-14 text-hud-muted">
             {lead ??
               'Instalado, ele abre sem sinal, guarda a viagem com segurança e recebe os avisos de hora de sair.'}
           </p>
@@ -78,7 +78,7 @@ export function InstallCard({ lead, persistent = false, onDismiss }: Props) {
         title="Adicionar à Tela de Início"
         description="No Safari, são dois toques."
       >
-        <ol className="grid gap-3 text-[16px]">
+        <ol className="grid gap-3 mv-text-16">
           <li className="flex items-center gap-3">
             <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-ink">
               <Share className="size-5" aria-hidden="true" />

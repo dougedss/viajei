@@ -11,7 +11,6 @@ import { EmptyState } from '@/components/ui/EmptyState.tsx';
 import { PageHeader } from '@/components/ui/PageHeader.tsx';
 import { Sheet } from '@/components/ui/Sheet.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
-import { useTripDays, useTripStops } from '@/features/itinerary/queries.ts';
 import { loadExampleTrip } from '@/features/itinerary/seed.ts';
 import { CalendarExport } from '@/features/notifications/components/CalendarExport.tsx';
 import { PushAskSheet } from '@/features/notifications/components/PushAskSheet.tsx';
@@ -21,16 +20,13 @@ import { LevelBar } from '@/features/progression/components/LevelBar.tsx';
 import { useTeamLevel } from '@/features/progression/useTeamProgress.ts';
 import { RetroEntry } from '@/features/retrospective/components/RetroEntry.tsx';
 import { deleteTrip } from '../actions.ts';
-import { useIsOwner, useTrip, useTripMembers } from '../queries.ts';
+import { useTripOverview } from '../overview.ts';
+import { useIsOwner } from '../queries.ts';
 import { TripHero } from '../components/TripHero.tsx';
 import { TripShortcuts } from '../components/TripShortcuts.tsx';
-import { useTripReservations } from '@/features/reservations/queries.ts';
 import { ReadinessCard, ReadyCelebration } from '@/features/checklists/components/Readiness.tsx';
-import { useTripChecklist } from '@/features/checklists/queries.ts';
 import { listsProgress, shortcutValue } from '@/features/checklists/rules.ts';
-import { useTripContacts } from '@/features/contacts/queries.ts';
 import { contactCount, contactGroups } from '@/features/contacts/rules.ts';
-import { useTripExpenses } from '@/features/expenses/queries.ts';
 import { formatMoneyShort, totals } from '@/features/expenses/rules.ts';
 import { todayISO } from '../rules.ts';
 import { WeatherStrip } from '@/features/weather/components/WeatherStrip.tsx';
@@ -39,26 +35,22 @@ import { useSession } from '@/lib/supabase/session.ts';
 
 export default function ViagemPage() {
   const { tripId = '' } = useParams();
-  const trip = useTrip(tripId);
-  const members = useTripMembers(tripId);
+  // tudo numa leitura: a tela espera e pinta inteira, sem seção chegando depois (D162)
+  const overview = useTripOverview(tripId);
+  const trip = overview?.trip;
   const isOwner = useIsOwner(trip);
   const { session } = useSession();
   const navigate = useNavigate();
   const toast = useToast();
   const [confirm, setConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const tripDays = useTripDays(tripId) ?? [];
-  const stops = useTripStops(tripId);
   const [loadingExample, setLoadingExample] = useState(false);
-  const reservations = useTripReservations(tripId) ?? [];
-  const items = useTripChecklist(tripId);
-  const contacts = useTripContacts(tripId) ?? [];
-  const expenses = useTripExpenses(tripId) ?? [];
   const teamLevel = useTeamLevel(tripId);
   const weather = useTripWeather(trip);
 
-  if (trip === undefined) return <Splash />;
+  if (overview === undefined || trip === undefined) return <Splash />;
   if (trip === null) return <NotFound />;
+  const { members, days: tripDays, stops, reservations, items, contacts, expenses } = overview;
 
   const today = todayISO();
   const team = members.filter((m) => m.member.status === 'accepted');
@@ -67,7 +59,7 @@ export default function ViagemPage() {
   return (
     <div className="grid gap-5">
       <PageHeader
-        back="/"
+        back="/viagens"
         title={trip.name}
         actions={
           <ButtonLink
@@ -85,19 +77,19 @@ export default function ViagemPage() {
       <TripHero trip={trip} today={today} />
 
       {/* abrir a visão geral é um momento calmo: o resumo ou o cartão de desbloqueio sai aqui */}
-      <CelebrationHost active tripId={trip.id} />
+      <CelebrationHost active tripId={trip.id} state={overview.celebrations} />
 
       <RetroEntry trip={trip} stops={stops} today={today} />
 
       <LevelBar progress={teamLevel.progress} who="team" solo={teamLevel.solo} label="Time" />
 
-      <ReadinessCard trip={trip} items={items ?? []} today={today} teamSize={team.length} />
+      <ReadinessCard trip={trip} items={items} today={today} teamSize={team.length} />
 
       <TripShortcuts
         trip={trip}
         stops={stops.length}
         reservations={reservations.length}
-        lists={shortcutValue(listsProgress(items ?? []))}
+        lists={shortcutValue(listsProgress(items))}
         contacts={contactCount(contactGroups(contacts, reservations))}
         spent={formatMoneyShort(totals(expenses).total)}
         diary={stops.filter((s) => s.done_at !== null).length}
@@ -120,7 +112,7 @@ export default function ViagemPage() {
           </h2>
           <Link
             to={`/viagens/${trip.id}/membros`}
-            className="text-[15px] font-semibold text-accent-ink"
+            className="inline-flex min-h-12 items-center text-[15px] font-semibold text-accent-ink"
           >
             {isOwner ? 'Convidar' : 'Ver todos'}
           </Link>
@@ -152,7 +144,7 @@ export default function ViagemPage() {
           </h2>
           <Link
             to={`/viagens/${trip.id}/roteiro`}
-            className="text-[15px] font-semibold text-accent-ink"
+            className="inline-flex min-h-12 items-center text-[15px] font-semibold text-accent-ink"
           >
             Editar roteiro
           </Link>
@@ -226,7 +218,7 @@ export default function ViagemPage() {
           </h2>
           <Link
             to={`/viagens/${trip.id}/avisos`}
-            className="text-[15px] font-semibold text-accent-ink"
+            className="inline-flex min-h-12 items-center text-[15px] font-semibold text-accent-ink"
           >
             Configurar
           </Link>

@@ -24,10 +24,10 @@ export function ReservationCard({ reservation: r, media, today, onOpen }: Props)
       type="button"
       onClick={onOpen}
       className="grid w-full grid-cols-[auto_1fr_auto] items-start gap-3 rounded-card bg-card p-4 text-left shadow-card"
-      aria-label={`${label}: ${r.name}`}
     >
       <ReservationTypeIcon type={r.type} />
       <span className="grid min-w-0 gap-1">
+        <span className="sr-only">{label}: </span>
         <span className="text-[17px] leading-snug font-semibold break-words">{r.name}</span>
         {when ? <span className="num text-[15px] text-ink-2">{when}</span> : null}
         <span className="flex flex-wrap gap-x-3 gap-y-1 text-[14px] text-ink-2">

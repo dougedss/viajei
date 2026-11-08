@@ -159,7 +159,7 @@ export default function MapaPage() {
               aria-pressed={on}
               onClick={() => choose(c.key)}
               className={cx(
-                'inline-flex min-h-11 shrink-0 snap-start items-center rounded-full px-4 text-[15px] font-semibold whitespace-nowrap',
+                'inline-flex min-h-12 shrink-0 snap-start items-center rounded-full px-4 text-[15px] font-semibold whitespace-nowrap',
                 on
                   ? 'bg-ink text-paper'
                   : 'bg-card text-ink shadow-[inset_0_0_0_1.5px_var(--color-line)]',

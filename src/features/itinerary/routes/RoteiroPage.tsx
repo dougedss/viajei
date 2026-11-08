@@ -27,7 +27,11 @@ export default function RoteiroPage() {
         title="Roteiro"
         eyebrow={<span className="text-[15px] text-ink-2">{trip.name}</span>}
         actions={
-          <ButtonLink to={`/viagens/${trip.id}/viagem`} size="sm" aria-label="Abrir o Modo Viagem">
+          <ButtonLink
+            to={`/viagens/${trip.id}/viagem`}
+            size="sm"
+            aria-label="Agora: abrir o Modo Viagem"
+          >
             <Navigation className="size-4" aria-hidden="true" />
             Agora
           </ButtonLink>
@@ -48,11 +52,7 @@ export default function RoteiroPage() {
             const last = [...dayStops].reverse().find((s) => s.time)?.time;
             return (
               <li key={day.id}>
-                <Link
-                  to={`/viagens/${trip.id}/roteiro/${day.id}`}
-                  className="block rounded-card"
-                  aria-label={`Dia ${i + 1}, ${formatDayShort(day.date)}`}
-                >
+                <Link to={`/viagens/${trip.id}/roteiro/${day.id}`} className="block rounded-card">
                   <Card className="flex items-center gap-3">
                     <span className="grid size-14 shrink-0 place-items-center rounded-[16px] bg-accent-soft text-accent-ink">
                       <span className="num text-[22px] leading-none font-bold">{i + 1}</span>

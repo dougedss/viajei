@@ -11,7 +11,7 @@ export function XpGainHost() {
         <span
           key={g.id}
           data-xp-gain={g.points}
-          className="absolute rounded-full bg-sunset px-2.5 py-0.5 font-num text-[15px] font-bold text-white shadow-[0_4px_12px_rgb(0_0_0/0.18)]"
+          className="absolute rounded-full bg-sunset-deep px-2.5 py-0.5 font-num text-[15px] font-bold text-white shadow-[0_4px_12px_rgb(0_0_0/0.18)]"
           style={{
             left: g.x,
             top: g.y,

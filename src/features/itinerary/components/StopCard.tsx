@@ -37,7 +37,7 @@ export function NavLinks({ stop }: { stop: Stop }) {
   const waze = wazeUrl(stop);
   if (!maps && !waze) return null;
   const cls =
-    'inline-flex min-h-10 items-center gap-1 rounded-full bg-card px-3 text-[14px] font-semibold text-accent-ink shadow-[inset_0_0_0_1.5px_var(--color-line)]';
+    'inline-flex min-h-12 items-center gap-1 rounded-full bg-card px-3 text-[14px] font-semibold text-accent-ink shadow-[inset_0_0_0_1.5px_var(--color-line)]';
   return (
     <div className="flex flex-wrap gap-2">
       {maps ? (
@@ -114,7 +114,7 @@ export function StopCard({
               <button
                 type="button"
                 onClick={() => onAcceptSuggestion?.(suggestion)}
-                className="inline-flex min-h-9 items-center rounded-full bg-accent-soft px-3 font-semibold text-accent-ink"
+                className="inline-flex min-h-12 items-center rounded-full bg-accent-soft px-3 font-semibold text-accent-ink"
               >
                 Usar {formatDuration(suggestion)}
               </button>

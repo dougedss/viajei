@@ -29,10 +29,8 @@ export function MemoryPromptCard({ stop, uid, profiles, more, onOpen, onDismiss 
           <Star className="size-5" aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[17px] leading-snug font-semibold break-words">
-            Como foi {stop.name}?
-          </p>
-          <p className="text-[14px] text-ink-2">
+          <p className="mv-text-17 leading-snug font-semibold break-words">Como foi {stop.name}?</p>
+          <p className="mv-text-14 text-ink-2">
             {stop.done_at ? `chegaram ${formatStamp(stop.done_at)}` : ''}
             {by ? ` · ${by} marcou` : ''}
             {more > 0 ? ` · mais ${more} ${more === 1 ? 'parada' : 'paradas'} depois` : ''}

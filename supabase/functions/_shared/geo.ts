@@ -75,13 +75,18 @@ export function simplify<T extends readonly number[]>(
   keep[coords.length - 1] = 1;
   const stack: [number, number][] = [[0, coords.length - 1]];
   while (stack.length > 0) {
-    const [first, last] = stack.pop() as [number, number];
+    const top = stack.pop();
+    if (!top) break;
+    const [first, last] = top;
     let maxD = 0;
     let index = -1;
-    const a = xy[first] as [number, number];
-    const b = xy[last] as [number, number];
+    const a = xy[first];
+    const b = xy[last];
+    if (!a || !b) continue;
     for (let i = first + 1; i < last; i++) {
-      const d = segmentDistance(xy[i] as [number, number], a, b);
+      const p = xy[i];
+      if (!p) continue;
+      const d = segmentDistance(p, a, b);
       if (d > maxD) {
         maxD = d;
         index = i;

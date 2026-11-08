@@ -108,7 +108,7 @@ function Body({
               aria-pressed={type === k}
               onClick={() => setType(k)}
               className={cx(
-                'min-h-11 rounded-full px-4 text-[15px] font-semibold',
+                'min-h-12 rounded-full px-4 text-[15px] font-semibold',
                 type === k
                   ? 'bg-accent-soft text-accent-ink shadow-[inset_0_0_0_2px_var(--color-accent)]'
                   : 'text-ink-2 shadow-[inset_0_0_0_1.5px_var(--color-line)]',

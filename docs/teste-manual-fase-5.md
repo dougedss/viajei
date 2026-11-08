@@ -1,5 +1,7 @@
 # Teste manual · Fase 5 (mundo 3D: maquete e replay)
 
+> **Para o teste nos aparelhos, use o [roteiro final](teste-final.md).** Este roteiro da fase 5 fica como registro; tudo dele está lá.
+
 Roteiro para o iPhone (primeiro) e para um Android ou o Chrome do desktop, com o que observar em
 cada passo. Pré-requisitos: o deploy da fase 5 no ar (preview da branch `fase-5` ou produção), a
 viagem de exemplo carregada (botão "Carregar viagem de exemplo", só em dev) ou uma viagem sua com

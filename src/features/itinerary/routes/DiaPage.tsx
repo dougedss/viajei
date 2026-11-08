@@ -61,7 +61,7 @@ export default function DiaPage() {
   const trip = useTrip(tripId);
   const day = useTripDay(dayId);
   const days = useTripDays(tripId);
-  const stops = useDayStops(dayId);
+  const stops = useDayStops(dayId) ?? [];
   const routeState = useDayRoute(tripId, dayId, stops);
   const toast = useToast();
   const [editing, setEditing] = useState<Stop | 'new' | null>(null);

@@ -103,8 +103,8 @@ export function ReservationForm({
                 onClick={() => form.setValue('type', k, { shouldDirty: true })}
                 className={
                   selected
-                    ? 'inline-flex min-h-11 items-center gap-1.5 rounded-full bg-accent-soft pr-3 pl-1 text-[15px] font-semibold text-accent-ink shadow-[inset_0_0_0_2px_var(--color-accent)]'
-                    : 'inline-flex min-h-11 items-center gap-1.5 rounded-full bg-card pr-3 pl-1 text-[15px] font-semibold text-ink-2 shadow-[inset_0_0_0_1.5px_var(--color-line)]'
+                    ? 'inline-flex min-h-12 items-center gap-1.5 rounded-full bg-accent-soft pr-3 pl-1 text-[15px] font-semibold text-accent-ink shadow-[inset_0_0_0_2px_var(--color-accent)]'
+                    : 'inline-flex min-h-12 items-center gap-1.5 rounded-full bg-card pr-3 pl-1 text-[15px] font-semibold text-ink-2 shadow-[inset_0_0_0_1.5px_var(--color-line)]'
                 }
               >
                 <ReservationTypeIcon type={k} className="size-8 rounded-full" />

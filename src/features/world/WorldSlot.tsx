@@ -111,7 +111,7 @@ export function ListView({
   return (
     <div className="grid gap-3">
       {notice ? (
-        <p className="flex items-center gap-2 text-[14px] text-ink-2">
+        <p className="flex items-center gap-2 mv-text-14 text-ink-2">
           <List className="size-4" aria-hidden="true" />
           {notice}
         </p>
@@ -132,7 +132,7 @@ export function ListView({
 export function WorldSkeleton() {
   return (
     <div
-      className="grid h-[clamp(380px,58svh,620px)] place-items-center rounded-card bg-stage text-[14px] text-ink-2"
+      className="grid h-[clamp(380px,58svh,620px)] place-items-center rounded-card bg-stage mv-text-14 text-ink-2"
       role="status"
       aria-live="polite"
     >

@@ -1,5 +1,6 @@
 import { toXY } from '@shared/geo.ts';
-import { coastLines, type Polyline } from './data.ts';
+import { coastLines } from './coast-data.ts';
+import type { Polyline } from './polyline.ts';
 import type { Bbox } from './codec.ts';
 
 const DEG = Math.PI / 180;

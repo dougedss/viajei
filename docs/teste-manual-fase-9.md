@@ -1,5 +1,7 @@
 # Teste manual · Fase 9 (progressão e retrospectiva)
 
+> **Para o teste nos aparelhos, use o [roteiro final](teste-final.md).** Este roteiro da fase 9 fica como registro; tudo dele está lá.
+
 Roteiro para o iPhone (primeiro) e para um Android. Aqui fica só o que um navegador de laboratório
 não julga: o vídeo exportado no aparelho (formato, nitidez, sem engasgo), o vídeo nos stories do
 Instagram e no WhatsApp, a folha de compartilhar com arquivos, o cartão de desbloqueio com confete,

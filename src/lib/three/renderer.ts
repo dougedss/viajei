@@ -1,44 +1,30 @@
-import { WebGPURenderer } from 'three/webgpu';
+import { setConsoleFunction, WebGPURenderer } from 'three/webgpu';
+import type { Backend } from './support.ts';
+
+export type { Backend, Support } from './support.ts';
 
 /**
- * O motor das cenas 3D: detecção antes de montar o Canvas (WebGPU, WebGL2 ou nada), a criação do
- * `WebGPURenderer` do three (que tem backend WebGL2 próprio e cai nele quando não há WebGPU) e a
- * leitura de qual backend ficou ativo. `none` cai na versão sem 3D (a lista do dia, a vista
- * lateral da garagem) sem mensagem de erro, só com um aviso discreto.
+ * O motor das cenas 3D: a criação do `WebGPURenderer` do three (que tem backend WebGL2 próprio e cai
+ * nele quando não há WebGPU) e a leitura de qual backend ficou ativo. A detecção, antes de montar o
+ * Canvas, mora em `support.ts`, sem o three.
  */
-export type Backend = 'webgpu' | 'webgl2';
-export type Support = Backend | 'none';
-
-// a lib do TS declara `navigator.gpu` como obrigatório; o Safari antigo e o Firefox não o têm
-type GpuNavigator = Partial<Pick<Navigator, 'gpu'>>;
-
-let supportPromise: Promise<Support> | null = null;
-
-/** WebGPU com adaptador de verdade; senão WebGL2; senão nada. Uma vez por página. */
-export function detectSupport(): Promise<Support> {
-  supportPromise ??= probe();
-  return supportPromise;
-}
-
-async function probe(): Promise<Support> {
-  if (typeof document === 'undefined') return 'none';
-  const nav: GpuNavigator = navigator;
-  const gpu = nav.gpu;
-  if (gpu) {
-    try {
-      // o Chromium sem tela (Playwright) expõe navigator.gpu e devolve adaptador nulo
-      const adapter = await gpu.requestAdapter();
-      if (adapter) return 'webgpu';
-    } catch {
-      /* sem WebGPU utilizável: tenta WebGL2 */
-    }
-  }
-  const canvas = document.createElement('canvas');
-  const gl = canvas.getContext('webgl2');
-  if (!gl) return 'none';
-  gl.getExtension('WEBGL_lose_context')?.loseContext();
-  return 'webgl2';
-}
+/**
+ * O R3F 9.8 cria um `THREE.Clock` em cada Canvas, e o three 0.187 o declara deprecado (r183), com um
+ * aviso no console a cada maquete, garagem ou filme montados. Nenhuma versão do R3F trocou o Clock pelo
+ * Timer ainda (a 9.8.2, de 14/10, é a mais nova). Até trocar, só esse aviso sai do console, pelo gancho
+ * que o próprio three oferece; todo o resto passa como o three escreveria, com o rastro do TSL.
+ */
+const CLOCK_DEPRECATED =
+  'THREE.Clock: This module has been deprecated. Please use THREE.Timer instead.';
+type StackTrace = { isStackTrace: true; getError(message: string): Error };
+const isStackTrace = (v: unknown): v is StackTrace =>
+  typeof v === 'object' && v !== null && 'isStackTrace' in v && 'getError' in v;
+setConsoleFunction((type, message, ...params) => {
+  if (type === 'warn' && message === CLOCK_DEPRECATED) return;
+  const [first] = params;
+  if (type !== 'log' && isStackTrace(first)) console[type](first.getError(message));
+  else console[type](message, ...params);
+});
 
 export function backendOf(renderer: WebGPURenderer): Backend {
   const backend: unknown = renderer.backend;

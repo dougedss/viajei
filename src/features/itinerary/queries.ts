@@ -20,12 +20,11 @@ export function useTripDay(dayId: string): TripDay | null | undefined {
   }, [dayId]);
 }
 
-/** Paradas de um dia, em ordem, sem as excluídas. */
-export function useDayStops(dayId: string): Stop[] {
+/** Paradas de um dia, em ordem, sem as excluídas; `undefined` enquanto lê. */
+export function useDayStops(dayId: string): Stop[] | undefined {
   return useLiveQuery(
     async () => activeStops(await db.stops.where('trip_day_id').equals(dayId).toArray()),
     [dayId],
-    [],
   );
 }
 

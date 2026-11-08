@@ -93,8 +93,9 @@ const UNKNOWN: WeatherCodeInfo = {
 
 /** O código WMO lido para a tela. De noite (`isDay` falso), sol vira lua. */
 export function weatherCode(code: number | null, isDay = true): WeatherCodeInfo {
-  if (code === null || !Object.hasOwn(WEATHER_CODES, code)) return UNKNOWN;
-  const entry = WEATHER_CODES[code] as CodeEntry;
+  const entry =
+    code !== null && Object.hasOwn(WEATHER_CODES, code) ? WEATHER_CODES[code] : undefined;
+  if (!entry) return UNKNOWN;
   let icon = entry.icon;
   if (!isDay && icon === 'sun') icon = 'moon';
   if (!isDay && icon === 'cloud-sun') icon = 'cloud-moon';

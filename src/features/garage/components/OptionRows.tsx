@@ -30,8 +30,17 @@ type Props = {
 const MODELS = Object.keys(CAR_MODELS) as CarModel[];
 const COLORS = Object.keys(CAR_COLORS) as CarColor[];
 
-function lockedLabel(state: ItemState, label: string): string {
-  return state.status === 'locked' ? `${state.hint}. Toque para ver a prévia` : label;
+/**
+ * O que falta para liberar vira a descrição acessível do botão: o nome continua sendo o que está
+ * escrito nele (WCAG 2.5.3, quem usa a voz diz "SUV"), e o leitor de tela lê a regra logo depois.
+ */
+function LockedHint({ state, id }: { state: ItemState; id: string }) {
+  if (state.status !== 'locked') return null;
+  return (
+    <span id={id} hidden>
+      {`${state.hint}. Toque para ver a prévia`}
+    </span>
+  );
 }
 
 function Row({ title, children, id }: { title: string; children: ReactNode; id: string }) {
@@ -68,23 +77,25 @@ export function OptionRows({ trip, shown, progress, onTap }: Props) {
           const state = modelState(m, progress, trip);
           const locked = state.status === 'locked';
           const pressed = shown.model === m;
+          const hintId = `garagem-modelo-${m}`;
           return (
             <button
               key={m}
               type="button"
               className={pillClass(pressed, locked)}
               aria-pressed={pressed}
-              aria-label={lockedLabel(state, CAR_MODELS[m].label)}
+              aria-describedby={locked ? hintId : undefined}
               data-state={state.status}
               onClick={() => onTap({ kind: 'model', model: m })}
             >
               {locked ? <Lock className="size-4" aria-hidden="true" /> : null}
               {CAR_MODELS[m].label}
               {locked ? (
-                <small className="num text-[13px] font-semibold text-ink-2">
+                <small className="num text-[13px] font-semibold text-ink-2" aria-hidden="true">
                   nv {CAR_MODELS[m].level}
                 </small>
               ) : null}
+              <LockedHint state={state} id={hintId} />
             </button>
           );
         })}
@@ -95,13 +106,14 @@ export function OptionRows({ trip, shown, progress, onTap }: Props) {
           const state = colorState(c, progress, trip);
           const locked = state.status === 'locked';
           const pressed = shown.color === c;
+          const hintId = `garagem-pintura-${c}`;
           return (
             <button
               key={c}
               type="button"
               className="grid min-h-12 min-w-12 shrink-0 snap-start place-items-center rounded-full"
               aria-pressed={pressed}
-              aria-label={lockedLabel(state, CAR_COLORS[c].label)}
+              aria-describedby={locked ? hintId : undefined}
               data-state={state.status}
               data-color={c}
               onClick={() => onTap({ kind: 'color', color: c })}
@@ -115,6 +127,8 @@ export function OptionRows({ trip, shown, progress, onTap }: Props) {
                 )}
                 style={{ background: CAR_COLORS[c].hex }}
               >
+                {/* o nome é a cor; o "nv 5" de baixo é só o desenho do que a descrição diz */}
+                <span className="sr-only">{CAR_COLORS[c].label}</span>
                 {locked ? (
                   <span
                     className="absolute inset-0 grid place-items-center rounded-full bg-[repeating-linear-gradient(45deg,rgb(0_0_0/.45)_0_3px,transparent_3px_7px)]"
@@ -132,6 +146,7 @@ export function OptionRows({ trip, shown, progress, onTap }: Props) {
                   nv {CAR_COLORS[c].level}
                 </small>
               ) : null}
+              <LockedHint state={state} id={hintId} />
             </button>
           );
         })}
@@ -142,18 +157,20 @@ export function OptionRows({ trip, shown, progress, onTap }: Props) {
           const state = accessoryState(k, progress, trip);
           const locked = state.status === 'locked';
           const pressed = shown.accessories.includes(k);
+          const hintId = `garagem-acessorio-${k}`;
           return (
             <button
               key={k}
               type="button"
               className={pillClass(pressed, locked)}
               aria-pressed={pressed}
-              aria-label={lockedLabel(state, CAR_ACCESSORIES[k].label)}
+              aria-describedby={locked ? hintId : undefined}
               data-state={state.status}
               onClick={() => onTap({ kind: 'accessory', key: k })}
             >
               {locked ? <Lock className="size-4" aria-hidden="true" /> : null}
               {CAR_ACCESSORIES[k].label}
+              <LockedHint state={state} id={hintId} />
             </button>
           );
         })}

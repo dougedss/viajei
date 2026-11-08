@@ -41,7 +41,8 @@ function MiniRing({ label, p, color }: { label: string; p: Progress; color: stri
           {p.done}/{p.total}
         </b>
       </Ring>
-      {label}
+      {/* o anel já diz "Antes: 2 de 3": o rótulo de baixo é só para os olhos */}
+      <span aria-hidden="true">{label}</span>
     </div>
   );
 }
@@ -67,7 +68,6 @@ export function ReadinessCard({
   return (
     <Link
       to={`/viagens/${trip.id}/checklists`}
-      aria-label={ready ? 'Pronto para partir: ver as listas' : 'Pronto para partir? Ver as listas'}
       className="flex items-center gap-4 rounded-card bg-card p-4 shadow-card"
     >
       <MiniRing label="Antes" p={p.before} color="var(--color-accent)" />

@@ -20,7 +20,7 @@ export function PositionAsk({
       aria-label="Usar a posição do celular"
       className="grid gap-3 rounded-card bg-card p-4 shadow-[inset_0_0_0_1px_var(--color-line)]"
     >
-      <p className="flex items-start gap-3 text-[16px]">
+      <p className="flex items-start gap-3 mv-text-16">
         <LocateFixed className="mt-0.5 size-5 shrink-0 text-accent-ink" aria-hidden="true" />
         Posso usar a posição do celular para acertar onde vocês estão? Uma leitura ao abrir, nada em
         segundo plano.
@@ -53,16 +53,16 @@ export function PassedQuestion({ stop, date, now, onConfirm, onDismiss }: Passed
       aria-label={`Vocês passaram por ${stop.name}`}
       className="grid gap-3 rounded-card bg-tight/15 p-4 text-ink"
     >
-      <p className="text-[17px] font-semibold">
+      <p className="mv-text-17 font-semibold">
         Vocês passaram por {stop.name}. Marcar como concluída?
       </p>
-      <label className="flex items-center justify-between gap-3 text-[15px] text-ink-2">
+      <label className="flex items-center justify-between gap-3 mv-text-15 text-ink-2">
         Chegaram às
         <input
           type="time"
           value={time}
           onChange={(e) => setTime(e.target.value)}
-          className="min-h-11 rounded-field bg-card px-3 font-num text-[20px] font-semibold text-ink shadow-[inset_0_0_0_1.5px_var(--color-line)]"
+          className="min-h-12 rounded-field bg-card px-3 font-num mv-text-20 font-semibold text-ink shadow-[inset_0_0_0_1.5px_var(--color-line)]"
         />
       </label>
       <div className="grid grid-cols-2 gap-2">
@@ -123,13 +123,13 @@ export function SinceLastTime({
         type="button"
         aria-label="Fechar"
         onClick={onDismiss}
-        className="absolute top-3 right-3 grid size-9 place-items-center rounded-full text-hud-muted"
+        className="absolute top-1 right-1 grid size-12 place-items-center rounded-full text-hud-muted"
       >
         <X className="size-4" aria-hidden="true" />
       </button>
       <h2
         id="h-desde"
-        className="flex items-center gap-2 pr-8 font-num text-[20px] leading-tight font-semibold"
+        className="flex items-center gap-2 pr-8 font-num mv-text-20 leading-tight font-semibold"
       >
         <History className="size-5 text-lane" aria-hidden="true" />
         Desde a última vez
@@ -138,7 +138,7 @@ export function SinceLastTime({
         {events.map((e) => {
           const Icon = EVENT_ICON[e.kind];
           return (
-            <li key={e.id} className="flex items-center gap-3 text-[16px]">
+            <li key={e.id} className="flex items-center gap-3 mv-text-16">
               <span className="grid size-8 shrink-0 place-items-center rounded-full bg-white/10 text-lane">
                 <Icon className="size-4" aria-hidden="true" />
               </span>
@@ -176,7 +176,7 @@ export function PositionLine({ position }: { position: CatchupPosition | null })
   }
   if (position.fraction === null) return null;
   return (
-    <p className="flex items-center gap-2 text-[14px] text-ink-2">
+    <p className="flex items-center gap-2 mv-text-14 text-ink-2">
       <LocateFixed className="size-4 shrink-0" aria-hidden="true" />
       {Math.round(position.fraction * 100)}% do caminho do dia, {SOURCE_LABEL[position.source]}
     </p>

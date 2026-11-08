@@ -62,7 +62,7 @@ export function DayForecast({ weather, dayId, stops }: Props) {
             </span>
           </>
         ) : null}
-        {rain === null ? null : <span className="text-person-sky">· chuva {rain}%</span>}
+        {rain === null ? null : <span className="text-rain-ink">· chuva {rain}%</span>}
       </p>
       <WeatherCredit updatedAt={weather.updatedAt} />
     </Card>

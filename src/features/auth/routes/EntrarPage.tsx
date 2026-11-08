@@ -23,7 +23,10 @@ export default function EntrarPage() {
       title="Entrar"
       footer={
         <>
-          <Link to="/recuperar-senha" className="font-semibold text-accent-ink">
+          <Link
+            to="/recuperar-senha"
+            className="inline-flex min-h-12 items-center font-semibold text-accent-ink"
+          >
             Esqueci a senha
           </Link>
           <span className="text-ink-2">

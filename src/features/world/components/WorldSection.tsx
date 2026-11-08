@@ -104,7 +104,7 @@ export default function WorldSection(props: WorldSlotProps) {
             onFail={setFailed}
           />
         ) : (
-          <p className="grid h-full place-items-center text-[14px] text-ink-2" role="status">
+          <p className="grid h-full place-items-center mv-text-14 text-ink-2" role="status">
             Montando a maquete…
           </p>
         )}
@@ -500,7 +500,7 @@ function WorldStage(p: StageProps) {
       </WorldCanvas>
       {!firstFrame ? (
         <p
-          className="pointer-events-none absolute inset-0 grid place-items-center bg-stage text-[14px] text-ink-2"
+          className="pointer-events-none absolute inset-0 grid place-items-center bg-stage mv-text-14 text-ink-2"
           role="status"
         >
           Montando a maquete…
@@ -558,7 +558,7 @@ function WorldStage(p: StageProps) {
           <button
             type="button"
             onClick={startReview}
-            className="pointer-events-auto inline-flex min-h-9 items-center gap-1.5 rounded-full bg-hud px-3 text-[13px] font-semibold text-hud-ink backdrop-blur-sm"
+            className="pointer-events-auto inline-flex min-h-12 items-center gap-1.5 rounded-full bg-hud px-3 mv-text-13 font-semibold text-hud-ink backdrop-blur-sm"
           >
             <RotateCcw className="size-4" aria-hidden="true" />
             Rever o dia

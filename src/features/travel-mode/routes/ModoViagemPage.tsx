@@ -10,7 +10,7 @@ import {
   Star,
   Ticket,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { NotFound } from '@/app/NotFound.tsx';
 import { Splash } from '@/app/Splash.tsx';
@@ -90,6 +90,7 @@ export default function ModoViagemPage() {
   const members = useTripMembers(tripId);
   const now = useNow();
   const night = useNightTheme(now);
+  useTravelText(night);
   const [override, setOverride] = useState<string | null>(null);
 
   if (trip === undefined || days === undefined) return <Splash />;
@@ -103,14 +104,17 @@ export default function ModoViagemPage() {
   for (const m of members) if (m.profile) profiles.set(m.profile.id, m.profile);
 
   return (
-    <div className="grid gap-4" style={night ? { fontSize: '110%' } : undefined}>
-      <header className="grid gap-1">
+    // colunas que nunca passam da tela: a coluna automática de um grid cresce até o texto sem quebra
+    // mais largo (o nome da viagem), e a página inteira rolava para o lado. O nome encurta com
+    // reticências
+    <div className="grid grid-cols-1 gap-4 text-(length:--mv-min)">
+      <header className="grid grid-cols-1 gap-1">
         <div className="flex items-center justify-between gap-2">
           <Link
             to={`/viagens/${trip.id}`}
-            className="min-h-10 truncate text-[15px] font-semibold text-ink-2"
+            className="flex min-h-12 min-w-0 items-center mv-text-15 font-semibold text-ink-2"
           >
-            {trip.name}
+            <span className="truncate">{trip.name}</span>
           </Link>
           <div className="flex shrink-0 gap-2">
             <ButtonLink
@@ -139,9 +143,9 @@ export default function ModoViagemPage() {
             >
               <ChevronLeft className="size-6" aria-hidden="true" />
             </button>
-            <h1 className="flex-1 text-center font-num text-[24px] leading-tight font-semibold">
+            <h1 className="flex-1 text-center font-num mv-text-24 leading-tight font-semibold">
               <span className="uppercase">{formatDayShort(day.date)}</span>
-              <span className="block text-[15px] font-semibold text-ink-2">
+              <span className="block mv-text-15 font-semibold text-ink-2">
                 dia {index + 1} de {days.length}
                 {day.title ? ` · ${day.title}` : ''}
               </span>
@@ -184,6 +188,22 @@ export default function ModoViagemPage() {
   );
 }
 
+/**
+ * O texto do Modo Viagem: 17 px no mínimo, 10% maior à noite (prompt, 11). Enquanto a tela está
+ * aberta, a raiz do documento diz qual dos dois vale, e o `app.css` define as variáveis que a utility
+ * `mv-text-*` lê. Na raiz, e não na página, para os avisos e as folhas, que moram fora dela, seguirem
+ * a mesma regra. Antes da pintura, para o primeiro quadro já sair no tamanho certo.
+ */
+function useTravelText(night: boolean): void {
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.dataset.travelText = night ? 'night' : 'day';
+    return () => {
+      delete root.dataset.travelText;
+    };
+  }, [night]);
+}
+
 type DayViewProps = {
   trip: Trip;
   day: { id: string; date: string; title: string | null };
@@ -200,7 +220,8 @@ type DayViewProps = {
 function DayView({ trip, day, now, night, uid, members, profiles, active }: DayViewProps) {
   const tripId = trip.id;
   const dayId = day.id;
-  const stops = useDayStops(dayId);
+  const loadedStops = useDayStops(dayId);
+  const stops = loadedStops ?? [];
   const { route, status: routeStatus, loaded: routeLoaded } = useDayRoute(tripId, dayId, stops);
   const toast = useToast();
   const navigate = useNavigate();
@@ -217,7 +238,8 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
   const [owner, setOwner] = useState<EventsOwner | null>(null);
 
   // reservas, memórias e fotos da viagem: o "Ver reserva", o "Como foi?" e o "Rever o dia"
-  const reservations = useTripReservations(tripId) ?? [];
+  const loadedReservations = useTripReservations(tripId);
+  const reservations = loadedReservations ?? [];
   const memories = useTripMemories(tripId);
   const dismissedPrompts = useDismissedPrompts();
   const photos = useTripPhotos(tripId);
@@ -409,7 +431,7 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
       return null;
     }
     const pill =
-      'inline-flex min-h-10 items-center gap-1.5 rounded-full bg-card px-3 text-[14px] font-semibold text-accent-ink shadow-[inset_0_0_0_1.5px_var(--color-line)]';
+      'inline-flex min-h-12 items-center gap-1.5 rounded-full bg-card px-3 mv-text-14 font-semibold text-accent-ink shadow-[inset_0_0_0_1.5px_var(--color-line)]';
     return (
       <div className="flex flex-wrap items-center gap-2 pt-1 pb-2">
         <RatingChips memories={mine} profiles={profiles} />
@@ -437,6 +459,10 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
       </div>
     );
   };
+
+  // o dia pinta inteiro: as paradas e as reservas mudam o tamanho do "Agora" (a linha "Ver reserva"),
+  // e chegando depois empurravam os cartões de baixo (fase 12, D162). Os efeitos acima já rodam.
+  if (loadedStops === undefined || loadedReservations === undefined) return null;
 
   return (
     <>
@@ -499,7 +525,7 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
             <button
               type="button"
               onClick={() => setExpenseDraft({ date: day.date, ...expenseDefaults(state) })}
-              className="inline-flex min-h-12 items-center gap-1.5 rounded-full bg-card px-4 text-[15px] font-semibold text-ink-2 shadow-[inset_0_0_0_1.5px_var(--color-line)]"
+              className="inline-flex min-h-12 items-center gap-1.5 rounded-full bg-card px-4 mv-text-15 font-semibold text-ink-2 shadow-[inset_0_0_0_1.5px_var(--color-line)]"
             >
               <Plus className="size-4" aria-hidden="true" />
               Gasto
@@ -529,7 +555,7 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
           aria-label="Trilha do dia"
           className="grid gap-3 rounded-card bg-card p-5 shadow-card"
         >
-          <p className="text-[17px] text-ink-2">Nenhuma parada neste dia.</p>
+          <p className="mv-text-17 text-ink-2">Nenhuma parada neste dia.</p>
         </section>
       ) : (
         <WorldSlot

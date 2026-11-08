@@ -15,11 +15,12 @@
   --line: #e2e4e8;
   --stage: #e9eae7;
   --accent: #e8653a;
-  --accent-ink: #b8471f;
+  --accent-ink: #b4451e;
   --accent-soft: #fbe7de;
   --on-time-ink: #15754c;
   --tight-ink: #8a5a00;
   --late-ink: #b23a3a;
+  --rain-ink: #256caf;
   --sky-a: #f6dcc5;
   --sky-b: #f2eee6;
   --shadow-card: 0 10px 30px -12px rgb(28 34 48 / 0.28);
@@ -38,6 +39,7 @@
     --on-time-ink: #5bd39a;
     --tight-ink: #ffc24d;
     --late-ink: #ff8a8a;
+    --rain-ink: #5d9fdd;
     --sky-a: #0f1627;
     --sky-b: #26304a;
     --shadow-card: 0 10px 30px -12px rgb(0 0 0 / 0.6);
@@ -56,6 +58,7 @@
   --on-time-ink: #5bd39a;
   --tight-ink: #ffc24d;
   --late-ink: #ff8a8a;
+  --rain-ink: #5d9fdd;
   --sky-a: #0f1627;
   --sky-b: #26304a;
   --shadow-card: 0 10px 30px -12px rgb(0 0 0 / 0.6);
@@ -77,6 +80,7 @@
   --color-on-time-ink: var(--on-time-ink);
   --color-tight-ink: var(--tight-ink);
   --color-late-ink: var(--late-ink);
+  --color-rain-ink: var(--rain-ink);
   --color-sky-a: var(--sky-a);
   --color-sky-b: var(--sky-b);
   --shadow-card: var(--shadow-card);
@@ -85,6 +89,9 @@
 @theme {
   /* fixos nos dois temas */
   --color-sunset: #e8653a;
+  /* o pôr do sol sob texto branco: o mesmo matiz, mais fundo (4,9:1; o acento dá 3,3:1, só texto
+     grande). O acento continua nos elementos sem texto: anéis, barras, pinos, o halo da próxima */
+  --color-sunset-deep: #c84317;
   --color-night: #141a26;
   --color-road: #3b4250;
   --color-lane: #e9c24a;
@@ -126,6 +133,25 @@
   --radius-card: 22px;
   --radius-button: 14px;
   --radius-field: 12px;
+}
+
+/*
+  O texto do Modo Viagem (prompt, 11): nunca abaixo de 17 px, e 10% maior à noite. `mv-text-N` é o
+  tamanho N px; com o Modo Viagem aberto, a raiz do documento leva `data-travel-text`, que define
+  --mv-min (17 px, ou 18,7 px à noite) e --mv-scale (1, ou 1,1 à noite), e a classe vale
+  max(N × escala, mínimo), inclusive nos avisos e nas folhas por cima dele. Fora dele, as variáveis
+  não existem e a classe é exatamente N px: o mesmo componente serve aos dois lugares.
+*/
+:root[data-travel-text='day'] {
+  --mv-min: 17px;
+  --mv-scale: 1;
+}
+:root[data-travel-text='night'] {
+  --mv-min: 18.7px;
+  --mv-scale: 1.1;
+}
+@utility mv-text-* {
+  font-size: max(calc(--value(integer) * 1px * var(--mv-scale, 1)), var(--mv-min, 0px));
 }
 
 @layer base {
@@ -204,7 +230,8 @@
   font-variant-numeric: tabular-nums;
 }
 @utility label-caps {
-  font-size: 13px;
+  /* 13 px; dentro do Modo Viagem, a mesma regra do mv-text (mínimo de 17 px, +10% à noite) */
+  font-size: max(calc(13px * var(--mv-scale, 1)), var(--mv-min, 0px));
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;

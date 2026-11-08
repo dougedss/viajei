@@ -134,7 +134,7 @@ function Body({
               aria-pressed={category === k}
               onClick={() => setCategory(k)}
               className={cx(
-                'min-h-11 rounded-full px-4 text-[15px] font-semibold',
+                'min-h-12 rounded-full px-4 text-[15px] font-semibold',
                 category === k
                   ? 'bg-accent-soft text-accent-ink shadow-[inset_0_0_0_2px_var(--color-accent)]'
                   : 'text-ink-2 shadow-[inset_0_0_0_1.5px_var(--color-line)]',
@@ -190,7 +190,7 @@ function Body({
               aria-pressed={paidBy === p.id}
               onClick={() => setPaidBy(p.id)}
               className={cx(
-                'inline-flex min-h-11 items-center gap-2 rounded-full px-4 text-[15px] font-semibold',
+                'inline-flex min-h-12 items-center gap-2 rounded-full px-4 text-[15px] font-semibold',
                 paidBy === p.id
                   ? 'bg-accent-soft text-ink shadow-[inset_0_0_0_2px_var(--color-accent)]'
                   : 'text-ink-2 shadow-[inset_0_0_0_1.5px_var(--color-line)]',

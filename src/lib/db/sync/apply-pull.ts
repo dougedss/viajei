@@ -18,17 +18,28 @@ import {
 
 /** O envelope do pull é validado; as linhas em si vêm do nosso banco, com os tipos gerados. */
 const rowSchema = z.looseObject({ id: z.string(), deleted_at: z.string().nullable().optional() });
-const envelopeSchema = z.looseObject({ server_time: z.string(), revoked: z.boolean().optional() });
+const envelopeSchema = z.looseObject({
+  server_time: z.string(),
+  revoked: z.boolean().optional(),
+  resync: z.boolean().optional(),
+});
 
 export type PullRow = z.infer<typeof rowSchema>;
+/**
+ * `resync`: o cursor deste aparelho é anterior ao horizonte do expurgo (o servidor apagou de vez
+ * lápides que ele talvez nunca tenha visto). A resposta já é o retrato inteiro, e o que o aparelho
+ * tem a mais e não está pendente sai (`dropGhosts`).
+ */
 export type TripPull = {
   server_time: string;
   revoked: boolean;
+  resync: boolean;
   tables: Partial<Record<SyncTable, PullRow[]>>;
   profiles: PullRow[];
 };
 export type UserPull = {
   server_time: string;
+  resync: boolean;
   memberships: PullRow[];
   tables: Partial<Record<SyncTable, PullRow[]>>;
 };
@@ -42,6 +53,7 @@ export function parseTripPull(json: unknown): TripPull {
   return {
     server_time: env.server_time,
     revoked: env.revoked === true,
+    resync: env.resync === true,
     tables,
     profiles: 'profiles' in env ? z.array(rowSchema).parse(env.profiles) : [],
   };
@@ -55,9 +67,77 @@ export function parseUserPull(json: unknown): UserPull {
   }
   return {
     server_time: env.server_time,
+    resync: env.resync === true,
     memberships: z.array(rowSchema).parse(env.memberships ?? []),
     tables,
   };
+}
+
+async function isPending(db: ViajeiDb, table: SyncTable, id: string): Promise<boolean> {
+  return (await db.outbox.where('[table+row_id]').equals([table, id]).count()) > 0;
+}
+
+/**
+ * O `resync`, parte do aparelho: das linhas candidatas, sai a que o servidor já carimbou
+ * (`synced_at`), que o retrato não trouxe e que não tem operação na outbox. Ficam o que a pessoa
+ * criou ou editou aqui e ainda não subiu, a projeção local que o servidor ainda não carimbou (D15),
+ * a fila de fotos (`uploads`) e os caches recalculáveis (`blobs`, `routes`, `weather`,
+ * `travel_state`): nada pendente se perde. A linha sai sozinha, sem `removeWithChildren`, porque
+ * aquele caminho leva junto o arquivo em cache e o envio da foto; um filho que também sumiu do
+ * servidor sai pela própria tabela.
+ */
+async function dropGhosts(
+  db: ViajeiDb,
+  table: SyncTable,
+  candidates: readonly { id: string; synced_at: string | null }[],
+  known: readonly PullRow[],
+): Promise<string[]> {
+  const keep = new Set(known.map((r) => r.id));
+  const dropped: string[] = [];
+  for (const row of candidates) {
+    if (row.synced_at === null || keep.has(row.id)) continue;
+    if (await isPending(db, table, row.id)) continue;
+    await db.syncTable(table).delete(row.id);
+    dropped.push(row.id);
+  }
+  return dropped;
+}
+
+/** As linhas fantasmas de uma viagem, tabela a tabela (só as que o retrato trouxe). */
+async function dropTripGhosts(db: ViajeiDb, tripId: string, pull: TripPull): Promise<number> {
+  let n = 0;
+  for (const t of TRIP_SCOPED_TABLES) {
+    const known = pull.tables[t];
+    // tabela ausente da resposta (servidor de outra versão): nada a comparar, nada sai
+    if (!known) continue;
+    const local =
+      t === 'trips'
+        ? await db.trips.where('id').equals(tripId).toArray()
+        : await db.syncTable(t).where('trip_id').equals(tripId).toArray();
+    n += (await dropGhosts(db, t, local, known)).length;
+  }
+  return n;
+}
+
+/**
+ * O `resync` do pull do usuário: as próprias participações e as linhas de escopo `user` da pessoa
+ * que o servidor não tem mais. Devolve as viagens cuja participação sumiu (o motor as apaga como
+ * uma viagem deixada; o pull dela responderia `revoked` de qualquer jeito).
+ */
+async function dropUserGhosts(db: ViajeiDb, pull: UserPull): Promise<string[]> {
+  const me = (await db.sync_state.get(syncKeys.uid))?.value;
+  if (!me) return [];
+  const mine = await db.trip_members.where('user_id').equals(me).toArray();
+  const gone = new Set(await dropGhosts(db, 'trip_members', mine, pull.memberships));
+  for (const t of SYNC_TABLE_NAMES) {
+    const known = pull.tables[t];
+    if (scopeOf(t) !== 'user' || !known) continue;
+    const local = (await db.syncTable(t).toArray()).filter(
+      (row) => 'user_id' in row && row.user_id === me,
+    );
+    await dropGhosts(db, t, local, known);
+  }
+  return mine.filter((m) => gone.has(m.id)).map((m) => m.trip_id);
 }
 
 /** Apaga uma linha e, em cascata, os filhos locais registrados em `childrenOf`. */
@@ -105,7 +185,8 @@ async function applyRow(
   return 'upserted';
 }
 
-export type ApplyStats = { upserted: number; removed: number; revoked: boolean };
+/** `dropped`: linhas que o `resync` tirou porque o servidor não as tem mais. */
+export type ApplyStats = { upserted: number; removed: number; dropped: number; revoked: boolean };
 
 /**
  * Apaga tudo de uma viagem neste aparelho: linhas de todas as tabelas, os arquivos em cache, cursor
@@ -146,7 +227,11 @@ export async function wipeTrip(db: ViajeiDb, tripId: string): Promise<void> {
   });
 }
 
-/** Aplica o pull de uma viagem numa transação Dexie: tabelas em ordem de rank, perfis, cursor. */
+/**
+ * Aplica o pull de uma viagem numa transação Dexie: tabelas em ordem de rank, perfis, cursor. No
+ * `resync`, as linhas fantasmas saem na mesma transação, antes do retrato: a tela (`useLiveQuery`)
+ * só vê o estado final, nunca a viagem vazia no meio do caminho.
+ */
 export async function applyTripPull(
   db: ViajeiDb,
   tripId: string,
@@ -154,11 +239,12 @@ export async function applyTripPull(
 ): Promise<ApplyStats> {
   if (pull.revoked) {
     await wipeTrip(db, tripId);
-    return { upserted: 0, removed: 0, revoked: true };
+    return { upserted: 0, removed: 0, dropped: 0, revoked: true };
   }
-  const stats: ApplyStats = { upserted: 0, removed: 0, revoked: false };
+  const stats: ApplyStats = { upserted: 0, removed: 0, dropped: 0, revoked: false };
   const tables = [...db.tables.map((t) => t.name)];
   await db.transaction('rw', tables, async () => {
+    if (pull.resync) stats.dropped = await dropTripGhosts(db, tripId, pull);
     const order = SYNC_TABLE_NAMES.filter((t) => pull.tables[t]).sort(
       (a, b) => rankOf(a) - rankOf(b),
     );
@@ -220,6 +306,7 @@ export async function applyUserPull(db: ViajeiDb, pull: UserPull): Promise<Membe
   const change: MembershipChange = { left: [] };
   const tables = [...db.tables.map((t) => t.name)];
   await db.transaction('rw', tables, async () => {
+    if (pull.resync) change.left.push(...(await dropUserGhosts(db, pull)));
     for (const m of pull.memberships) {
       const tripId = typeof m.trip_id === 'string' ? m.trip_id : null;
       const accepted = m.status === 'accepted' && m.deleted_at == null;

@@ -25,14 +25,14 @@ export function NowReservations({
         >
           <ReservationTypeIcon type={r.type} className="size-9" />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[16px] font-semibold">{r.name}</span>
+            <span className="block truncate mv-text-16 font-semibold">{r.name}</span>
             {r.confirmation_code ? (
-              <span className="block text-[14px] text-ink-2">
+              <span className="block mv-text-14 text-ink-2">
                 código <span className="num font-semibold text-ink">{r.confirmation_code}</span>
               </span>
             ) : null}
           </span>
-          <span className="inline-flex shrink-0 items-center gap-0.5 text-[15px] font-semibold text-accent-ink">
+          <span className="inline-flex shrink-0 items-center gap-0.5 mv-text-15 font-semibold text-accent-ink">
             Ver reserva
             <ChevronRight className="size-4" aria-hidden="true" />
           </span>

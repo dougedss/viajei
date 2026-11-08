@@ -21,7 +21,7 @@ export function usePlaceName(
   useEffect(() => {
     if (lat === null || lng === null || !key || cache.has(key)) return;
     let alive = true;
-    void import('@/lib/geo/index.ts').then(({ nearestMunicipality }) => {
+    void import('@/lib/geo/municipalities.ts').then(({ nearestMunicipality }) => {
       const found = nearestMunicipality(lng, lat);
       cache.set(key, found && found.distance_m <= FAR_M ? found.municipality.name : null);
       if (alive) bump((n) => n + 1);

@@ -34,7 +34,10 @@ export default function NovaSenhaPage() {
         title="Link inválido ou expirado"
         subtitle="Abra o link mais recente do e-mail de recuperação, neste mesmo celular."
       >
-        <Link to="/recuperar-senha" className="font-semibold text-accent-ink">
+        <Link
+          to="/recuperar-senha"
+          className="inline-flex min-h-12 items-center font-semibold text-accent-ink"
+        >
           Pedir um link novo
         </Link>
       </AuthCard>

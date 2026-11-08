@@ -1,5 +1,7 @@
 # Teste manual · Fase 10 (importação com IA)
 
+> **Para o teste nos aparelhos, use o [roteiro final](teste-final.md).** Este roteiro da fase 10 fica como registro; tudo dele está lá.
+
 Roteiro para o iPhone (primeiro) e para um Android. Aqui fica só o que um navegador de laboratório
 não julga: colar de verdade do WhatsApp e das Notas, o teclado com um texto longo, a fluidez do
 preview enquanto o roteiro chega e as escolhas de lugar no dedo. O resto da fase (o limite diário, o

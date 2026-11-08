@@ -47,7 +47,7 @@ export function ChecklistRow({ item, profiles, onToggle, onMenu, extra, handlePr
         <button
           type="button"
           aria-label={`Arrastar ${item.text}`}
-          className="grid h-14 w-9 shrink-0 cursor-grab touch-none place-items-center text-ink-2 active:cursor-grabbing"
+          className="grid h-14 w-12 shrink-0 cursor-grab touch-none place-items-center text-ink-2 active:cursor-grabbing"
           {...handleProps}
         >
           <GripVertical className="size-5" aria-hidden="true" />

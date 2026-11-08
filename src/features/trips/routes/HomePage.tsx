@@ -1,5 +1,6 @@
 import { MailOpen, Plus, Route } from 'lucide-react';
-import { Navigate } from 'react-router';
+import { useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { Button } from '@/components/ui/Button.tsx';
 import { ButtonLink } from '@/components/ui/ButtonLink.tsx';
 import { Card } from '@/components/ui/Card.tsx';
@@ -11,8 +12,27 @@ import { TripCard } from '../components/TripCard.tsx';
 import { usePendingInvites, useTrips } from '../queries.ts';
 import { formatPeriod, todayISO, tripStatus } from '../rules.ts';
 
-/** viagens para as quais este carregamento do app já redirecionou: o link "Viagens" continua funcionando */
+/**
+ * Viagens para as quais este carregamento do app já redirecionou. Só a abertura (`/`) redireciona; a
+ * lista (`/viagens`), aonde levam os links "Início" e "Voltar", nunca: quem foi até ela fica nela,
+ * mesmo recarregando.
+ */
 const redirected = new Set<string>();
+
+/**
+ * Durante a viagem, abrir o app cai direto no Modo Viagem do dia (D33). A decisão mora num efeito, e
+ * não no render: o render pode rodar mais de uma vez por mudança (o modo estrito do React roda duas),
+ * e marcar o `Set` ali fazia a segunda passada achar a viagem já marcada e mostrar a lista.
+ */
+function useLaunchRedirect(ongoingId: string | undefined): void {
+  const launch = useLocation().pathname === '/';
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!launch || !ongoingId || redirected.has(ongoingId)) return;
+    redirected.add(ongoingId);
+    void navigate(`/viagens/${ongoingId}/viagem`, { replace: true });
+  }, [launch, ongoingId, navigate]);
+}
 
 export default function HomePage() {
   const invites = usePendingInvites();
@@ -21,13 +41,8 @@ export default function HomePage() {
   const decline = useDeclineInvite();
   const toast = useToast();
   const today = todayISO();
-
-  // durante a viagem, abrir o app cai direto no Modo Viagem do dia
   const ongoing = trips?.find((t) => tripStatus(t.trip, today) === 'ongoing');
-  if (ongoing && !redirected.has(ongoing.trip.id)) {
-    redirected.add(ongoing.trip.id);
-    return <Navigate to={`/viagens/${ongoing.trip.id}/viagem`} replace />;
-  }
+  useLaunchRedirect(ongoing?.trip.id);
 
   return (
     <div className="grid gap-6">

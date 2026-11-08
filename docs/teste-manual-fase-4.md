@@ -1,5 +1,7 @@
 # Teste manual · Fase 4 (uso com a tela apagada)
 
+> **Para o teste nos aparelhos, use o [roteiro final](teste-final.md).** Este roteiro da fase 4 fica como registro; tudo dele está lá.
+
 Roteiro curto para os dois aparelhos, com o que observar em cada passo. Pré-requisitos: produção
 publicada com a 0005, `send-notifications` publicada, `VAPID_PRIVATE_KEY` e `VAPID_SUBJECT` nos
 secrets, `VITE_VAPID_PUBLIC_KEY` na Vercel, os dois segredos no Vault do hospedado, e uma viagem

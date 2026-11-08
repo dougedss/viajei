@@ -34,7 +34,7 @@ export function WeatherChip({ summary, size, anchor, reducedMotion }: Props) {
     return (
       <motion.span
         {...layout}
-        className="pointer-events-none absolute z-40 inline-flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/15 bg-hud px-3.5 py-2 text-[15px] font-semibold whitespace-nowrap text-hud-ink shadow-[0_10px_24px_-10px_rgb(0_0_0/0.6)] backdrop-blur-sm"
+        className="pointer-events-none absolute z-40 inline-flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/15 bg-hud px-3.5 py-2 mv-text-15 font-semibold whitespace-nowrap text-hud-ink shadow-[0_10px_24px_-10px_rgb(0_0_0/0.6)] backdrop-blur-sm"
         style={{ left: anchor.x, top: Math.max(8, anchor.y - 76) }}
         initial={{ opacity: 0, y: 8, scale: 0.9 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -52,7 +52,7 @@ export function WeatherChip({ summary, size, anchor, reducedMotion }: Props) {
     <motion.span
       {...layout}
       initial={false}
-      className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-hud px-2.5 text-[13px] font-semibold text-hud-ink backdrop-blur-sm"
+      className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-hud px-2.5 mv-text-13 font-semibold text-hud-ink backdrop-blur-sm"
       aria-label={`Previsão do dia: ${range}`}
       data-weather-chip="small"
     >

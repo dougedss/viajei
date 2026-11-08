@@ -25,9 +25,9 @@ on:
   workflow_dispatch:
     inputs:
       tarefa:
-        description: 'laboratorio: os cenários de sempre; medir-importacao: a medição do pensamento da IA (D133)'
+        description: 'laboratorio: os cenários de sempre; medir-importacao: a medição do pensamento da IA (D133); medir-desempenho: só o Lighthouse, com os relatórios'
         type: choice
-        options: [laboratorio, medir-importacao]
+        options: [laboratorio, medir-importacao, medir-desempenho]
         default: laboratorio
       alvo:
         description: 'Onde o navegador abre o app: a produção ou o preview da branch escolhida acima (D106)'
@@ -65,7 +65,7 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Laboratório
-        run: pnpm lab --target production ${{ inputs.tarefa == 'medir-importacao' && '--medir-importacao' || '' }}
+        run: pnpm lab --target production ${{ inputs.tarefa != 'laboratorio' && inputs.tarefa && format('--{0}', inputs.tarefa) || '' }}
         env:
           LAB_SECRET: ${{ secrets.LAB_SECRET }}
           # agendado: sempre a produção; sob demanda: a escolha do formulário
@@ -74,7 +74,7 @@ jobs:
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: failure() || inputs.tarefa == 'medir-desempenho'
         with:
           name: laboratorio
           path: lab-artifacts

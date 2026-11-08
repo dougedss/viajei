@@ -1,5 +1,7 @@
 # Teste manual · Fase 8 (listas, missões, contatos e gastos)
 
+> **Para o teste nos aparelhos, use o [roteiro final](teste-final.md).** Este roteiro da fase 8 fica como registro; tudo dele está lá.
+
 Roteiro para o iPhone (primeiro) e para um Android. Aqui fica só o que um navegador de laboratório
 não julga: o toque de ligar e o WhatsApp abrindo de verdade, o `.vcf` no app de Contatos, o confete,
 o sino e a vibração no aparelho. O resto da fase (marcar, sugerir, dispensar, os `href`, o "+ Gasto",

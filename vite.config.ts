@@ -38,11 +38,29 @@ function pdfjsWasm(): Plugin {
   };
 }
 
+/**
+ * As fontes com `font-display: fallback` no lugar do `swap` do @fontsource (fase 12, D162). Com o app
+ * instalado, a fonte vem do precache em milissegundos e o texto já pinta na Barlow, sem a troca que
+ * mexia o layout (o cartão do resumo da visão geral, 0,12 de CLS). Na primeira visita, o texto espera
+ * no máximo 100 ms pela fonte e cai na de reserva.
+ */
+function fontDisplayFallback(): Plugin {
+  return {
+    name: 'viajei:font-display',
+    enforce: 'pre',
+    transform(code, id) {
+      if (!/[\\/]@fontsource[\\/].*\.css(\?|$)/.test(id)) return null;
+      return code.replaceAll('font-display: swap;', 'font-display: fallback;');
+    },
+  };
+}
+
 // React Compiler pelo caminho estável (babel-plugin-react-compiler 1.0). O compilador em Rust do
 // plugin-react ainda é experimental; quando sair da fase experimental, basta trocar por `react({ compiler: true })`.
 export default defineConfig({
   plugins: [
     pdfjsWasm(),
+    fontDisplayFallback(),
     react(),
     babel({ presets: [reactCompilerPreset()] }),
     tailwindcss(),

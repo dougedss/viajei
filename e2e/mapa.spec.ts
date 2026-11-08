@@ -60,6 +60,8 @@ test('o mapa mostra o dia, a folha do pino e troca de dia', async ({ page, conte
   const mapBox = await map.boundingBox();
   expect(box && mapBox && box.x + box.width <= mapBox.x + mapBox.width).toBe(true);
   expect(box && mapBox && box.y + box.height <= mapBox.y + mapBox.height).toBe(true);
+  // o elementFromPoint só enxerga a área visível: a atribuição vem para a tela antes
+  await attribution.scrollIntoViewIfNeeded();
   const onTop = await page.evaluate<boolean>(`(() => {
     const el = document.querySelector('.leaflet-control-attribution');
     const r = el.getBoundingClientRect();

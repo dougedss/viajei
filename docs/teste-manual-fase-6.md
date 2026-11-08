@@ -1,5 +1,7 @@
 # Teste manual · Fase 6 (garagem 3D)
 
+> **Para o teste nos aparelhos, use o [roteiro final](teste-final.md).** Este roteiro da fase 6 fica como registro; tudo dele está lá.
+
 Roteiro para o iPhone (primeiro) e para um Android ou o Chrome do desktop. Como o teste da fase 5
 ainda não aconteceu, a última seção traz os passos dela: dá para fazer as duas fases na mesma
 sentada.

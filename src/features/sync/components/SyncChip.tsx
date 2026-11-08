@@ -35,7 +35,8 @@ export function SyncChip() {
             ? `Sem conexão, ${total} ${total === 1 ? 'alteração por enviar' : 'alterações por enviar'}`
             : `${label}: ver pendências`
         }
-        className="rounded-full"
+        // o chip continua com o tamanho dele; o toque tem 48 px de altura
+        className="inline-flex min-h-12 items-center rounded-full"
       >
         <Chip kind={kind}>
           <Icon

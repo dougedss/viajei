@@ -1,4 +1,4 @@
-import { AuthError } from '@supabase/supabase-js';
+import { AuthError, isAuthWeakPasswordError } from '@supabase/supabase-js';
 
 const MESSAGES: Record<string, string> = {
   invalid_credentials: 'E-mail ou senha incorretos.',
@@ -14,11 +14,15 @@ const MESSAGES: Record<string, string> = {
   signup_disabled: 'O cadastro está desativado no momento.',
   validation_failed: 'Confira os dados informados.',
 };
+// com a proteção contra senha vazada ligada no Auth, a senha que aparece no HaveIBeenPwned também
+// vem como `weak_password`, com o motivo `pwned`: a frase diz o que fazer, não "use 8 caracteres"
+const LEAKED = 'Essa senha já apareceu em vazamentos conhecidos. Escolha outra.';
 const OFFLINE = 'Sem conexão. Tente de novo quando a internet voltar.';
 const GENERIC = 'Não deu certo. Tente de novo em instantes.';
 
 /** Erro do Supabase Auth (ou de rede) em uma frase em português para a tela. */
 export function authErrorMessage(err: unknown): string {
+  if (isAuthWeakPasswordError(err) && err.reasons.includes('pwned')) return LEAKED;
   if (err instanceof AuthError) {
     const known = err.code ? MESSAGES[err.code] : undefined;
     if (known) return known;

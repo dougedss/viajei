@@ -21,7 +21,7 @@ export function usePendingInvites() {
 
 export type MemberWithProfile = { member: TripMember; profile: Profile | null };
 
-async function membersOf(tripId: string): Promise<MemberWithProfile[]> {
+export async function membersOf(tripId: string): Promise<MemberWithProfile[]> {
   const members = await db.trip_members
     .where('trip_id')
     .equals(tripId)

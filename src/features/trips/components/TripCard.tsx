@@ -23,7 +23,6 @@ export function TripCard({ item: { trip, members, pendingOps }, today }: Props) 
   return (
     <Link
       to={`/viagens/${trip.id}`}
-      aria-label={trip.name}
       className="grid gap-3 rounded-card bg-card p-4 shadow-[inset_0_0_0_1px_var(--color-line)] transition active:scale-[.99]"
     >
       <div className="flex items-center justify-between gap-2">
@@ -54,7 +53,11 @@ export function TripCard({ item: { trip, members, pendingOps }, today }: Props) 
         ) : (
           <span />
         )}
-        <div className="flex shrink-0 -space-x-2" aria-label={`${members.length} no time`}>
+        <div
+          className="flex shrink-0 -space-x-2"
+          role="img"
+          aria-label={`${String(members.length)} no time`}
+        >
           {shown.map(({ member, profile }) => (
             <Avatar
               key={member.id}

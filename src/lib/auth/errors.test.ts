@@ -1,4 +1,8 @@
-import { AuthApiError, AuthRetryableFetchError } from '@supabase/supabase-js';
+import {
+  AuthApiError,
+  AuthRetryableFetchError,
+  AuthWeakPasswordError,
+} from '@supabase/supabase-js';
 import { describe, expect, it } from 'vitest';
 import { authErrorMessage } from './errors.ts';
 
@@ -9,6 +13,14 @@ describe('mensagens de erro de autenticação', () => {
     );
     expect(authErrorMessage(new AuthApiError('x', 400, 'email_not_confirmed'))).toMatch(
       /Confirme seu e-mail/,
+    );
+  });
+  it('a senha vazada diz o que fazer; a curta segue pedindo 8 caracteres', () => {
+    expect(authErrorMessage(new AuthWeakPasswordError('weak', 422, ['pwned']))).toMatch(
+      /vazamentos conhecidos/,
+    );
+    expect(authErrorMessage(new AuthWeakPasswordError('weak', 422, ['length']))).toMatch(
+      /pelo menos 8 caracteres/,
     );
   });
   it('rede fora vira "sem conexão"', () => {

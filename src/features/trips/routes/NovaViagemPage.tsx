@@ -12,7 +12,7 @@ export default function NovaViagemPage() {
 
   return (
     <div className="grid gap-5">
-      <PageHeader back="/" title="Nova viagem" />
+      <PageHeader back="/viagens" title="Nova viagem" />
       <TripForm
         submitLabel="Criar viagem"
         onSubmit={async (values) => {

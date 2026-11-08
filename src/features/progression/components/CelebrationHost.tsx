@@ -19,7 +19,8 @@ import { db } from '@/lib/db/schema.ts';
 import { useReducedMotion } from '@/lib/reduced-motion.ts';
 import { ThreeBoundary } from '@/lib/three/ThreeBoundary.tsx';
 import { useSupport } from '@/lib/three/useSupport.ts';
-import { parseQueue, parseSummary, progressKeys } from '../engine.ts';
+import { readCelebrations, type CelebrationState } from '../celebrations.ts';
+import { parseQueue, progressKeys } from '../engine.ts';
 import { useCelebrationsPref } from '../prefs.ts';
 import { unlocksAt } from '../level.ts';
 import {
@@ -44,13 +45,15 @@ const GarageStage = lazy(() => import('@/features/garage/components/GarageStage.
  * fazendo, e o que chegar depois espera o próximo momento. Nunca por cima de outra folha.
  *
  * O resumo da primeira derivação não é folha: é um cartão na própria página, calmo, que a pessoa
- * fecha quando quiser.
+ * fecha quando quiser. A tela que pinta tudo de uma vez (a visão geral) passa a fila já lida
+ * (`state`), para o cartão não chegar depois e empurrar o resto (D162).
  */
 export function CelebrationHost({
   active,
   tripId,
   since,
   showSummary = true,
+  state: preloaded,
 }: {
   active: boolean;
   tripId?: string | undefined;
@@ -58,18 +61,15 @@ export function CelebrationHost({
   since?: number | undefined;
   /** o resumo da primeira derivação aparece aqui (no Modo Viagem, não: fica para as outras telas) */
   showSummary?: boolean;
+  /** a fila já lida pela tela, na mesma leitura do resto */
+  state?: CelebrationState | undefined;
 }) {
   // nunca por cima de outra folha: espera ela fechar
   const otherSheet = useAnySheetOpen();
   const cards = useCelebrationsPref();
   const [mountedAt] = useState(() => Date.now());
-  const state = useLiveQuery(async () => {
-    const [queue, summary] = await Promise.all([
-      db.sync_state.get(progressKeys.queue),
-      db.sync_state.get(progressKeys.summary),
-    ]);
-    return { queue: parseQueue(queue?.value), summary: parseSummary(summary?.value) };
-  }, []);
+  const own = useLiveQuery(readCelebrations, []);
+  const state = preloaded ?? own;
   if (!active || !state) return null;
   const summary =
     showSummary && state.summary ? <SummaryCard summary={state.summary} tripId={tripId} /> : null;
@@ -118,7 +118,7 @@ function SummaryCard({ summary, tripId }: { summary: Summary; tripId: string | u
         <button
           type="button"
           onClick={close}
-          className="grid size-10 shrink-0 place-items-center rounded-full text-ink-2"
+          className="grid size-12 shrink-0 place-items-center rounded-full text-ink-2"
           aria-label="Fechar o resumo"
         >
           <X className="size-5" aria-hidden="true" />

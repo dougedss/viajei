@@ -245,7 +245,7 @@ export function ExportSheet({
                 aria-pressed={size === k}
                 onClick={() => setSize(k)}
                 className={cx(
-                  'min-h-11 rounded-full text-[15px] font-semibold',
+                  'min-h-12 rounded-full text-[15px] font-semibold',
                   size === k
                     ? 'bg-ink text-paper'
                     : 'bg-paper text-ink shadow-[inset_0_0_0_1px_var(--color-line)]',
@@ -258,7 +258,7 @@ export function ExportSheet({
           <ul className="grid grid-cols-2 gap-2">
             {CARD_KINDS.map((k) => (
               <li key={k}>
-                <label className="flex min-h-11 items-center gap-2 text-[16px]">
+                <label className="flex min-h-12 items-center gap-2 text-[16px]">
                   <input
                     type="checkbox"
                     className="size-5 accent-[var(--color-sunset)]"

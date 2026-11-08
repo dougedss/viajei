@@ -247,7 +247,9 @@ function appListas(r: RoadRun): Promise<Check> {
         async () => {
           const b = await r.peer();
           await b.goto(r.trip(listas.trip));
-          await b.getByRole('link', { name: 'Pronto para partir: ver as listas' }).waitFor();
+          await b
+            .getByRole('link', { name: /Pronto para partir\s+As duas listas estão fechadas/ })
+            .waitFor();
         },
       ],
     ],
@@ -549,7 +551,7 @@ function appMissoes(r: RoadRun): Promise<Check> {
           await page.getByRole('button', { name: 'Chegamos!' }).click({ timeout: SLOW });
           const sheet = page.getByRole('dialog', { name: `Como foi ${ROAD.estrada.nature}?` });
           await sheet.waitFor();
-          const done = sheet.getByRole('button', { name: `Missão feita: ${QUEST}` });
+          const done = sheet.getByRole('button', { name: `Feito: ${QUEST}` });
           await done.click();
           await until(
             () => done.getAttribute('aria-pressed'),

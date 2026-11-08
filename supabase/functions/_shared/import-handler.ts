@@ -423,7 +423,7 @@ class ImportRun {
       outcome = this.#why ? outcomeOfStop(this.#why) : failed(failureCode(err));
       if (!this.#why) {
         // só a classe e o identificador do pedido: a mensagem pode carregar trecho do pedido
-        const status = err instanceof Anthropic.APIError ? (err.status ?? '-') : '-';
+        const status = err instanceof Anthropic.APIError ? String(err.status ?? '-') : '-';
         const request = err instanceof Anthropic.APIError ? (err.requestID ?? '-') : '-';
         deps.log(
           `import-itinerary id=${id} erro=${outcome.error ?? '-'} http=${status} request=${request}`,

@@ -433,6 +433,15 @@ enabled = true
 verify_jwt = true
 entrypoint = "./functions/import-itinerary/index.ts"
 
+# purge é o expurgo diário: o pg_cron a chama às 4h de São Paulo com a chave secreta no apikey, como
+# a send-notifications, e a função aceita também o JWT de um executor do laboratório, só para o
+# dry_run (`withSupabase({ auth: ['secret', 'user'] })` confere os dois). A chave secreta não é um
+# JWT, então o JWT da plataforma fica desligado; quem confere é a própria função.
+[functions.purge]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/purge/index.ts"
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

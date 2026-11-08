@@ -33,14 +33,14 @@ export function SuggestionRow({
         <button
           type="button"
           onClick={onAdd}
-          className="min-h-11 rounded-full bg-accent-soft px-4 text-[15px] font-semibold text-accent-ink"
+          className="min-h-12 rounded-full bg-accent-soft px-4 text-[15px] font-semibold text-accent-ink"
         >
           Adicionar
         </button>
         <button
           type="button"
           onClick={onDismiss}
-          className="min-h-11 rounded-full px-4 text-[15px] font-semibold text-ink-2 shadow-[inset_0_0_0_1.5px_var(--color-line)]"
+          className="min-h-12 rounded-full px-4 text-[15px] font-semibold text-ink-2 shadow-[inset_0_0_0_1.5px_var(--color-line)]"
         >
           Dispensar
         </button>

@@ -54,7 +54,7 @@ export function RatingChips({
         return (
           <span
             key={m.id}
-            className="inline-flex min-h-7 items-center gap-1 rounded-full bg-paper px-2 text-[13px] font-semibold"
+            className="inline-flex min-h-7 items-center gap-1 rounded-full bg-paper px-2 mv-text-13 font-semibold"
             style={{ boxShadow: `inset 0 0 0 1.5px ${hex}` }}
             aria-label={`${p?.name ?? 'Alguém'}: ${m.rating ?? 0} de 5`}
           >

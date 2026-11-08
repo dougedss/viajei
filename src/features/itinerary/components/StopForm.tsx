@@ -187,8 +187,8 @@ export function StopForm({ stop, submitLabel, onSubmit }: Props) {
                 onClick={() => form.setValue('kind', k, { shouldDirty: true })}
                 className={
                   selected
-                    ? 'inline-flex min-h-11 items-center gap-1.5 rounded-full bg-accent-soft px-3 text-[15px] font-semibold text-accent-ink shadow-[inset_0_0_0_2px_var(--color-accent)]'
-                    : 'inline-flex min-h-11 items-center gap-1.5 rounded-full bg-card px-3 text-[15px] font-semibold text-ink-2 shadow-[inset_0_0_0_1.5px_var(--color-line)]'
+                    ? 'inline-flex min-h-12 items-center gap-1.5 rounded-full bg-accent-soft px-3 text-[15px] font-semibold text-accent-ink shadow-[inset_0_0_0_2px_var(--color-accent)]'
+                    : 'inline-flex min-h-12 items-center gap-1.5 rounded-full bg-card px-3 text-[15px] font-semibold text-ink-2 shadow-[inset_0_0_0_1.5px_var(--color-line)]'
                 }
               >
                 <StopKindIcon kind={k} className={`size-4 ${KIND_TEXT[k]}`} />
@@ -307,7 +307,7 @@ export function StopForm({ stop, submitLabel, onSubmit }: Props) {
           <button
             type="button"
             onClick={clearCoords}
-            className="inline-flex min-h-10 items-center gap-1 text-[14px] font-semibold text-ink-2"
+            className="inline-flex min-h-12 items-center gap-1 text-[14px] font-semibold text-ink-2"
           >
             <X className="size-4" aria-hidden="true" />
             Limpar

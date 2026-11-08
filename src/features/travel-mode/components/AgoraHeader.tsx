@@ -41,8 +41,8 @@ export function AgoraHeader({ state, busy, onDepart, onArrive, onSkip, footer, f
         <h2 id="h-agora" className="label-caps text-accent-ink">
           Agora
         </h2>
-        <p className="font-num text-[30px] leading-tight font-semibold">Dia concluído</p>
-        <p className="text-[17px] text-ink-2">
+        <p className="font-num mv-text-30 leading-tight font-semibold">Dia concluído</p>
+        <p className="mv-text-17 text-ink-2">
           Todas as paradas de hoje foram marcadas. Bom descanso.
         </p>
         {footer}
@@ -59,7 +59,7 @@ export function AgoraHeader({ state, busy, onDepart, onArrive, onSkip, footer, f
         <h2 id="h-agora" className="label-caps text-accent-ink">
           Agora
         </h2>
-        <p className="text-[17px] text-ink-2">Este dia ainda não tem paradas.</p>
+        <p className="mv-text-17 text-ink-2">Este dia ainda não tem paradas.</p>
         {footer}
       </section>
     );
@@ -88,37 +88,35 @@ export function AgoraHeader({ state, busy, onDepart, onArrive, onSkip, footer, f
           label={minutesLabel ? `Contagem: ${minutesLabel}` : 'Sem horário'}
         >
           {countdown ? (
-            <span className={`num text-[26px] leading-none font-bold ${TEXT_COLOR[stateKey]}`}>
+            <span className={`num mv-text-26 leading-none font-bold ${TEXT_COLOR[stateKey]}`}>
               {Math.abs(countdown.minutes) >= 100
                 ? formatDuration(Math.abs(countdown.minutes))
                 : Math.abs(countdown.minutes)}
               {Math.abs(countdown.minutes) < 100 ? (
-                <span className="block text-[12px] font-semibold tracking-wide uppercase">
+                <span className="block mv-text-12 font-semibold tracking-wide uppercase">
                   {countdown.minutes < 0 ? 'atraso' : 'min'}
                 </span>
               ) : null}
             </span>
           ) : (
-            <span className="text-[14px] text-ink-2">sem hora</span>
+            <span className="mv-text-14 text-ink-2">sem hora</span>
           )}
         </Ring>
         <div className="min-w-0 flex-1">
           <p className="label-caps text-ink-2">{state.onRoad ? 'A caminho de' : 'Próxima'}</p>
-          <p className="font-num text-[28px] leading-tight font-semibold break-words">
-            {next.name}
-          </p>
+          <p className="font-num mv-text-28 leading-tight font-semibold break-words">{next.name}</p>
           {countdown ? (
-            <p className={`num text-[34px] leading-none font-bold ${TEXT_COLOR[stateKey]}`}>
-              <span className="font-ui text-[17px] font-semibold text-ink-2">
+            <p className={`num mv-text-34 leading-none font-bold ${TEXT_COLOR[stateKey]}`}>
+              <span className="font-ui mv-text-17 font-semibold text-ink-2">
                 {countdown.label}{' '}
               </span>
               {formatClock(countdown.target)}
             </p>
           ) : (
-            <p className="text-[17px] text-ink-2">Sem horário definido</p>
+            <p className="mv-text-17 text-ink-2">Sem horário definido</p>
           )}
           {travel !== null && state.arriveAt ? (
-            <p className="text-[17px] text-ink-2">
+            <p className="mv-text-17 text-ink-2">
               {formatDuration(travel)} de estrada · chega {formatClock(state.arriveAt)}
             </p>
           ) : null}
@@ -160,7 +158,7 @@ export function AgoraHeader({ state, busy, onDepart, onArrive, onSkip, footer, f
       {closingSoon ? (
         <p
           role="status"
-          className="flex items-center gap-2 rounded-field bg-tight/15 px-4 py-3 text-[17px] font-semibold text-tight-ink"
+          className="flex items-center gap-2 rounded-field bg-tight/15 px-4 py-3 mv-text-17 font-semibold text-tight-ink"
         >
           <TriangleAlert className="size-5 shrink-0" aria-hidden="true" />
           {closingSoon.minutes < 0

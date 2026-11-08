@@ -29,8 +29,8 @@ export function PanelBar({ panel }: { panel: Panel }) {
           <Satellite className="size-5" aria-hidden="true" />
         </span>
         <span className="grid min-w-0">
-          <span className="font-num text-[19px] leading-tight font-semibold">Painel ligado</span>
-          <span className="truncate text-[14px] text-hud-muted">
+          <span className="font-num mv-text-19 leading-tight font-semibold">Painel ligado</span>
+          <span className="truncate mv-text-14 text-hud-muted">
             {panel.lowPower
               ? 'Parado · GPS econômico · trilha gravada'
               : 'Tela acesa · GPS · gravando trilha'}

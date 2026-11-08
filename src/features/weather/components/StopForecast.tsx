@@ -19,7 +19,7 @@ export function StopForecast({ forecast, at, className }: Props) {
   const text = hourText(forecast);
   return (
     <p
-      className={cx('mt-1 flex items-center gap-1.5 text-[14px] text-ink-2', className)}
+      className={cx('mt-1 flex items-center gap-1.5 mv-text-14 text-ink-2', className)}
       aria-label={`Previsão${at ? ` ${at}` : ''}: ${info.known ? `${info.label}, ` : ''}${text.replace(' · ', ', ')}`}
       data-stop-forecast
     >

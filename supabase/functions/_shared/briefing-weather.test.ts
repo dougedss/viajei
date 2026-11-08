@@ -38,7 +38,7 @@ describe('o clima do briefing no servidor', () => {
       { fetch: fetchFn },
     );
     expect(fetchFn).toHaveBeenCalledTimes(1);
-    const url = new URL(String(fetchFn.mock.calls[0]?.[0]));
+    const url = new URL(fetchFn.mock.calls[0]?.[0] as string);
     expect(url.searchParams.get('latitude')).toBe('-26.41,-29.49');
     expect(url.searchParams.get('start_date')).toBe(RECORDED_DATE);
     expect(url.searchParams.has('hourly')).toBe(false);

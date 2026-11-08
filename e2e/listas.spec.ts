@@ -93,7 +93,9 @@ test('marcar Antes e Mala até 100% antes da viagem mostra "Pronto para partir"'
 
   // a visão geral mostra o selo; o cartão não volta (uma vez por aparelho)
   await page.goto(tripUrl);
-  await expect(page.getByRole('link', { name: 'Pronto para partir: ver as listas' })).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: /Pronto para partir\s+As duas listas estão fechadas/ }),
+  ).toBeVisible();
   await expect(page.getByRole('link', { name: 'Listas: 3 de 3' })).toBeVisible();
   await expect(page.getByRole('dialog', { name: 'Pronto para partir' })).toHaveCount(0);
 });

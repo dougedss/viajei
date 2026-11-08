@@ -85,7 +85,7 @@ async function readSnapshot(me: string, now: number): Promise<ProgressSnapshot> 
   ]);
   // a distância até a costa só carrega quando há trilha (o chunk da lib/geo tem os dados embutidos)
   const coastDistance =
-    tracks.length > 0 ? (await import('@/lib/geo/index.ts')).distanceToCoast : null;
+    tracks.length > 0 ? (await import('@/lib/geo/coast.ts')).distanceToCoast : null;
   return {
     uid: me,
     now,

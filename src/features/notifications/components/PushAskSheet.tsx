@@ -83,7 +83,7 @@ export function PushAskSheet({
 
   return (
     <Sheet open onClose={close} title="Avisos da viagem" description={trip.name}>
-      <ul className="grid gap-3 text-[16px]">
+      <ul className="grid gap-3 mv-text-16">
         <li className="flex items-center gap-3">
           <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-ink">
             <BellRing className="size-5" aria-hidden="true" />

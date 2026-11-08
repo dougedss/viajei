@@ -158,9 +158,10 @@ function PinMarker(props: {
     () =>
       L.divIcon({
         html: host,
-        className: 'map-pin-host',
-        iconSize: compact ? [28, 28] : [40, 48],
-        iconAnchor: compact ? [14, 14] : [20, 47],
+        // o desenho tem 28 ou 40 px; o alvo do toque, 48 (fase 12)
+        className: compact ? 'map-pin-host map-pin-host--compact' : 'map-pin-host',
+        iconSize: [48, 48],
+        iconAnchor: compact ? [24, 24] : [24, 47],
       }),
     [host, compact],
   );

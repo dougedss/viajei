@@ -157,7 +157,7 @@ function Garage({
           {sideOnly ? null : <p>arraste para girar</p>}
         </div>
         {preview ? (
-          <span className="pointer-events-none absolute top-11 right-4 inline-flex items-center gap-1.5 rounded-full bg-sunset px-3 py-1 font-num text-[15px] font-bold tracking-wide text-white">
+          <span className="pointer-events-none absolute top-11 right-4 inline-flex items-center gap-1.5 rounded-full bg-sunset-deep px-3 py-1 font-num text-[15px] font-bold tracking-wide text-white">
             <Eye className="size-4" aria-hidden="true" />
             Prévia
           </span>

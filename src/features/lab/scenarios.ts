@@ -143,6 +143,21 @@ export const LAB_SCENARIOS = {
     label: 'App · retrospectiva',
     description: 'O filme chega ao card final; o card em 1080 × 1920 e o vídeo de 15 s, no Chrome',
   },
+  expurgo: {
+    label: 'Expurgo',
+    description:
+      'O dry_run diário da função purge responde, não mexe em nada e nada fora da regra se qualifica',
+  },
+  app_resync: {
+    label: 'App · aparelho atrasado',
+    description:
+      'Com o cursor antes do horizonte, o resync tira a linha fantasma e as edições sem sinal sobem',
+  },
+  lighthouse: {
+    label: 'Lighthouse',
+    description:
+      'Desempenho, acessibilidade e boas práticas ≥ 90 no celular (mediana de 3), e o app instalável',
+  },
 } as const;
 
 export type LabScenario = keyof typeof LAB_SCENARIOS;

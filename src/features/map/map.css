@@ -61,6 +61,11 @@
   background: none;
   border: 0;
 }
+/* o pino da viagem inteira é pequeno, mas o toque nele tem 48 px: o desenho fica no centro */
+.map-pin-host--compact .map-pin {
+  height: 100%;
+  align-content: center;
+}
 .map-pin-host:focus-visible {
   outline: none;
 }
@@ -182,11 +187,13 @@
     0 0 0 1px var(--color-line),
     0 6px 16px -8px rgb(0 0 0 / 0.4);
 }
-.leaflet-bar a,
-.leaflet-bar a:hover {
-  width: 40px;
-  height: 40px;
-  line-height: 40px;
+/* alvo de toque de 48 px (fase 12); três classes para passar a regra de toque do Leaflet
+   (`.leaflet-touch .leaflet-bar a`, 30 px), qualquer que seja a ordem dos arquivos de CSS */
+.leaflet-container .leaflet-bar.leaflet-control a,
+.leaflet-container .leaflet-bar.leaflet-control a:hover {
+  width: 48px;
+  height: 48px;
+  line-height: 48px;
   background: var(--color-card);
   color: var(--color-ink);
   border-bottom-color: var(--color-line);

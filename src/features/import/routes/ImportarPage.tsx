@@ -68,7 +68,7 @@ export default function ImportarPage() {
           <button
             type="button"
             onClick={() => setEditing(null)}
-            className="inline-flex min-h-10 w-fit items-center gap-1 text-[15px] font-semibold text-ink-2"
+            className="inline-flex min-h-12 w-fit items-center gap-1 text-[15px] font-semibold text-ink-2"
           >
             <ArrowLeft className="size-5" aria-hidden="true" />
             Voltar à revisão

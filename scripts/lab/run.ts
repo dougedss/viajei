@@ -53,6 +53,9 @@ import { appProgressao, appRetrospectiva, type ProgressContext } from './app-pro
 import { roadScenarios, ROAD_SCENARIOS } from './app-road.ts';
 import { appImportar } from './app-import.ts';
 import { appMapaClima } from './app-map.ts';
+import { appResync } from './app-resync.ts';
+import { labLighthouse } from './lighthouse.ts';
+import { expurgo } from './purge.ts';
 import { measureImport } from './measure-import.ts';
 import { NOT_ARMED, runArmed } from './armed.ts';
 import { prepareRoad, resetRoad } from './road.ts';
@@ -550,6 +553,24 @@ async function main(): Promise<number> {
   if (argv.includes('--medir-importacao')) {
     return measureImport(cfg, await signIn(cfg, LAB_USERS.a));
   }
+  // o Lighthouse sozinho (fase 12): a viagem do lab-a preparada pelo laboratório do dia, sem os
+  // outros cenários; os relatórios inteiros vão para os artefatos
+  if (argv.includes('--medir-desempenho')) {
+    const lh = await labLighthouse(
+      {
+        appUrl: cfg.appOrigin,
+        bypass: cfg.bypass,
+        a: await signIn(cfg, LAB_USERS.a),
+        email: LAB_USERS.a.email,
+        password: await derivePassword(cfg.secret, LAB_USERS.a.email),
+        reportsDir: join(process.cwd(), 'lab-artifacts'),
+      },
+      new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date()),
+    );
+    log(`lighthouse ${lh.status} · ${lh.detail}`);
+    log(JSON.stringify(lh.data));
+    return lh.status === 'fail' ? 1 : 0;
+  }
   if (target === 'local') for (const l of await ensureLocalLab(cfg)) log(l);
   await probeReceiver(cfg);
 
@@ -854,6 +875,54 @@ async function main(): Promise<number> {
   } finally {
     if (app) await closeApp(app);
     await finalize(a, b, ids);
+  }
+
+  // fase 12, depois de tudo (nada aqui depende do cron): o dry_run do expurgo, o aparelho atrasado
+  // e o Lighthouse, que mede em silêncio, com os outros navegadores já fechados
+  const failedCheck = (scenario: Check['scenario'], err: unknown): Check => ({
+    scenario,
+    status: 'fail',
+    latency_ms: null,
+    detail: (err instanceof Error ? err.message : String(err)).slice(0, 900),
+    data: {},
+  });
+  const purge = await expurgo(a).catch((err: unknown) => failedCheck('expurgo', err));
+  checks.push(purge);
+  log(`expurgo ${purge.status} · ${purge.detail}`);
+  if (withApp) {
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(
+      new Date(),
+    );
+    const late = await appResync(
+      {
+        appUrl: cfg.appOrigin,
+        bypass: cfg.bypass,
+        a,
+        email: LAB_USERS.a.email,
+        password: progress.passwords.a,
+        artifactsDir: progress.artifactsDir,
+      },
+      today,
+    ).catch((err: unknown) => failedCheck('app_resync', err));
+    checks.push(late);
+    log(`app: app_resync ${late.status} · ${late.detail}`);
+    const lh = await labLighthouse(
+      {
+        appUrl: cfg.appOrigin,
+        bypass: cfg.bypass,
+        a,
+        email: LAB_USERS.a.email,
+        password: progress.passwords.a,
+      },
+      today,
+    ).catch((err: unknown) => failedCheck('lighthouse', err));
+    checks.push(lh);
+    log(`lighthouse ${lh.status} · ${lh.detail}`);
+  } else {
+    checks.push(
+      skipped('app_resync', 'Sem navegador nesta execução.'),
+      skipped('lighthouse', 'Sem navegador nesta execução.'),
+    );
   }
 
   const { status, summary } = summarize(checks);

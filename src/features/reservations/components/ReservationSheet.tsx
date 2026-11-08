@@ -9,6 +9,7 @@ import { MediaThumb } from '@/features/media/components/MediaThumb.tsx';
 import { MediaViewer } from '@/features/media/components/MediaViewer.tsx';
 import { formatMoney } from '@/features/trips/rules.ts';
 import type { Reservation, Stop } from '@/lib/db/schema.ts';
+import { canWhatsApp } from '@/features/contacts/rules.ts';
 import { googleMapsUrl, telUrl, wazeUrl, whatsappUrl } from '@/lib/links/index.ts';
 import { cancelInfo, policyAdds, typeLabel, whenLabel } from '../rules.ts';
 import { useReservationMedia } from '../queries.ts';
@@ -117,10 +118,18 @@ function Body({ r, stop, today }: { r: Reservation; stop: Props['stop']; today: 
                 <Phone className="size-5" aria-hidden="true" />
                 Ligar
               </a>
-              <a href={whatsappUrl(r.phone)} target="_blank" rel="noreferrer" className={linkClass}>
-                <MessageCircle className="size-5" aria-hidden="true" />
-                WhatsApp
-              </a>
+              {/* como nos contatos (D99): o wa.me de um fixo abre uma conversa que não existe */}
+              {canWhatsApp(r.phone) ? (
+                <a
+                  href={whatsappUrl(r.phone)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={linkClass}
+                >
+                  <MessageCircle className="size-5" aria-hidden="true" />
+                  WhatsApp
+                </a>
+              ) : null}
             </div>
           </div>
         ) : null}

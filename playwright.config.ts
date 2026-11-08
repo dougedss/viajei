@@ -22,7 +22,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
+  reporter: process.env.CI
+    ? [['github'], ['html', { open: 'never' }], ['./e2e/reporters/tempo-por-projeto.ts']]
+    : 'list',
   use: {
     baseURL: 'http://127.0.0.1:5173',
     trace: 'on-first-retry',
@@ -40,7 +42,7 @@ export default defineConfig({
   projects: [
     {
       name: 'iphone',
-      testIgnore: /\.pwa\.spec\.ts$/,
+      testIgnore: [/\.pwa\.spec\.ts$/, /\/resync\.spec\.ts$/],
       use: { ...iphone, storageState: quiet('http://127.0.0.1:5173') },
     },
     {
@@ -48,6 +50,39 @@ export default defineConfig({
       testMatch: /\.pwa\.spec\.ts$/,
       use: {
         ...iphone,
+        baseURL: 'http://127.0.0.1:4173',
+        serviceWorkers: 'allow',
+        storageState: quiet('http://127.0.0.1:4173'),
+      },
+    },
+    // O motor do Safari (WebKit), com o perfil do iPhone 15: o mais perto do iPhone que a CI tem. Só o
+    // fluxo principal e o sem sinal, que são o que mais depende do motor (IndexedDB, Web Locks,
+    // service worker, datas); o resto da suíte fica no Chromium, que é o que a CI roda rápido.
+    {
+      name: 'webkit',
+      testMatch: /\/(fluxo|offline)\.spec\.ts$/,
+      // o `--host-resolver-rules` de cima é do Chromium: no WebKit, os specs bloqueiam o OSM e o
+      // Open-Meteo no próprio contexto (`semMundoDeFora`)
+      use: {
+        ...devices['iPhone 15'],
+        launchOptions: { args: [] },
+        storageState: quiet('http://127.0.0.1:5173'),
+      },
+    },
+    // O aparelho atrasado chama o expurgo com o corte de agora, que alcança o banco inteiro dos
+    // testes: roda sozinho, depois de todos os outros projetos.
+    {
+      name: 'expurgo',
+      testMatch: /\/resync\.spec\.ts$/,
+      dependencies: ['iphone', 'pwa', 'webkit', 'webkit-pwa'],
+      use: { ...iphone, storageState: quiet('http://127.0.0.1:5173') },
+    },
+    {
+      name: 'webkit-pwa',
+      testMatch: /\/offline\.pwa\.spec\.ts$/,
+      use: {
+        ...devices['iPhone 15'],
+        launchOptions: { args: [] },
         baseURL: 'http://127.0.0.1:4173',
         serviceWorkers: 'allow',
         storageState: quiet('http://127.0.0.1:4173'),

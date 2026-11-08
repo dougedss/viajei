@@ -1,5 +1,5 @@
 import { fastDistanceM } from '@shared/geo.ts';
-import { municipalities, type Municipality } from './data.ts';
+import { municipalities, type Municipality } from './municipalities-data.ts';
 
 export type NearestMunicipality = { municipality: Municipality; distance_m: number };
 

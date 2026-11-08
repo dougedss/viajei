@@ -42,7 +42,7 @@ export function fromBase64Url(text: string): Uint8Array<ArrayBuffer> {
 }
 
 export async function generateVapidKeyPair(subtle: SubtleCrypto = crypto.subtle): Promise<KeyPair> {
-  return (await subtle.generateKey(P256, true, ['sign', 'verify'])) as KeyPair;
+  return await subtle.generateKey(P256, true, ['sign', 'verify']);
 }
 
 /** A chave privada como `VAPID_PRIVATE_KEY` (PKCS#8, base64url). */

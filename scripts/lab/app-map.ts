@@ -241,6 +241,9 @@ export async function appMapaClima(ctx: MapContext, today: string): Promise<Chec
       mapData.tiles_na_tela = await frame.locator('img.leaflet-tile-loaded').count();
     });
     await map.run('a atribuição está visível e nada a cobre', async () => {
+      // o elementFromPoint só enxerga a área visível: com os alvos de 48 px (fase 12), o canto do
+      // mapa pode ficar abaixo da dobra, e a atribuição vem para a tela antes
+      await p.locator('.leaflet-control-attribution').scrollIntoViewIfNeeded();
       if (!(await p.evaluate(ATTRIBUTION_ON_TOP)))
         throw new Error('a atribuição está coberta ou some');
     });

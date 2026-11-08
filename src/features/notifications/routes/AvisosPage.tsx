@@ -203,9 +203,9 @@ export default function AvisosPage() {
                   disabled={!prefs.enabled}
                   onClick={() => save({ lead_minutes: min })}
                   className={cx(
-                    'min-h-11 min-w-16 rounded-full px-4 font-num text-[17px] font-bold disabled:opacity-50',
+                    'min-h-12 min-w-16 rounded-full px-4 font-num text-[17px] font-bold disabled:opacity-50',
                     prefs.lead_minutes === min
-                      ? 'bg-sunset text-white'
+                      ? 'bg-sunset-deep text-white'
                       : 'bg-card text-ink shadow-[inset_0_0_0_1.5px_var(--color-line)]',
                   )}
                 >
@@ -223,7 +223,7 @@ export default function AvisosPage() {
               onChange={(e) => {
                 if (e.target.value) save({ morning_time: e.target.value });
               }}
-              className="min-h-11 rounded-field bg-paper px-3 font-num text-[20px] font-semibold text-ink shadow-[inset_0_0_0_1.5px_var(--color-line)] disabled:opacity-50"
+              className="min-h-12 rounded-field bg-paper px-3 font-num text-[20px] font-semibold text-ink shadow-[inset_0_0_0_1.5px_var(--color-line)] disabled:opacity-50"
             />
           </label>
           {kinds.map((k) => (

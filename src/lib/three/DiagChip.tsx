@@ -20,7 +20,7 @@ type Props = {
 };
 
 const chip =
-  'pointer-events-auto inline-flex min-h-8 items-center gap-1.5 rounded-full bg-hud px-3 text-[12px] font-semibold text-hud-ink backdrop-blur-sm';
+  'pointer-events-auto inline-flex min-h-8 items-center gap-1.5 rounded-full bg-hud px-3 mv-text-12 font-semibold text-hud-ink backdrop-blur-sm';
 
 export function DiagChip(props: Props) {
   const backend =

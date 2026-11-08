@@ -29,31 +29,31 @@ export function QuestChecks({
           >
             <Flag className="size-5 shrink-0 text-on-time-ink" aria-hidden="true" />
             <span className="min-w-0 flex-1">
-              <span className={cx('block text-[16px] leading-snug', done && 'text-ink-2')}>
+              <span className={cx('block mv-text-16 leading-snug', done && 'text-ink-2')}>
                 {q.text}
               </span>
-              <span className="font-num text-[13px] font-semibold text-on-time-ink">
+              <span className="font-num mv-text-13 font-semibold text-on-time-ink">
                 missão · +{q.points}
               </span>
             </span>
             <button
               type="button"
               aria-pressed={done}
-              aria-label={`Missão feita: ${q.text}`}
+              aria-label={`Feito: ${q.text}`}
               onClick={() => {
                 const at = tappedRect();
                 void setDone(q, uid, !done);
                 if (!done) void gainXp(uid, 'quest_done', q.id, q.points, at);
               }}
               className={cx(
-                'inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full px-4 text-[15px] font-semibold',
+                'inline-flex min-h-12 shrink-0 items-center gap-1 rounded-full px-4 mv-text-15 font-semibold',
                 done
                   ? 'bg-on-time text-white'
                   : 'bg-on-time/15 text-on-time-ink shadow-[inset_0_0_0_1.5px_var(--color-on-time)]',
               )}
             >
               {done ? <Check className="size-4" strokeWidth={3} aria-hidden="true" /> : null}
-              {done ? 'Feita' : 'Feito'}
+              Feito
             </button>
           </li>
         );

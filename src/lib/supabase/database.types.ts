@@ -623,6 +623,12 @@ isOneToOne: false
 "lab_grant":
 { Args: { "p_email": string,"p_role": string }; Returns: string
                            },
+"lab_mark_horizon":
+{ Args: { "p_trip_id": string }; Returns: undefined
+                           },
+"lab_purge_preview":
+{ Args: { "p_logs_before": string,"p_orphans_before": string,"p_tombstones_before": string,"p_trips_before": string }; Returns: Json
+                           },
 "lab_reset_progress":
 { Args: Record<PropertyKey, never>; Returns: number
                            },
@@ -633,6 +639,9 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: {
               "end_date": string,"invited_by_name": string,"member_id": string,"start_date": string,"trip_id": string,"trip_name": string
             }[]
+                           },
+"purge":
+{ Args: { "p_dry_run": boolean,"p_logs_before": string,"p_orphans_before": string,"p_tombstones_before": string,"p_trips_before": string }; Returns: Json
                            },
 "sync_pull":
 { Args: { "p_since": string,"p_trip_id": string }; Returns: Json

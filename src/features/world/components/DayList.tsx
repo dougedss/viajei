@@ -35,13 +35,13 @@ export function DayList({ state, legs, profiles, route, defaultOpen, footer, sto
         aria-expanded={open}
         aria-controls="lista-do-dia"
         onClick={() => setOpen((v) => !v)}
-        className="flex min-h-10 w-full items-center justify-between gap-3 text-left"
+        className="flex min-h-12 w-full items-center justify-between gap-3 text-left"
       >
         <span className="flex items-baseline gap-3">
           <span id="h-lista" className="label-caps text-accent-ink">
             Lista do dia
           </span>
-          <span className="text-[15px] text-ink-2">
+          <span className="mv-text-15 text-ink-2">
             {done.done} de {done.total} {done.total === 1 ? 'parada' : 'paradas'}
           </span>
         </span>
@@ -55,12 +55,12 @@ export function DayList({ state, legs, profiles, route, defaultOpen, footer, sto
       </button>
       <div id="lista-do-dia" hidden={!open} className="grid gap-3">
         {state.stops.length === 0 ? (
-          <p className="text-[17px] text-ink-2">Nenhuma parada neste dia.</p>
+          <p className="mv-text-17 text-ink-2">Nenhuma parada neste dia.</p>
         ) : (
           <TrailList state={state} legs={legs} profiles={profiles} stopExtras={stopExtras} />
         )}
         {route && distance !== null && duration !== null ? (
-          <p className="border-t border-line pt-3 text-[15px] text-ink-2">
+          <p className="border-t border-line pt-3 mv-text-15 text-ink-2">
             Rota do dia · {formatKm(distance)} · {formatDuration(duration)} · sobe{' '}
             {totalAscent(route.elevation).toLocaleString('pt-BR')} m
           </p>

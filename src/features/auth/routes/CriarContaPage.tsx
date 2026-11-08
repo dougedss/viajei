@@ -38,7 +38,10 @@ export default function CriarContaPage() {
             Enviamos um link de confirmação para <b className="text-ink">{sentTo}</b>. Abra-o neste
             celular para entrar.
           </p>
-          <Link to="/entrar" className="font-semibold text-accent-ink">
+          <Link
+            to="/entrar"
+            className="inline-flex min-h-12 items-center font-semibold text-accent-ink"
+          >
             Voltar para entrar
           </Link>
         </div>

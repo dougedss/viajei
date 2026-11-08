@@ -85,7 +85,7 @@ export function WorldHud(props: Props) {
                 animate={{ scale: 1 }}
                 transition={{ type: 'spring', stiffness: 500, damping: 18 }}
                 className={cx(
-                  'flex h-[26px] items-center gap-1.5 rounded-full border bg-hud px-2.5 text-[13px] font-semibold whitespace-nowrap text-hud-ink backdrop-blur-sm',
+                  'flex min-h-[26px] items-center gap-1.5 rounded-full border bg-hud px-2.5 mv-text-13 font-semibold whitespace-nowrap text-hud-ink backdrop-blur-sm',
                   status === 'done' && 'border-on-time/60',
                   status === 'next' && 'border-sunset shadow-[0_0_0_3px_rgb(232_101_58/0.3)]',
                   status === 'pending' && 'border-white/10',
@@ -104,7 +104,7 @@ export function WorldHud(props: Props) {
                   {stop.name}
                 </span>
                 {stop.time ? (
-                  <time className="num text-[13px] text-hud-muted">{hhmm(stop.time)}</time>
+                  <time className="num mv-text-13 text-hud-muted">{hhmm(stop.time)}</time>
                 ) : null}
                 {props.rainy?.has(node.stop_id) ? (
                   <CloudRain
@@ -125,7 +125,7 @@ export function WorldHud(props: Props) {
                 <motion.span
                   initial={reducedMotion ? false : { y: -6, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
-                  className="rounded-full bg-sunset px-2 py-0.5 text-[12px] font-semibold text-white"
+                  className="rounded-full bg-sunset-deep px-2 py-0.5 mv-text-12 font-semibold text-white"
                 >
                   {chip.name}
                   {chip.time ? ` · ${chip.time}` : ''}
@@ -151,7 +151,7 @@ export function WorldHud(props: Props) {
             role="status"
             initial={reducedMotion ? false : { y: -6, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            className="inline-flex max-w-[92%] items-center gap-2 rounded-full border border-sunset bg-hud px-4 py-2 text-center text-[14px] font-semibold text-hud-ink backdrop-blur-sm"
+            className="inline-flex max-w-[92%] items-center gap-2 rounded-full border border-sunset bg-hud px-4 py-2 text-center mv-text-14 font-semibold text-hud-ink backdrop-blur-sm"
           >
             <span className="text-sunset" aria-hidden="true">
               ✦
@@ -165,13 +165,13 @@ export function WorldHud(props: Props) {
       <div className="absolute inset-x-0 bottom-2 flex items-end justify-between gap-2 px-3">
         <div className="flex flex-wrap gap-2">
           {props.offRouteM !== null ? (
-            <span className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-late px-3 text-[13px] font-semibold text-white">
+            <span className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-late px-3 mv-text-13 font-semibold text-white">
               <MapPinOff className="size-4" aria-hidden="true" />
               Fora da rota · {formatDistance(props.offRouteM)}
             </span>
           ) : null}
           {props.overflow > 0 ? (
-            <span className="inline-flex min-h-8 items-center rounded-full bg-hud px-3 text-[13px] font-semibold text-hud-ink">
+            <span className="inline-flex min-h-8 items-center rounded-full bg-hud px-3 mv-text-13 font-semibold text-hud-ink">
               +{props.overflow} {props.overflow === 1 ? 'parada' : 'paradas'}
             </span>
           ) : null}
@@ -181,7 +181,7 @@ export function WorldHud(props: Props) {
           <button
             type="button"
             onClick={props.onSkip}
-            className="pointer-events-auto inline-flex min-h-10 items-center gap-1.5 rounded-full bg-hud px-4 text-[15px] font-semibold text-hud-ink backdrop-blur-sm"
+            className="pointer-events-auto inline-flex min-h-12 items-center gap-1.5 rounded-full bg-hud px-4 mv-text-15 font-semibold text-hud-ink backdrop-blur-sm"
           >
             Pular
             <SkipForward className="size-4" aria-hidden="true" />
@@ -208,7 +208,7 @@ function PhotoCardView({ card }: { card: PhotoCard }) {
     >
       <img src={url} alt="" className="size-full object-cover" />
       {card.extra > 0 ? (
-        <span className="absolute right-1 bottom-1 rounded-full bg-[rgb(8_12_24/0.7)] px-1.5 num text-[12px] font-semibold text-white">
+        <span className="absolute right-1 bottom-1 rounded-full bg-[rgb(8_12_24/0.7)] px-1.5 num mv-text-12 font-semibold text-white">
           +{card.extra}
         </span>
       ) : null}

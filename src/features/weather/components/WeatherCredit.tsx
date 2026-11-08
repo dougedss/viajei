@@ -14,7 +14,7 @@ export function WeatherCredit({ updatedAt }: { updatedAt: string | null }) {
   const now = useNow(60_000);
   const online = useOnline();
   return (
-    <p className="flex flex-wrap items-center gap-x-2 text-[13px] text-ink-2" data-weather-credit>
+    <p className="text-[13px] text-ink-2" data-weather-credit>
       {updatedAt ? (
         <span data-weather-updated>
           {online
@@ -22,6 +22,7 @@ export function WeatherCredit({ updatedAt }: { updatedAt: string | null }) {
             : `Sem internet · ${updatedLabel(updatedAt, now)}`}
         </span>
       ) : null}
+      {updatedAt ? ' · ' : null}
       <a
         href={OPEN_METEO_ATTRIBUTION.href}
         target="_blank"

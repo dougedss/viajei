@@ -71,7 +71,12 @@ test('a garagem abre em 3D, a cor persiste e aparece no card, e o SUV é só pr�
   await page.goto(`${url}/garagem?render=list`);
   const palco = page.locator('[data-garage="svg"]');
   await expect(palco).toBeVisible();
-  await page.getByRole('button', { name: /^SUV: no nível 3 \(Explorador\)/ }).click();
+  // o nome é o que está escrito no botão; o que falta para liberar vem na descrição
+  const suv = page.getByRole('region', { name: 'Modelo' }).getByRole('button', { name: 'SUV' });
+  await expect(suv).toHaveAccessibleDescription(
+    'SUV: no nível 3 (Explorador). Toque para ver a prévia',
+  );
+  await suv.click();
   await expect(page.getByRole('region', { name: 'Prévia' })).toContainText(
     'SUV: no nível 3 (Explorador)',
   );
@@ -79,7 +84,7 @@ test('a garagem abre em 3D, a cor persiste e aparece no card, e o SUV é só pr�
   await page.getByRole('button', { name: 'Voltar ao carro da viagem' }).click();
   await expect(palco.locator('svg[data-car-model="hatch"]')).toBeVisible();
 
-  await page.getByRole('button', { name: /^SUV: no nível 3/ }).click();
+  await suv.click();
   await page.reload();
   await expect(palco.locator('svg[data-car-model="hatch"][data-car-color="sky"]')).toBeVisible();
   await expect(page.getByRole('region', { name: 'Prévia' })).toHaveCount(0);

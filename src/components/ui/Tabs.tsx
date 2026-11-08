@@ -49,7 +49,7 @@ export function Tabs({ tabs, value, onChange, label, className }: Props) {
               if (e.key === 'ArrowLeft') move(i, -1);
             }}
             className={cx(
-              'min-h-10 flex-1 rounded-[12px] px-3 text-[15px] font-semibold transition',
+              'min-h-12 flex-1 rounded-[12px] px-3 text-[15px] font-semibold transition',
               selected ? 'bg-accent-soft text-accent-ink' : 'text-ink-2',
             )}
           >

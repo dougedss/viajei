@@ -67,12 +67,21 @@ export function AppLayout() {
   return (
     <div className="min-h-full bg-paper">
       <header className="flex items-center justify-between gap-3 py-3 safe-x">
-        <Link to="/" aria-label="Início">
+        {/* o nome acessível começa pelo que se vê (a marca), como o WCAG 2.5.3 pede */}
+        <Link
+          to="/viagens"
+          aria-label="Viajei, início"
+          className="inline-flex min-h-12 items-center"
+        >
           <Wordmark className="text-[30px]" />
         </Link>
         <div className="flex items-center gap-2">
           <SyncChip />
-          <Link to="/perfil" aria-label="Perfil" className="rounded-full">
+          <Link
+            to="/perfil"
+            aria-label="Perfil"
+            className="grid size-12 place-items-center rounded-full"
+          >
             {profile.data ? (
               <Avatar name={profile.data.name} color={asPersonColor(profile.data.color)} />
             ) : (

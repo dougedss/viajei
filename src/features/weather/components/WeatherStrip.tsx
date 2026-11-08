@@ -58,7 +58,7 @@ export function WeatherStrip({ weather }: { weather: TripWeather }) {
                       {degrees(t.summary.day.min)}
                     </span>
                     <span
-                      className="flex h-4 items-center gap-0.5 num text-[13px] font-semibold text-person-sky"
+                      className="flex h-4 items-center gap-0.5 num text-[13px] font-semibold text-rain-ink"
                       aria-label={rain === null ? undefined : `chuva ${String(rain)}%`}
                     >
                       {rain === null ? null : (

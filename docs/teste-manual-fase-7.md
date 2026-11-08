@@ -1,5 +1,7 @@
 # Teste manual · Fase 7 (reservas, anexos e memórias)
 
+> **Para o teste nos aparelhos, use o [roteiro final](teste-final.md).** Este roteiro da fase 7 fica como registro; tudo dele está lá.
+
 Roteiro para o iPhone (primeiro) e para um Android. Câmera, galeria, HEIC e PDF offline só se
 julgam no aparelho. Os testes das fases 4, 5 e 6 também esperam: os roteiros estão em
 `docs/teste-manual-fase-4.md` e `docs/teste-manual-fase-6.md` (este último traz também os da fase 5).
