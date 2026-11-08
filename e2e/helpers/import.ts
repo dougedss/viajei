@@ -57,14 +57,23 @@ export function importSse(dates: readonly string[], pauseBefore?: string): strin
   return pauseAt >= 0 ? [first, rest] : [first + rest];
 }
 
-/** O Nominatim de mentira: cada busca acha um lugar só, no centro do RS. */
+/**
+ * O Nominatim de mentira: cada busca acha um lugar só, no centro do RS, menos a da Cascata do
+ * Caracol, que acha dois a 35 km um do outro e vira escolha, como acontece de verdade.
+ */
 export async function nominatimLocal(page: Page): Promise<void> {
   await page.route('https://nominatim.openstreetmap.org/**', async (route) => {
     const q = new URL(route.request().url()).searchParams.get('q') ?? '';
+    const place = (lat: string, lon: string, city?: string) => ({
+      display_name: [q, city, 'Rio Grande do Sul, Brasil'].filter(Boolean).join(', '),
+      name: q,
+      lat,
+      lon,
+    });
     await route.fulfill({
-      json: [
-        { display_name: `${q}, Rio Grande do Sul, Brasil`, name: q, lat: '-29.4', lon: '-51.1' },
-      ],
+      json: /cascata do caracol/i.test(q)
+        ? [place('-29.31', '-50.85', 'Canela'), place('-29.17', '-51.18', 'Caxias do Sul')]
+        : [place('-29.4', '-51.1')],
     });
   });
 }

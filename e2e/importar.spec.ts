@@ -59,16 +59,23 @@ test('colar o roteiro do seed → revisar → editar uma parada → salvar: a vi
     true,
   );
 
+  // uma busca com lugares espalhados vira escolha; escolher o local não tira a parada da viagem
+  await page.getByRole('button', { name: 'Escolher o local (2)' }).click();
+  await page.getByRole('list', { name: 'Opções de local' }).getByRole('button').first().click();
+  await expect(
+    page.getByRole('checkbox', { name: 'Cascata do Caracol', exact: true }),
+  ).toBeChecked();
+
   // editar uma parada: o mesmo formulário do roteiro, dentro da revisão
   await page.getByRole('button', { name: 'Editar Park Salto Ventoso' }).click();
   await expect(page.getByRole('heading', { name: 'Editar parada', exact: true })).toBeVisible();
   await page.getByLabel('Horário').fill('14:15');
   await page.getByRole('button', { name: 'Guardar na revisão' }).click();
   await expect(page.getByRole('heading', { name: 'Revisar o roteiro', exact: true })).toBeVisible();
-  await expect(page.getByRole('checkbox', { name: 'Park Salto Ventoso' })).toContainText('14:15');
+  await expect(page.getByText('14:15', { exact: true })).toBeVisible();
 
   // tirar uma parada: ela não entra
-  await page.getByRole('checkbox', { name: 'Restaurante dos Bifes' }).click();
+  await page.getByRole('checkbox', { name: 'Restaurante dos Bifes', exact: true }).click();
   await expect(page.getByText('4 dias · 17 paradas')).toBeVisible();
 
   await page.getByRole('button', { name: 'Salvar na viagem' }).click();
