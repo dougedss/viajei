@@ -27,6 +27,17 @@ const LISTA_SOB_A_BARRA = `(() => {
   return lista.getBoundingClientRect().bottom - sobre.getBoundingClientRect().top;
 })()`;
 
+/** As pílulas em cena cuja base (a âncora, `top`) entra por baixo do que está sobre a maquete. */
+const PILULAS_SOB_A_BARRA = `(() => {
+  const sobre = document.querySelector('[data-overlay]');
+  if (!sobre) return ['sem a barra'];
+  const top = sobre.getBoundingClientRect().top;
+  return [...document.querySelectorAll('[data-pill]:not([hidden])')]
+    .map((el) => [el.getAttribute('data-pill'), parseFloat(el.style.top) - top])
+    .filter(([, d]) => d > 0)
+    .map(([id, d]) => id + ' entra ' + Math.round(d) + ' px');
+})()`;
+
 /** O elemento no centro de um alvo (o último que casa, se `last`) é ele mesmo ou um filho: nada o cobre. */
 const SOB_O_DEDO = (selector: string, last = false) => `(() => {
   const todos = document.querySelectorAll(${JSON.stringify(selector)});
@@ -106,6 +117,11 @@ test('a tela da viagem não rola, "Hoje" volta, e a ação e Detalhes ficam sob 
       timeout: 60_000,
     });
     await semRolagem(page, 'maquete a 393 px');
+    // nenhuma pílula em cena fica por baixo do que está sobre a maquete (a altura medida, não um número)
+    await expect(page.locator('[data-pill][data-placed]').first()).toBeAttached({
+      timeout: 30_000,
+    });
+    await expect.poll(() => page.evaluate<string[]>(PILULAS_SOB_A_BARRA)).toEqual([]);
     const size = page.viewportSize();
     if (size) {
       await page.setViewportSize({ width: LARGURA_ESTREITA, height: size.height });

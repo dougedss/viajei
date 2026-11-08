@@ -516,6 +516,7 @@ function WorldStage(p: StageProps) {
         reducedMotion={reducedMotion}
         rainy={rainy}
         onOpenStop={p.onOpenStop}
+        bottomInset={p.bottomInset}
       />
       {weatherBig ? (
         <div

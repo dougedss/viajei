@@ -45,6 +45,8 @@ type Props = {
   rainy?: ReadonlySet<string>;
   /** tocar na pílula abre a folha da parada */
   onOpenStop?: ((stopId: string) => void) | undefined;
+  /** a altura do que está sobre o pé do palco (o cartão da vez, "Detalhes", o "Agora"): nenhuma pílula fica por baixo */
+  bottomInset: number;
 };
 
 export const HUD_TOP = 44;
@@ -55,8 +57,10 @@ export const HUD_BOTTOM = 72;
  */
 const PINNED_TOP = 136;
 const PINNED_MARGIN_X = 56;
-/** a pílula inteira cabe na tela: a base do nó abaixo da faixa de cima e acima do pé, com folga lateral */
+/** a pílula inteira cabe na tela: a base do nó abaixo da faixa de cima e acima do que cobre o pé, com folga lateral */
 const IN_VIEW = { top: PINNED_TOP, bottom: 24, side: 24 };
+/** folga entre a base da pílula e o que está sobre o pé do palco */
+const BOTTOM_GAP = 8;
 
 /**
  * Põe cada pílula onde o nó dela está na tela, pelo enquadramento atual: só as em cena; a da próxima
@@ -67,8 +71,10 @@ function placePills(
   runtime: WorldRuntime,
   nodes: readonly LayoutNode[],
   nextId: string | null,
+  bottomInset: number,
 ): void {
   const { width, height } = runtime.viewport;
+  const bottom = Math.max(IN_VIEW.bottom, bottomInset + BOTTOM_GAP);
   for (const node of nodes) {
     const el = root.querySelector<HTMLElement>(`[data-pill="${node.stop_id}"]`);
     if (!el) continue;
@@ -81,7 +87,7 @@ function placePills(
       p.x >= IN_VIEW.side &&
       p.x <= width - IN_VIEW.side &&
       p.y >= IN_VIEW.top &&
-      p.y <= height - IN_VIEW.bottom;
+      p.y <= height - bottom;
     const pinned = !inView && p.depth > 0 && node.stop_id === nextId;
     if (inView) {
       el.style.left = `${String(Math.round(p.x))}px`;
@@ -102,8 +108,18 @@ function placePills(
 }
 
 export function WorldHud(props: Props) {
-  const { runtime, nodes, stops, statuses, pops, teamChips, hidePills, opening, reducedMotion } =
-    props;
+  const {
+    runtime,
+    nodes,
+    stops,
+    statuses,
+    pops,
+    teamChips,
+    hidePills,
+    opening,
+    reducedMotion,
+    bottomInset,
+  } = props;
   const root = useRef<HTMLDivElement>(null);
   const nextId = Object.entries(statuses).find(([, s]) => s === 'next')?.[0] ?? null;
 
@@ -112,9 +128,9 @@ export function WorldHud(props: Props) {
   useEffect(() => {
     const el = root.current;
     if (!el) return;
-    placePills(el, runtime, nodes, nextId);
-    return runtime.register(() => placePills(el, runtime, nodes, nextId));
-  }, [runtime, nodes, nextId]);
+    placePills(el, runtime, nodes, nextId, bottomInset);
+    return runtime.register(() => placePills(el, runtime, nodes, nextId, bottomInset));
+  }, [runtime, nodes, nextId, bottomInset]);
 
   return (
     <div ref={root} className="pointer-events-none absolute inset-0 overflow-hidden" data-world-hud>
