@@ -9,6 +9,7 @@ import { pullTrip, pullUser } from './pull.ts';
 import { pushOutbox } from './push.ts';
 import { pushRpcFor } from './rpc.ts';
 import { watchTrips } from './realtime.ts';
+import { withDeadline } from './deadline.ts';
 import { CycleRunner } from './runner.ts';
 
 export type SyncPhase = 'idle' | 'syncing';
@@ -44,7 +45,8 @@ function emit(notice: SyncNotice) {
   for (const l of noticeListeners) l(notice);
 }
 
-// RPCs como o usuário (RLS vale). Erro de rede sobe como está, para o motor marcar offline.
+// RPCs como o usuário (RLS vale), cada uma com prazo (`deadline.ts`). Erro de rede sobe como está,
+// para o motor marcar offline.
 const basePush = pushRpcFor(supabase);
 async function rpcPush(ops: PushOp[]): Promise<PushResult[]> {
   const results = await basePush(ops);
@@ -52,13 +54,17 @@ async function rpcPush(ops: PushOp[]): Promise<PushResult[]> {
   return results;
 }
 async function rpcPullTrip(tripId: string, since: string): Promise<unknown> {
-  const { data, error } = await supabase.rpc('sync_pull', { p_trip_id: tripId, p_since: since });
+  const { data, error } = await withDeadline((signal) =>
+    supabase.rpc('sync_pull', { p_trip_id: tripId, p_since: since }).abortSignal(signal),
+  );
   if (error) throw error;
   connectivity.markOnline();
   return data;
 }
 async function rpcPullUser(since: string): Promise<unknown> {
-  const { data, error } = await supabase.rpc('sync_pull_user', { p_since: since });
+  const { data, error } = await withDeadline((signal) =>
+    supabase.rpc('sync_pull_user', { p_since: since }).abortSignal(signal),
+  );
   if (error) throw error;
   connectivity.markOnline();
   return data;
