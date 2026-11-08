@@ -60,13 +60,13 @@ test('a tela da viagem monta a maquete e "Ver como lista" persiste', async ({ pa
   await expect(maquete).toBeVisible({ timeout: 60_000 });
   // o 3D é decorativo: o canvas fica escondido do leitor de tela
   await expect(page.locator('[aria-hidden="true"] canvas')).toHaveCount(1);
-  // as pílulas em HTML por cima da cena; tocar numa abre a folha da parada (fase 14)
+  // as pílulas em HTML por cima da cena; tocar numa abre a folha da parada (fase 14). Só os nós em
+  // cena têm pílula: a abertura começa larga (o dia inteiro) e desce até o carro (D177), e aí o Parque
+  // fica fora da cena. A pílula que fica é a da parada do carro; no SwiftShader um quadro leva
+  // centenas de ms e a pílula "estável" por dois quadros do navegador ainda anda com a câmera: espera
+  // ela ficar no lugar antes de tocar, como faria uma pessoa
   const hud = page.locator('[data-world-hud]');
-  await expect(hud.getByText('Parque')).toBeVisible();
-  // a abertura desce a câmera até o carro e as pílulas andam com ela (D177); no SwiftShader um quadro
-  // leva centenas de ms, e a pílula "estável" por dois quadros do navegador ainda anda: espera ela
-  // ficar no lugar por um tempo antes de tocar, como faria uma pessoa
-  const pilula = hud.getByRole('button', { name: /^Parque/ });
+  const pilula = hud.getByRole('button', { name: /^Saída de casa/ });
   await expect
     .poll(
       async () => {
@@ -84,10 +84,10 @@ test('a tela da viagem monta a maquete e "Ver como lista" persiste', async ({ pa
     )
     .toBe(true);
   await pilula.click();
-  const folha = page.getByRole('dialog', { name: 'Parque' });
+  const folha = page.getByRole('dialog', { name: 'Saída de casa' });
   // a maquete segura a thread por segundos na CI: a folha pode demorar a montar
   await expect(folha).toBeVisible({ timeout: 30_000 });
-  await expect(folha).toContainText('Natureza · Dia 1 · 2ª parada');
+  await expect(folha).toContainText('Origem · Dia 1 · saída');
   await expect(folha.getByRole('link', { name: 'Ver no roteiro' })).toBeVisible();
   await expect(folha.getByRole('button', { name: 'Gasto' })).toBeVisible();
   // a folha desce com animação; no SwiftShader da CI a maquete segura a thread por segundos

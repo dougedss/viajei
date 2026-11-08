@@ -1,4 +1,4 @@
-import { expect, test, type Browser } from '@playwright/test';
+import { chromium, expect, test, type Browser } from '@playwright/test';
 import { dateInSaoPaulo } from './helpers/dates.ts';
 import { inserir } from './helpers/db.ts';
 import { uuidV4, uuidV5 } from './helpers/ids.ts';
@@ -21,13 +21,22 @@ const PARQUE = { latitude: -26.31, longitude: -50.144 };
 /** 40 m do Parque: dentro do raio de 150 m */
 const PARQUE_PERTO = { latitude: -26.31036, longitude: -50.144 };
 /**
- * Um pouco mais que o `maximumAge` da leitura única (`POSITION_MAX_AGE_MS`, 60 s). A posição emulada
- * do Chromium leva a hora em que foi posta; mais velha que isso, uma leitura única feita com o
- * acompanhamento já ligado descarta a posição guardada e espera uma nova, que uma posição emulada
- * parada nunca manda (num aparelho, a próxima leitura vem). É a condição do laboratório, que põe a
- * posição ao abrir o navegador, minutos antes do `app_reabrir`.
+ * Um pouco mais que o `maximumAge` da leitura única (`POSITION_MAX_AGE_MS`, 60 s): o laboratório põe a
+ * posição ao abrir o navegador, minutos antes do `app_reabrir`, e a posição emulada leva a hora em
+ * que foi posta.
  */
 const POSICAO_VELHA_MS = 62_000;
+
+/** O que a tela diz da posição na hora da falha: as leituras que chegaram e a permissão. */
+const POSICAO_DIAG = `(async () => {
+  const gps = document.querySelector('[data-gps]');
+  const perm = await navigator.permissions.query({ name: 'geolocation' }).catch(() => null);
+  return {
+    acompanhamento: gps ? gps.getAttribute('data-fix-at') : 'sem o ponto GPS',
+    leitura_unica: gps ? gps.getAttribute('data-read-at') : null,
+    permissao: perm ? perm.state : '?',
+  };
+})()`;
 
 /** A viagem de hoje: Casa → Parque; com `casaFeita`, a Casa já concluída e deixada há 30 min (na estrada). */
 async function viagemDeHoje(
@@ -160,19 +169,25 @@ test('com o mapa aberto, a posição marca Partiu! e Chegamos! sozinha, com Desf
   await context.close();
 });
 
-test('ao reabrir no destino, "Usar posição" marca Chegamos! na hora, pela leitura única', async ({
-  browser,
-}: {
-  browser: Browser;
-}) => {
+/**
+ * O `app_reabrir` do laboratório, nas condições dele (fase 14, D176): o Chromium inteiro (o canal
+ * `chromium`, não o headless shell dos outros testes), a posição posta ao abrir o navegador e sem
+ * permissão, a permissão dada só antes do toque, e a posição mais velha que o `maximumAge`. Com o
+ * e2e de antes (headless shell, permissão desde o começo, posição recente) o teste passava sem a
+ * correção, e o laboratório ficava vermelho.
+ */
+test('ao reabrir no destino, "Usar posição" marca Chegamos! na hora, pela leitura única', async () => {
   test.setTimeout(150_000);
   const user = await criarUsuario('Gps');
   // na estrada: a Casa concluída e deixada; o carro (o celular) já está no Parque
   await viagemDeHoje(user.id, { casaFeita: true });
+  const use = test.info().project.use;
+  const browser = await chromium.launch({ ...use.launchOptions, channel: 'chromium' });
   const context = await browser.newContext({
-    ...test.info().project.use,
+    ...use,
     geolocation: PARQUE,
-    permissions: ['geolocation'],
+    // como num aparelho (e no laboratório): a permissão só existe depois do toque
+    permissions: [],
   });
   const posicaoPosta = Date.now();
   const page = await context.newPage();
@@ -185,21 +200,24 @@ test('ao reabrir no destino, "Usar posição" marca Chegamos! na hora, pela leit
   await expect(page.getByRole('region', { name: 'Agora' })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole('button', { name: 'Chegamos!' })).toBeVisible({ timeout: 15_000 });
 
-  // a posição emulada envelhece além do `maximumAge`, como no laboratório (o relógio do Chromium,
-  // não o da página: não há atalho)
+  // a posição emulada envelhece além do `maximumAge` (o relógio do Chromium, não o da página)
   await page.waitForTimeout(Math.max(0, POSICAO_VELHA_MS - (Date.now() - posicaoPosta)));
 
-  // a leitura única ao permitir (o catch-up): no raio do Parque, Chegamos! na hora, com Desfazer; a
-  // presença de 3 min é do acompanhamento, que começa junto e não precisa esperar aqui
+  // o "Permitir" da localização, no toque em "Usar posição"; a leitura única (o catch-up): no raio
+  // do Parque, Chegamos! na hora, com Desfazer (a presença de 3 min é do acompanhamento)
+  await context.grantPermissions(['geolocation'], { origin: new URL(page.url()).origin });
   await page.getByRole('button', { name: 'Usar posição' }).click();
-  await expect(page.locator('[data-gps][data-read-at]')).toBeAttached({ timeout: 15_000 });
-  await expect(page.getByText('Chegamos: Parque', { exact: true })).toBeVisible({
-    timeout: 15_000,
-  });
+  const chegou = page.getByText('Chegamos: Parque', { exact: true });
+  await chegou.waitFor({ timeout: 20_000 }).catch(() => undefined);
+  expect(
+    await chegou.count(),
+    `o Chegamos! da leitura única não veio; a posição: ${JSON.stringify(await page.evaluate(POSICAO_DIAG))}`,
+  ).toBe(1);
   await expect(page.getByRole('button', { name: 'Desfazer' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Como foi Parque?' })).toBeVisible();
   await expect(page.getByRole('dialog', { name: 'Como foi Parque?' })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Agora' })).toContainText('Dia concluído');
 
   await context.close();
+  await browser.close();
 });
