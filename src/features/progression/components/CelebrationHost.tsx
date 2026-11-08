@@ -247,6 +247,9 @@ function UnlockSheet({
   );
 }
 
+/** O palco do cartão: Leve (sem reflexo, sombra de 1024, dpr 1) e o giro de 4 s depois do encaixe. */
+const CARD_STAGE = { level: 'leve', spinMs: 4_000 } as const;
+
 /**
  * O carro da viagem com o desbloqueio: em 3D, o acessório encaixa (ou o modelo novo entra) no palco
  * da garagem, com as luzes que ele já tem; sem WebGL ou com reduzir movimento, a vista lateral já
@@ -287,6 +290,7 @@ function UnlockStage({ before, after }: { before: CarSpec; after: CarSpec }) {
               <GarageStage
                 car={after}
                 reveal={reveal}
+                card={CARD_STAGE}
                 onReady={onReady}
                 reducedMotion={reduced}
                 support={support === 'webgpu' ? 'webgpu' : 'webgl2'}

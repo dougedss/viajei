@@ -43,6 +43,17 @@ describe('o disco gira sozinho e para', () => {
     expect(later.busy).toBe(false);
   });
 
+  it('no palco do cartão de conquista, o giro para depois de 4 s sem toque (fase 13)', () => {
+    const env: DiscEnv = { ...ENV, idleMs: 4_000 };
+    const d = startDisc(0, env);
+    const at3 = run(d, 3, 0, env);
+    expect(at3.disc.vel).toBeCloseTo(DISC.autoSpeed, 3);
+    const later = run(at3.disc, 4, 3_000, env);
+    expect(later.disc.auto).toBe(false);
+    expect(later.disc.vel).toBe(0);
+    expect(later.busy).toBe(false);
+  });
+
   it('não gira sozinho sob reduzir movimento nem com a aba escondida', () => {
     expect(startDisc(0, { reduced: true, hidden: false }).auto).toBe(false);
     const hidden = run(startDisc(0, ENV), 1, 0, { reduced: false, hidden: true });

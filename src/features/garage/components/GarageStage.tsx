@@ -3,7 +3,7 @@ import type { RootState } from '@react-three/fiber';
 import type { CarSpec } from '@/art/cars/types.ts';
 import { audio, useSoundPref, writeSoundPref } from '@/lib/audio/index.ts';
 import { DiagChip } from '@/lib/three/DiagChip.tsx';
-import { tierFor } from '@/lib/three/quality.ts';
+import { tierFor, type QualityLevel } from '@/lib/three/quality.ts';
 import type { Backend } from '@/lib/three/renderer.ts';
 import { ThreeCanvas, type ThreeCamera } from '@/lib/three/ThreeCanvas.tsx';
 import { useQuality } from '@/lib/three/useQuality.ts';
@@ -32,6 +32,14 @@ export type GarageStageProps = {
   reveal?: CarSpec;
   /** o palco já mostra `reveal` e vai animar (o cartão tira a cortina) */
   onReady?: () => void;
+  /**
+   * O palco pequeno do cartão de conquista (fase 13): nível fixo, sem medir fps nem mexer na
+   * preferência do aparelho, e o giro sozinho mais curto. O cartão é o encaixe do acessório, não o
+   * showroom: 220 px não pedem reflexo nem sombra de 2048, e cada passe a menos é compilação e
+   * quadro a menos numa máquina fraca, enquanto o resto do app (o sync, por exemplo) precisa da
+   * thread principal.
+   */
+  card?: { level: QualityLevel; spinMs: number };
 };
 
 /** quanto o palco espera, depois de voltar ao carro de antes, para animar o desbloqueio */
@@ -44,11 +52,19 @@ function visible(): boolean {
 }
 
 export default function GarageStage(p: GarageStageProps) {
-  const { car, reducedMotion, onSeat } = p;
+  const { car, reducedMotion, onSeat, card } = p;
   const quality = useQuality(tierFor);
+  const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
+  const tier = card ? tierFor(card.level, dpr) : quality.tier;
+  const spin = card ? { idleMs: card.spinMs } : {};
   const soundPref = useSoundPref();
   const [runtime] = useState(
-    () => new GarageRuntime(car, performance.now(), { reduced: reducedMotion, hidden: !visible() }),
+    () =>
+      new GarageRuntime(car, performance.now(), {
+        reduced: reducedMotion,
+        hidden: !visible(),
+        ...spin,
+      }),
   );
   const [forceWebGL, setForceWebGL] = useState(p.support === 'webgl2');
   const [backend, setBackend] = useState<Backend | null>(null);
@@ -91,12 +107,18 @@ export default function GarageStage(p: GarageStageProps) {
   }, [drawn, reveal, runtime, car, reducedMotion, onSeat, onReady]);
 
   // o giro sozinho para com a aba escondida e sob reduzir movimento
+  const spinMs = card?.spinMs;
   useEffect(() => {
-    const update = () => runtime.setEnv({ reduced: reducedMotion, hidden: !visible() });
+    const update = () =>
+      runtime.setEnv({
+        reduced: reducedMotion,
+        hidden: !visible(),
+        ...(spinMs === undefined ? {} : { idleMs: spinMs }),
+      });
     update();
     document.addEventListener('visibilitychange', update);
     return () => document.removeEventListener('visibilitychange', update);
-  }, [runtime, reducedMotion]);
+  }, [runtime, reducedMotion, spinMs]);
 
   // a roda do mouse aproxima sem rolar a página (o listener do React é passivo)
   useEffect(() => {
@@ -148,7 +170,7 @@ export default function GarageStage(p: GarageStageProps) {
     >
       <ThreeCanvas
         key={String(forceWebGL)}
-        tier={quality.tier}
+        tier={tier}
         forceWebGL={forceWebGL}
         camera={CAMERA}
         onCreated={onCreated}
@@ -157,8 +179,9 @@ export default function GarageStage(p: GarageStageProps) {
       >
         <Showroom
           runtime={runtime}
-          tier={quality.tier}
-          onFrame={quality.onFrame}
+          tier={tier}
+          // o palco do cartão não mede fps: o nível é fixo e a preferência do aparelho é do showroom
+          onFrame={card ? undefined : quality.onFrame}
           onFirstFrame={onFirstFrame}
         />
       </ThreeCanvas>

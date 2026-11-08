@@ -43,7 +43,12 @@ export type Disc = {
   dragging: boolean;
 };
 
-export type DiscEnv = { reduced: boolean; hidden: boolean };
+export type DiscEnv = {
+  reduced: boolean;
+  hidden: boolean;
+  /** quanto tempo o giro sozinho dura sem toque; o padrão é o do showroom (20 s), o cartão de conquista usa menos (fase 13) */
+  idleMs?: number;
+};
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
@@ -130,7 +135,8 @@ export function stepDisc(
   now: number,
   env: DiscEnv,
 ): { disc: Disc; busy: boolean } {
-  let auto = d.auto && !env.reduced && !env.hidden && now - d.lastTouch < DISC.idleMs;
+  let auto =
+    d.auto && !env.reduced && !env.hidden && now - d.lastTouch < (env.idleMs ?? DISC.idleMs);
   if (d.dragging) auto = false;
   let { vel, yaw } = d;
   if (!d.dragging) {

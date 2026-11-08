@@ -17,7 +17,7 @@ import { createStudio, type Studio } from './studio.ts';
 type Props = {
   runtime: GarageRuntime;
   tier: Tier;
-  onFrame: (now: number, dt_ms: number, moving: boolean) => void;
+  onFrame?: ((now: number, dt_ms: number, moving: boolean) => void) | undefined;
   onFirstFrame: () => void;
 };
 
@@ -81,5 +81,5 @@ export function Showroom({ runtime, tier, onFrame, onFirstFrame }: Props) {
     [runtime, camera],
   );
 
-  return <FrameDriver step={step} onFrame={onFrame} onFirstFrame={onFirstFrame} />;
+  return <FrameDriver step={step} {...(onFrame ? { onFrame } : {})} onFirstFrame={onFirstFrame} />;
 }
