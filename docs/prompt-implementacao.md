@@ -1,4 +1,6 @@
-# Viajei · Prompt de implementação (v4, 08/11/2026)
+# Viajei · Prompt de implementação (v5, 08/11/2026)
+
+**Histórico.** v5 (08/11/2026, fim da fase 14): a viagem abre no mapa; a tela da viagem inteira, sem rolagem; o GPS sempre que o mapa está aberto e "Tela acesa" no lugar do modo painel; a câmera que segue o carro; as miniaturas; Detalhes e a tabela de rotas. v4 (08/11/2026): a regra do não-preencher e as fases 13 a 21.
 
 > Você é o agente de implementação do Viajei. Este documento é a fonte de verdade do projeto: contexto, regras de trabalho, stack, produto, mundo 3D, uso com a tela apagada, offline, modelo de dados, gamificação e plano por fases. Ele consolida o planejamento, o Passo 0 já apresentado (`docs/passo-0-2026-11-04.md`), as decisões de 04/11/2026 sobre a maquete 3D (`docs/atualizacao-prompt-3d.md`) e as decisões do mesmo dia sobre notificações, catch-up e replay (`docs/atualizacao-prompt-notificacoes.md`). Leia os quatro antes de agir. Comece pelo **Passo 0** da última seção e espere aprovação formal antes de escrever código.
 
@@ -107,16 +109,17 @@ Versões conferidas no npm em 04/11/2026 pelo chat de implementação. Reconfira
 - Reordenar por drag and drop com alça, mais botões subir/descer. Ordem por **índice fracionário** (`position text collate "C"`): um arrasto gera um patch só, e reordenações simultâneas não se misturam.
 - Quando a rota real do dia existe (seção 6.2), as durações dos trechos **sugerem** `travel_minutes_to_next` para as paradas sem valor. O usuário confirma.
 
-### 4.3 Modo Viagem: "Agora" e a maquete do dia
-Tela do dia atual (dia cuja data é hoje; senão o próximo; senão o último). Durante a viagem, abrir o app cai direto nela. Especificação completa na seção 6. Em resumo:
-- **Cabeçalho "Agora"**, útil em cinco segundos: próxima saída grande, **"sair às HH:MM"** (horário da próxima parada menos o deslocamento), contagem regressiva em anel (verde com folga, âmbar com menos de 15 min, vermelho atrasado), e os botões **Partiu!** e **Chegamos!**.
-- Logo abaixo, a maquete 3D vista de cima com o **dia inteiro na tela** e a **câmera parada**, inclusive com o carro andando.
-- Pílulas das paradas (nome, horário, ícone) e anéis de estado (concluída, próxima, pendente) em HTML por cima da cena, nítidos no sol.
-- Semântica da trilha: o carro fica **no último nó concluído**; o halo pulsa **no próximo**; **"Partiu!"** põe o carro na estrada (`departed_at`); **"Chegamos!"** conclui (`done_at`, `done_by`), com confete, vibração no Android e a folha de memória. "Pular parada" marca `skipped`.
+### 4.3 A tela da viagem: a maquete inteira, o "Agora" e o GPS
+A viagem é o mapa (fase 14, D174): tocar na viagem abre a maquete 3D inteira na tela, sem rolagem, do dia atual (dia cuja data é hoje; senão o próximo; senão o último). Durante a viagem, abrir o app cai direto nela. A visão geral de antes é "Detalhes" (`/viagens/:tripId/detalhes`), o centro das outras telas. Especificação completa na seção 6. Em resumo:
+- **A barra do dia**, fixa no alto: o nome da viagem pequeno (leva à lista), a data do dia mostrado ("sáb, 12 dez · Dia 2"), "Dia anterior" e "Dia seguinte", o chip **"Hoje"** quando a pessoa saiu do dia de hoje, e os botões de ícone "Lista/Maquete" e **"Tela acesa"**.
+- **O "Agora" compacto**, numa barra sobre a maquete, embaixo, útil em cinco segundos: a frase ("A caminho de · Parque · chega às 10:00 · 12 min"; **"sair às HH:MM"** parado, o horário da próxima parada menos o deslocamento), a ação principal grande (**Partiu!** ou **Chegamos!**) e, só quando existem, os chips "Ver reserva", a outra marcação e "Pular parada". Um botão flutuante **"Detalhes"** leva ao resto.
+- **Partiu! e Chegamos! pelo GPS sempre que o mapa está aberto** (D176): com a tela visível, o dia de hoje, a viagem em andamento e a posição permitida, o app acompanha a posição, grava a trilha e marca sozinho pelas regras da D47, com o Desfazer de 10 s. Os botões continuam, para quando a posição está negada, errada ou atrasada e para o VoiceOver; nunca forçam nada. "Tela acesa" (Wake Lock) é um toggle à parte, lembrado por aparelho.
+- A câmera fica **alta e atrás do carro, olhando a próxima parada** (D177): parado, o carro ocupa um quinto da altura da tela; em movimento, recua para a estrada caber. Cada parada é uma **miniatura 3D do seu tipo** (D178); tocar nela, na pílula ou na linha da lista abre a folha da parada (Maps, Waze, Chegamos!, "+ Gasto").
+- Pílulas das paradas (nome, horário, ícone) e anéis de estado (concluída, próxima, pendente) em HTML por cima da cena, nítidos no sol; só os nós em cena, e a da próxima parada presa ao topo quando está fora.
+- Semântica da trilha: o carro fica **no último nó concluído**; o halo pulsa **no próximo**; **"Partiu!"** põe o carro na estrada (`departed_at`); **"Chegamos!"** conclui (`done_at`, `done_by`), com confete, vibração no Android e, só no toque, a folha de memória. "Pular parada" marca `skipped`.
 - **Ao abrir, o app faz o catch-up e o replay** (seção 6.4): uma leitura de posição, reconciliação do estado e o carrinho andando do ponto onde parou até o atual, disparando os eventos do caminho.
-- **Modo painel**, opcional, para quem deixa o celular no suporte: tela ligada (Wake Lock), GPS contínuo movendo o carrinho, Partiu! e Chegamos! automáticos por presença e gravação da trilha. Fora dele, nada disso roda.
-- Aviso quando a parada atual está perto do `closes_at`. Modo noite automático.
-- **Lista acessível da trilha**: a mesma informação em lista, usada por leitor de tela e como fallback quando WebGL não está disponível.
+- O que acontece aparece num único lugar sobre a maquete e some: "Desde a última vez", "Vocês passaram por…", o pedido de posição, "Como foi?", "Viajei!" depois da viagem. Aviso quando a parada atual está perto do `closes_at`. Modo noite automático.
+- **Lista acessível da trilha**: a mesma informação em lista, no lugar da maquete, atrás do botão do topo (lembrado por aparelho) e sempre que WebGL não está disponível; o VoiceOver e o TalkBack precisam dela.
 
 ### 4.4 Reservas e confirmações
 - Tipos `hotel`, `ticket`, `restaurant`, `other`. Campos: nome, `start_at`, `end_at`, código de confirmação, valor, política de cancelamento (texto + data limite), telefone (E.164), endereço, `booked_via`, observações. Vinculada a uma parada ou a um dia.
@@ -259,10 +262,11 @@ Ao mudar o esquema, suba a versão. Tabelas de dados podem ser limpas e rebaixad
 Direção aprovada pelo Douglas em 04/11/2026 com base no protótipo. O protótipo prova: maquete gerada só dos dados (rota real, altitude, cidades, costa) com cidade grande → interior → plantação → serra → praia; o dia inteiro na tela; curiosidades com mergulho de câmera; modo noite; garagem showroom; 60 fps com WebGPU no Chrome do Mac; render reduzido quando parado. Não cobre: sons, tilt-shift, os outros quatro carros, fotos nos nós, posição real do celular, fps no iPhone e no Android.
 
 ### 6.1 A maquete
-- **Câmera parada**, enquadrando o dia completo, como no mockup 2D do style tile. Quando o carro para, a pessoa quer ver o progresso e o que falta, não um close de onde está. O carro anda pela trilha nessa mesma visão. **Não há deslocamento de câmera durante o avanço.**
-- A câmera só se aproxima **sozinha, em eventos específicos, e volta**: as **curiosidades do caminho**, derivadas dos dados. Primeira entrada em cada cenário, ponto mais alto do dia, a serra ("desce 640 m em 7 km"), o mar a menos de 2 km. Cada uma dura 2 a 3 segundos, com legenda. `prefers-reduced-motion` desliga os mergulhos.
+- **A câmera segue o carro** (fase 14, D177): alta e atrás, olhando para a próxima parada, em retrato; parada, o carro ocupa um quinto da altura da tela e a estrada serpenteia à frente, subindo na tela; em movimento entre paradas distantes, a câmera recua para a estrada caber, até um teto. A abertura do dia começa larga, com o dia inteiro, e desce até o carro. Com reduzir movimento, a câmera corta em vez de deslizar. (Até a fase 13 a câmera era parada, com o dia inteiro na tela; a lista do dia continua sendo onde se vê o dia inteiro de uma vez.)
+- A câmera mergulha **sozinha, em eventos específicos, e volta**: as **curiosidades do caminho**, derivadas dos dados. Primeira entrada em cada cenário, ponto mais alto do dia, a serra ("desce 640 m em 7 km"), o mar a menos de 2 km. Cada uma dura 2 a 3 segundos, com legenda. `prefers-reduced-motion` desliga os mergulhos.
+- **Poucas cidades, mais detalhadas; o mapa só com o que importa:** prédios só em volta das paradas de cidade, hotel e comida; o relevo quieto, sem enfeite longe da estrada. Cada parada é uma **miniatura 3D do seu tipo** (`src/art/stops`: casa, marco, árvores, parreira e barril, hotel, restaurante, palco, quarteirão, placa), na linguagem dos carros, e tocar nela abre a folha da parada (D178).
 - O traçado em S é estilizado para caber na tela; a geografia real entra pelos números (km, duração, altitude) e pelo relevo.
-- Pílulas, anéis, botões, horários e contagem ficam em **HTML por cima da cena**, nítidos e legíveis no sol. O 3D é só a cena.
+- Pílulas, anéis, botões, horários e contagem ficam em **HTML por cima da cena**, nítidos e legíveis no sol. O 3D é só a cena. As pílulas são postas pelo laço da cena a cada quadro em movimento, só para os nós em cena, e recebem toque (abrem a folha da parada).
 - Modo noite: iluminação da cena muda, faróis acendem, texto 10% maior.
 - **Render sob demanda**: parado, a maquete redesenha poucas vezes por segundo. Níveis de qualidade Leve e Alta com rebaixamento automático por fps. Chip de diagnóstico (fps, motor, qualidade) em dev.
 - WebGPU no iOS 26+ e no Chrome do Android, WebGL2 de reserva, lista acessível como fallback final.
@@ -275,14 +279,14 @@ Direção aprovada pelo Douglas em 04/11/2026 com base no protótipo. O protóti
 - Fora do Brasil: só altitude e costa, cenário genérico. Brasil completo é o escopo da primeira versão.
 - Consequências: `trip_days` **não tem** coluna `theme`; a importação com IA não infere tema; as durações dos trechos sugerem `travel_minutes_to_next` quando vazio.
 
-### 6.3 Avanço: botões, notificações, catch-up e modo painel. Nunca um navegador.
+### 6.3 Avanço: botões, notificações, catch-up e o GPS com o mapa aberto. Nunca um navegador.
 - **"Partiu!" e "Chegamos!"** funcionam sem GPS: pelo botão no "Agora", pelo botão da notificação no Android, ou pelo toque na notificação no iPhone.
 - **Catch-up ao abrir** (e ao voltar do plano de fundo): uma leitura de posição (`getCurrentPosition`, tempo limite de 8 s, aceita leitura de até 60 s). Se está no raio da próxima parada, marca Chegamos! com toast "desfazer" por 10 s. Se está entre duas, posiciona o carrinho ali, pela fração percorrida da rota real projetada no traçado em S. Se passou por paradas sem marcar, pergunta "Vocês passaram por Gramado. Marcar como concluída?" (hora atual, ajustável). Sem posição, usa a última parada concluída pelo time e a trilha de quem estiver no modo painel. Os pontos esparsos do catch-up também entram na trilha gravada.
 - **Sem hora real, sem XP de pontualidade.** A hora real existe quando veio de botão, de notificação ou do modo painel. Nunca inventar horário.
-- **Modo painel**, opcional: `watchPosition` em primeiro plano move o carrinho continuamente, registra Partiu! ao sair do raio da parada e Chegamos! ao entrar no raio da próxima e permanecer alguns minutos, mantém a tela ligada (Wake Lock) e grava a trilha. Parado por 10 min, reduz o GPS.
+- **O GPS sempre que o mapa está aberto** (fase 14, D176; antes era o "modo painel", opcional): com a tela da viagem visível, o dia de hoje, a viagem em andamento e a posição permitida, `watchPosition` em primeiro plano move o carrinho continuamente, registra Partiu! ao sair do raio da parada (depois de ter visto o carro nela) e Chegamos! ao entrar no raio da próxima e permanecer 3 min, e grava a trilha. Parado por 10 min, reduz o GPS. **"Tela acesa"** (Wake Lock) é um toggle à parte, lembrado por aparelho: sem ele, o sistema apaga a tela e corta o GPS, e está tudo bem.
 - Desvio: a mais de 2 km da rota, o carrinho aparece fora da trilha com "Fora da rota · 3 km". Sem recálculo.
 - **Trilha gravada**: o caminho real fica em `trip_tracks` (uma linha por dia e pessoa, id `v5(trip_day_id, user_id)`, pontos simplificados), para a retrospectiva sobrevoar por onde passaram de fato. Os trechos sem gravação são interpolados pela rota real, então o filme continua inteiro. Como sincroniza, quem ficou em casa vê o carrinho andando.
-- Limites conhecidos: PWA não rastreia em segundo plano no iOS nem no Android. É por isso que existem as notificações, o catch-up e o modo painel.
+- Limites conhecidos: PWA não rastreia em segundo plano no iOS nem no Android. É por isso que existem as notificações, o catch-up e o GPS enquanto o mapa está aberto.
 - Regras duras repetidas de propósito: sem rota passo a passo, sem voz, sem mapa de ruas, sem recálculo, nada que premie velocidade, nada que exija interação de quem dirige.
 
 ### 6.4 Replay ao abrir: o carrinho repõe o que aconteceu
@@ -358,10 +362,11 @@ O código compartilhado entre front e Edge Functions vive em `supabase/functions
 /entrar  /criar-conta  /recuperar-senha
 /                                   viagens + convites pendentes
 /viagens/nova
-/viagens/:tripId                    visão geral: progresso, próxima saída, atalhos, clima
+/viagens/:tripId                    a viagem: a maquete inteira na tela, o "Agora" e o GPS (fase 14)
+/viagens/:tripId/detalhes           Detalhes: progresso, próxima saída, atalhos, clima (a visão geral)
 /viagens/:tripId/roteiro            dias e paradas (edição)
 /viagens/:tripId/roteiro/:dayId
-/viagens/:tripId/viagem             Modo Viagem (maquete)
+/viagens/:tripId/viagem             (a rota antiga do Modo Viagem: redireciona para /viagens/:tripId, com a query)
 /viagens/:tripId/reservas
 /viagens/:tripId/checklists         antes · mala · missões
 /viagens/:tripId/contatos
@@ -375,7 +380,7 @@ O código compartilhado entre front e Edge Functions vive em `supabase/functions
 /viagens/:tripId/importar
 /perfil
 ```
-Durante a viagem (hoje entre `start_date` e `end_date`), `/` redireciona para o Modo Viagem da viagem do dia. Notificações abrem a mesma rota.
+Durante a viagem (hoje entre `start_date` e `end_date`), `/` redireciona para a tela da viagem do dia. As notificações abrem `/viagens/:tripId/viagem`, que redireciona (D174). As telas de detalhe voltam para `/detalhes`; o "Voltar" de Detalhes vai à tela da viagem; o nome pequeno da tela da viagem leva à lista.
 
 ### 7.3 Convenções
 - Lógica em funções puras (`lib/` e `features/*/rules.ts`), sem React, testadas com Vitest.
@@ -545,7 +550,7 @@ Cada fase termina com testes passando, CI verde, `docs/decisoes.md` atualizado e
 | **11. Mapa e clima** | Leaflet com rota real, cache de tiles, Open-Meteo; clima no briefing da manhã e na abertura do dia | — | Vitest: códigos de clima |
 | **12. Polish e E2E** | Playwright completo (fluxo principal e offline com `context.setOffline(true)`), matriz iPhone e Android (instalação, push, ações, selo, WebGPU/WebGL2, fps, Wake Lock, geolocalização, vídeo, compartilhar), acessibilidade, Lighthouse, README, expurgo de viagens excluídas (job) | job de expurgo | Suíte completa verde |
 | **13. Correções** | o mapa por cima da folha, a rolagem horizontal, o rack que não sobe (o defeito do sync), o Lighthouse da visão geral cobrado só numa máquina normal, o que o teste do Douglas achar; o plano das fases 13 a 21 e esta v4 | — | e2e do mapa (a folha por cima) e da rolagem lateral a 393 e 360 px com link, endereço colado e código; Vitest da causa do rack; laboratório no preview e na produção |
-| **14. A viagem abre no mapa** | `/viagens/:tripId` vira a maquete inteira na tela, sem rolagem; a visão geral vira "Detalhes"; barra do topo com a data e "Hoje"; "Agora" compacto embaixo com Partiu! e Chegamos!, automáticos pelo GPS sempre que o mapa está aberto (`watchPosition`, regras da D47, Desfazer); o carro grande; miniaturas 3D por tipo de parada; o comboio se couber sem poluir | — | Vitest do layout e da câmera; e2e do mapa como tela da viagem e dos redirecionamentos; laboratório; um bloco no teste final |
+| **14. A viagem abre no mapa** · feita (08/11, D174 a D180) | `/viagens/:tripId` vira a maquete inteira na tela, sem rolagem; a visão geral vira "Detalhes"; barra do topo com a data e "Hoje"; "Agora" compacto embaixo com Partiu! e Chegamos!, automáticos pelo GPS sempre que o mapa está aberto (`watchPosition`, regras da D47, Desfazer); o carro grande; miniaturas 3D por tipo de parada; o comboio (a regra; a renderização conforme a D179) | — | Vitest do layout, da câmera, das miniaturas, do GPS e do comboio; e2e das rotas, da tela sem rolagem, do GPS e da folha; laboratório no preview e na produção; um bloco no teste final |
 | **15. Paradas que se registram sozinhas** | com o mapa aberto, o detector puro (8 min a 60 m e fora da linha da estrada, ou 20 min em qualquer lugar; trânsito ignorado), o lugar pelo Nominatim reverso, a parada com `source: 'auto'` e horas medidas, o tipo Posto (`fuel`) | só se houver `check` nos tipos de parada | Vitest com as trilhas reais de `trip_tracks`; laboratório com uma trilha forjada no cenário do painel |
 | **16. A garagem é da pessoa, e o perfil** | `profiles.car_model`, `car_color`, `car_accessories` (cada pessoa vê o próprio carro em qualquer viagem); modelos livres, níveis liberam cores, acabamentos e rodas, o último nível libera o seu carro; `/perfil/garagem`; o perfil em seções | 0013 | pgTAP da migration e dos grants (`car_*` só pela própria pessoa); Vitest das regras novas; e2e do perfil; laboratório |
 | **17. Criar a viagem conversando** | sai o formulário de nova viagem; um campo só com três caminhos (o formato do Viajei lido no aparelho, um roteiro em texto livre pela importação, uma descrição ou "quero sair hoje" pela conversa com até 3 perguntas ditas antes); a saída de hoje com lugares conferidos no OSM; o pedido para outras IAs; "O que você gosta" no perfil; limites e privacidade da fase 10 | — | Vitest do leitor do formato (com o seed e inválidos), da decisão entre os caminhos e da conferência de lugares; teste da função com entrada fixa; e2e do campo; laboratório com uma leitura real |

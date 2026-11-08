@@ -73,7 +73,7 @@ scripts/          lab/ (laboratório), geo/ (dados embutidos), security/ (varred
 docs/             o prompt, as decisões, os roteiros de teste, as fontes dos dados geográficos
 ```
 
-**Rotas.** `/entrar`, `/criar-conta`, `/recuperar-senha`, `/nova-senha` · `/` é a abertura do app (durante uma viagem, cai no Modo Viagem do dia) · `/viagens` é a lista, que nunca redireciona · `/viagens/nova` · `/viagens/:tripId` (visão geral) e as telas da viagem, em `/viagens/:tripId/...`: `roteiro`, `roteiro/:dayId`, `viagem` (Modo Viagem), `reservas`, `checklists`, `contatos`, `gastos`, `mapa`, `diario`, `garagem`, `retrospectiva`, `avisos`, `membros`, `importar`, `editar` · `/perfil` · `/lab` (o painel do laboratório).
+**Rotas.** `/entrar`, `/criar-conta`, `/recuperar-senha`, `/nova-senha` · `/` é a abertura do app (durante uma viagem, cai na tela da viagem do dia) · `/viagens` é a lista, que nunca redireciona · `/viagens/nova` · `/viagens/:tripId` é **a viagem: o mapa** (a maquete inteira na tela, fase 14) · `/viagens/:tripId/detalhes` é **Detalhes** (a visão geral: progresso, atalhos, clima) e as outras telas da viagem, em `/viagens/:tripId/...`: `roteiro`, `roteiro/:dayId`, `reservas`, `checklists`, `contatos`, `gastos`, `mapa`, `diario`, `garagem`, `retrospectiva`, `avisos`, `membros`, `importar`, `editar` (todas voltam para Detalhes) · `/viagens/:tripId/viagem` é a rota antiga do Modo Viagem e redireciona para a viagem, com a query (os avisos push a usam) · `/perfil` · `/lab` (o painel do laboratório).
 
 ## Rodar e testar
 
@@ -105,10 +105,11 @@ Os projetos do Playwright (`playwright.config.ts`), todos com o perfil do iPhone
 
 O WebKit é o motor do Safari, o mais perto do iPhone que a CI tem. Os specs que valem a leitura primeiro:
 
-- `e2e/fluxo.spec.ts`: o fluxo principal, como uma pessoa: cria a viagem, monta o roteiro, abre o Modo Viagem, Partiu! e Chegamos!, "Como foi?", um gasto, um item da mala e a retrospectiva.
+- `e2e/fluxo.spec.ts`: o fluxo principal, como uma pessoa: cria a viagem, monta o roteiro, abre a viagem, Partiu! e Chegamos!, "Como foi?", um gasto, um item da mala e a retrospectiva.
+- `e2e/rotas.spec.ts`, `e2e/tela.spec.ts` e `e2e/gps.spec.ts` (fase 14): a viagem é o mapa (as rotas, o redirecionamento da rota antiga, Detalhes); a tela sem rolagem a 393 e a 360 px, com a lista e com a maquete, "Hoje" e os alvos sob o dedo; Partiu! e Chegamos! pelo GPS com o mapa aberto, com o relógio e a geolocalização do Playwright.
 - `e2e/offline.spec.ts`: sem sinal no meio do uso (`context.setOffline(true)`), o "N pendentes" e o servidor com tudo quando a rede volta.
 - `e2e/offline.pwa.spec.ts`: recarregar o app sem rede nenhuma, com o service worker de verdade; a edição sem sinal sobrevive à recarga.
-- `e2e/acessibilidade.spec.ts`: todas as telas nos dois temas com o axe (WCAG 2.2 A e AA): zero violações sérias ou críticas, alvos de toque de 48 px, texto do Modo Viagem de pelo menos 17 px e 10% maior à noite.
+- `e2e/acessibilidade.spec.ts`: todas as telas nos dois temas com o axe (WCAG 2.2 A e AA): zero violações sérias ou críticas, alvos de toque de 48 px, texto da tela da viagem de pelo menos 17 px e 10% maior à noite.
 
 As contagens de testes e os tempos de cada fase estão em `docs/decisoes.md`.
 
@@ -190,7 +191,7 @@ Um agente que exercita o app de ponta a ponta, na produção, sem ninguém pegar
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | Servidor dos avisos (fase 4) | `preparo`, `entrega`, `saida`, `fechamento`, `briefing` (com o clima), `time`, `desligado`, `dedupe`, `assinatura_morta`, `vapid`, `payload` |
 | Em dois dias (D105)          | `vespera`, `prazo`, `retro`: uma execução arma o aviso, a seguinte confere o texto e arma o próximo ciclo                                    |
-| Tela apagada (fase 4)        | `app_avisos`, `app_notificacao`, `app_reabrir`, `app_extras` (modo painel e `.ics`)                                                          |
+| Tela apagada (fase 4)        | `app_avisos`, `app_notificacao`, `app_reabrir`, `app_extras` (a posição acompanhada com o mapa aberto, "Tela acesa" e o `.ics`)              |
 | Maquete (fase 5)             | `app_maquete`                                                                                                                                |
 | Na estrada (fases 7 e 8)     | `app_listas`, `app_contatos`, `app_agora_reserva`, `app_reserva_offline`, `app_missoes`, `app_memoria`, `app_gastos`, `app_sair_pendente`    |
 | Progressão (fase 9)          | `app_progressao`, `app_retrospectiva`                                                                                                        |
@@ -289,19 +290,21 @@ A Edge Function `purge`, chamada pelo `pg_cron` às 4h de São Paulo com a chave
 
 Com `dry_run`, a função devolve as contagens sem apagar nada; o laboratório faz um por dia. O log é uma linha só com contagens, nunca conteúdo. Os prazos e o handler moram em `supabase/functions/_shared/purge.ts` (testado pelo Vitest); a parte do banco é a função SQL `public.purge`, da migration 0012.
 
-### Modo Viagem e a maquete 3D
+### A tela da viagem e a maquete 3D
 
-O "Agora" diz onde o carro está (a última parada concluída), a próxima e o "sair às": o horário da próxima menos o deslocamento até ela, a mesma conta dos avisos (D29). Cada toque em Partiu! ou Chegamos! tem "Desfazer" por 10 s. O tema noturno vale das 18:30 às 6:00 enquanto o Modo Viagem está aberto. O modo painel usa a posição do celular para marcar sozinho: Partiu! só depois de ver o carro na parada, Chegamos! depois de 3 minutos no destino (D47).
+A viagem abre no mapa (fase 14): `/viagens/:tripId` é a maquete inteira na tela, sem rolagem, com a barra do dia no alto ("‹ sáb, 12 dez · Dia 2 ›", "Hoje" quando a pessoa saiu do dia de hoje, os botões "Lista/Maquete" e "Tela acesa"), o "Agora" compacto numa barra sobre a maquete, embaixo, e o botão flutuante "Detalhes" para o resto. O "Agora" diz onde o carro está (a última parada concluída), a próxima e o "sair às": o horário da próxima menos o deslocamento até ela, a mesma conta dos avisos (D29), com a ação principal grande (Partiu! ou Chegamos!) e, só quando existem, os chips "Ver reserva", a outra marcação e "Pular parada". Cada toque em Partiu! ou Chegamos! tem "Desfazer" por 10 s. O tema noturno vale das 18:30 às 6:00 enquanto a tela está aberta.
 
-A maquete (`src/features/world`) desenha o dia visto de cima: o traçado em S entre as paradas, o relevo do perfil de altitude real, o cenário lido da geografia (`src/lib/geo`), o carro da viagem (`src/art/cars`) e, em HTML por cima, as pílulas das paradas. A câmera fica parada com o dia inteiro na tela e só mergulha nas curiosidades do caminho. Motor: `three/webgpu` (WebGPU onde há, WebGL2 nos demais) com React Three Fiber, render sob demanda (parado, zero quadros) e dois níveis de qualidade, Leve e Alta, com rebaixamento automático por fps. Tudo do 3D vem num chunk próprio, só quando a maquete vai aparecer.
+**O GPS sempre que o mapa está aberto** (D176): com a tela visível, o dia de hoje, a viagem em andamento e a posição permitida pela pessoa, o app acompanha a posição, grava a trilha e marca sozinho pelas regras da D47 (Partiu! só depois de ver o carro na parada, Chegamos! depois de 3 minutos no destino), com o Desfazer; um ponto "GPS" na frase diz que está acompanhando. **"Tela acesa"** (Wake Lock) é um botão à parte na barra do topo, lembrado por aparelho: sem ele, o sistema apaga a tela e corta o GPS, e o catch-up repõe ao abrir. O "modo painel" deixou de existir.
+
+A maquete (`src/features/world`) desenha o dia: o traçado em S entre as paradas, o relevo do perfil de altitude real, o cenário lido da geografia (`src/lib/geo`, com prédios só em volta das paradas de cidade, hotel e comida), o carro da viagem (`src/art/cars`), uma **miniatura 3D por parada** do tipo dela (`src/art/stops`) e, em HTML por cima, as pílulas das paradas. **A câmera segue o carro** (`src/features/world/camera.ts`, D177): alta e atrás, olhando a próxima parada; parada, o carro ocupa um quinto da altura da tela; em movimento, recua para a estrada caber; mergulha nas curiosidades do caminho e volta. Tocar numa miniatura, numa pílula ou numa linha da lista abre a folha da parada (horário, endereço, Maps, Waze, Chegamos!, "+ Gasto"), a mesma do pino do mapa 2D. Motor: `three/webgpu` (WebGPU onde há, WebGL2 nos demais) com React Three Fiber, render sob demanda (parado, zero quadros) e dois níveis de qualidade, Leve e Alta, com rebaixamento automático por fps. Tudo do 3D vem num chunk próprio, só quando a maquete vai aparecer.
 
 - **Replay ao abrir:** o carro repõe o que aconteceu desde a última vez que este aparelho viu a maquete (`travel_state`). Com "reduzir movimento", aparece o card "Desde a última vez".
-- **Forçar a lista:** `?render=list` na URL, ou "Ver como lista" no rodapé de "Lista do dia" (fica guardado no aparelho). Sem WebGL2, a lista aparece sozinha, com "Maquete indisponível neste aparelho".
-- **Chip de diagnóstico:** em dev, ou com `?diag=1` em produção: fps (só em movimento), motor, qualidade e nível; o toque alterna Auto → Leve → Alta. Para medir fps no iPhone: `/viagens/<id>/viagem?diag=1`, "Rever o dia", e ler o chip durante o movimento.
+- **Forçar a lista:** `?render=list` na URL, ou o botão "Ver como lista" na barra do topo (fica guardado no aparelho); a lista ocupa a área da maquete e rola dentro dela. Sem WebGL2, a lista aparece sozinha, com "Maquete indisponível neste aparelho".
+- **Chip de diagnóstico:** em dev, ou com `?diag=1` em produção: fps (só em movimento), motor, qualidade e nível; o toque alterna Auto → Leve → Alta. Para medir fps no iPhone: `/viagens/<id>?diag=1`, "Rever o dia", e ler o chip durante o movimento.
 
 ### Garagem
 
-`/viagens/<id>/garagem`, aberta pelo carro no topo da visão geral: um showroom 3D (`src/features/garage`) em que o carro da viagem gira num disco sob luz de estúdio. Arrastar gira, na vertical inclina, pinçar aproxima. Embaixo, Modelo, Pintura e Acessórios.
+`/viagens/<id>/garagem`, aberta pelo carro no topo de Detalhes: um showroom 3D (`src/features/garage`) em que o carro da viagem gira num disco sob luz de estúdio. Arrastar gira, na vertical inclina, pinçar aproxima. Embaixo, Modelo, Pintura e Acessórios.
 
 - **Os carros:** cinco modelos por código, cada um um `CarProfile` que gera o 3D (`buildCar`) e a vista lateral em SVG (`CarSide`), usada no card da viagem, na visão geral e na garagem sem 3D.
 - **O que está liberado** vem do progresso do time (o maior nível e a união das conquistas dos membros). Tocar em algo bloqueado abre a prévia, que nunca grava.
@@ -333,7 +336,7 @@ As fotos das memórias ("Como foi?", no Modo Viagem e no diário) e os prints e 
 
 ### Gastos
 
-`/viagens/<id>/gastos` (`src/features/expenses`): a barra do total contra o orçamento (sempre com o valor e a porcentagem em texto), os totais por categoria e a lista por dia, com quem pagou na cor da pessoa. As somas são em centavos. O "+ Gasto" do Modo Viagem abre com o dia, a parada e a categoria pelo tipo dela, e nunca abre sozinho. "Lançar como gasto" numa reserva com valor cria o gasto ligado a ela, com id determinístico: dois aparelhos que lançam a mesma reserva escrevem a mesma linha.
+`/viagens/<id>/gastos` (`src/features/expenses`): a barra do total contra o orçamento (sempre com o valor e a porcentagem em texto), os totais por categoria e a lista por dia, com quem pagou na cor da pessoa. As somas são em centavos. O "+ Gasto" da folha da parada (na tela da viagem) e o de Detalhes (durante a viagem) abrem com o dia, a parada e a categoria pelo tipo dela, e nunca abrem sozinhos. "Lançar como gasto" numa reserva com valor cria o gasto ligado a ela, com id determinístico: dois aparelhos que lançam a mesma reserva escrevem a mesma linha.
 
 ### Progressão
 

@@ -11,6 +11,11 @@ início e fim, `session_id`, retomadas, custo), o portão de saída (o sha na `m
 laboratório na produção, as decisões, a memória) e o que ficou (pendências e pulos). O resumo final
 para o Douglas fica no fim.
 
+**Os shas.** Às 13h30 de 08/11, entre a fase 13 e a 14, a história da `main` foi reescrita para
+tirar a linha de coautoria dos commits (seção "Entre a fase 13 e a 14", abaixo). Todo sha citado em
+`docs/decisoes.md`, na memória do projeto e neste relatório **até essa hora** é da história antiga; a
+tabela daquela seção traduz os que importam. O conteúdo das árvores não mudou.
+
 ## O começo (08/11/2026)
 
 - **Estado encontrado às 07h35:** a `main` em `642089c` (`fase 12: polish e E2E`), fast-forward feito
@@ -50,6 +55,134 @@ para o Douglas fica no fim.
 - **Abertura:** 08/11/2026 às 08h18, headless, na pasta principal, binário da extensão 2.1.319,
   texto de abertura em `fase-13.kickoff.txt` (o modelo da seção 1.3 do orquestrador mais os seis
   pontos do portão de entrada acima). Monitor de sinais de vida a cada 30 min.
+- **Retomada 1, às 11h14,** por pedido do Douglas (às 11h12: "acelerar sem estragar a qualidade").
+  A sessão esperava a CI de cada sha antes de disparar o laboratório e zerava a contagem dos cinco
+  laboratórios do 3.3 a cada push, mesmo quando o push só mudava scripts do laboratório. O
+  orquestrador encerrou o processo (SIGTERM, ocioso, esperando a CI de `78dc566`; 14 commits já na
+  branch, nenhum script órfão) e o retomou (`--resume`) com `fase-13.continue.txt`: contar o
+  `app_progressao` por laboratório e não por sha (três de cinco desde `a656eb3`, o último commit no
+  sync) e disparar o laboratório assim que o deploy da Vercel sobe, em paralelo com a CI. Nenhuma
+  barra baixou (CI verde no sha, laboratório inteiro verde no sha do merge, laboratório na
+  produção). A nota também pediu: sem `Co-Authored-By` nos commits daí em diante (pedido do Douglas
+  das 10h50) e o `.env.local` só carregado no shell para o `psql` de leitura, nunca exibido.
+- **Fim:** 08/11 às 13h19 · `session_id` `7dfa5d8b-dc06-42d9-a6fe-286d0c5c01de` · retomadas: 1 ·
+  606 turnos, 594 chamadas de ferramenta · `is_error: false` · custo informado pelo JSON da
+  retomada: **US$ 66,34** (o JSON da abertura ficou vazio com o SIGTERM; o valor acumula a sessão).
+- **O que a sessão fez:** 15 commits na `fase-13` (o ciclo puro do sync em `cycle.ts`, o rastro
+  `trace.ts`, os shaders compilados antes do primeiro quadro em `ThreeCanvas`, o palco do cartão em
+  Leve, `isolate` nas caixas com HUD, `overflow-wrap: anywhere` e a guarda a 360 px, a régua
+  `verdict` do Lighthouse, a tarefa `medir-sync` e a instrumentação do laboratório); 8 laboratórios
+  no preview (4 vermelhos, todos de cenários fora do escopo da fase, lidos e tratados: três do
+  `app_avisos`, cuja causa a instrumentação revelou, e um do `app_importar` pela cota); CI 10 vezes
+  (2 vermelhas, lint e um contraste do axe, corrigidas). Efeito dos dois ajustes da retomada: dois
+  laboratórios a menos e uns 10 min a menos por ciclo; a fase fechou 2h05 depois da retomada.
+
+### Portão de saída (fechado às 13h25 de 08/11)
+- ponta da `fase-13` na `origin/main`: sim, `84dbf27`, fast-forward de `9af8580` (15 commits). O de
+  fechamento é `8a79ca4` `fase 13: correções` (12h06); depois dele `84dbf27` `botões: só o toque
+  anima` (12h30), porque a CI de `8a79ca4` pegou um contraste no axe (D169).
+- CI verde na `main` em `84dbf27`: sim (run 42496641094, 13 min).
+- laboratório na produção verde em `84dbf27`: sim (run 42496760740, 12h49 a 13h14): 31 verdes, 4
+  pulados (a importação pela cota do lab-a e os três de dois dias), nenhum "medido, não cobrado";
+  `app_progressao` em 30 s; Lighthouse 97 a 100.
+- `docs/decisoes.md` com a seção "Fase 13 · Correções": sim, D168 a D173, sequenciais.
+- `fase-13.md` e este relatório commitados: sim, em `8a79ca4`, sem alteração. Esta versão do
+  relatório foi escrita depois, fora do git; a sessão da fase 14 a commita.
+- memória do projeto atualizada: sim (estado, armadilhas e números da fase 13).
+- resumo final para o Douglas: sim, na transcrição da sessão; copiado para o scratchpad do
+  orquestrador (`fase-13.resumo-sessao.txt`) e resumido no fim deste relatório.
+- **Números** (os da D173): `app_progressao` de 104 a 137 s nas máquinas lentas (falha acima de
+  90 s) para 31,8 a 32,7 s em cinco laboratórios seguidos e 30 s na produção; rack no servidor 2,6 a
+  3,3 s depois do toque; primeiro quadro da maquete de 5,1 a 10,9 s para 4,6 s; Lighthouse da visão
+  geral de 83 a 86 para 93 a 98; 834 Vitest (eram 817), 430 pgTAP, 44 Playwright; CI em 13 min;
+  custo de IA nos laboratórios da fase: zero.
+- **O que ficou sem prova** (nenhum aparelho, por decisão do Douglas): a folha por cima do mapa no
+  dedo (bloco 1.16 do `teste-final.md`), a rolagem a 360 px num Android de verdade, o congelamento
+  da maquete e do cartão num celular fraco.
+- **Pendências que só o Douglas resolve:**
+  - o `.env.local`: a seção 1 do `fase-13.md` diz que ele está na pasta e que os scripts `remote:*`
+    funcionam direto; a seção 2 proíbe ler `.env*`. A sessão o carregou no shell (`set -a && .
+    ./.env.local`, 36 vezes) só para o `psql` de leitura (os dados do laboratório e, para a D169,
+    os dele), nunca exibiu nem alterou o conteúdo, e a senha não aparece na transcrição. Nas fases
+    14 a 20 a regra fica precisa (carregar no shell para os `remote:*` e o `psql`; nunca exibir,
+    copiar, alterar ou passar em argumento visível). Se ele quiser proibir o banco de vez, basta
+    dizer;
+  - a CLI da Vercel deste Mac está logada na conta de cliente `reitechkairos-commits` (a sessão não
+    a usou; o deploy se confere pelo status "Vercel" do commit na API do GitHub);
+  - o `progressao.spec` continua instável na CI (passa na repetição, D167), se quiser que deixe de
+    repetir.
+
+## Entre a fase 13 e a 14 · a história limpa (13h30 de 08/11)
+
+- **Autorização:** às 10h50 o Douglas viu "claude" entre os contribuidores do repositório e pediu
+  para tirar o `Co-Authored-By: Claude …` dos commits; escolheu fazê-lo **entre a fase 13 e a 14**,
+  uma única vez e só para isso (a regra geral de nunca reescrever a `main` continua; a de nunca
+  acrescentar a linha está em `~/.claude/CLAUDE.md` e na memória).
+- **Como:** com nenhuma sessão rodando, num clone limpo no scratchpad, `git filter-branch
+  --msg-filter 'sed -E "/^Co-Authored-By: Claude /d" | git stripspace' -- main` (o `git
+  filter-repo` não está instalado; git 2.40). Antes: 61 commits, 58 com a linha (37 "Claude Opus
+  5.5", 21 "Claude Fable 5.1"). Depois: 61 commits, zero linhas; árvore, autor, committer e datas
+  **idênticos em todos os 61** (conferido commit a commit); identidades conferidas antes do push
+  (`gh` e SSH em `dougedss`, e-mail do commit `203018054+dougedss@users.noreply.github.com`).
+- **Push:** `84dbf27` → **`fa100cd`** na `main` (forced update, 13h31). Apagadas do GitHub as
+  branches mescladas `fase-5`, `fase-6`, `fase-7`, `fase-8`, `fase-8-conexao`, `fase-9`, `fase-11`,
+  `fase-12`, `fase-13`; sobrou só a `main`. A API de contribuidores já lista só `dougedss` (61).
+  A pasta principal foi sincronizada (`fetch --prune`; a `main` local em `fa100cd`; a branch local
+  `fase-13` ficou, apontando para a história antiga, e será apagada pela sessão da fase 14).
+- **Depois do push:** a CI da `main` em `fa100cd` começou às 13h22 UTC-3 e a Vercel republicou o
+  mesmo conteúdo; o resultado dos dois entra no portão de entrada da fase 14.
+- **Tradução dos shas que as decisões e a memória citam** (velho → novo):
+
+  | Commit | Velho | Novo |
+  |---|---|---|
+  | `fase 13: correções` + ajuste de botão (ponta da fase 13) | `8a79ca4` / `84dbf27` | `b099be8` / `fa100cd` |
+  | `laboratório: a ativação dos avisos se prova pelo que fica` | `c65b371` | `4b0af18` |
+  | `sync: um push no meio por pedido novo` (último commit no sync) | `a656eb3` | `df85f1b` |
+  | `decisões: a publicação da fase 12 (D167)` | `9af8580` | `8d3d3ab` |
+  | `fase 12: polish e E2E` | `642089c` | `8dc0b57` |
+  | `fase 11` (ponta, `laboratório: … a fila do aparelho`) | `dc7a04e` | `36f6e31` |
+  | `fase 11: o primeiro quadro do mapa …` / `fase 11: mapa e clima` | `f015491` / `d92c024` | `3d2ecc9` / `a1813f2` |
+  | `fase 10: importação com IA` | `e1ac046` | `463eb4d` |
+  | `fase 9: progressão e retrospectiva` | `f53fb7f` | `c0b0b30` |
+  | `fase 8: listas, missões, contatos e gastos` | `a16d2dc` | `e74d159` |
+  | `fase 7: reservas, anexos e memórias` | `c8fccb0` | `7ec5163` |
+  | `fase 6: garagem 3D` | `2953525` | `0533601` |
+  | `fase 5: mundo 3D, maquete e replay` | `11dc562` | `5fc14df` |
+  | `fase 4: uso com a tela apagada` | `082ba0b` | `cc6b1fd` |
+  | `fase 3: roteiro, rota real e trilha` | `2d05500` | `249f925` |
+  | `fase 2: offline, PWA e viagens` | `0398392` | `b87e7c4` |
+  | `fase 1: base, auth, perfil e convites` | `504fcc8` | `0649822` |
+
+  O mapa completo dos 61 pares ficou no scratchpad do orquestrador (`limpeza-mapa.txt`); a partir
+  daqui as decisões citam só shas da história nova.
+- **Conferido depois do push:** CI da `main` em `fa100cd` verde (run 42499564442, 13 min); a
+  Vercel republicou (status `success` no commit). Nenhum laboratório novo: a árvore é a mesma de
+  `84dbf27`, verde às 13h14.
+
+## Fase 14 · A viagem abre no mapa
+
+### Portão de entrada (aberto às 13h50 de 08/11)
+- fase 13 na `main`: sim, `b099be8` (`fase 13: correções`) e `fa100cd` (o ajuste de botão), a ponta.
+- CI da `main` em `fa100cd`: verde (run 42499564442).
+- laboratório na produção: verde na mesma árvore (run 42496760740, 13h14, em `84dbf27` antes da
+  reescrita): 31 verdes, 4 pulados, nenhum "medido, não cobrado".
+- `docs/decisoes.md` com a seção da fase 13: sim, D168 a D173. **As D da fase 14 começam na D174.**
+- memória do projeto atualizada depois do fim da fase 13: sim (pela sessão, e pelo orquestrador às
+  13h35 com a história reescrita).
+- cota do Actions: não se aplica.
+- dependência (13 → 14): satisfeita. Nada a pular.
+- `docs/fases/fase-14.md` escrito às 13h45 pelo orquestrador, a partir do plano, das D168 a D173 e
+  de um levantamento do código em `fa100cd` (rotas, `ModoViagemPage`, o painel e o catch-up, o
+  mundo 3D e a câmera, as miniaturas, `STOP_KINDS`, os testes e o laboratório). Seções 0 a 4 como
+  os da fase 12 e 13; a seção 2 com a regra precisa do `.env.local`, a proibição da coautoria e a
+  nota de que a reescrita da história foi única. Fora do git até o commit de fechamento da fase.
+
+### Sessão
+- **Abertura:** 08/11/2026 às 13h5x, headless, na pasta principal, binário da extensão 2.1.319,
+  texto de abertura em `fase-14.kickoff.txt` (o modelo da seção 1.3 do orquestrador mais sete
+  pontos: o estado em `fa100cd`, a história reescrita e a proibição da coautoria, os dois arquivos
+  fora do git, o repositório público, o `.env.local`, nenhum teste em aparelho, o processo do
+  laboratório). Monitor de sinais de vida a cada 30 min.
 - **Fim:** _(a preencher)_ · `session_id`: _(a preencher)_ · retomadas: 0 · custo: _(a preencher)_
 
 ### Portão de saída

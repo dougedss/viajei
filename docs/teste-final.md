@@ -24,8 +24,9 @@ ficam na pasta como registro; tudo o que eles pedem está aqui.
 | iPhone B | o dia 1 do Ensaio, com uma saída curta a pé ou de carro; termina depois das 18:30 | 1.8 a 1.15 | 2 h 45 |
 | Android, instalar | a noite do dia 1, para ele receber o briefing do dia 2 | 2.1 e 2.2 | 10 min |
 | iPhone C | o dia 1 ou o dia 2 do Ensaio, de dia (o clima se lê ao sol) | 1.16 a 1.22 | 2 h 30 |
-| Android | o dia 2 do Ensaio, com uma volta curta de carro | 2.3 a 2.13 | 3 h |
+| Android | o dia 2 do Ensaio, com uma volta curta de carro | 2.3 a 2.14 | 3 h 20 |
 | Com hora marcada | a manhã do dia 2, às 9h do dia seguinte ao fim do Ensaio, 07/12 e 10/12 | 1.23 | 5 min cada |
+| iPhone D (fase 14) | o dia 1 do Ensaio, no carro de verdade, com o mapa aberto | 1.24 | 40 min |
 
 **Total: umas 7 h 30 no iPhone e 3 h 15 no Android**, perto de 11 h em três dias seguidos, mais os
 toques com hora marcada. A sentada C pode ficar para depois do Android.
@@ -684,6 +685,37 @@ Anotações:
 
 Anotações:
 
+### 1.24 A viagem abre no mapa · 40 min (fase 14) · sem prova até a viagem
+
+Decisão do Douglas de 08/11: nenhum teste nos aparelhos antes da viagem. Este bloco fica como
+documentação do que só um aparelho prova; a CI e o laboratório provam o resto (D174 a D180).
+
+- [ ] **A viagem é o mapa.** Toque na viagem na lista: a maquete inteira na tela, sem rolagem, com a
+  barra do dia no alto e o "Agora" embaixo. Tente rolar: nada rola (só a lista do dia, quando ela
+  está no lugar da maquete). O cabeçalho do app não aparece aqui; "Detalhes" leva à visão geral.
+- [ ] **O carro grande e a câmera.** Parado numa parada, o carro ocupa mais ou menos um quinto da
+  altura da tela, visto de cima e de trás, com a estrada subindo à frente em direção à próxima
+  parada. No "Rever o dia", a câmera recua entre paradas distantes e volta. Anote travadas.
+- [ ] **As miniaturas.** Cada parada tem a miniatura do tipo (casa, árvores, parreira e barril,
+  hotel, restaurante, palco, quarteirão, placa). Toque numa: a folha da parada abre, com Maps e Waze
+  e, se for a próxima, Chegamos!. Toque numa pílula: a mesma folha. "+ Gasto" na folha vem com a
+  parada e a categoria.
+- [ ] **Partiu! sozinho, no carro.** Com a posição permitida e o mapa aberto, saia da parada: a
+  mais de 300 m, "Saímos de …" com Desfazer, sem o "+10". Anote a distância aproximada.
+- [ ] **Chegamos! sozinho.** Fique 3 min dentro de 150 m da próxima: "Chegamos: …" com Desfazer, e
+  o "Como foi?" como cartão, não como folha. Anote quanto demorou depois de parar.
+- [ ] **O ponto "GPS".** Na frase da barra, o ponto verde "GPS" enquanto acompanha; "GPS econômico"
+  depois de 10 min parado.
+- [ ] **"Tela acesa".** Ligue o botão de sol na barra do topo: a tela não apaga sozinha. Desligue:
+  apaga. Bloqueie a tela com o botão desligado e ande: nada se marca (o PWA não recebe posição com a
+  tela apagada); ao destravar, o catch-up marca o que ficou para trás. Anote a bateria antes e
+  depois de 30 min com "Tela acesa" ligado e o mapa aberto (tabela dos números).
+- [ ] **"Hoje".** Toque em "Dia seguinte": o chip "Hoje" aparece; toque nele: volta ao dia de hoje.
+- [ ] **A folha por cima.** Com a folha da parada aberta, nada da maquete nem das pílulas vaza por
+  cima dela.
+
+Anotações:
+
 ## Parte 2 · Android
 
 O mesmo percurso, mais curto: aqui está só o que muda no Android, e no fim o resto, item a item,
@@ -864,6 +896,16 @@ Anotações:
 
 Anotações:
 
+### 2.14 A viagem abre no mapa · 20 min (fase 14) · sem prova até a viagem
+
+- [ ] **O mesmo do 1.24** no Android: a tela sem rolagem, o carro grande, as miniaturas e a folha,
+  Partiu! e Chegamos! sozinhos com o mapa aberto, "Tela acesa", "Hoje".
+- [ ] **O TalkBack na tela nova.** A barra do dia (o nome, as setas, "Hoje", "Lista"), a região
+  "Agora" com a ação principal, as pílulas como botões com o nome e o horário, e a lista do dia no
+  lugar da maquete.
+
+Anotações:
+
 ### 2.13 No Chrome do computador · opcional (fases 5 e 6)
 
 - [ ] **Sem WebGL.** No Chrome do computador, em `chrome://flags` desligue a aceleração por
@@ -900,12 +942,14 @@ dia" da RS — cópia, Dia 1, e na garagem com o disco girando. Os alvos são os
 | O filme da retrospectiva engasga? (sem chip de fps) | não | ____ | ____ |
 | Tempo para gerar o vídeo de 15 s | — | ____ | ____ |
 | Formato que a folha mostra | MP4 · H.264 | ____ | ____ |
-| Bateria em 30 min de modo painel (de % a %) | — | ____ | ____ |
+| Bateria em 30 min com o mapa aberto e "Tela acesa" (de % a %) | — | ____ | ____ |
+| Primeiro quadro da tela da viagem com a câmera nova (cronômetro) | (a D180 tem o número do laboratório) | ____ | ____ |
 | Foto: de "Usar foto" até a miniatura | — | ____ | ____ |
 | Importação do WhatsApp: tempo em "Lendo o roteiro…" | — | ____ | ____ |
 | Importação do WhatsApp: até a primeira parada / até a revisão | — | ____ | ____ |
 | Texto longo: até a primeira parada / até o fim | (a D140 mediu 17 s / 91 s) | ____ | ____ |
-| Partiu! automático do painel: a que distância marcou | ~300 m | ____ | ____ |
+| Partiu! automático pelo GPS com o mapa aberto: a que distância marcou | ~300 m | ____ | ____ |
+| Chegamos! automático: quanto depois de parar | ~3 min | ____ | ____ |
 
 ## Se algo falhar
 
