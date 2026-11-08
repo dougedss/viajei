@@ -4,7 +4,8 @@ import { haversineM } from '@shared/geo.ts';
  * Chegada e saída por presença, para o catch-up e o modo painel (fase 4). Chegada: dentro de
  * 150 m por pelo menos 3 min. Saída: mais de 300 m. Regras puras sobre leituras de posição.
  */
-export type Fix = { lng: number; lat: number; t: number };
+/** Uma leitura de posição; `accuracy` em metros, quando o aparelho diz (o raio de 68% de confiança). */
+export type Fix = { lng: number; lat: number; t: number; accuracy?: number };
 type Place = { lat: number; lng: number };
 
 export const ARRIVAL_RADIUS_M = 150;

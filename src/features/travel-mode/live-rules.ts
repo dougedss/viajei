@@ -7,6 +7,7 @@ import {
   isWithin,
   type Fix,
 } from '@/lib/geo/geofence.ts';
+import { isAutoStop } from './auto-stop.ts';
 import { isDepartureNode, type DayState } from './rules.ts';
 
 /**
@@ -71,7 +72,9 @@ export function liveDecision(
 
   const from = departureStop(state);
   const wasThere = located(from) && fixes.some((f) => isWithin(f, from, ARRIVAL_RADIUS_M));
-  const autoDepart = located(from) && wasThere && hasDeparted(latest, from);
+  // a saída de uma parada que se registrou sozinha é do detector (fase 15): a primeira leitura a
+  // 60 m dela, com a hora medida, e sem toast; esta regra, a 300 m, chegaria depois e repetiria
+  const autoDepart = located(from) && !isAutoStop(from) && wasThere && hasDeparted(latest, from);
 
   const next = state.next;
   const autoArrive = located(next) && !isDepartureNode(next) && arrivalAt(fixes, next) !== null;

@@ -34,6 +34,14 @@ describe('o acompanhamento da posição', () => {
     expect(liveDecision(there, state, MIN).autoDepart).toBe(true);
   });
 
+  it('da parada que se registrou sozinha, a saída é do detector, não desta regra', () => {
+    const auto = { ...park(), source: 'auto', done_at: 'x' };
+    const there = pushFix(pushFix([], fix(PARK, 0)), fix(PARK, MIN, 0.004));
+    expect(liveDecision(there, { at: auto, next: hotel(), onRoad: false }, MIN).autoDepart).toBe(
+      false,
+    );
+  });
+
   it('a saída do nó de origem usa o próprio nó quando ainda não há at', () => {
     const state = { at: null, next: origin(), onRoad: false };
     expect(departureStop(state)?.id).toBe('o');
