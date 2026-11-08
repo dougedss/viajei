@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { folhaCoberta } from './helpers/folha.ts';
 import { criarUsuario, SENHA } from './helpers/users.ts';
 import { fakeOpenMeteo, fakeRouteDay, fakeTiles, viagemNaSerra } from './helpers/world.ts';
 
@@ -52,6 +53,15 @@ test('o mapa visto com rede abre sem rede, com os tiles do cache', async ({ page
     .toBeGreaterThan(0);
   expect((await page.evaluate<Cached>(CACHED)).statuses).toEqual([200]);
   const seen = await map.locator('img.leaflet-tile-loaded').count();
+
+  // no build de verdade, a folha do pino fica por cima do mapa (fase 13: o CSS do Leaflet entra no
+  // chunk do mapa, e é no build que a ordem das folhas de estilo vale)
+  await page.getByRole('button', { name: '2. Cascata do Caracol' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Cascata do Caracol' });
+  await expect(sheet.locator('[data-map-sheet]')).toBeVisible();
+  expect(await folhaCoberta(page)).toEqual([]);
+  await page.keyboard.press('Escape');
+  await expect(sheet).toBeHidden();
 
   // sem rede nenhuma, e sem a rota de mentira: o que aparecer vem do cache
   await context.unroute('https://tile.openstreetmap.org/**');

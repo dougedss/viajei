@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { folhaCoberta } from './helpers/folha.ts';
 import { criarUsuario, SENHA } from './helpers/users.ts';
 import { appendFileSync } from 'node:fs';
 import {
@@ -78,6 +79,9 @@ test('o mapa mostra o dia, a folha do pino e troca de dia', async ({ page, conte
   await page.getByRole('button', { name: '2. Cascata do Caracol' }).click();
   const sheet = page.getByRole('dialog', { name: 'Cascata do Caracol' });
   await expect(sheet).toBeVisible();
+  // a folha fica por cima do mapa: nenhum pino nem tile vaza por cima dela (fase 13)
+  await expect(sheet.locator('[data-map-sheet]')).toBeVisible();
+  expect(await folhaCoberta(page)).toEqual([]);
   await expect(sheet).toContainText('09:30');
   await expect(sheet.locator('[data-stop-forecast]')).toContainText('chuva 70%');
   await expect(sheet.getByRole('link', { name: 'Google Maps' })).toHaveAttribute(

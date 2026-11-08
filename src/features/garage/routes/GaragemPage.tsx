@@ -126,7 +126,7 @@ function Garage({
       <CelebrationHost active tripId={trip.id} />
 
       <div
-        className="relative -mx-4 h-[clamp(320px,52svh,560px)] overflow-hidden sm:mx-0 sm:rounded-card"
+        className="relative isolate -mx-4 h-[clamp(320px,52svh,560px)] overflow-hidden sm:mx-0 sm:rounded-card"
         style={{ background: STUDIO_BACKGROUND }}
         data-garage={sideOnly ? 'svg' : (backend ?? undefined)}
       >

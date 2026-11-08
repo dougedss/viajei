@@ -172,8 +172,10 @@ export default function MapaPage() {
       </div>
 
       {pinned ? (
+        // `isolate`: as camadas do Leaflet (tiles 400, pinos 600 e mais, controles 1000) empilham só
+        // dentro desta caixa; sem isso competiam na raiz com a folha (z-50) e o pino abria por cima dela
         <div
-          className="relative h-[clamp(360px,calc(100svh-250px),720px)] overflow-hidden rounded-card bg-stage shadow-card"
+          className="relative isolate h-[clamp(360px,calc(100svh-250px),720px)] overflow-hidden rounded-card bg-stage shadow-card"
           data-map={selectionKey}
           data-map-ready={ready ? 'true' : undefined}
         >

@@ -266,7 +266,7 @@ function UnlockStage({ before, after }: { before: CarSpec; after: CarSpec }) {
   const side = reduced || support === 'none' || failed;
   return (
     <div
-      className="relative -mx-4 h-[220px] overflow-hidden"
+      className="relative isolate -mx-4 h-[220px] overflow-hidden"
       style={{ background: STUDIO_BACKGROUND }}
       data-unlock-stage={side ? 'svg' : ready ? 'ready' : 'pending'}
     >

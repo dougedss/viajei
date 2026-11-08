@@ -43,8 +43,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext value={value}>
       {children}
+      {/* acima da folha (z-50) de propósito: o "Desfazer" do Chegamos! mora aqui e a folha "Como foi?"
+          abre 1,2 s depois dele; desfazer com a folha aberta fecha a folha (D83), então o toque tem de
+          continuar alcançável. Fase 13: antes os dois tinham z-50 e decidia a ordem no DOM. */}
       <div
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex flex-col items-center gap-2 px-4 pb-[max(16px,env(safe-area-inset-bottom,0px))]"
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex flex-col items-center gap-2 px-4 pb-[max(16px,env(safe-area-inset-bottom,0px))]"
         aria-live="polite"
       >
         {started ? (

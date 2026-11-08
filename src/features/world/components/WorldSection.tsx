@@ -88,7 +88,7 @@ export default function WorldSection(props: WorldSlotProps) {
     <div className="grid gap-3">
       <div
         ref={hostRef}
-        className="relative h-[clamp(380px,58svh,620px)] overflow-hidden rounded-card bg-stage shadow-card"
+        className="relative isolate h-[clamp(380px,58svh,620px)] overflow-hidden rounded-card bg-stage shadow-card"
         data-world={backend ?? undefined}
       >
         {layout && support !== 'pending' ? (

@@ -388,7 +388,7 @@ function Retro({ trip, days, stops }: { trip: Trip; days: TripDay[]; stops: Stop
       </div>
       <div
         ref={stageRef}
-        className="relative h-[calc(100svh-72px)] min-h-[560px] overflow-hidden bg-[#0d1220]"
+        className="relative isolate h-[calc(100svh-72px)] min-h-[560px] overflow-hidden bg-[#0d1220]"
       >
         {cardsOnly ? (
           <CardsDeck art={art} onExport={() => setExportOpen(true)} tripId={tripId} />
