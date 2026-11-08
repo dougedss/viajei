@@ -11,6 +11,8 @@ import { pushRpcFor } from './rpc.ts';
 import { watchTrips } from './realtime.ts';
 import { withDeadline } from './deadline.ts';
 import { CycleRunner } from './runner.ts';
+import { SyncTrace } from './trace.ts';
+import { registerDiag } from '@/lib/diag.ts';
 
 export type SyncPhase = 'idle' | 'syncing';
 export type SyncState = {
@@ -36,6 +38,8 @@ let cleanups: (() => void)[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
 /** o ciclo em andamento, quando não há Web Locks */
 let running: Promise<void> | null = null;
+/** os últimos passos do motor, para o diagnóstico (`viajeiDiag.sync()`; fase 13) */
+const trace = new SyncTrace();
 
 function setState(patch: Partial<SyncState>) {
   state = { ...state, ...patch };
@@ -79,7 +83,10 @@ const hasLocks = () => typeof navigator !== 'undefined' && 'locks' in navigator;
 async function withLock(run: () => Promise<void>): Promise<boolean> {
   if (hasLocks()) {
     return navigator.locks.request('viajei:sync', { ifAvailable: true }, async (lock) => {
-      if (!lock) return false;
+      if (!lock) {
+        trace.add('lock ocupado');
+        return false;
+      }
       await run();
       return true;
     });
@@ -94,11 +101,13 @@ async function withLock(run: () => Promise<void>): Promise<boolean> {
 
 /** Espera quem está com o lock terminar, sem rodar nada. */
 async function lockReleased(): Promise<void> {
+  const t0 = Date.now();
   if (hasLocks()) {
     await navigator.locks.request('viajei:sync', () => Promise.resolve());
-    return;
+  } else {
+    await running?.catch(() => undefined);
   }
-  await running?.catch(() => undefined);
+  trace.add('lock solto', Date.now() - t0);
 }
 
 async function tripIdsToPull(userId: string): Promise<string[]> {
@@ -107,8 +116,10 @@ async function tripIdsToPull(userId: string): Promise<string[]> {
 }
 
 async function pullOne(tripId: string): Promise<void> {
+  const t0 = Date.now();
   const trip = await db.trips.get(tripId);
   const stats = await pullTrip(db, tripId, rpcPullTrip);
+  trace.add(`pull ${tripId.slice(0, 8)}`, Date.now() - t0);
   if (stats.revoked && trip) emit({ kind: 'revoked', tripId, tripName: trip.name });
 }
 
@@ -116,16 +127,24 @@ async function pullOne(tripId: string): Promise<void> {
 async function cycle(): Promise<void> {
   const me = uid;
   if (!me) return;
+  const t0 = Date.now();
+  trace.add('ciclo');
   setState({ phase: 'syncing' });
   try {
     const push = await pushOutbox(db, rpcPush);
+    trace.add(
+      `push ${String(push.done)}/${String(push.failed)}${push.offline ? ' sem rede' : ''}`,
+      Date.now() - t0,
+    );
     for (const n of push.notices) emit({ kind: 'superseded', ...n });
     if (push.failed > 0) emit({ kind: 'failed', count: push.failed });
     if (push.offline) {
       connectivity.markOffline();
       return;
     }
+    const t1 = Date.now();
     const memberships = await pullUser(db, rpcPullUser);
+    trace.add('pull do usuário', Date.now() - t1);
     for (const tripId of memberships.left) {
       const trip = await db.trips.get(tripId);
       if (trip) {
@@ -147,9 +166,16 @@ async function cycle(): Promise<void> {
     watchTrips(await tripIdsToPull(me), (id) => schedulePull(id));
     setState({ lastSyncAt: Date.now(), lastError: errors[0] ?? null });
   } catch (err) {
-    if (isNetworkError(err)) connectivity.markOffline();
-    else setState({ lastError: err instanceof Error ? err.message : String(err) });
+    const message = err instanceof Error ? err.message : String(err);
+    if (isNetworkError(err)) {
+      trace.add(`sem rede: ${message.slice(0, 80)}`);
+      connectivity.markOffline();
+    } else {
+      trace.add(`erro: ${message.slice(0, 80)}`);
+      setState({ lastError: message });
+    }
   } finally {
+    trace.add('ciclo fim', Date.now() - t0);
     setState({ phase: 'idle' });
   }
 }
@@ -166,7 +192,11 @@ const runner = new CycleRunner({
 
 /** Agenda um ciclo (com debounce curto): escrita, online, foco, abrir o app, 60 s visível. */
 export function schedule(delayMs = 150): void {
-  if (!uid) return;
+  if (!uid) {
+    trace.add('pedido com o motor desligado');
+    return;
+  }
+  trace.add('pedido');
   runner.request();
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => {
@@ -185,6 +215,7 @@ export function schedulePull(tripId: string, delayMs = 800): void {
     setTimeout(() => {
       pullTimers.delete(tripId);
       if (!uid || !connectivity.canTry()) return;
+      trace.add(`realtime ${tripId.slice(0, 8)}`);
       void withLock(() =>
         pullOne(tripId).catch((err: unknown) => {
           if (isNetworkError(err)) connectivity.markOffline();
@@ -205,6 +236,8 @@ export async function start(userId: string): Promise<void> {
   if (uid === userId) return;
   stop();
   const gen = ++generation;
+  const t0 = Date.now();
+  trace.add('ligando');
   const owner = await db.sync_state.get(syncKeys.uid);
   if (owner && owner.value !== userId) {
     await db.delete();
@@ -217,6 +250,7 @@ export async function start(userId: string): Promise<void> {
   if (gen !== generation) return; // parado enquanto preparava
 
   uid = userId;
+  trace.add('motor ligado', Date.now() - t0);
   const onVisible = () => {
     if (document.visibilityState === 'visible') schedule();
   };
@@ -263,6 +297,14 @@ export async function syncNow(): Promise<void> {
   runner.request();
   await runner.run();
 }
+
+// o diagnóstico pelo console e pelo laboratório: o estado, se há pedido na fila e o rastro
+registerDiag('sync', () => ({
+  ...state,
+  ligado: uid !== null,
+  pedido: runner.pending,
+  rastro: trace.list(),
+}));
 
 export const syncEngine = {
   subscribe: (listener: Listener) => {

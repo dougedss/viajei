@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import type { LabScenario } from '../../src/features/lab/scenarios.ts';
+import { formatTrace, type TraceEntry } from '../../src/lib/db/sync/trace.ts';
 import { uuidV5 } from '../../src/lib/ids/uuid.ts';
 import { wallToInstant } from '../../src/lib/time/zone.ts';
 import { DEVICE, enterPreview, QUIET, signInPage, TIMEOUT } from './app.ts';
@@ -55,6 +56,87 @@ const OUTBOX = `async () => {
   db.close();
   return rows.map((o) => [o.table, o.op, o.state, o.attempts, Math.round((o.next_at - Date.now()) / 1000) + 's', o.last_error].join(' '));
 }`;
+/**
+ * As tarefas longas da thread principal (50 ms ou mais), desde que a página abriu: é o que diz se o
+ * app estava ocupado enquanto a fila esperava (fase 13). Entra como script de início do contexto.
+ */
+const LONG_TASKS_INIT = `(() => {
+  const tasks = [];
+  globalThis.__viajeiLongTasks = tasks;
+  if (typeof PerformanceObserver === 'undefined') return;
+  try {
+    new PerformanceObserver((list) => {
+      for (const e of list.getEntries()) {
+        tasks.push([Math.round(performance.timeOrigin + e.startTime), Math.round(e.duration)]);
+        if (tasks.length > 3000) tasks.shift();
+      }
+    }).observe({ type: 'longtask', buffered: true });
+  } catch {}
+})();`;
+
+/**
+ * O índice de CPU da máquina, pela receita do Lighthouse (`benchmarkIndex`): meio segundo de
+ * concatenação de texto e meio de uma lista que enche e esvazia; o número é iterações por 10 por
+ * segundo, na média das duas. Serve para ler os tempos do cenário à luz da máquina do dia.
+ */
+const CPU_INDEX = `(() => {
+  const gc = () => {
+    const start = Date.now();
+    let n = 0;
+    while (Date.now() - start < 500) {
+      let s = '';
+      for (let j = 0; j < 10000; j++) s += 'a';
+      if (s.length === 1) throw new Error();
+      n++;
+    }
+    return Math.round(n / 10 / ((Date.now() - start) / 1000));
+  };
+  const noGc = () => {
+    const arr = [];
+    const start = Date.now();
+    let n = 0;
+    while (Date.now() - start < 500) {
+      for (let j = 0; j < 10000; j++) arr.push(j);
+      arr.length = 0;
+      n++;
+    }
+    return Math.round(n / 10 / ((Date.now() - start) / 1000));
+  };
+  return Math.round((gc() + noGc()) / 2);
+})()`;
+
+/** O estado do motor de sync, os Web Locks e as tarefas longas, lidos do app (`viajeiDiag`). */
+const DIAG = `(async () => {
+  const diag = globalThis.viajeiDiag || {};
+  const sync = typeof diag.sync === 'function' ? diag.sync() : null;
+  let locks = null;
+  try { locks = typeof diag.locks === 'function' ? await diag.locks() : null; } catch {}
+  return { sync, locks, tasks: globalThis.__viajeiLongTasks || [], now: Date.now(), visibility: document.visibilityState };
+})()`;
+
+type Diag = {
+  sync: { phase?: string; ligado?: boolean; pedido?: boolean; rastro?: TraceEntry[] } | null;
+  locks: { held: string[]; pending: string[] } | null;
+  tasks: [number, number][];
+  now: number;
+  visibility: string;
+};
+
+/** O que a thread principal fez desde `since`: quantas tarefas longas, quanto somam e a maior. */
+function longTasksSince(tasks: readonly [number, number][], since: number) {
+  const mine = tasks.filter(([at]) => at + 50 >= since);
+  const total = mine.reduce((acc, [, d]) => acc + d, 0);
+  return {
+    quantas: mine.length,
+    total_ms: total,
+    maior_ms: mine.reduce((acc, [, d]) => Math.max(acc, d), 0),
+    // as primeiras, com o instante relativo em segundos: onde o tempo foi
+    primeiras: mine
+      .slice(0, 12)
+      .map(([at, d]) => `+${((at - since) / 1000).toFixed(1)}s ${String(d)} ms`),
+  };
+}
+
 const removedAt = () => new Date().toISOString();
 const tomb =
   (table: string) =>
@@ -80,7 +162,7 @@ async function until<T>(
   }
 }
 
-type Step = { step: string; ok: boolean; detail?: string };
+type Step = { step: string; ok: boolean; ms: number; detail?: string };
 
 async function runSteps(
   scenario: LabScenario,
@@ -93,12 +175,13 @@ async function runSteps(
   const startedAt = Date.now();
   const done: Step[] = [];
   for (const [step, fn] of steps) {
+    const t0 = Date.now();
     try {
       await fn();
-      done.push({ step, ok: true });
+      done.push({ step, ok: true, ms: Date.now() - t0 });
     } catch (err) {
       const message = (err instanceof Error ? err.message : String(err)).split('\n')[0] ?? '';
-      done.push({ step, ok: false, detail: message.slice(0, 600) });
+      done.push({ step, ok: false, ms: Date.now() - t0, detail: message.slice(0, 900) });
       let i = 0;
       for (const page of pages()) {
         i++;
@@ -133,6 +216,7 @@ async function newContext(
   await context.addInitScript({
     content: celebrations ? `localStorage.setItem('viajei:celebrations', 'on');` : QUIET,
   });
+  await context.addInitScript({ content: LONG_TASKS_INIT });
   // sem folha de compartilhar: o card e o vídeo viram download, como num computador
   await context.addInitScript({
     content: `Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
@@ -261,7 +345,16 @@ async function prepareProgress(a: Session, b: Session, today: string, now: Date)
   return { trip, origin };
 }
 
-export async function appProgressao(ctx: ProgressContext, today: string): Promise<Check> {
+export type ProgressOptions = {
+  /** só A, até o rack chegar ao servidor: a medição do envio (`medir-sync`), sem o lado de B */
+  somenteRack?: boolean;
+};
+
+export async function appProgressao(
+  ctx: ProgressContext,
+  today: string,
+  opts: ProgressOptions = {},
+): Promise<Check> {
   const { a, b, appUrl } = ctx;
   let browser: Browser | null = null;
   let pageA: Page | null = null;
@@ -290,133 +383,166 @@ export async function appProgressao(ctx: ProgressContext, today: string): Promis
     const A = await newContext(browser, ctx, true);
     pageA = A.page;
     const pa = A.page;
+    const steps: [string, () => Promise<void>][] = [
+      [
+        'a máquina do dia',
+        async () => {
+          // o índice de CPU pela receita do Lighthouse, antes de entrar: os tempos de hoje se leem com ele
+          await pa.goto(`${appUrl}/entrar`);
+          data.indice_cpu = await pa.evaluate<number>(CPU_INDEX);
+        },
+      ],
+      ['A entra', () => signInPage(pa, appUrl, ctx.emails.a, ctx.passwords.a)],
+      [
+        'A abre o "Agora" e toca Partiu!',
+        async () => {
+          await pa.goto(url('/viagem?render=list'));
+          await pa.getByRole('button', { name: 'Partiu!' }).click({ timeout: SLOW });
+          await pa.getByText('Saímos: Saída do laboratório', { exact: true }).waitFor();
+        },
+      ],
+      [
+        'o servidor tem a conquista e o XP de A',
+        async () => {
+          await until(
+            async () =>
+              must(
+                await a.client
+                  .from('achievements')
+                  .select('key, unlocked_at')
+                  .eq('user_id', a.uid)
+                  .eq('key', 'first_stop'),
+                'conquista de A',
+              ),
+            (rows) => rows.length === 1,
+            'o "Primeiro pé na estrada" de A não chegou ao servidor',
+          );
+          await until(
+            async () =>
+              must(
+                await a.client
+                  .from('xp_events')
+                  .select('points')
+                  .eq('user_id', a.uid)
+                  .eq('kind', 'stop_done')
+                  .eq('ref_id', origin),
+                'XP de A',
+              ),
+            (rows) => rows.length === 1,
+            'o XP da parada de A não chegou ao servidor',
+          );
+        },
+      ],
+      [
+        'o cartão aparece na visão geral',
+        async () => {
+          await pa.goto(url());
+          const card = pa.getByRole('dialog', { name: 'Primeiro pé na estrada' });
+          // de madrugada o Madrugador vem junto, na frente: "Agora não" nos outros
+          for (let i = 0; i < 6 && !(await card.isVisible()); i++) {
+            const other = pa.locator('[role=dialog]:has([data-unlock])');
+            if (await other.isVisible()) {
+              data.cartoesAntes = Number(data.cartoesAntes ?? 0) + 1;
+              await other.getByRole('button', { name: /Agora não|Fechar/ }).click();
+              await other.waitFor({ state: 'detached' });
+            }
+            await sleep(700);
+          }
+          await card.waitFor({ timeout: SLOW });
+          await card.getByText('Rack de teto').waitFor();
+        },
+      ],
+      [
+        '"Usar no carro" põe o rack no carro da viagem',
+        async () => {
+          const card = pa.getByRole('dialog', { name: 'Primeiro pé na estrada' });
+          await card.getByRole('button', { name: 'Usar no carro' }).click();
+          const clickedAt = Date.now();
+          await card.waitFor({ state: 'detached' });
+          // o que o aparelho estava fazendo enquanto a fila esperava: o rastro do motor, os
+          // locks, as tarefas longas da thread principal e a fila (fase 13; D167)
+          const diagnose = async (): Promise<Record<string, unknown>> => {
+            const d = await pa.evaluate<Diag>(DIAG).catch(() => null);
+            const fila: unknown = await pa.evaluate(`(${OUTBOX})()`).catch(() => null);
+            if (!d) return { fila };
+            return {
+              motor: d.sync
+                ? { fase: d.sync.phase, ligado: d.sync.ligado, pedido: d.sync.pedido }
+                : null,
+              rastro: formatTrace(d.sync?.rastro ?? [], clickedAt),
+              locks: d.locks,
+              tarefas_longas: longTasksSince(d.tasks, clickedAt),
+              visibilidade: d.visibility,
+              fila,
+            };
+          };
+          try {
+            await until(
+              async () =>
+                must(
+                  await a.client.from('trips').select('car_accessories').eq('id', trip),
+                  'carro da viagem',
+                )[0]?.car_accessories ?? [],
+              (acc) => acc.includes('rack'),
+              'o rack não chegou ao carro no servidor',
+            );
+            data.rack = { ms: Date.now() - clickedAt, ...(await diagnose()) };
+          } catch (err) {
+            const diag = await diagnose();
+            data.rack = { ms: null, ...diag };
+            const message = err instanceof Error ? err.message : String(err);
+            throw new Error(
+              `${message}; motor ${JSON.stringify(diag.motor)}; locks ${JSON.stringify(diag.locks)}; tarefas longas ${JSON.stringify(diag.tarefas_longas)}; fila ${JSON.stringify(diag.fila)}; rastro ${JSON.stringify((diag.rastro as string[] | undefined)?.slice(-14))}`,
+              { cause: err },
+            );
+          }
+        },
+      ],
+      [
+        'B abre a viagem e o servidor tem o XP de B',
+        async () => {
+          if (!browser) throw new Error('sem navegador');
+          const B = await newContext(browser, ctx, false);
+          pageB = B.page;
+          await signInPage(B.page, appUrl, ctx.emails.b, ctx.passwords.b);
+          await B.page.goto(url());
+          await until(
+            async () =>
+              must(
+                await b.client
+                  .from('xp_events')
+                  .select('points')
+                  .eq('user_id', b.uid)
+                  .eq('kind', 'stop_done')
+                  .eq('ref_id', origin),
+                'XP de B',
+              ),
+            (rows) => rows.length === 1,
+            'o XP da parada de B não chegou ao servidor',
+          );
+        },
+      ],
+      [
+        'a garagem de B mostra o rack',
+        async () => {
+          if (!pageB) throw new Error('sem o navegador de B');
+          await pageB.goto(url('/garagem?render=list'));
+          await pageB
+            .getByRole('img', { name: /com rack/ })
+            .first()
+            .waitFor({ timeout: SLOW });
+        },
+      ],
+    ];
+    const rackIndex = steps.findIndex(([name]) => name.startsWith('"Usar no carro"'));
     return await runSteps(
       'app_progressao',
-      'A concluiu a primeira parada, o cartão apareceu, "Usar no carro" pôs o rack; o servidor tem o XP de A e de B, e a garagem de B mostra o rack',
+      opts.somenteRack
+        ? 'A concluiu a primeira parada, o cartão apareceu e "Usar no carro" pôs o rack no servidor'
+        : 'A concluiu a primeira parada, o cartão apareceu, "Usar no carro" pôs o rack; o servidor tem o XP de A e de B, e a garagem de B mostra o rack',
       () => [pageA, pageB],
       ctx.artifactsDir,
-      [
-        ['A entra', () => signInPage(pa, appUrl, ctx.emails.a, ctx.passwords.a)],
-        [
-          'A abre o "Agora" e toca Partiu!',
-          async () => {
-            await pa.goto(url('/viagem?render=list'));
-            await pa.getByRole('button', { name: 'Partiu!' }).click({ timeout: SLOW });
-            await pa.getByText('Saímos: Saída do laboratório', { exact: true }).waitFor();
-          },
-        ],
-        [
-          'o servidor tem a conquista e o XP de A',
-          async () => {
-            await until(
-              async () =>
-                must(
-                  await a.client
-                    .from('achievements')
-                    .select('key, unlocked_at')
-                    .eq('user_id', a.uid)
-                    .eq('key', 'first_stop'),
-                  'conquista de A',
-                ),
-              (rows) => rows.length === 1,
-              'o "Primeiro pé na estrada" de A não chegou ao servidor',
-            );
-            await until(
-              async () =>
-                must(
-                  await a.client
-                    .from('xp_events')
-                    .select('points')
-                    .eq('user_id', a.uid)
-                    .eq('kind', 'stop_done')
-                    .eq('ref_id', origin),
-                  'XP de A',
-                ),
-              (rows) => rows.length === 1,
-              'o XP da parada de A não chegou ao servidor',
-            );
-          },
-        ],
-        [
-          'o cartão aparece na visão geral',
-          async () => {
-            await pa.goto(url());
-            const card = pa.getByRole('dialog', { name: 'Primeiro pé na estrada' });
-            // de madrugada o Madrugador vem junto, na frente: "Agora não" nos outros
-            for (let i = 0; i < 6 && !(await card.isVisible()); i++) {
-              const other = pa.locator('[role=dialog]:has([data-unlock])');
-              if (await other.isVisible()) {
-                data.cartoesAntes = Number(data.cartoesAntes ?? 0) + 1;
-                await other.getByRole('button', { name: /Agora não|Fechar/ }).click();
-                await other.waitFor({ state: 'detached' });
-              }
-              await sleep(700);
-            }
-            await card.waitFor({ timeout: SLOW });
-            await card.getByText('Rack de teto').waitFor();
-          },
-        ],
-        [
-          '"Usar no carro" põe o rack no carro da viagem',
-          async () => {
-            const card = pa.getByRole('dialog', { name: 'Primeiro pé na estrada' });
-            await card.getByRole('button', { name: 'Usar no carro' }).click();
-            await card.waitFor({ state: 'detached' });
-            try {
-              await until(
-                async () =>
-                  must(
-                    await a.client.from('trips').select('car_accessories').eq('id', trip),
-                    'carro da viagem',
-                  )[0]?.car_accessories ?? [],
-                (acc) => acc.includes('rack'),
-                'o rack não chegou ao carro no servidor',
-              );
-            } catch (err) {
-              const fila: unknown = await pa.evaluate(`(${OUTBOX})()`).catch(() => null);
-              const message = err instanceof Error ? err.message : String(err);
-              throw new Error(`${message}; a fila do aparelho: ${JSON.stringify(fila)}`, {
-                cause: err,
-              });
-            }
-          },
-        ],
-        [
-          'B abre a viagem e o servidor tem o XP de B',
-          async () => {
-            if (!browser) throw new Error('sem navegador');
-            const B = await newContext(browser, ctx, false);
-            pageB = B.page;
-            await signInPage(B.page, appUrl, ctx.emails.b, ctx.passwords.b);
-            await B.page.goto(url());
-            await until(
-              async () =>
-                must(
-                  await b.client
-                    .from('xp_events')
-                    .select('points')
-                    .eq('user_id', b.uid)
-                    .eq('kind', 'stop_done')
-                    .eq('ref_id', origin),
-                  'XP de B',
-                ),
-              (rows) => rows.length === 1,
-              'o XP da parada de B não chegou ao servidor',
-            );
-          },
-        ],
-        [
-          'a garagem de B mostra o rack',
-          async () => {
-            if (!pageB) throw new Error('sem o navegador de B');
-            await pageB.goto(url('/garagem?render=list'));
-            await pageB
-              .getByRole('img', { name: /com rack/ })
-              .first()
-              .waitFor({ timeout: SLOW });
-          },
-        ],
-      ],
+      opts.somenteRack ? steps.slice(0, rackIndex + 1) : steps,
       data,
     );
   } finally {

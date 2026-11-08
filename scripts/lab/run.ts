@@ -29,7 +29,14 @@ import {
   openApp,
   type App,
 } from './app.ts';
-import { derivePassword, LAB_USERS, loadConfig, parseTarget, type LabConfig } from './env.ts';
+import {
+  argValues,
+  derivePassword,
+  LAB_USERS,
+  loadConfig,
+  parseTarget,
+  type LabConfig,
+} from './env.ts';
 import {
   briefingFactsOf,
   evaluate,
@@ -570,6 +577,40 @@ async function main(): Promise<number> {
     log(`lighthouse ${lh.status} · ${lh.detail}`);
     log(JSON.stringify(lh.data));
     return lh.status === 'fail' ? 1 : 0;
+  }
+  // o envio do rack (fase 13): só a progressão de A, até o rack chegar ao servidor, algumas vezes
+  // seguidas (--vezes, 3 por padrão), com o índice de CPU da máquina, o tempo de cada passo, o rastro
+  // do motor de sync, os locks e as tarefas longas no detalhe; sem o laboratório inteiro, sem IA
+  if (argv.includes('--medir-sync')) {
+    const a = await signIn(cfg, LAB_USERS.a);
+    const b = await signIn(cfg, LAB_USERS.b);
+    const progress: ProgressContext = {
+      appUrl: cfg.appOrigin,
+      bypass: cfg.bypass,
+      a,
+      b,
+      emails: { a: LAB_USERS.a.email, b: LAB_USERS.b.email },
+      passwords: {
+        a: await derivePassword(cfg.secret, LAB_USERS.a.email),
+        b: await derivePassword(cfg.secret, LAB_USERS.b.email),
+      },
+      artifactsDir: join(process.cwd(), 'lab-artifacts'),
+    };
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(
+      new Date(),
+    );
+    const vezes = Math.max(1, Number(argValues(argv, '--vezes')[0] ?? '3') || 3);
+    let failed = 0;
+    for (let i = 1; i <= vezes; i++) {
+      const check = await appProgressao(progress, today, { somenteRack: true });
+      const rack = check.data.rack as { ms?: number | null } | undefined;
+      log(
+        `medir-sync ${String(i)}/${String(vezes)}: ${check.status} · rack em ${rack?.ms == null ? 'nunca' : formatMs(rack.ms)} · índice de CPU ${typeof check.data.indice_cpu === 'number' ? String(check.data.indice_cpu) : '?'} · ${check.detail}`,
+      );
+      log(JSON.stringify(check.data));
+      if (check.status === 'fail') failed++;
+    }
+    return failed > 0 ? 1 : 0;
   }
   if (target === 'local') for (const l of await ensureLocalLab(cfg)) log(l);
   await probeReceiver(cfg);
