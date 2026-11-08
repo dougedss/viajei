@@ -158,7 +158,10 @@ function watchErrors(page: Page): () => string[] {
   };
   page.on('pageerror', (err) => push(`erro: ${err.message}`));
   page.on('console', (msg) => {
-    if (msg.type() === 'error') push(`console: ${msg.text()}`);
+    // a barra da Vercel bloqueada pelo próprio laboratório (D106) não é erro do app
+    if (msg.type() === 'error' && !msg.text().includes('ERR_BLOCKED_BY_CLIENT')) {
+      push(`console: ${msg.text()}`);
+    }
   });
   return () => [...errors];
 }
