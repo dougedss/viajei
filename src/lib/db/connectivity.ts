@@ -48,10 +48,18 @@ function scheduleRetry() {
   }, retryDelay(failures));
 }
 
+/** O servidor respondeu, ou o navegador avisou a volta: sem falhas contadas nem tentativa marcada. */
+function recovered(value: boolean) {
+  failures = 0;
+  cancelRetry();
+  set(value);
+}
+
 function start() {
   if (started || typeof window === 'undefined') return;
   started = true;
-  window.addEventListener('online', () => connectivity.markOnline());
+  // o evento é o próprio navegador dizendo que a rede voltou
+  window.addEventListener('online', () => recovered(true));
   window.addEventListener('offline', () => {
     // o navegador avisa a volta pelo `online`: não há o que tentar até lá
     cancelRetry();
@@ -63,14 +71,10 @@ export const connectivity = {
   isOnline: () => online,
   /** Vale tentar a rede? Só o "sem rede" do navegador impede; uma falha de requisição, não. */
   canTry: browserOnline,
-  markOnline: () => {
-    failures = 0;
-    cancelRetry();
-    // uma resposta que chega depois de o navegador avisar "sem rede" (o pedido saiu antes) não
-    // desmente o navegador: sem isso o chip voltava a "N pendentes" com a rede cortada e, como nada
-    // é tentado sem rede, nenhuma falha o corrigia (fase 14, visto na CI)
-    set(browserOnline());
-  },
+  // uma resposta que chega depois de o navegador avisar "sem rede" (o pedido saiu antes) não
+  // desmente o navegador: sem isso o chip voltava a "N pendentes" com a rede cortada e, como nada
+  // é tentado sem rede, nenhuma falha o corrigia (fase 14, visto na CI)
+  markOnline: () => recovered(browserOnline()),
   markOffline: () => {
     failures += 1;
     set(false);
