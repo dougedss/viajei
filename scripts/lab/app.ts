@@ -142,6 +142,21 @@ export async function pageDiagnosis(app: App, at: number): Promise<string> {
   });
 }
 export const TIMEOUT = 20_000;
+
+/**
+ * O que a tela da viagem diz da posição (fase 14): a hora da última leitura do acompanhamento, a da
+ * leitura única do catch-up e o estado da permissão. Só horas e estados, nenhuma coordenada.
+ */
+const POSICAO_DIAG = `(async () => {
+  const gps = document.querySelector('[data-gps]');
+  const perm = await navigator.permissions.query({ name: 'geolocation' }).catch(() => null);
+  return {
+    acompanhamento: gps ? gps.getAttribute('data-fix-at') : 'sem o ponto GPS',
+    leitura_unica: gps ? gps.getAttribute('data-read-at') : null,
+    permissao: perm ? perm.state : '?',
+    agora: Date.now(),
+  };
+})()`;
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
@@ -595,7 +610,16 @@ export function appReabrir(app: App, serverMarked: () => Promise<void>): Promise
           // o "Permitir" da localização, no toque em "Usar posição"
           await app.context.grantPermissions(['geolocation'], { origin: target.appUrl });
           await page.getByRole('button', { name: 'Usar posição' }).click();
-          await page.getByText(`Chegamos: ${target.destinationName}`).first().waitFor();
+          try {
+            await page.getByText(`Chegamos: ${target.destinationName}`).first().waitFor();
+          } catch (err) {
+            // o que a tela diz da posição (fase 14): as leituras que chegaram e a permissão
+            const posicao = await page.evaluate(POSICAO_DIAG).catch(() => null);
+            throw new Error(
+              `${err instanceof Error ? err.message : String(err)}; a posição: ${JSON.stringify(posicao)}`,
+              { cause: err },
+            );
+          }
         },
       ],
       ['o servidor recebeu a chegada', serverMarked],
