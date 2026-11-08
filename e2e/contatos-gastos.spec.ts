@@ -138,7 +138,9 @@ test('gasto pelo "+ Gasto" do Modo Viagem aparece no total e na barra do orçame
   await page.keyboard.press('Escape');
   await expect(howWasIt).toHaveCount(0);
 
-  // o "+ Gasto" nunca abre sozinho: só pelo toque de quem está no banco do passageiro
+  // o "+ Gasto" nunca abre sozinho: só pelo toque de quem está no banco do passageiro, em Detalhes
+  // (fase 14), já com a parada de agora e a categoria dela
+  await page.goto(`${tripUrl}/detalhes`);
   await page.getByRole('button', { name: 'Gasto', exact: true }).click();
   const sheet = page.getByRole('dialog', { name: 'Novo gasto' });
   await expect(sheet.getByRole('button', { name: 'Atrações' })).toHaveAttribute(

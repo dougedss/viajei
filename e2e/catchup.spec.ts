@@ -63,10 +63,8 @@ test('o card "Desde a última vez" aparece depois de marcar Partiu! em outra ses
   // a primeira visita à rota compila o Modo Viagem inteiro no Vite de dev: o mesmo prazo do B
   await expect(pageA.getByRole('heading', { name: 'Agora' })).toBeVisible({ timeout: 15_000 });
   await expect(pageA.getByText('Saída de casa').first()).toBeVisible();
-  await pageA.getByRole('link', { name: 'Roteiro' }).click();
-  await expect(
-    pageA.getByRole('heading', { name: 'Roteiro', exact: true, level: 1 }),
-  ).toBeVisible();
+  await pageA.getByRole('link', { name: 'Detalhes' }).click();
+  await expect(pageA.getByRole('heading', { name: nome })).toBeVisible();
 
   // o segundo aparelho marca Partiu!
   const ctxB = await browser.newContext({ ...test.info().project.use });

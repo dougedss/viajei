@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { CircleUserRound } from 'lucide-react';
 import { useEffect } from 'react';
-import { Link, Outlet } from 'react-router';
+import { Link, Outlet, useMatches } from 'react-router';
 import { Avatar } from '@/components/ui/Avatar.tsx';
 import { Wordmark } from '@/components/ui/Wordmark.tsx';
 import { markFirstOpen } from '@/features/notifications/first-open.ts';
@@ -25,6 +25,16 @@ import { useSession } from '@/lib/supabase/session.ts';
 
 const claimed = new Set<string>();
 
+/** A rota pediu a tela inteira (a tela da viagem, fase 14): sem o cabeçalho do app nem o `main`. */
+function isFullscreen(handle: unknown): boolean {
+  return (
+    typeof handle === 'object' &&
+    handle !== null &&
+    'fullscreen' in handle &&
+    handle.fullscreen === true
+  );
+}
+
 /**
  * Casca do app autenticado. Liga o motor de sync, a fila de fotos e o motor de progressão para o
  * usuário da sessão (e desliga ao sair),
@@ -35,6 +45,7 @@ export function AppLayout() {
   const profile = useProfile();
   const queryClient = useQueryClient();
   const uid = session?.user.id ?? null;
+  const fullscreen = useMatches().some((m) => isFullscreen(m.handle));
   useServiceWorkerMessages();
   useClearBadgeWhenVisible();
 
@@ -63,6 +74,19 @@ export function AppLayout() {
       }
     });
   }, [uid, queryClient]);
+
+  if (fullscreen) {
+    // a tela da viagem é inteira: a própria tela traz a barra do topo; o chip do sync e o perfil
+    // ficam em Detalhes. Os avisos, as folhas e o "+N" de XP continuam por cima
+    return (
+      <div className="h-full bg-paper">
+        <Outlet />
+        <UpdatePrompt />
+        <SyncNotices />
+        <XpGainHost />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-full bg-paper">

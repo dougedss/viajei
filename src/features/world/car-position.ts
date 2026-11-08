@@ -3,12 +3,13 @@ import type { CatchupPosition } from '@/lib/geo/catchup.ts';
 import type { LayoutNode, WorldLayout } from './layout.ts';
 
 /**
- * Onde o carrinho fica no caminho, puro. Prioridade: leitura ao vivo do painel, GPS do catch-up,
- * trilha do time, e por fim o nó da última concluída. Sem posição e na estrada, o carro aparece
+ * Onde o carrinho fica no caminho, puro. Prioridade: a posição deste aparelho (a leitura única ao
+ * abrir ou o acompanhamento com o mapa aberto, fase 14), a trilha do time, e por fim o nó da última
+ * concluída. Sem posição e na estrada, o carro aparece
  * logo depois do nó de saída, nunca no meio do trecho: não se inventa posição. Fora da rota, o `s`
  * continua o projetado e a cena desloca o carro na perpendicular, com a distância no chip.
  */
-export type CarSource = 'panel' | 'gps' | 'team-track' | 'node';
+export type CarSource = 'gps' | 'team-track' | 'node';
 
 export type CarPlacement = {
   s: number;
@@ -22,7 +23,6 @@ export type CarPositionInput = {
   state: Pick<DayState, 'at' | 'onRoad' | 'next' | 'finished'>;
   /** do `useCatchup`; `last-done` é só o nó, então vale como "sem posição" */
   position: CatchupPosition | null;
-  panelOn: boolean;
   layout: WorldLayout;
 };
 
@@ -42,14 +42,13 @@ function nodeNear(layout: WorldLayout, s: number): LayoutNode | null {
 }
 
 export function placeCar(input: CarPositionInput): CarPlacement {
-  const { state, position, panelOn, layout } = input;
+  const { state, position, layout } = input;
   const first = layout.nodes[0] ?? null;
   const last = layout.nodes.at(-1) ?? null;
 
   if (position && position.fraction !== null && position.source !== 'last-done') {
     const s = layout.fractionToS(position.fraction);
-    const source: CarSource =
-      position.source === 'gps' ? (panelOn ? 'panel' : 'gps') : 'team-track';
+    const source: CarSource = position.source === 'gps' ? 'gps' : 'team-track';
     const offRoute =
       position.offRoute && position.distanceM !== null
         ? { distance_m: Math.round(position.distanceM) }

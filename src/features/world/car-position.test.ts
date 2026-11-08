@@ -29,19 +29,18 @@ const pos = (over: Partial<CatchupPosition> = {}): CatchupPosition => ({
 const idle = { at: null, onRoad: false, next: stops[0]!, finished: false };
 
 describe('placeCar: prioridade das fontes', () => {
-  it('a leitura do painel vence tudo e aparece como painel', () => {
-    const p = placeCar({ state: idle, position: pos(), panelOn: true, layout });
-    expect(p.source).toBe('panel');
+  it('a posição deste aparelho vence tudo e aparece como gps', () => {
+    const p = placeCar({ state: idle, position: pos(), layout });
+    expect(p.source).toBe('gps');
     expect(p.s).toBeCloseTo(layout.fractionToS(0.5), 6);
     expect(p.offRoute).toBeNull();
   });
 
-  it('GPS do catch-up sem painel é gps; trilha do time é team-track', () => {
-    expect(placeCar({ state: idle, position: pos(), panelOn: false, layout }).source).toBe('gps');
+  it('GPS é gps; trilha do time é team-track', () => {
+    expect(placeCar({ state: idle, position: pos(), layout }).source).toBe('gps');
     const team = placeCar({
       state: idle,
       position: pos({ source: 'team-track', fraction: 0.2 }),
-      panelOn: false,
       layout,
     });
     expect(team.source).toBe('team-track');
@@ -53,7 +52,6 @@ describe('placeCar: prioridade das fontes', () => {
     const p = placeCar({
       state,
       position: pos({ source: 'last-done', fraction: 0.33 }),
-      panelOn: false,
       layout,
     });
     expect(p.source).toBe('node');
@@ -62,7 +60,7 @@ describe('placeCar: prioridade das fontes', () => {
   });
 
   it('posição sem fração (sem rota) cai na regra do nó', () => {
-    const p = placeCar({ state: idle, position: pos({ fraction: null }), panelOn: false, layout });
+    const p = placeCar({ state: idle, position: pos({ fraction: null }), layout });
     expect(p.source).toBe('node');
     expect(p.s).toBe(node('a').s);
   });
@@ -83,7 +81,7 @@ describe('placeCar: prioridade das fontes', () => {
     })();
     expect(f).toBeGreaterThan(0);
     expect(exact).toBeGreaterThan(0);
-    const p = placeCar({ state: idle, position: pos({ fraction: fB }), panelOn: false, layout });
+    const p = placeCar({ state: idle, position: pos({ fraction: fB }), layout });
     expect(Math.abs(p.s - node('b').s)).toBeLessThan(AT_NODE_EPSILON);
     expect(p.atNodeId).toBe('b');
   });
@@ -91,20 +89,20 @@ describe('placeCar: prioridade das fontes', () => {
 
 describe('placeCar: sem posição', () => {
   it('no início do dia o carro está no primeiro nó', () => {
-    const p = placeCar({ state: idle, position: null, panelOn: false, layout });
+    const p = placeCar({ state: idle, position: null, layout });
     expect(p).toEqual({ s: node('a').s, offRoute: null, source: 'node', atNodeId: 'a' });
   });
 
   it('parado na última concluída, fica no nó dela', () => {
     const state = { at: stops[1]!, onRoad: false, next: stops[2]!, finished: false };
-    const p = placeCar({ state, position: null, panelOn: false, layout });
+    const p = placeCar({ state, position: null, layout });
     expect(p.s).toBe(node('b').s);
     expect(p.atNodeId).toBe('b');
   });
 
   it('na estrada sem posição, aparece logo depois do nó de saída, nunca no meio do trecho', () => {
     const state = { at: stops[1]!, onRoad: true, next: stops[2]!, finished: false };
-    const p = placeCar({ state, position: null, panelOn: false, layout });
+    const p = placeCar({ state, position: null, layout });
     expect(p.s).toBeGreaterThan(node('b').s);
     expect(p.s - node('b').s).toBeGreaterThanOrEqual(ROAD_STEP_MIN);
     expect(p.s).toBeLessThan((node('b').s + node('c').s) / 2);
@@ -114,14 +112,14 @@ describe('placeCar: sem posição', () => {
 
   it('dia concluído: no último nó', () => {
     const state = { at: stops[3]!, onRoad: false, next: null, finished: true };
-    const p = placeCar({ state, position: null, panelOn: false, layout });
+    const p = placeCar({ state, position: null, layout });
     expect(p.s).toBe(node('d').s);
     expect(p.atNodeId).toBe('d');
   });
 
   it('última concluída que não está no layout cai no primeiro nó', () => {
     const state = { at: makeStop({ id: 'zzz' }), onRoad: true, next: stops[2]!, finished: false };
-    const p = placeCar({ state, position: null, panelOn: false, layout });
+    const p = placeCar({ state, position: null, layout });
     expect(p.s).toBe(node('a').s);
   });
 });
@@ -131,7 +129,6 @@ describe('placeCar: fora da rota', () => {
     const p = placeCar({
       state: idle,
       position: pos({ offRoute: true, distanceM: 3049.6, fraction: 0.4 }),
-      panelOn: false,
       layout,
     });
     expect(p.offRoute).toEqual({ distance_m: 3050 });

@@ -264,7 +264,8 @@ for (const tema of ['light', 'dark'] as const) {
       await alvos(page, rota, tema, achados);
     }
 
-    // o Modo Viagem de dia e de noite (o tema da noite entra sozinho das 18:30 às 6:00)
+    // a tela da viagem de dia e de noite (o tema da noite entra sozinho das 18:30 às 6:00), pela
+    // lista do dia (a maquete em WebGL por software não representa um aparelho)
     for (const [quando, hora, min] of [
       ['dia', 12, TEXTO_PX],
       ['noite', 20, TEXTO_PX * 1.1],

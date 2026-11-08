@@ -160,25 +160,56 @@ const SOURCE_LABEL = {
   'last-done': 'pela última parada marcada',
 } as const;
 
-/** Uma linha sobre onde o carro está: fora da rota com a distância, ou a fração do dia percorrida. */
-export function PositionLine({ position }: { position: CatchupPosition | null }) {
-  if (!position) return null;
+/**
+ * Uma linha discreta sobre a posição, na barra do "Agora": o ponto "GPS" enquanto a posição está
+ * sendo acompanhada (e "econômico" parado), fora da rota com a distância, ou a fração do dia.
+ */
+export function PositionLine({
+  position,
+  tracking = false,
+  lowPower = false,
+}: {
+  position: CatchupPosition | null;
+  tracking?: boolean;
+  lowPower?: boolean;
+}) {
+  const gps = tracking ? (
+    <span className="inline-flex items-center gap-1 font-semibold text-on-time-ink" data-gps>
+      <span className="size-2 rounded-full bg-on-time" aria-hidden="true" />
+      GPS{lowPower ? ' econômico' : ''}
+    </span>
+  ) : null;
+  if (!position) {
+    return gps ? (
+      <p className="mt-0.5 flex items-center gap-2 mv-text-13 text-ink-2">{gps}</p>
+    ) : null;
+  }
   if (position.offRoute && position.distanceM !== null) {
     return (
-      <Chip kind="warn" className="w-fit">
-        <MapPinOff className="size-4" aria-hidden="true" />
-        Fora da rota ·{' '}
-        {position.distanceM >= 1000
-          ? `${(position.distanceM / 1000).toFixed(position.distanceM >= 10_000 ? 0 : 1)} km`
-          : `${Math.round(position.distanceM)} m`}
-      </Chip>
+      <p className="mt-0.5 flex items-center gap-2 mv-text-13 text-ink-2">
+        {gps}
+        <Chip kind="warn" className="min-h-6 px-2">
+          <MapPinOff className="size-4" aria-hidden="true" />
+          Fora da rota ·{' '}
+          {position.distanceM >= 1000
+            ? `${(position.distanceM / 1000).toFixed(position.distanceM >= 10_000 ? 0 : 1)} km`
+            : `${Math.round(position.distanceM)} m`}
+        </Chip>
+      </p>
     );
   }
-  if (position.fraction === null) return null;
+  if (position.fraction === null) {
+    return gps ? (
+      <p className="mt-0.5 flex items-center gap-2 mv-text-13 text-ink-2">{gps}</p>
+    ) : null;
+  }
   return (
-    <p className="flex items-center gap-2 mv-text-14 text-ink-2">
-      <LocateFixed className="size-4 shrink-0" aria-hidden="true" />
-      {Math.round(position.fraction * 100)}% do caminho do dia, {SOURCE_LABEL[position.source]}
+    <p className="mt-0.5 flex items-center gap-2 mv-text-13 text-ink-2">
+      {gps}
+      <span className="inline-flex items-center gap-1">
+        <LocateFixed className="size-4 shrink-0" aria-hidden="true" />
+        {Math.round(position.fraction * 100)}% do caminho do dia, {SOURCE_LABEL[position.source]}
+      </span>
     </p>
   );
 }

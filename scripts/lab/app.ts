@@ -648,23 +648,28 @@ export function appExtras(app: App): Promise<Check> {
       [
         'ligar o modo painel',
         async () => {
-          await page.getByRole('button', { name: 'Modo painel' }).click();
-          await page.getByRole('status').filter({ hasText: 'Painel ligado' }).waitFor();
+          const toggle = page.getByRole('button', { name: 'Modo painel' });
+          await toggle.click();
+          await until(
+            () => toggle.getAttribute('aria-pressed'),
+            (v) => v === 'true',
+            'o botão não ficou ligado',
+          );
+          // ligado, a barra do "Agora" diz que a posição está sendo acompanhada
+          await page.locator('[data-gps]').waitFor();
         },
       ],
       [
         'desligar o modo painel',
         async () => {
-          await page.getByRole('button', { name: 'Desligar o modo painel' }).click();
-          await page
-            .getByRole('status')
-            .filter({ hasText: 'Painel ligado' })
-            .waitFor({ state: 'detached' });
+          await page.getByRole('button', { name: 'Modo painel' }).click();
+          await page.locator('[data-gps]').waitFor({ state: 'detached' });
         },
       ],
       [
-        'exportar o dia (.ics)',
+        'exportar o dia (.ics), em Detalhes',
         async () => {
+          await page.goto(tripUrl(target, 'detalhes'));
           const download = page.waitForEvent('download');
           await page.getByRole('button', { name: 'Exportar o dia' }).click();
           const file = await download;
@@ -749,7 +754,8 @@ export function appMaquete(app: App): Promise<Check> {
         await review.waitFor({ timeout: WORLD_TIMEOUT });
         await review.click();
         const t0 = Date.now();
-        await hud
+        // o "Pular" do replay mora na faixa de cima do palco (fase 14), no lugar do "Rever o dia"
+        await page
           .getByRole('button', { name: 'Pular', exact: true })
           .waitFor({ timeout: WORLD_TIMEOUT });
         await review.waitFor({ timeout: WORLD_TIMEOUT });

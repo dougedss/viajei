@@ -45,10 +45,10 @@ async function viagemComParadas(page: Page): Promise<string> {
 
 /**
  * O Chromium do Playwright não tem WebGPU utilizável e desenha WebGL2 pelo SwiftShader: a maquete
- * tem de aceitar esse motor. A lista acessível continua na página, recolhida, e "Ver como lista"
- * desliga a maquete neste aparelho até a pessoa querer de volta.
+ * tem de aceitar esse motor. A lista acessível entra no lugar dela pelo botão do topo (fase 14), e
+ * "Ver como lista" desliga a maquete neste aparelho até a pessoa querer de volta.
  */
-test('o Modo Viagem monta a maquete e "Ver como lista" persiste', async ({ page }) => {
+test('a tela da viagem monta a maquete e "Ver como lista" persiste', async ({ page }) => {
   // criar a viagem leva uns 15 s; o SwiftShader compila os shaders da cena devagar
   test.setTimeout(150_000);
   await entrar(page, 'dono@viajei.local');
@@ -63,11 +63,8 @@ test('o Modo Viagem monta a maquete e "Ver como lista" persiste', async ({ page 
   // as pílulas em HTML por cima da cena
   await expect(page.locator('[data-world-hud]').getByText('Parque')).toBeVisible();
 
-  // a lista do dia continua na página, recolhida
-  const lista = page.getByRole('button', { name: /Lista do dia/ });
-  await expect(lista).toHaveAttribute('aria-expanded', 'false');
-  await lista.click();
-  await expect(page.getByRole('list', { name: 'Trilha do dia' })).toBeVisible();
+  // a lista do dia não está na tela: entra no lugar da maquete pelo botão do topo
+  await expect(page.getByRole('list', { name: 'Trilha do dia' })).toHaveCount(0);
 
   // "Ver como lista" desliga a maquete e sobrevive a recarregar
   await page.getByRole('button', { name: 'Ver como lista' }).click();
@@ -83,7 +80,7 @@ test('o Modo Viagem monta a maquete e "Ver como lista" persiste', async ({ page 
   await expect(maquete).toBeVisible({ timeout: 60_000 });
 });
 
-test('?render=list força a lista, sem canvas e sem botão de voltar', async ({ page }) => {
+test('?render=list força a lista, sem canvas e sem o botão de alternar', async ({ page }) => {
   await entrar(page, 'dono@viajei.local');
   const tripUrl = await viagemComParadas(page);
   await page.goto(`${tripUrl}?render=list`);

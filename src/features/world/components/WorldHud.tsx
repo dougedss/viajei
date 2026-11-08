@@ -1,4 +1,4 @@
-import { Check, CloudRain, MapPinOff, SkipForward } from 'lucide-react';
+import { Check, CloudRain } from 'lucide-react';
 import { motion } from 'motion/react';
 import { PERSON_COLORS } from '@shared/constants.ts';
 import { asPersonColor } from '@/features/profile/queries.ts';
@@ -13,9 +13,10 @@ import type { ProjectedNode } from '../project.ts';
 
 /**
  * O HTML por cima da cena: pílulas das paradas projetadas uma vez por layout (ícone, nome, horário,
- * estado), o chip "Ana · 14:02" nas marcações do time, a legenda da curiosidade, "Fora da rota",
- * "+N paradas" e o "Pular" do replay. Nítidos no sol, nada de texto em textura. O canvas por baixo
- * é `aria-hidden`; o conteúdo acessível é a lista do dia.
+ * estado), o chip "Ana · 14:02" nas marcações do time e a legenda da curiosidade. Nítidos no sol,
+ * nada de texto em textura. "Fora da rota", "+N paradas" e o "Pular" do replay moram na faixa de
+ * cima do palco (a barra do "Agora" ocupa o pé da maquete, fase 14). O canvas por baixo é
+ * `aria-hidden`; o conteúdo acessível é a lista do dia.
  */
 export type TeamChip = { name: string; time: string | null };
 /** O cartão de foto do "Rever o dia": a primeira foto do nó, na cor de quem tirou, e "+N". */
@@ -31,10 +32,6 @@ type Props = {
   /** mergulho de câmera em curso: as pílulas se escondem */
   hidePills: boolean;
   caption: string | null;
-  offRouteM: number | null;
-  overflow: number;
-  skippable: boolean;
-  onSkip: () => void;
   opening: { plan: OpeningPlan; startedAt: number } | null;
   reducedMotion: boolean;
   /** as paradas em que é mais provável chover no horário delas (a previsão guardada) */
@@ -43,12 +40,6 @@ type Props = {
 
 export const HUD_TOP = 44;
 export const HUD_BOTTOM = 72;
-
-function formatDistance(m: number): string {
-  if (m >= 10_000) return `${Math.round(m / 1000)} km`;
-  if (m >= 1000) return `${(m / 1000).toFixed(1)} km`;
-  return `${Math.round(m)} m`;
-}
 
 export function WorldHud(props: Props) {
   const { nodes, stops, statuses, pops, teamChips, hidePills, opening, reducedMotion } = props;
@@ -158,34 +149,6 @@ export function WorldHud(props: Props) {
             </span>
             {props.caption}
           </motion.p>
-        ) : null}
-      </div>
-
-      {/* faixa de baixo: fora da rota, +N paradas, Pular; o lugar do chip de XP fica reservado à fase 9 */}
-      <div className="absolute inset-x-0 bottom-2 flex items-end justify-between gap-2 px-3">
-        <div className="flex flex-wrap gap-2">
-          {props.offRouteM !== null ? (
-            <span className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-late px-3 mv-text-13 font-semibold text-white">
-              <MapPinOff className="size-4" aria-hidden="true" />
-              Fora da rota · {formatDistance(props.offRouteM)}
-            </span>
-          ) : null}
-          {props.overflow > 0 ? (
-            <span className="inline-flex min-h-8 items-center rounded-full bg-hud px-3 mv-text-13 font-semibold text-hud-ink">
-              +{props.overflow} {props.overflow === 1 ? 'parada' : 'paradas'}
-            </span>
-          ) : null}
-          <span data-slot="xp" className="hidden" />
-        </div>
-        {props.skippable ? (
-          <button
-            type="button"
-            onClick={props.onSkip}
-            className="pointer-events-auto inline-flex min-h-12 items-center gap-1.5 rounded-full bg-hud px-4 mv-text-15 font-semibold text-hud-ink backdrop-blur-sm"
-          >
-            Pular
-            <SkipForward className="size-4" aria-hidden="true" />
-          </button>
         ) : null}
       </div>
     </div>

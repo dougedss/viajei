@@ -1,17 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import {
-  Bell,
-  BookOpen,
-  ChevronLeft,
-  ChevronRight,
-  CalendarOff,
-  Plus,
-  Route as RouteIcon,
-  Star,
-  Ticket,
-} from 'lucide-react';
+import { BookOpen, CalendarOff, Gauge, SlidersHorizontal, Star, Ticket } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { useLocation, useParams } from 'react-router';
 import { NotFound } from '@/app/NotFound.tsx';
 import { Splash } from '@/app/Splash.tsx';
 import { ButtonLink } from '@/components/ui/ButtonLink.tsx';
@@ -19,21 +9,18 @@ import { EmptyState } from '@/components/ui/EmptyState.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { QuestChecks } from '@/features/checklists/components/QuestChecks.tsx';
 import { useTripChecklist } from '@/features/checklists/queries.ts';
-import { createExpense } from '@/features/expenses/actions.ts';
-import { ExpenseSheet, type ExpenseDraft } from '@/features/expenses/components/ExpenseSheet.tsx';
-import { expenseDefaults } from '@/features/expenses/rules.ts';
-import { useDayStops, useTripDays, useTripStops } from '@/features/itinerary/queries.ts';
+import { useDayStops, useTripDays } from '@/features/itinerary/queries.ts';
 import { useDayRoute } from '@/features/itinerary/route.ts';
 import { legsByStop } from '@/features/itinerary/rules.ts';
 import { applyBadge, badgeCount } from '@/features/notifications/badge.ts';
-import { CalendarExport } from '@/features/notifications/components/CalendarExport.tsx';
 import { PushAskSheet } from '@/features/notifications/components/PushAskSheet.tsx';
 import { useTrip, useTripMembers, type MemberWithProfile } from '@/features/trips/queries.ts';
-import { formatMoney, todayISO, tripStatus } from '@/features/trips/rules.ts';
+import { todayISO, tripStatus } from '@/features/trips/rules.ts';
 import type { Profile, Trip } from '@/lib/db/schema.ts';
 import { cx } from '@/lib/cx.ts';
 import { useSession } from '@/lib/supabase/session.ts';
 import { WorldSlot, type EventsOwner, type ReviewPhoto } from '@/features/world/WorldSlot.tsx';
+import { useRenderPref, writeRenderPref } from '@/features/world/prefs.ts';
 import { dismissMemoryPrompt } from '@/features/memories/actions.ts';
 import { HowWasItSheet } from '@/features/memories/components/HowWasItSheet.tsx';
 import { MemoryPromptCard } from '@/features/memories/components/MemoryPromptCard.tsx';
@@ -50,38 +37,47 @@ import {
   SHEET_DELAY_MS,
   type ArrivalSource,
 } from '@/features/memories/rules.ts';
-import { NowReservations } from '@/features/reservations/components/NowReservations.tsx';
 import { ReservationSheet } from '@/features/reservations/components/ReservationSheet.tsx';
 import { useTripReservations } from '@/features/reservations/queries.ts';
 import { reservationsForNow, reservationsOfStop } from '@/features/reservations/rules.ts';
+import { retroState } from '@/features/retrospective/rules.ts';
 import { db, type Stop } from '@/lib/db/schema.ts';
 import { useTripMediaPrefetch } from '@/lib/media/hooks.ts';
 import { audio } from '@/lib/audio/index.ts';
 import { celebrateArrival } from '@/lib/celebrate.ts';
+import { readUrlFlags } from '@/lib/three/prefs.ts';
+import { useSupport } from '@/lib/three/useSupport.ts';
 import { XP_POINTS } from '@shared/constants.ts';
 import { CelebrationHost } from '@/features/progression/components/CelebrationHost.tsx';
 import { gainXp, tappedRect } from '@/features/progression/xp-gain.ts';
-import { currentDay, formatDayShort, hhmm } from '@/lib/time/index.ts';
-import { StopForecast } from '@/features/weather/components/StopForecast.tsx';
+import { daySummary } from '@/features/weather/rules.ts';
 import { useTripWeather } from '@/features/weather/queries.ts';
-import { daySummary, stopForecast } from '@/features/weather/rules.ts';
 import { arrive, arriveAt, depart, skip, type Undoable } from '../actions.ts';
 import { useCatchup } from '../catchup.ts';
-import { AgoraHeader } from '../components/AgoraHeader.tsx';
 import {
   PassedQuestion,
   PositionAsk,
   PositionLine,
   SinceLastTime,
 } from '../components/CatchupCards.tsx';
-import { PanelBar, PanelToggle } from '../components/PanelBar.tsx';
+import { DayBar } from '../components/DayBar.tsx';
+import { NowBar } from '../components/NowBar.tsx';
+import { RetroCard } from '../components/RetroCard.tsx';
+import { useRetroSeen } from '../retro-seen.ts';
 import { useNightTheme, useNow } from '../hooks.ts';
 import { usePanelMode } from '../panel.ts';
 import { declineGeo, grantGeo, useGeoConsent, useTeamTracks } from '../queries.ts';
 import { dayState, isDepartureNode } from '../rules.ts';
+import { dayBar, overlayCard } from '../screen.ts';
 
 const UNDO_MS = 10_000;
 
+/**
+ * A tela da viagem (`/viagens/:tripId`, fase 14): a maquete inteira na tela, sem rolagem. No alto, a
+ * barra do dia; embaixo, sobre a maquete, o "Agora" compacto com Partiu! e Chegamos!, e o botão
+ * "Detalhes" para o resto. O que acontece aparece num único lugar acima da barra e some. Antes da
+ * viagem, o Dia 1 com a estrada inteira; depois, o último dia com o cartão "Viajei!".
+ */
 export default function ViagemPage() {
   const { tripId = '' } = useParams();
   const { session } = useSession();
@@ -92,76 +88,55 @@ export default function ViagemPage() {
   const night = useNightTheme(now);
   useTravelText(night);
   const [override, setOverride] = useState<string | null>(null);
+  // o modo painel (GPS contínuo com a tela acesa), ligado pelo botão do topo
+  const [panelOn, setPanelOn] = useState(false);
+  const pref = useRenderPref();
+  const { search } = useLocation();
+  const support = useSupport();
 
   if (trip === undefined || days === undefined) return <Splash />;
   if (trip === null) return <NotFound />;
 
   const today = todayISO(now);
-  const auto = currentDay(days, today);
-  const day = (override ? days.find((d) => d.id === override) : null) ?? auto;
-  const index = day ? days.findIndex((d) => d.id === day.id) : -1;
+  const bar = dayBar({ days, today, overrideId: override });
+  const { day, index } = bar;
+  const active = day !== null && day.date === today && tripStatus(trip, today) === 'ongoing';
   const profiles = new Map<string, Profile>();
   for (const m of members) if (m.profile) profiles.set(m.profile.id, m.profile);
+  // a lista ou a maquete: a escolha some quando não há maquete possível ou a URL força a lista
+  const forced = readUrlFlags(search).forceList || support === 'none';
+  const render = forced
+    ? null
+    : {
+        mode: pref === 'list' ? ('list' as const) : ('world' as const),
+        onToggle: () => writeRenderPref(pref === 'list' ? 'auto' : 'list'),
+      };
 
   return (
-    // colunas que nunca passam da tela: a coluna automática de um grid cresce até o texto sem quebra
-    // mais largo (o nome da viagem), e a página inteira rolava para o lado. O nome encurta com
-    // reticências
-    <div className="grid grid-cols-1 gap-4 text-(length:--mv-min)">
-      <header className="grid grid-cols-1 gap-1">
-        <div className="flex items-center justify-between gap-2">
-          <Link
-            to="/viagens"
-            className="flex min-h-12 min-w-0 items-center mv-text-15 font-semibold text-ink-2"
+    <div
+      className="flex h-svh flex-col overflow-hidden bg-paper text-(length:--mv-min)"
+      data-tela-viagem
+    >
+      <DayBar
+        tripName={trip.name}
+        bar={bar}
+        onPrev={() => setOverride(days[index - 1]?.id ?? null)}
+        onNext={() => setOverride(days[index + 1]?.id ?? null)}
+        onToday={() => setOverride(null)}
+        render={render}
+      >
+        {active ? (
+          <button
+            type="button"
+            className="grid size-12 shrink-0 place-items-center rounded-full text-ink-2 aria-pressed:bg-accent-soft aria-pressed:text-accent-ink"
+            aria-pressed={panelOn}
+            aria-label="Modo painel"
+            onClick={() => setPanelOn((v) => !v)}
           >
-            <span className="truncate">{trip.name}</span>
-          </Link>
-          <div className="flex shrink-0 gap-2">
-            <ButtonLink
-              to={`/viagens/${trip.id}/avisos`}
-              variant="secondary"
-              size="sm"
-              aria-label="Avisos da viagem"
-            >
-              <Bell className="size-4" aria-hidden="true" />
-              Avisos
-            </ButtonLink>
-            <ButtonLink to={`/viagens/${trip.id}/roteiro`} variant="secondary" size="sm">
-              <RouteIcon className="size-4" aria-hidden="true" />
-              Roteiro
-            </ButtonLink>
-          </div>
-        </div>
-        {day ? (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              aria-label="Dia anterior"
-              disabled={index <= 0}
-              onClick={() => setOverride(days[index - 1]?.id ?? null)}
-              className="grid size-12 place-items-center rounded-full text-ink-2 disabled:opacity-30"
-            >
-              <ChevronLeft className="size-6" aria-hidden="true" />
-            </button>
-            <h1 className="flex-1 text-center font-num mv-text-24 leading-tight font-semibold">
-              <span className="uppercase">{formatDayShort(day.date)}</span>
-              <span className="block mv-text-15 font-semibold text-ink-2">
-                dia {index + 1} de {days.length}
-                {day.title ? ` · ${day.title}` : ''}
-              </span>
-            </h1>
-            <button
-              type="button"
-              aria-label="Dia seguinte"
-              disabled={index >= days.length - 1}
-              onClick={() => setOverride(days[index + 1]?.id ?? null)}
-              className="grid size-12 place-items-center rounded-full text-ink-2 disabled:opacity-30"
-            >
-              <ChevronRight className="size-6" aria-hidden="true" />
-            </button>
-          </div>
+            <Gauge className="size-6" aria-hidden="true" />
+          </button>
         ) : null}
-      </header>
+      </DayBar>
 
       {day ? (
         <DayView
@@ -173,14 +148,23 @@ export default function ViagemPage() {
           uid={session?.user.id ?? ''}
           members={members}
           profiles={profiles}
-          active={day.date === today && tripStatus(trip, today) === 'ongoing'}
+          active={active}
+          finishedTrip={tripStatus(trip, today) === 'past'}
+          panelOn={panelOn}
         />
       ) : (
-        <EmptyState
-          icon={CalendarOff}
-          title="Sem dias nesta viagem"
-          text="Os dias nascem das datas da viagem. Confira as datas em Editar viagem."
-        />
+        <div className="grid flex-1 content-center safe-x">
+          <EmptyState
+            icon={CalendarOff}
+            title="Sem dias nesta viagem"
+            text="Os dias nascem das datas da viagem. Confira as datas em Editar viagem."
+            action={
+              <ButtonLink to={`/viagens/${trip.id}/detalhes`} variant="secondary" size="md">
+                Detalhes
+              </ButtonLink>
+            }
+          />
+        </div>
       )}
 
       <PushAskSheet trip={trip} />
@@ -189,7 +173,7 @@ export default function ViagemPage() {
 }
 
 /**
- * O texto do Modo Viagem: 17 px no mínimo, 10% maior à noite (prompt, 11). Enquanto a tela está
+ * O texto da tela da viagem: 17 px no mínimo, 10% maior à noite (prompt, 11). Enquanto a tela está
  * aberta, a raiz do documento diz qual dos dois vale, e o `app.css` define as variáveis que a utility
  * `mv-text-*` lê. Na raiz, e não na página, para os avisos e as folhas, que moram fora dela, seguirem
  * a mesma regra. Antes da pintura, para o primeiro quadro já sair no tamanho certo.
@@ -215,16 +199,30 @@ type DayViewProps = {
   profiles: Map<string, Profile>;
   /** o dia é hoje e a viagem está acontecendo: catch-up com GPS, painel e selo só assim */
   active: boolean;
+  /** a viagem terminou: o cartão "Viajei!" por cima do último dia */
+  finishedTrip: boolean;
+  /** o modo painel ligado pelo botão do topo */
+  panelOn: boolean;
 };
 
-function DayView({ trip, day, now, night, uid, members, profiles, active }: DayViewProps) {
+function DayView({
+  trip,
+  day,
+  now,
+  night,
+  uid,
+  members,
+  profiles,
+  active,
+  finishedTrip,
+  panelOn,
+}: DayViewProps) {
   const tripId = trip.id;
   const dayId = day.id;
   const loadedStops = useDayStops(dayId);
   const stops = loadedStops ?? [];
   const { route, status: routeStatus, loaded: routeLoaded } = useDayRoute(tripId, dayId, stops);
   const toast = useToast();
-  const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const state = dayState({ date: day.date }, stops, now);
   const legs = legsByStop(stops, route);
@@ -236,6 +234,7 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
   const [dismissedPassed, setDismissedPassed] = useState<string[]>([]);
   // quem conta "o que aconteceu desde a última vez": a maquete (replay) ou o card; nunca os dois
   const [owner, setOwner] = useState<EventsOwner | null>(null);
+  const retroSeen = useRetroSeen(tripId);
 
   // reservas, memórias e fotos da viagem: o "Ver reserva", o "Como foi?" e o "Rever o dia"
   const loadedReservations = useTripReservations(tripId);
@@ -250,20 +249,14 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
   );
   useTripMediaPrefetch(tripId);
   const answered = answeredStops(memories, uid);
-  // as missões da viagem (as da parada aparecem na lista do dia) e o "+ Gasto" do passageiro
+  // as missões da viagem (as da parada aparecem na lista do dia)
   const quests = (useTripChecklist(tripId) ?? []).filter(
     (i) => i.kind === 'quest' && i.status === 'active' && i.stop_id !== null,
   );
-  const tripDays = useTripDays(tripId) ?? [];
-  const tripStops = useTripStops(tripId);
-  const [expenseDraft, setExpenseDraft] = useState<ExpenseDraft | null>(null);
-  const team = members
-    .filter((m) => m.member.status === 'accepted')
-    .flatMap((m) => (m.profile ? [m.profile] : []));
   const [memoryStopId, setMemoryStopId] = useState<string | null>(null);
   const [reservationId, setReservationId] = useState<string | null>(null);
-  // o momento calmo do Modo Viagem: fechar a folha "Como foi?" (até o próximo Partiu!), nunca com o
-  // modo painel. Os cartões que já esperavam na fila nesse instante saem aí; os outros esperam.
+  // o momento calmo da tela: fechar a folha "Como foi?" (até o próximo Partiu!), nunca com o modo
+  // painel. Os cartões que já esperavam na fila nesse instante saem aí; os outros esperam.
   const [calmSince, setCalmSince] = useState<number | null>(null);
   const sheetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
@@ -326,6 +319,7 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
   const skipSeen = state.next ? [`skipped:${state.next.id}`] : [];
 
   const panel = usePanelMode({
+    on: panelOn,
     enabled: active && uid !== '',
     ctx: uid ? { tripId, dayId, uid } : null,
     state,
@@ -339,7 +333,6 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
         'panel',
       ),
   });
-
   const cu = useCatchup({
     tripId,
     dayId,
@@ -460,123 +453,139 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
     );
   };
 
-  // o dia pinta inteiro: as paradas e as reservas mudam o tamanho do "Agora" (a linha "Ver reserva"),
-  // e chegando depois empurravam os cartões de baixo (fase 12, D162). Os efeitos acima já rodam.
-  if (loadedStops === undefined || loadedReservations === undefined) return null;
+  // o dia pinta inteiro: as paradas e as reservas mudam o tamanho do "Agora" (os chips), e chegando
+  // depois empurravam o que está embaixo (fase 12, D162). Os efeitos acima já rodam.
+  if (loadedStops === undefined || loadedReservations === undefined) {
+    return <div className="relative isolate min-h-0 flex-1 bg-stage" />;
+  }
+
+  // o único lugar sobre a maquete: um cartão por vez
+  const retro =
+    finishedTrip && !retroSeen && retroState(trip, stops, todayISO(now)).status === 'ready';
+  const card = overlayCard({
+    since: owner === 'card' && cu.events.length > 0,
+    passed: active && question !== undefined,
+    position: active && geo.loaded && !geo.allowed && !geo.declined && !panel.on,
+    memory: promptStop !== null,
+    retro,
+  });
 
   return (
     <>
-      {owner === 'card' ? (
-        <SinceLastTime
-          events={cu.events}
-          profiles={profiles}
-          onDismiss={() => void cu.dismissEvents()}
-        />
-      ) : null}
-
-      <AgoraHeader
-        forecast={
-          state.next?.time ? (
-            <StopForecast
-              forecast={stopForecast(forecast, state.next.id)}
-              at={`às ${hhmm(state.next.time)}`}
-            />
-          ) : null
-        }
-        footer={
-          <NowReservations
-            reservations={reservationsForNow(state, reservations, now)}
-            onOpen={(r) => setReservationId(r.id)}
+      <div className="relative isolate min-h-0 flex-1 overflow-hidden bg-stage" data-palco>
+        {stops.length === 0 ? (
+          <p
+            className="absolute inset-0 grid place-items-center px-6 text-center mv-text-17 text-ink-2"
+            role="status"
+          >
+            Nenhuma parada neste dia.
+          </p>
+        ) : (
+          <WorldSlot
+            trip={trip}
+            day={day}
+            state={state}
+            legs={legs}
+            route={route}
+            routeStatus={routeStatus}
+            routeLoaded={routeLoaded}
+            profiles={profiles}
+            catchup={cu}
+            uid={uid}
+            night={night}
+            onEventsOwner={setOwner}
+            stopExtras={stopExtras}
+            reviewPhotos={reviewPhotos}
+            weather={{ summary: daySummary(forecast), stops: forecast?.stops ?? {} }}
           />
-        }
-        state={state}
-        busy={busy}
-        onDepart={() => run(departLabel, () => depart(state, uid), departSeen, 'depart')}
-        onArrive={() =>
-          run(`Chegamos: ${state.next?.name ?? ''}`, () => arrive(state, uid), arriveSeen, 'arrive')
-        }
-        onSkip={() => run(`Pulamos ${state.next?.name ?? ''}`, () => skip(state), skipSeen)}
-      />
+        )}
 
-      {active ? (
-        <div className="grid gap-3">
-          <PositionLine position={cu.position} />
-          {geo.loaded && !geo.allowed && !geo.declined && !panel.on ? (
-            <PositionAsk onAllow={() => void grantGeo()} onDecline={() => void declineGeo()} />
+        {/* sobre a maquete, de baixo para cima: o "Agora", "Detalhes" e o cartão da vez */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex flex-col gap-3 px-3 pb-[max(12px,env(safe-area-inset-bottom,0px))]">
+          {card === 'since' ? (
+            <div className="pointer-events-auto">
+              <SinceLastTime
+                events={cu.events}
+                profiles={profiles}
+                onDismiss={() => void cu.dismissEvents()}
+              />
+            </div>
+          ) : card === 'passed' && question ? (
+            <div className="pointer-events-auto">
+              <PassedQuestion
+                key={question.id}
+                stop={question}
+                date={day.date}
+                now={now}
+                onConfirm={(when) => {
+                  setDismissedPassed((xs) => [...xs, question.id]);
+                  run(`Marcado: ${question.name}`, () => arriveAt(question, uid, when), [
+                    `arrived:${question.id}`,
+                  ]);
+                }}
+                onDismiss={() => setDismissedPassed((xs) => [...xs, question.id])}
+              />
+            </div>
+          ) : card === 'position' ? (
+            <div className="pointer-events-auto">
+              <PositionAsk onAllow={() => void grantGeo()} onDecline={() => void declineGeo()} />
+            </div>
+          ) : card === 'memory' && promptStop ? (
+            <div className="pointer-events-auto">
+              <MemoryPromptCard
+                key={promptStop.id}
+                stop={promptStop}
+                uid={uid}
+                profiles={profiles}
+                more={prompts.length - 1}
+                onOpen={() => setMemoryStopId(promptStop.id)}
+                onDismiss={() => void dismissMemoryPrompt(promptStop.id)}
+              />
+            </div>
+          ) : card === 'retro' ? (
+            <div className="pointer-events-auto">
+              <RetroCard tripId={tripId} done={stops.filter((s) => s.done_at !== null).length} />
+            </div>
           ) : null}
-          {question ? (
-            <PassedQuestion
-              key={question.id}
-              stop={question}
-              date={day.date}
-              now={now}
-              onConfirm={(when) => {
-                setDismissedPassed((xs) => [...xs, question.id]);
-                run(`Marcado: ${question.name}`, () => arriveAt(question, uid, when), [
-                  `arrived:${question.id}`,
-                ]);
-              }}
-              onDismiss={() => setDismissedPassed((xs) => [...xs, question.id])}
-            />
-          ) : null}
-          <div className="flex flex-wrap gap-2">
-            <PanelToggle panel={panel} />
-            <CalendarExport trip={trip} day={day} stops={stops} label="Exportar o dia" />
-            <button
-              type="button"
-              onClick={() => setExpenseDraft({ date: day.date, ...expenseDefaults(state) })}
-              className="inline-flex min-h-12 items-center gap-1.5 rounded-full bg-card px-4 mv-text-15 font-semibold text-ink-2 shadow-[inset_0_0_0_1.5px_var(--color-line)]"
+          <div className="flex justify-end">
+            <ButtonLink
+              to={`/viagens/${tripId}/detalhes`}
+              variant="secondary"
+              size="md"
+              className="pointer-events-auto min-h-12 bg-card/95 shadow-card backdrop-blur-sm"
+              data-detalhes
             >
-              <Plus className="size-4" aria-hidden="true" />
-              Gasto
-            </button>
+              <SlidersHorizontal className="size-5" aria-hidden="true" />
+              Detalhes
+            </ButtonLink>
           </div>
+          <NowBar
+            state={state}
+            busy={busy}
+            onDepart={() => run(departLabel, () => depart(state, uid), departSeen, 'depart')}
+            onArrive={() =>
+              run(
+                `Chegamos: ${state.next?.name ?? ''}`,
+                () => arrive(state, uid),
+                arriveSeen,
+                'arrive',
+              )
+            }
+            onSkip={() => run(`Pulamos ${state.next?.name ?? ''}`, () => skip(state), skipSeen)}
+            reservations={reservationsForNow(state, reservations, now)}
+            onOpenReservation={(r) => setReservationId(r.id)}
+            line={
+              active ? (
+                <PositionLine
+                  position={cu.position}
+                  tracking={panel.on}
+                  lowPower={panel.lowPower}
+                />
+              ) : null
+            }
+          />
         </div>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          <CalendarExport trip={trip} day={day} stops={stops} label="Exportar o dia" />
-        </div>
-      )}
-
-      {promptStop ? (
-        <MemoryPromptCard
-          key={promptStop.id}
-          stop={promptStop}
-          uid={uid}
-          profiles={profiles}
-          more={prompts.length - 1}
-          onOpen={() => setMemoryStopId(promptStop.id)}
-          onDismiss={() => void dismissMemoryPrompt(promptStop.id)}
-        />
-      ) : null}
-
-      {stops.length === 0 ? (
-        <section
-          aria-label="Trilha do dia"
-          className="grid gap-3 rounded-card bg-card p-5 shadow-card"
-        >
-          <p className="mv-text-17 text-ink-2">Nenhuma parada neste dia.</p>
-        </section>
-      ) : (
-        <WorldSlot
-          trip={trip}
-          day={day}
-          state={state}
-          legs={legs}
-          route={route}
-          routeStatus={routeStatus}
-          routeLoaded={routeLoaded}
-          profiles={profiles}
-          catchup={cu}
-          panelOn={panel.on}
-          uid={uid}
-          night={night}
-          onEventsOwner={setOwner}
-          stopExtras={stopExtras}
-          reviewPhotos={reviewPhotos}
-          weather={{ summary: daySummary(forecast), stops: forecast?.stops ?? {} }}
-        />
-      )}
+      </div>
 
       <HowWasItSheet
         tripId={tripId}
@@ -593,30 +602,6 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
         tripId={tripId}
         showSummary={false}
       />
-      <ExpenseSheet
-        open={expenseDraft ? { draft: expenseDraft } : null}
-        trip={trip}
-        days={tripDays}
-        stops={tripStops}
-        team={team}
-        uid={uid}
-        onClose={() => setExpenseDraft(null)}
-        onSave={(values) => {
-          setExpenseDraft(null);
-          void createExpense(tripId, uid, values).then((id) => {
-            void gainXp(uid, 'expense_logged', id, XP_POINTS.expense_logged, null);
-            toast.show({
-              title: 'Gasto lançado',
-              description: formatMoney(values.amount),
-              kind: 'ok',
-              action: {
-                label: 'Ver gastos',
-                onClick: () => void navigate(`/viagens/${tripId}/gastos?abrir=${id}`),
-              },
-            });
-          });
-        }}
-      />
       <ReservationSheet
         reservation={openReservation}
         stop={
@@ -628,9 +613,6 @@ function DayView({ trip, day, now, night, uid, members, profiles, active }: DayV
         now
         onClose={() => setReservationId(null)}
       />
-
-      {panel.on ? <div className="h-24" aria-hidden="true" /> : null}
-      <PanelBar panel={panel} />
     </>
   );
 }

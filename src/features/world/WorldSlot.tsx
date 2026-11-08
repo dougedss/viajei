@@ -1,7 +1,5 @@
-import { Box, List } from 'lucide-react';
 import { lazy, Suspense, useEffect, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
-import { Button } from '@/components/ui/Button.tsx';
 import type { Catchup } from '@/features/travel-mode/catchup.ts';
 import type { DayState } from '@/features/travel-mode/rules.ts';
 import type { RouteStatus } from '@/features/itinerary/route.ts';
@@ -11,16 +9,20 @@ import { readUrlFlags } from '@/lib/three/prefs.ts';
 import { ThreeBoundary } from '@/lib/three/ThreeBoundary.tsx';
 import { DayList } from './components/DayList.tsx';
 import type { ReviewPhoto } from './replay.ts';
-import { useRenderPref, writeRenderPref } from './prefs.ts';
+import { useRenderPref } from './prefs.ts';
 
 /**
- * O lugar da maquete no Modo Viagem, sem nada do 3D no chunk principal: decide entre a lista (por
+ * O lugar da maquete na tela da viagem, sem nada do 3D no chunk principal: decide entre a lista (por
  * preferência do aparelho ou `?render=list`) e a maquete, que entra por `lazy()` só quando vai
- * desenhar. Se o chunk não carregar, a lista aparece. O "Agora" nunca espera por nada disto.
+ * desenhar. Se o chunk não carregar, a lista aparece. Preenche a caixa que o recebe (fase 14: a
+ * tela inteira, menos a barra do dia); o "Agora" nunca espera por nada disto.
  */
 export type EventsOwner = 'world' | 'card';
 
 export type { ReviewPhoto } from './replay.ts';
+
+/** O espaço, em px, que a barra do "Agora" cobre embaixo: a lista rola até acima dela. */
+export const NOW_BAR_INSET = 136;
 
 export type WorldSlotProps = {
   trip: Pick<Trip, 'id' | 'name' | 'car_model' | 'car_color' | 'car_accessories'>;
@@ -33,7 +35,6 @@ export type WorldSlotProps = {
   routeLoaded: boolean;
   profiles: Map<string, Profile>;
   catchup: Catchup;
-  panelOn: boolean;
   uid: string;
   night: boolean;
   /** quem mostra "o que aconteceu": a maquete (replay) ou o card "Desde a última vez" */
@@ -67,25 +68,11 @@ export function WorldSlot(props: WorldSlotProps) {
     if (listOnly) onEventsOwner('card');
   }, [listOnly, onEventsOwner]);
 
-  if (listOnly) {
-    return (
-      <ListView
-        {...props}
-        action={
-          flags.forceList ? null : (
-            <Button variant="ghost" size="sm" onClick={() => writeRenderPref('auto')}>
-              <Box className="size-4" aria-hidden="true" />
-              Ver a maquete
-            </Button>
-          )
-        }
-      />
-    );
-  }
+  if (listOnly) return <ListView {...props} />;
 
   return (
     <ThreeBoundary
-      fallback={<ListView {...props} notice="Maquete indisponível agora." action={null} />}
+      fallback={<ListView {...props} notice="Maquete indisponível agora." />}
       onError={() => onEventsOwner('card')}
     >
       <Suspense fallback={<WorldSkeleton />}>
@@ -102,37 +89,27 @@ export function ListView({
   profiles,
   route,
   notice,
-  action,
   stopExtras,
 }: Pick<WorldSlotProps, 'state' | 'legs' | 'profiles' | 'route' | 'stopExtras'> & {
   notice?: string;
-  action: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-3">
-      {notice ? (
-        <p className="flex items-center gap-2 mv-text-14 text-ink-2">
-          <List className="size-4" aria-hidden="true" />
-          {notice}
-        </p>
-      ) : null}
-      <DayList
-        state={state}
-        legs={legs}
-        profiles={profiles}
-        route={route}
-        defaultOpen
-        footer={action}
-        stopExtras={stopExtras}
-      />
-    </div>
+    <DayList
+      state={state}
+      legs={legs}
+      profiles={profiles}
+      route={route}
+      notice={notice}
+      stopExtras={stopExtras}
+      bottomInset={NOW_BAR_INSET}
+    />
   );
 }
 
 export function WorldSkeleton() {
   return (
     <div
-      className="grid h-[clamp(380px,58svh,620px)] place-items-center rounded-card bg-stage mv-text-14 text-ink-2"
+      className="absolute inset-0 grid place-items-center bg-stage mv-text-14 text-ink-2"
       role="status"
       aria-live="polite"
     >

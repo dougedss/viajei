@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Fix } from '@/lib/geo/geofence.ts';
 import {
   LOW_POWER_INTERVAL_MS,
@@ -19,6 +19,8 @@ import { isWithin } from '@/lib/geo/geofence.ts';
 const AUTO_REPEAT_GUARD_MS = 10 * 60_000;
 
 export type PanelArgs = {
+  /** o botão do topo está ligado */
+  on: boolean;
   /** o dia é hoje e a viagem está acontecendo */
   enabled: boolean;
   ctx: TrackContext | null;
@@ -28,24 +30,24 @@ export type PanelArgs = {
 };
 
 export type Panel = {
+  /** ligado e rodando (o dia é hoje e a viagem está acontecendo) */
   on: boolean;
   supported: boolean;
   lowPower: boolean;
   fix: Fix | null;
-  toggle: () => void;
 };
 
 // a lib do TS declara wakeLock como obrigatório; nem todo navegador o tem
 type WakeLockNavigator = Partial<Pick<Navigator, 'wakeLock'>>;
 
 export function usePanelMode({
+  on,
   enabled,
   ctx,
   state,
   onAutoDepart,
   onAutoArrive,
 }: PanelArgs): Panel {
-  const [on, setOn] = useState(false);
   const [lowPower, setLowPower] = useState(false);
   const [fix, setFix] = useState<Fix | null>(null);
   const supported = typeof navigator !== 'undefined' && 'geolocation' in navigator;
@@ -158,7 +160,5 @@ export function usePanelMode({
     };
   }, [running, ctx, supported]);
 
-  const toggle = useCallback(() => setOn((v) => !v), []);
-
-  return { on: running, supported, lowPower, fix: running ? fix : null, toggle };
+  return { on: running, supported, lowPower, fix: running ? fix : null };
 }

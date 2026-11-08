@@ -339,8 +339,9 @@ function appAgoraReserva(r: RoadRun): Promise<Check> {
     [
       '"Ver reserva" da próxima parada',
       async () => {
+        // o chip da barra do "Agora" (fase 14): "Ver reserva", com o nome da reserva no rótulo
         await page
-          .getByRole('button', { name: new RegExp(`${esc(pousada.name)}.*Ver reserva`) })
+          .getByRole('button', { name: new RegExp(`Ver reserva.*${esc(pousada.name)}`) })
           .click({ timeout: SLOW });
         const sheet = page.getByRole('dialog', { name: pousada.name });
         await sheet

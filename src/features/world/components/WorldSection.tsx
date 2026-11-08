@@ -1,7 +1,6 @@
-import { RotateCcw } from 'lucide-react';
+import { MapPinOff, RotateCcw, SkipForward } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router';
-import { Button } from '@/components/ui/Button.tsx';
 import { readPalette } from '@/art/palette.ts';
 import { normalizeCar } from '@/features/garage/rules.ts';
 import { statusOf, type StopStatus } from '@/features/travel-mode/rules.ts';
@@ -21,23 +20,22 @@ import { usePlace } from '../hooks/usePlace.ts';
 import { buildLayout, type WorldLayout } from '../layout.ts';
 import { MotionController, type MotionEvent } from '../motion.ts';
 import { OPENING_TIMELINE, OPENING_TOTAL_MS, openedKey, planOpening } from '../opening.ts';
-import { writeRenderPref } from '../prefs.ts';
 import { tierFor } from '../quality.ts';
 import { projectNodes } from '../project.ts';
 import { PHOTO_CARD_MS, planLiveAdvance, planReplay, planReview } from '../replay.ts';
 import { WorldRuntime, type Opening } from '../scene/runtime.ts';
 import { WorldCanvas } from '../scene/WorldCanvas.tsx';
 import { WorldScene } from '../scene/WorldScene.tsx';
-import { ListView, type WorldSlotProps } from '../WorldSlot.tsx';
-import { DayList } from './DayList.tsx';
+import { ListView, NOW_BAR_INSET, type WorldSlotProps } from '../WorldSlot.tsx';
 import { RAIN_LIKELY } from '@shared/weather.ts';
 import { WeatherChip } from './WeatherChip.tsx';
 import { HUD_BOTTOM, HUD_TOP, WorldHud, type PhotoCard, type TeamChip } from './WorldHud.tsx';
 
 /**
- * A maquete do dia no Modo Viagem. Esta casca decide se há como desenhar (WebGPU, WebGL2 ou nada),
- * mede o espaço, lê o lugar da rota e constrói o layout; o palco (`WorldStage`) desenha, anima e
- * reage ao que acontece. A "Lista do dia" fica logo abaixo, recolhida, e é o fallback de tudo.
+ * A maquete do dia na tela da viagem. Esta casca decide se há como desenhar (WebGPU, WebGL2 ou
+ * nada), mede o espaço, lê o lugar da rota e constrói o layout; o palco (`WorldStage`) desenha,
+ * anima e reage ao que acontece. Preenche a caixa inteira (fase 14); a "Lista do dia" entra no
+ * lugar dela pela barra do topo e é o fallback de tudo.
  */
 export default function WorldSection(props: WorldSlotProps) {
   const support = useSupport();
@@ -72,7 +70,7 @@ export default function WorldSection(props: WorldSlotProps) {
               width: size.width,
               height: size.height,
               hudTop: HUD_TOP,
-              hudBottom: HUD_BOTTOM,
+              hudBottom: Math.max(HUD_BOTTOM, NOW_BAR_INSET),
             },
           })
         : null,
@@ -81,47 +79,32 @@ export default function WorldSection(props: WorldSlotProps) {
   );
 
   if (unavailable) {
-    return <ListView {...props} notice="Maquete indisponível neste aparelho." action={null} />;
+    return <ListView {...props} notice="Maquete indisponível neste aparelho." />;
   }
 
   return (
-    <div className="grid gap-3">
-      <div
-        ref={hostRef}
-        className="relative isolate h-[clamp(380px,58svh,620px)] overflow-hidden rounded-card bg-stage shadow-card"
-        data-world={backend ?? undefined}
-      >
-        {layout && support !== 'pending' ? (
-          <WorldStage
-            {...props}
-            layout={layout}
-            size={size}
-            place={place}
-            reducedMotion={reducedMotion}
-            support={support}
-            diag={diag}
-            onBackend={setBackend}
-            onFail={setFailed}
-          />
-        ) : (
-          <p className="grid h-full place-items-center mv-text-14 text-ink-2" role="status">
-            Montando a maquete…
-          </p>
-        )}
-      </div>
-      <DayList
-        state={state}
-        legs={props.legs}
-        profiles={props.profiles}
-        route={route}
-        defaultOpen={false}
-        stopExtras={props.stopExtras}
-        footer={
-          <Button variant="ghost" size="sm" onClick={() => writeRenderPref('list')}>
-            Ver como lista
-          </Button>
-        }
-      />
+    <div
+      ref={hostRef}
+      className="absolute inset-0 overflow-hidden bg-stage"
+      data-world={backend ?? undefined}
+    >
+      {layout && support !== 'pending' ? (
+        <WorldStage
+          {...props}
+          layout={layout}
+          size={size}
+          place={place}
+          reducedMotion={reducedMotion}
+          support={support}
+          diag={diag}
+          onBackend={setBackend}
+          onFail={setFailed}
+        />
+      ) : (
+        <p className="grid h-full place-items-center mv-text-14 text-ink-2" role="status">
+          Montando a maquete…
+        </p>
+      )}
     </div>
   );
 }
@@ -143,12 +126,18 @@ type StageProps = WorldSlotProps & {
 /** Quanto o chip do clima fica grande depois de o carro estacionar, antes de subir para a faixa. */
 const WEATHER_HOLD_MS = 1_200;
 
+function formatDistance(m: number): string {
+  if (m >= 10_000) return `${Math.round(m / 1000)} km`;
+  if (m >= 1000) return `${(m / 1000).toFixed(1)} km`;
+  return `${Math.round(m)} m`;
+}
+
 function withoutKey<T>(record: Record<string, T>, key: string): Record<string, T> {
   return Object.fromEntries(Object.entries(record).filter(([k]) => k !== key));
 }
 
 function WorldStage(p: StageProps) {
-  const { layout, state, catchup, panelOn, uid, reducedMotion, onEventsOwner } = p;
+  const { layout, state, catchup, uid, reducedMotion, onEventsOwner } = p;
   const quality = useQuality(tierFor);
   const soundPref = useSoundPref();
   const palette = useMemo(() => readPalette(), []);
@@ -176,7 +165,7 @@ function WorldStage(p: StageProps) {
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const night = nightOverride ?? p.night;
-  const placement = placeCar({ state, position: catchup.position, panelOn, layout });
+  const placement = placeCar({ state, position: catchup.position, layout });
   const stops = new Map<string, Stop>(state.stops.map((s) => [s.id, s]));
   const nodes = useMemo(() => projectNodes(layout, p.size), [layout, p.size]);
 
@@ -220,7 +209,7 @@ function WorldStage(p: StageProps) {
       runtime.setLayout(layout);
       if (decided.current) {
         motion.skip(performance.now());
-        motion.jumpTo(placeCar({ state, position: catchup.position, panelOn, layout }).s);
+        motion.jumpTo(placeCar({ state, position: catchup.position, layout }).s);
       }
     }
     runtime.invalidate();
@@ -255,7 +244,7 @@ function WorldStage(p: StageProps) {
       settled = true;
       if (cancelled) return;
       const now = performance.now();
-      const current = placeCar({ state, position: catchup.position, panelOn, layout }).s;
+      const current = placeCar({ state, position: catchup.position, layout }).s;
       const plan = planReplay({
         prev: catchup.prev,
         current_s: current,
@@ -330,7 +319,7 @@ function WorldStage(p: StageProps) {
     const fresh = catchup.events.filter((e) => !shown.current.has(e.id));
     if (Math.abs(motion.s - target) < 0.01 && fresh.length === 0) return;
     for (const e of fresh) shown.current.add(e.id);
-    const live = placement.source === 'panel' || placement.source === 'gps';
+    const live = placement.source === 'gps';
     const plan = live
       ? planLiveAdvance(motion.s, target, [], layout, { duration_ms: 1000 })
       : planLiveAdvance(motion.s, target, fresh, layout);
@@ -515,10 +504,6 @@ function WorldStage(p: StageProps) {
         photoCards={photoCards}
         hidePills={diving}
         caption={caption}
-        offRouteM={offRouteM}
-        overflow={overflow}
-        skippable={skippable}
-        onSkip={skip}
         opening={opening}
         reducedMotion={reducedMotion}
         rainy={rainy}
@@ -531,8 +516,21 @@ function WorldStage(p: StageProps) {
           reducedMotion={reducedMotion}
         />
       ) : null}
+      {/* a faixa de cima: clima, diagnóstico, fora da rota e "+N paradas" à esquerda; "Rever o dia"
+          ou o "Pular" do replay à direita (a barra do "Agora" ocupa o pé da maquete, fase 14) */}
       <div className="pointer-events-none absolute inset-x-3 top-2 flex items-start justify-between gap-2">
         <div className="flex flex-wrap items-start gap-2">
+          {offRouteM !== null ? (
+            <span className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-late px-3 mv-text-13 font-semibold text-white">
+              <MapPinOff className="size-4" aria-hidden="true" />
+              Fora da rota · {formatDistance(offRouteM)}
+            </span>
+          ) : null}
+          {overflow > 0 ? (
+            <span className="inline-flex min-h-8 items-center rounded-full bg-hud px-3 mv-text-13 font-semibold text-hud-ink">
+              +{overflow} {overflow === 1 ? 'parada' : 'paradas'}
+            </span>
+          ) : null}
           {!weatherBig ? (
             <WeatherChip
               summary={p.weather?.summary ?? null}
@@ -554,7 +552,16 @@ function WorldStage(p: StageProps) {
             />
           ) : null}
         </div>
-        {reviewPlan && !skippable ? (
+        {skippable ? (
+          <button
+            type="button"
+            onClick={skip}
+            className="pointer-events-auto inline-flex min-h-12 items-center gap-1.5 rounded-full bg-hud px-4 mv-text-15 font-semibold text-hud-ink backdrop-blur-sm"
+          >
+            Pular
+            <SkipForward className="size-4" aria-hidden="true" />
+          </button>
+        ) : reviewPlan ? (
           <button
             type="button"
             onClick={startReview}

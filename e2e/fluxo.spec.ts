@@ -75,7 +75,10 @@ test('o fluxo principal: viagem, roteiro, Partiu! e Chegamos!, "Como foi?", gast
     await expect(agora.getByText('Dia concluído')).toBeVisible();
   });
 
-  await test.step('lança o almoço pelo "+ Gasto"', async () => {
+  await test.step('lança o almoço pelo "+ Gasto" de Detalhes', async () => {
+    // o gasto acontece no banco do passageiro: em Detalhes durante a viagem (fase 14)
+    await page.getByRole('link', { name: 'Detalhes' }).click();
+    await expect(page.getByRole('heading', { name: nome })).toBeVisible();
     await page.getByRole('button', { name: 'Gasto', exact: true }).click();
     const sheet = page.getByRole('dialog', { name: 'Novo gasto' });
     await sheet.getByRole('button', { name: 'Comida' }).click();

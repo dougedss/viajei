@@ -1,4 +1,4 @@
-import { Bell, ClipboardPaste, Pencil, Route, Trash2, Users } from 'lucide-react';
+import { Bell, ClipboardPaste, Pencil, Plus, Route, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { NotFound } from '@/app/NotFound.tsx';
@@ -26,8 +26,14 @@ import { TripShortcuts } from '../components/TripShortcuts.tsx';
 import { ReadinessCard, ReadyCelebration } from '@/features/checklists/components/Readiness.tsx';
 import { listsProgress, shortcutValue } from '@/features/checklists/rules.ts';
 import { contactCount, contactGroups } from '@/features/contacts/rules.ts';
-import { formatMoneyShort, totals } from '@/features/expenses/rules.ts';
-import { todayISO } from '../rules.ts';
+import { createExpense } from '@/features/expenses/actions.ts';
+import { ExpenseSheet, type ExpenseDraft } from '@/features/expenses/components/ExpenseSheet.tsx';
+import { expenseDefaults, formatMoneyShort, totals } from '@/features/expenses/rules.ts';
+import { gainXp } from '@/features/progression/xp-gain.ts';
+import { dayState } from '@/features/travel-mode/rules.ts';
+import { currentDay } from '@/lib/time/index.ts';
+import { XP_POINTS } from '@shared/constants.ts';
+import { formatMoney, todayISO, tripStatus } from '../rules.ts';
 import { WeatherStrip } from '@/features/weather/components/WeatherStrip.tsx';
 import { useTripWeather } from '@/features/weather/queries.ts';
 import { useSession } from '@/lib/supabase/session.ts';
@@ -49,6 +55,7 @@ export default function DetalhesPage() {
   const [confirm, setConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [loadingExample, setLoadingExample] = useState(false);
+  const [expenseDraft, setExpenseDraft] = useState<ExpenseDraft | null>(null);
   const teamLevel = useTeamLevel(tripId);
   const weather = useTripWeather(trip);
 
@@ -59,6 +66,12 @@ export default function DetalhesPage() {
   const today = todayISO();
   const team = members.filter((m) => m.member.status === 'accepted');
   const pendingInvites = members.length - team.length;
+  // durante a viagem, o que saiu da tela do mapa e acontece no banco do passageiro (fase 14): o gasto
+  // com a parada e a categoria de agora, e o dia de hoje para o calendário
+  const ongoing = tripStatus(trip, today) === 'ongoing';
+  const todayDay = ongoing ? currentDay(tripDays, today) : null;
+  const todayStops = todayDay ? stops.filter((s) => s.trip_day_id === todayDay.id) : [];
+  const uid = session?.user.id ?? '';
 
   return (
     <div className="grid gap-5">
@@ -100,6 +113,25 @@ export default function DetalhesPage() {
         located={stops.filter((s) => s.lat !== null && s.lng !== null).length}
       />
       <ReadyCelebration trip={trip} items={items} today={today} />
+
+      {todayDay ? (
+        <div className="flex flex-wrap gap-2" data-hoje>
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={() =>
+              setExpenseDraft({
+                date: today,
+                ...expenseDefaults(dayState({ date: todayDay.date }, todayStops, new Date())),
+              })
+            }
+          >
+            <Plus className="size-5" aria-hidden="true" />
+            Gasto
+          </Button>
+          <CalendarExport trip={trip} day={todayDay} stops={todayStops} label="Exportar o dia" />
+        </div>
+      ) : null}
 
       <WeatherStrip weather={weather} />
 
@@ -254,6 +286,30 @@ export default function DetalhesPage() {
       </section>
 
       <PushAskSheet trip={trip} />
+      <ExpenseSheet
+        open={expenseDraft ? { draft: expenseDraft } : null}
+        trip={trip}
+        days={tripDays}
+        stops={stops}
+        team={team.flatMap((m) => (m.profile ? [m.profile] : []))}
+        uid={uid}
+        onClose={() => setExpenseDraft(null)}
+        onSave={(values) => {
+          setExpenseDraft(null);
+          void createExpense(trip.id, uid, values).then((id) => {
+            void gainXp(uid, 'expense_logged', id, XP_POINTS.expense_logged, null);
+            toast.show({
+              title: 'Gasto lançado',
+              description: formatMoney(values.amount),
+              kind: 'ok',
+              action: {
+                label: 'Ver gastos',
+                onClick: () => void navigate(`/viagens/${trip.id}/gastos?abrir=${id}`),
+              },
+            });
+          });
+        }}
+      />
 
       {isOwner ? (
         <>
