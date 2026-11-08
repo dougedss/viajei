@@ -63,9 +63,30 @@ test('a tela da viagem monta a maquete e "Ver como lista" persiste', async ({ pa
   // as pílulas em HTML por cima da cena; tocar numa abre a folha da parada (fase 14)
   const hud = page.locator('[data-world-hud]');
   await expect(hud.getByText('Parque')).toBeVisible();
-  await hud.getByRole('button', { name: /^Parque/ }).click();
+  // a abertura desce a câmera até o carro e as pílulas andam com ela (D177); no SwiftShader um quadro
+  // leva centenas de ms, e a pílula "estável" por dois quadros do navegador ainda anda: espera ela
+  // ficar no lugar por um tempo antes de tocar, como faria uma pessoa
+  const pilula = hud.getByRole('button', { name: /^Parque/ });
+  await expect
+    .poll(
+      async () => {
+        const antes = await pilula.boundingBox();
+        await page.waitForTimeout(800);
+        const depois = await pilula.boundingBox();
+        return (
+          antes !== null &&
+          depois !== null &&
+          Math.abs(antes.x - depois.x) < 1 &&
+          Math.abs(antes.y - depois.y) < 1
+        );
+      },
+      { timeout: 60_000 },
+    )
+    .toBe(true);
+  await pilula.click();
   const folha = page.getByRole('dialog', { name: 'Parque' });
-  await expect(folha).toBeVisible();
+  // a maquete segura a thread por segundos na CI: a folha pode demorar a montar
+  await expect(folha).toBeVisible({ timeout: 30_000 });
   await expect(folha).toContainText('Natureza · Dia 1 · 2ª parada');
   await expect(folha.getByRole('link', { name: 'Ver no roteiro' })).toBeVisible();
   await expect(folha.getByRole('button', { name: 'Gasto' })).toBeVisible();
