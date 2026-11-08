@@ -353,6 +353,7 @@ const listUrl = (t: AppTarget) => `${tripUrl(t)}?render=list`;
 /** Entrar, abrir o "Agora", a folha de avisos na segunda abertura, ativar e conferir em /avisos. */
 export function appAvisos(app: App): Promise<Check> {
   const { page, target } = app;
+  const info: Record<string, unknown> = {};
   return runSteps(
     app,
     'app_avisos',
@@ -397,16 +398,24 @@ export function appAvisos(app: App): Promise<Check> {
           await app.context.grantPermissions(['notifications'], { origin: target.appUrl });
           await sheet.getByRole('button', { name: 'Ativar avisos' }).click();
           const clickedAt = Date.now();
+          // a ativação se prova pelo que fica: a folha fecha quando termina e /avisos diz "Avisos
+          // ligados" no passo seguinte (e o push de verdade usa a assinatura logo depois). O toast é
+          // efêmero: em WebGL por software, a maquete trava a thread por uns 6 s logo depois do
+          // toque, e o toast de 4 s nasce e morre dentro do congelamento, invisível (fase 13)
+          const toast = page
+            .getByText('Avisos ativados')
+            .waitFor()
+            .then(() => 'o toast "Avisos ativados"');
+          const closed = sheet.waitFor({ state: 'hidden' }).then(() => 'a folha fechou');
+          toast.catch(() => undefined);
+          closed.catch(() => undefined);
           try {
-            await page.getByText('Avisos ativados').waitFor();
+            info.ativacao = await Promise.race([toast, closed]);
           } catch (err) {
-            // o toast não veio: o que a página fazia (fase 13: a thread principal, os toasts, os erros)
             const message = err instanceof Error ? (err.message.split('\n')[0] ?? '') : String(err);
             throw new Error(
-              `${message} (o toast depois do toque); a página: ${await pageDiagnosis(app, clickedAt)}`,
-              {
-                cause: err,
-              },
+              `${message} (nem o toast nem a folha fechada depois do toque); a página: ${await pageDiagnosis(app, clickedAt)}`,
+              { cause: err },
             );
           }
         },
@@ -446,7 +455,7 @@ export function appAvisos(app: App): Promise<Check> {
         },
       ],
     ],
-  );
+  ).then((check) => ({ ...check, data: { ...check.data, ...info } }));
 }
 
 async function serviceWorker(app: App): Promise<Worker> {
