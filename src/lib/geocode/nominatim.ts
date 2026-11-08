@@ -5,8 +5,12 @@ import { db, type GeocodeEntry, type GeocodeResult } from '@/lib/db/schema.ts';
  * segundo, identificação do app (o navegador manda o Referer) e nunca busca por tecla, só por
  * botão ou pausa de digitação. Os resultados ficam em `geocode` no Dexie, então a mesma consulta
  * nunca vai duas vezes à rede e funciona offline quando já foi feita.
+ *
+ * O caminho inverso (fase 15): o lugar de um ponto, uma chamada por parada que se registrou
+ * sozinha, pela mesma fila. Sem cache: cada parada é um lugar e uma hora.
  */
 const ENDPOINT = 'https://nominatim.openstreetmap.org/search';
+const REVERSE_ENDPOINT = 'https://nominatim.openstreetmap.org/reverse';
 const MIN_INTERVAL_MS = 1_100;
 const LIMIT = 5;
 
@@ -70,4 +74,48 @@ export async function geocode(query: string, signal?: AbortSignal): Promise<Geoc
   const entry: GeocodeEntry = { query: key, results, fetched_at: new Date().toISOString() };
   await db.geocode.put(entry);
   return results;
+}
+
+/** A resposta do `/reverse` em `jsonv2`, só com o que o app lê. */
+export type ReverseRow = {
+  /** a chave do OSM (amenity, tourism, shop, highway, place…) */
+  category?: string;
+  /** o valor dela (fuel, restaurant, hotel, viewpoint…) */
+  type?: string;
+  name?: string;
+  display_name?: string;
+  lat?: string;
+  lon?: string;
+  address?: Record<string, string>;
+  namedetails?: Record<string, string> | null;
+};
+
+/**
+ * O objeto do OSM mais perto do ponto, no zoom de ponto de interesse (18, o mais detalhado: o posto,
+ * o restaurante; sem nada ali, o prédio, a rua ou a estrada), com o endereço e os nomes (o `ref` da
+ * rodovia, "BR-116", vem em `namedetails`). `null` quando o OSM não tem nada no ponto; erro de rede
+ * ou de servidor sobe como exceção, para quem chama tentar de novo quando a rede voltar.
+ */
+export async function reverseGeocode(
+  lat: number,
+  lng: number,
+  signal?: AbortSignal,
+): Promise<ReverseRow | null> {
+  return throttled(async () => {
+    const url = new URL(REVERSE_ENDPOINT);
+    url.searchParams.set('lat', lat.toFixed(6));
+    url.searchParams.set('lon', lng.toFixed(6));
+    url.searchParams.set('format', 'jsonv2');
+    url.searchParams.set('zoom', '18');
+    url.searchParams.set('addressdetails', '1');
+    url.searchParams.set('namedetails', '1');
+    url.searchParams.set('accept-language', 'pt-BR');
+    const res = await fetch(url, {
+      signal: signal ?? null,
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Nominatim ${res.status}`);
+    const row = (await res.json()) as ReverseRow & { error?: string };
+    return row.error ? null : row;
+  });
 }
