@@ -74,6 +74,12 @@ function diagnose(lhr: Lhr) {
       ),
     bytes_kb: Math.round((lhr.audits['total-byte-weight']?.numericValue ?? 0) / 1024),
     requests: items('network-requests').length,
+    // as regras de acessibilidade que falharam, com o primeiro elemento de cada (fase 14: a tela da
+    // viagem com a lista deu 96, como na fase 13 inteira, e o laboratório não dizia por quê)
+    a11y: (lhr.categories.accessibility?.auditRefs ?? [])
+      .map((ref) => lhr.audits[ref.id])
+      .filter((a) => a?.scoreDisplayMode === 'binary' && a.score !== null && a.score < 1)
+      .map((a) => `${a?.id ?? ''} ${node(items(a?.id ?? '')[0]) ?? ''}`.trim()),
   };
 }
 
