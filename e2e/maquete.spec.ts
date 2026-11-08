@@ -62,31 +62,17 @@ test('a tela da viagem monta a maquete e "Ver como lista" persiste', async ({ pa
   await expect(page.locator('[aria-hidden="true"] canvas')).toHaveCount(1);
   // as pílulas em HTML por cima da cena; tocar numa abre a folha da parada (fase 14). Só os nós em
   // cena têm pílula: a abertura começa larga (o dia inteiro) e desce até o carro (D177), e aí o Parque
-  // fica fora da cena. A pílula que fica é a da parada do carro; no SwiftShader um quadro leva
-  // centenas de ms e a pílula "estável" por dois quadros do navegador ainda anda com a câmera: espera
-  // ela ficar no lugar antes de tocar, como faria uma pessoa
+  // fica fora da cena; a que fica é a da parada do carro. No SwiftShader da CI um quadro leva
+  // centenas de ms e a maquete segura a thread por segundos: a pílula ainda anda com a câmera quando
+  // o Playwright a acha estável, e a folha demora a montar. Toca de novo até a folha abrir, como
+  // faria uma pessoa (com a folha aberta, o toque seguinte nem chega à pílula)
   const hud = page.locator('[data-world-hud]');
   const pilula = hud.getByRole('button', { name: /^Saída de casa/ });
-  await expect
-    .poll(
-      async () => {
-        const antes = await pilula.boundingBox();
-        await page.waitForTimeout(800);
-        const depois = await pilula.boundingBox();
-        return (
-          antes !== null &&
-          depois !== null &&
-          Math.abs(antes.x - depois.x) < 1 &&
-          Math.abs(antes.y - depois.y) < 1
-        );
-      },
-      { timeout: 60_000 },
-    )
-    .toBe(true);
-  await pilula.click();
   const folha = page.getByRole('dialog', { name: 'Saída de casa' });
-  // a maquete segura a thread por segundos na CI: a folha pode demorar a montar
-  await expect(folha).toBeVisible({ timeout: 30_000 });
+  await expect(async () => {
+    if (!(await folha.isVisible())) await pilula.click({ timeout: 10_000 });
+    await expect(folha).toBeVisible({ timeout: 10_000 });
+  }).toPass({ timeout: 60_000 });
   await expect(folha).toContainText('Origem · Dia 1 · saída');
   await expect(folha.getByRole('link', { name: 'Ver no roteiro' })).toBeVisible();
   await expect(folha.getByRole('button', { name: 'Gasto' })).toBeVisible();
