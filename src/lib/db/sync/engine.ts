@@ -9,6 +9,7 @@ import { pullTrip, pullUser } from './pull.ts';
 import { pushOutbox } from './push.ts';
 import { pushRpcFor } from './rpc.ts';
 import { watchTrips } from './realtime.ts';
+import { runCycle } from './cycle.ts';
 import { withDeadline } from './deadline.ts';
 import { CycleRunner } from './runner.ts';
 import { SyncTrace } from './trace.ts';
@@ -123,7 +124,10 @@ async function pullOne(tripId: string): Promise<void> {
   if (stats.revoked && trip) emit({ kind: 'revoked', tripId, tripName: trip.name });
 }
 
-/** Um ciclo completo: push, pull do usuário, pull de cada viagem. */
+/**
+ * Um ciclo completo: push, pull do usuário, pull de cada viagem (`cycle.ts`, puro). Uma escrita que
+ * chega no meio dos pulls sobe antes do pull seguinte (fase 13): o pedido dela está no laço.
+ */
 async function cycle(): Promise<void> {
   const me = uid;
   if (!me) return;
@@ -131,40 +135,32 @@ async function cycle(): Promise<void> {
   trace.add('ciclo');
   setState({ phase: 'syncing' });
   try {
-    const push = await pushOutbox(db, rpcPush);
-    trace.add(
-      `push ${String(push.done)}/${String(push.failed)}${push.offline ? ' sem rede' : ''}`,
-      Date.now() - t0,
-    );
-    for (const n of push.notices) emit({ kind: 'superseded', ...n });
-    if (push.failed > 0) emit({ kind: 'failed', count: push.failed });
-    if (push.offline) {
+    const result = await runCycle({
+      push: () => pushOutbox(db, rpcPush),
+      pullUser: () => pullUser(db, rpcPullUser),
+      leaveTrip: async (tripId) => {
+        const trip = await db.trips.get(tripId);
+        if (trip) {
+          await wipeTrip(db, tripId);
+          emit({ kind: 'revoked', tripId, tripName: trip.name });
+        }
+      },
+      tripsToPull: () => tripIdsToPull(me),
+      pullTrip: pullOne,
+      hasPendingRequest: () => runner.pending,
+      isNetworkError,
+      onPushed: (push) => {
+        for (const n of push.notices) emit({ kind: 'superseded', ...n });
+        if (push.failed > 0) emit({ kind: 'failed', count: push.failed });
+      },
+      trace: (e, ms) => trace.add(e, ms),
+    });
+    if (result.offline) {
       connectivity.markOffline();
       return;
     }
-    const t1 = Date.now();
-    const memberships = await pullUser(db, rpcPullUser);
-    trace.add('pull do usuário', Date.now() - t1);
-    for (const tripId of memberships.left) {
-      const trip = await db.trips.get(tripId);
-      if (trip) {
-        await wipeTrip(db, tripId);
-        emit({ kind: 'revoked', tripId, tripName: trip.name });
-      }
-    }
-    // cada viagem por si: a que falha não segura as seguintes; sem rede, o resto fica para o
-    // próximo ciclo, que a encontra de novo pela participação gravada
-    const errors: string[] = [];
-    for (const tripId of await tripIdsToPull(me)) {
-      try {
-        await pullOne(tripId);
-      } catch (err) {
-        if (isNetworkError(err)) throw err;
-        errors.push(err instanceof Error ? err.message : String(err));
-      }
-    }
     watchTrips(await tripIdsToPull(me), (id) => schedulePull(id));
-    setState({ lastSyncAt: Date.now(), lastError: errors[0] ?? null });
+    setState({ lastSyncAt: Date.now(), lastError: result.errors[0] ?? null });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (isNetworkError(err)) {
