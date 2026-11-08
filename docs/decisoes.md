@@ -928,7 +928,7 @@ O Douglas não estava presente: deu o ok antecipado para seguir sem esperar o pl
 - O segundo laboratório no preview, com a função nova: o briefing já sai com o clima ("Garoa moderada, 8° a 17°, chuva 98%"). Mas o `app_progressao` falhou: o rack não subia (D164). E o `app_importar` falhou por outro motivo: o lab-a tinha gastado as 20 leituras do dia nas execuções da noite, e o app mostrava, certo, "Limite de leituras do dia".
 - Três commits próprios na `fase-11`, cada um com o porquê: o prazo nas chamadas do sync (`1a91064`, D164); a importação do laboratório termina como skip quando o lab-a gastou as leituras do dia, antes ou depois do toque em "Ler o roteiro" (`e5f29c6`, `79b7cfd`); e, quando o rack não sobe, a falha mostra a fila do aparelho com o último erro do servidor (`dc7a04e`).
 - O laboratório no preview de `dc7a04e`: 28 cenários verdes e a importação em skip (a próxima leitura do lab-a libera às 18h39 de 08/11). CI verde (767 testes de unidade, 33 de ponta a ponta).
-- O fast-forward da `main` para `dc7a04e` às 02h57 de 08/11, sem force, e o laboratório na produção verde: 28 cenários, a importação em skip pelo mesmo limite.
+- O fast-forward da `main` para `dc7a04e` às 02h56 de 08/11, sem force, e o laboratório na produção verde: 28 cenários, a importação em skip pelo mesmo limite.
 - Foram 6 laboratórios no preview e 1 na produção nesta passagem. Só dois leram roteiro com a IA (US$ 0,018 cada, US$ 0,036 no total); nos outros, o limite do dia já valia. Nenhuma medição extra.
 
 **O chat da fase 11** acordou com a `main` andando, viu o fechamento feito e atualizou só a memória; não mexeu em git, hospedado nem laboratório.
@@ -1031,3 +1031,9 @@ O Douglas não estava presente: deu o ok antecipado para seguir sem esperar o pl
 - **JS antes de pintar** (comprimido, do build): a tela de entrar, 116 KB do principal mais a tela; as de dentro, a lista 261 KB, o roteiro do dia 298, o Modo Viagem 325 e a visão geral 365 (eram 305, 342, 727 e 767).
 - **Lighthouse** (preview, mediana de 3): 98, 96, 90, 95 e 94 (D162); frias, 86, 78, 82 e 80.
 - **O expurgo no hospedado:** o primeiro `dry_run`, em 398 ms, com nada a apagar (D158).
+
+### D167 · A publicação da fase 12
+**Contexto.** O commit final (`642089c`) passou na CI (817 Vitest, 430 pgTAP, 44 Playwright; um instável que passou na segunda tentativa, o `progressao.spec`) e, no laboratório no preview, deu 33 de 35: o `expurgo` e o `app_resync` verdes com a 0012 no hospedado, e dois vermelhos. O Lighthouse da visão geral ficou em 86 numa máquina lenta (índice de CPU 2.330; as outras telas de 90 a 93). E o `app_progressao` falhou de novo no rack: a fila do aparelho mostrou a operação com zero tentativas e sem erro, ou seja, o ciclo do sync nem chegou a enviá-la. Não é rede nem servidor (o prazo da D164 teria cortado e marcado sem conexão): é o ciclo parado em outro ponto, e a mudança só sobe quando o app é reaberto.
+**Decisão do Douglas (08/11).** Publicar assim, com os dois registrados, e tratar o defeito do sync como o próximo trabalho.
+**O que aconteceu.** Fast-forward da `main` para `642089c` às 07h24 de 08/11, sem force, e o laboratório na produção verde: 31 cenários, nenhuma falha (a importação em skip pela cota do lab-a). O Lighthouse, numa máquina rápida (índice 4.000 a 4.400), deu 98 na tela de entrar e de 97 a 99 nas de dentro, acessibilidade de 96 a 100 e boas práticas 100; frias, de 80 a 86. O `app_progressao` passou em 36 s.
+**O próximo passo do defeito do sync.** Na falha do rack, registrar quem segura o lock `viajei:sync` (`navigator.locks.query()`), a fase do motor e o console do aparelho. O `progressao.spec`, instável na CI, é o mesmo fluxo e guarda o trace na segunda tentativa.
