@@ -122,7 +122,17 @@ export async function appImportar(ctx: ImportContext, today: string): Promise<Ch
       }
       since = new Date(Date.now() - 5_000).toISOString();
       const t0 = Date.now();
-      await read.click();
+      // a cota chega do servidor depois que a tela abre: o botão pode ligar e desligar de novo entre
+      // a conferência de cima e o toque; se foi isso, é o mesmo skip (fase 13)
+      try {
+        await read.click({ timeout: 5_000 });
+      } catch (err) {
+        if (await exhausted.isVisible()) {
+          quota.message = 'As leituras de hoje acabaram.';
+          return;
+        }
+        throw err;
+      }
       // a primeira parada que aparece no preview, ou a revisão, se tudo chegou de uma vez
       const firstStop = p.getByRole('list', { name: 'Dias que chegaram' }).locator('li li');
       const review = p.getByRole('heading', { name: 'Revisar o roteiro', exact: true });
