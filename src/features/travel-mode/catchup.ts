@@ -25,7 +25,8 @@ export function readPosition(): Promise<Fix | null> {
   }
   return new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ lng: pos.coords.longitude, lat: pos.coords.latitude, t: pos.timestamp }),
+      // a hora é a de quando a leitura chega ao app, como no acompanhamento (D176): um relógio só
+      (pos) => resolve({ lng: pos.coords.longitude, lat: pos.coords.latitude, t: Date.now() }),
       () => resolve(null),
       { enableHighAccuracy: false, timeout: POSITION_TIMEOUT_MS, maximumAge: POSITION_MAX_AGE_MS },
     );
@@ -45,13 +46,18 @@ export type CatchupArgs = {
   active: boolean;
   /** a última leitura do acompanhamento com o mapa aberto, quando há */
   liveFix: Fix | null;
+  /**
+   * o acompanhamento está ligado: a leitura única é a primeira leitura dele depois de abrir (ou de
+   * permitir, ou de voltar à tela), sem um `getCurrentPosition` à parte; só sem ele se lê uma vez
+   */
+  liveTracking: boolean;
 };
 
 export type Catchup = CatchupResult & {
   events: TravelEvent[];
   /** a posição deste aparelho agora: a do acompanhamento quando há, senão a leitura única */
   fix: Fix | null;
-  /** a leitura única ao abrir (ou ao voltar à tela): é dela que vem o Chegamos! do catch-up */
+  /** a leitura única ao abrir (ou ao permitir, ou ao voltar à tela): é dela que vem o Chegamos! do catch-up */
   readFix: Fix | null;
   /** o estado anterior deste aparelho, para a fase 5 animar o replay */
   prev: TravelState | null;
@@ -66,7 +72,18 @@ export type Catchup = CatchupResult & {
 type Reading = { before: TravelState | null; read: Fix | null };
 
 export function useCatchup(args: CatchupArgs): Catchup {
-  const { tripId, dayId, uid, state, route, teamTracks, geoAllowed, active, liveFix } = args;
+  const {
+    tripId,
+    dayId,
+    uid,
+    state,
+    route,
+    teamTracks,
+    geoAllowed,
+    active,
+    liveFix,
+    liveTracking,
+  } = args;
   const [prev, setPrev] = useState<TravelState | null>(null);
   const [loaded, setLoaded] = useState(false);
   const loadedRef = useRef(false);
@@ -131,10 +148,20 @@ export function useCatchup(args: CatchupArgs): Catchup {
     if (now - lastRunRef.current < CATCHUP_MIN_INTERVAL_MS) return null;
     lastRunRef.current = now;
     const before = await loadTravelState(dayId);
-    const read = active && geoAllowed ? await readPosition() : null;
+    // com o acompanhamento ligado, a leitura única é a primeira leitura dele (o efeito abaixo): um
+    // `getCurrentPosition` a mais, pedido logo depois do `watchPosition`, ficava à espera de uma
+    // posição nova que uma posição parada não dá (o Chromium emulado do laboratório nunca a dá) e
+    // vencia o tempo
+    const read = active && geoAllowed && !liveTracking ? await readPosition() : null;
     if (read) void recordCatchupFix({ tripId, dayId, uid }, read);
     return { before, read };
-  }, [dayId, tripId, uid, active, geoAllowed]);
+  }, [dayId, tripId, uid, active, geoAllowed, liveTracking]);
+
+  // a primeira leitura do acompanhamento depois da última leitura do estado vale como leitura única
+  useEffect(() => {
+    if (!liveFix || liveFix.t < lastRunRef.current) return;
+    setGpsFix((g) => (g && g.t >= lastRunRef.current ? g : liveFix));
+  }, [liveFix]);
 
   const apply = useCallback((r: Reading | null) => {
     if (!r) return;

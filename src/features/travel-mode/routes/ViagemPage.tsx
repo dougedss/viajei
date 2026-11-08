@@ -381,6 +381,7 @@ function DayView({
     geoAllowed: geo.allowed,
     active,
     liveFix: live.fix,
+    liveTracking: live.tracking,
   });
   const cuRef = useRef<typeof cu | null>(null);
   useEffect(() => {
