@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Fix } from '@/lib/geo/geofence.ts';
 import { isWithin } from '@/lib/geo/geofence.ts';
 import { liveDecision, LOW_POWER_INTERVAL_MS, pushFix, STATIONARY_RADIUS_M } from './live-rules.ts';
@@ -17,7 +17,10 @@ const AUTO_REPEAT_GUARD_MS = 10 * 60_000;
 
 export type LiveArgs = {
   enabled: boolean;
-  ctx: TrackContext | null;
+  tripId: string;
+  dayId: string;
+  /** vazio sem sessão: nada roda */
+  uid: string;
   state: DayState;
   onAutoDepart: () => void;
   onAutoArrive: () => void;
@@ -35,11 +38,20 @@ export type Live = {
 
 export function useLivePosition({
   enabled,
-  ctx,
+  tripId,
+  dayId,
+  uid,
   state,
   onAutoDepart,
   onAutoArrive,
 }: LiveArgs): Live {
+  // o contexto da trilha é estável enquanto o dia e a pessoa não mudam: o efeito abaixo reinicia o
+  // `watchPosition` (e zera as leituras guardadas) quando ele muda, e um objeto novo a cada render
+  // faria a regra nunca ver o carro na parada entre dois renders
+  const ctx = useMemo<TrackContext | null>(
+    () => (uid ? { tripId, dayId, uid } : null),
+    [tripId, dayId, uid],
+  );
   const [lowPower, setLowPower] = useState(false);
   const [fix, setFix] = useState<Fix | null>(null);
   const [denied, setDenied] = useState(false);

@@ -8,9 +8,11 @@ import { criarUsuario, SENHA } from './helpers/users.ts';
  * Partiu! e Chegamos! pelo GPS, sempre que o mapa está aberto (fase 14): com a posição permitida, o
  * app acompanha a posição e marca sozinho pelas regras da D47 (ver o carro na parada antes de
  * sair; 3 min dentro do raio para chegar), com o toast de Desfazer, e o Desfazer desfaz. O relógio é
- * o de mentira do Playwright: os 3 min andam por `fastForward`, e a hora de cada leitura é a de
- * quando ela chega ao app (`Date.now()`), não o carimbo do aparelho. Nenhum e2e usava geolocalização
- * até aqui; o laboratório usa a leitura única (`app_reabrir`).
+ * o de mentira do Playwright: os 3 min andam por `runFor` (que dispara os timers do caminho e deixa
+ * o relógio andando; `fastForward` pausaria o relógio, e o Dexie reexecuta as leituras vivas por um
+ * `setTimeout`), e a hora de cada leitura é a de quando ela chega ao app (`Date.now()`), não o
+ * carimbo do aparelho. Nenhum e2e usava geolocalização até aqui; o laboratório usa a leitura única
+ * (`app_reabrir`).
  */
 const CASA = { latitude: -26.371, longitude: -50.144 };
 /** uns 2 km ao norte: longe da Casa (saiu) e fora do raio do Parque */
@@ -102,7 +104,7 @@ test('com o mapa aberto, a posição marca Partiu! e Chegamos! sozinha, com Desf
 
   await test.step('vê o carro na Casa e sai: Partiu! sozinho', async () => {
     // a primeira leitura já veio da Casa; a segunda, 1 min depois, a 2 km: saiu
-    await page.clock.fastForward('01:00');
+    await page.clock.runFor('01:00');
     await context.setGeolocation(ESTRADA);
     await expect(page.getByText('Saímos: Casa', { exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('button', { name: 'Desfazer' })).toBeVisible();
@@ -112,13 +114,13 @@ test('com o mapa aberto, a posição marca Partiu! e Chegamos! sozinha, com Desf
   });
 
   await test.step('3 min dentro do raio do Parque: Chegamos! sozinho, e o Desfazer desfaz', async () => {
-    await page.clock.fastForward('01:00');
+    await page.clock.runFor('01:00');
     await context.setGeolocation(PARQUE);
-    await page.clock.fastForward('01:30');
+    await page.clock.runFor('01:30');
     await context.setGeolocation(PARQUE_PERTO);
     // ainda não: a presença tem de durar 3 min
     await expect(page.getByText('Chegamos: Parque', { exact: true })).toHaveCount(0);
-    await page.clock.fastForward('01:40');
+    await page.clock.runFor('01:40');
     await context.setGeolocation(PARQUE);
     // uma chegada só, mesmo com várias leituras dentro do raio (a regra não repete em 10 min)
     await expect(page.getByText('Chegamos: Parque', { exact: true })).toBeVisible({

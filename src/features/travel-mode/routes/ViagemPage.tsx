@@ -193,8 +193,6 @@ export default function ViagemPage() {
           />
         </div>
       )}
-
-      <PushAskSheet trip={trip} />
     </div>
   );
 }
@@ -357,7 +355,9 @@ function DayView({
   // de hoje, a viagem em andamento e a posição permitida
   const live = useLivePosition({
     enabled: liveEnabled({ visible, isToday: active, ongoing: active, consent: geo.allowed }),
-    ctx: uid ? { tripId, dayId, uid } : null,
+    tripId,
+    dayId,
+    uid,
     state,
     onAutoDepart: () => run(departLabel, () => depart(state, uid), departSeen, 'depart', 'live'),
     onAutoArrive: () =>
@@ -608,7 +608,14 @@ function DayView({
             <div className="pointer-events-auto">
               <RetroCard tripId={tripId} done={stops.filter((s) => s.done_at !== null).length} />
             </div>
-          ) : null}
+          ) : (
+            // a folha "Avisos da viagem" (D48) e, no iPhone fora da Tela de Início, o cartão de
+            // instalação, que é um cartão em linha: entram no lugar do cartão da vez, nunca empurrando
+            // a maquete (a tela é inteira)
+            <div className="pointer-events-auto">
+              <PushAskSheet trip={trip} />
+            </div>
+          )}
           <div className="flex justify-end">
             <ButtonLink
               to={`/viagens/${tripId}/detalhes`}

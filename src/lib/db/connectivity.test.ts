@@ -28,6 +28,17 @@ describe('retryDelay', () => {
 });
 
 describe('connectivity', () => {
+  it('uma resposta que chega com o navegador sem rede não marca online', async () => {
+    const { connectivity, retry } = await fresh(false);
+    expect(connectivity.isOnline()).toBe(false);
+    expect(connectivity.canTry()).toBe(false);
+    // o pedido saiu antes de a rede cair; a resposta não desmente o navegador
+    connectivity.markOnline();
+    expect(connectivity.isOnline()).toBe(false);
+    vi.advanceTimersByTime(120_000);
+    expect(retry).not.toHaveBeenCalled();
+  });
+
   it('falha de rede com o navegador online: pede nova tentativa, cada vez mais espaçada', async () => {
     const { connectivity, retry } = await fresh();
     connectivity.markOffline();

@@ -66,7 +66,10 @@ export const connectivity = {
   markOnline: () => {
     failures = 0;
     cancelRetry();
-    set(true);
+    // uma resposta que chega depois de o navegador avisar "sem rede" (o pedido saiu antes) não
+    // desmente o navegador: sem isso o chip voltava a "N pendentes" com a rede cortada e, como nada
+    // é tentado sem rede, nenhuma falha o corrigia (fase 14, visto na CI)
+    set(browserOnline());
   },
   markOffline: () => {
     failures += 1;
