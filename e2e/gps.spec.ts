@@ -20,6 +20,14 @@ const ESTRADA = { latitude: -26.353, longitude: -50.144 };
 const PARQUE = { latitude: -26.31, longitude: -50.144 };
 /** 40 m do Parque: dentro do raio de 150 m */
 const PARQUE_PERTO = { latitude: -26.31036, longitude: -50.144 };
+/**
+ * Um pouco mais que o `maximumAge` da leitura única (`POSITION_MAX_AGE_MS`, 60 s). A posição emulada
+ * do Chromium leva a hora em que foi posta; mais velha que isso, uma leitura única feita com o
+ * acompanhamento já ligado descarta a posição guardada e espera uma nova, que uma posição emulada
+ * parada nunca manda (num aparelho, a próxima leitura vem). É a condição do laboratório, que põe a
+ * posição ao abrir o navegador, minutos antes do `app_reabrir`.
+ */
+const POSICAO_VELHA_MS = 62_000;
 
 /** A viagem de hoje: Casa → Parque; com `casaFeita`, a Casa já concluída e deixada há 30 min (na estrada). */
 async function viagemDeHoje(
@@ -157,7 +165,7 @@ test('ao reabrir no destino, "Usar posição" marca Chegamos! na hora, pela leit
 }: {
   browser: Browser;
 }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(150_000);
   const user = await criarUsuario('Gps');
   // na estrada: a Casa concluída e deixada; o carro (o celular) já está no Parque
   await viagemDeHoje(user.id, { casaFeita: true });
@@ -166,6 +174,7 @@ test('ao reabrir no destino, "Usar posição" marca Chegamos! na hora, pela leit
     geolocation: PARQUE,
     permissions: ['geolocation'],
   });
+  const posicaoPosta = Date.now();
   const page = await context.newPage();
   await page.addInitScript(() => localStorage.setItem('viajei:world:render', 'list'));
 
@@ -175,6 +184,10 @@ test('ao reabrir no destino, "Usar posição" marca Chegamos! na hora, pela leit
   await page.getByRole('button', { name: 'Entrar' }).click();
   await expect(page.getByRole('region', { name: 'Agora' })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole('button', { name: 'Chegamos!' })).toBeVisible({ timeout: 15_000 });
+
+  // a posição emulada envelhece além do `maximumAge`, como no laboratório (o relógio do Chromium,
+  // não o da página: não há atalho)
+  await page.waitForTimeout(Math.max(0, POSICAO_VELHA_MS - (Date.now() - posicaoPosta)));
 
   // a leitura única ao permitir (o catch-up): no raio do Parque, Chegamos! na hora, com Desfazer; a
   // presença de 3 min é do acompanhamento, que começa junto e não precisa esperar aqui
