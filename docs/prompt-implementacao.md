@@ -1,4 +1,4 @@
-# Viajei · Prompt de implementação (v3, 04/11/2026)
+# Viajei · Prompt de implementação (v4, 08/11/2026)
 
 > Você é o agente de implementação do Viajei. Este documento é a fonte de verdade do projeto: contexto, regras de trabalho, stack, produto, mundo 3D, uso com a tela apagada, offline, modelo de dados, gamificação e plano por fases. Ele consolida o planejamento, o Passo 0 já apresentado (`docs/passo-0-2026-11-04.md`), as decisões de 04/11/2026 sobre a maquete 3D (`docs/atualizacao-prompt-3d.md`) e as decisões do mesmo dia sobre notificações, catch-up e replay (`docs/atualizacao-prompt-notificacoes.md`). Leia os quatro antes de agir. Comece pelo **Passo 0** da última seção e espere aprovação formal antes de escrever código.
 
@@ -48,6 +48,7 @@ Dono do projeto: Douglas. Conta GitHub pessoal: `dougedss`.
 13. **UI em português do Brasil. Mobile-first.** No desktop só precisa não quebrar. Códigos de domínio em inglês; rótulos pt-BR em `_shared/constants.ts`.
 14. **Não mude a stack sem perguntar.** As bibliotecas da seção 3 já estão aprovadas; as versões aguardam o ok do Passo 0.
 15. **Nada depende do app estar aberto, e o app tem que ser útil em cinco segundos de tela ligada.** Motorista no Waze, passageiro no WhatsApp, celulares bloqueados: esse é o cenário normal. Tela ligada é opcional (modo painel). Toda funcionalidade do dia precisa funcionar por notificação, por catch-up ao abrir, ou pelos dois.
+16. **A regra do não-preencher.** O app nunca pede que a pessoa preencha o que ele pode ler, descobrir ou perguntar numa frase. Formulário é a última opção, nunca a primeira. Quando precisar perguntar, diz antes quantas perguntas são, oferece opções e aceita texto livre.
 
 ---
 
@@ -525,7 +526,7 @@ Modelos por nível: hatch livre, sedã no 2, SUV no 3, picape no 4, kombi no 5. 
 
 ---
 
-## 12. Plano por fases (12)
+## 12. Plano por fases (21)
 
 Cada fase termina com testes passando, CI verde, `docs/decisoes.md` atualizado e um commit `fase N: ...`. Resumo curto ao fim de cada fase e ok antes da próxima.
 
@@ -543,6 +544,15 @@ Cada fase termina com testes passando, CI verde, `docs/decisoes.md` atualizado e
 | **10. Importação com IA** | Edge Function em streaming, limites e log, preview progressivo e editável, geocodificação, salvar via outbox | 0009 | Vitest: schema com o seed e inválidos; teste da função com entrada fixa |
 | **11. Mapa e clima** | Leaflet com rota real, cache de tiles, Open-Meteo; clima no briefing da manhã e na abertura do dia | — | Vitest: códigos de clima |
 | **12. Polish e E2E** | Playwright completo (fluxo principal e offline com `context.setOffline(true)`), matriz iPhone e Android (instalação, push, ações, selo, WebGPU/WebGL2, fps, Wake Lock, geolocalização, vídeo, compartilhar), acessibilidade, Lighthouse, README, expurgo de viagens excluídas (job) | job de expurgo | Suíte completa verde |
+| **13. Correções** | o mapa por cima da folha, a rolagem horizontal, o rack que não sobe (o defeito do sync), o Lighthouse da visão geral cobrado só numa máquina normal, o que o teste do Douglas achar; o plano das fases 13 a 21 e esta v4 | — | e2e do mapa (a folha por cima) e da rolagem lateral a 393 e 360 px com link, endereço colado e código; Vitest da causa do rack; laboratório no preview e na produção |
+| **14. A viagem abre no mapa** | `/viagens/:tripId` vira a maquete inteira na tela, sem rolagem; a visão geral vira "Detalhes"; barra do topo com a data e "Hoje"; "Agora" compacto embaixo com Partiu! e Chegamos!, automáticos pelo GPS sempre que o mapa está aberto (`watchPosition`, regras da D47, Desfazer); o carro grande; miniaturas 3D por tipo de parada; o comboio se couber sem poluir | — | Vitest do layout e da câmera; e2e do mapa como tela da viagem e dos redirecionamentos; laboratório; um bloco no teste final |
+| **15. Paradas que se registram sozinhas** | com o mapa aberto, o detector puro (8 min a 60 m e fora da linha da estrada, ou 20 min em qualquer lugar; trânsito ignorado), o lugar pelo Nominatim reverso, a parada com `source: 'auto'` e horas medidas, o tipo Posto (`fuel`) | só se houver `check` nos tipos de parada | Vitest com as trilhas reais de `trip_tracks`; laboratório com uma trilha forjada no cenário do painel |
+| **16. A garagem é da pessoa, e o perfil** | `profiles.car_model`, `car_color`, `car_accessories` (cada pessoa vê o próprio carro em qualquer viagem); modelos livres, níveis liberam cores, acabamentos e rodas, o último nível libera o seu carro; `/perfil/garagem`; o perfil em seções | 0013 | pgTAP da migration e dos grants (`car_*` só pela própria pessoa); Vitest das regras novas; e2e do perfil; laboratório |
+| **17. Criar a viagem conversando** | sai o formulário de nova viagem; um campo só com três caminhos (o formato do Viajei lido no aparelho, um roteiro em texto livre pela importação, uma descrição ou "quero sair hoje" pela conversa com até 3 perguntas ditas antes); a saída de hoje com lugares conferidos no OSM; o pedido para outras IAs; "O que você gosta" no perfil; limites e privacidade da fase 10 | — | Vitest do leitor do formato (com o seed e inválidos), da decisão entre os caminhos e da conferência de lugares; teste da função com entrada fixa; e2e do campo; laboratório com uma leitura real |
+| **18. Reservas e gastos sem digitar** | "Ler a confirmação" colada, anexada, por `share_target` no Android e por e-mail encaminhado para um endereço por pessoa (Cloudflare Email Routing → `inbound-mail`), com "Reservas recebidas" e push; "Fotografar a nota" e o QR da NFC-e; a nota anexada ao gasto. O e-mail depende de um domínio próprio | o endereço por pessoa e as reservas recebidas | Vitest dos leitores e da escolha da viagem pelas datas; teste das funções com entradas fixas (PDF, print, nota, e-mail bruto); e2e; laboratório com um e-mail de verdade até o push |
+| **19. O gerador de carros** | o perfil estendido (famílias de teto, proporções, frente, traseira, portas, detalhes, rodas) e o `CarSpec` que vira `CarProfile`; os cinco carros reescritos como specs sem mudança visual; sem IA e sem servidor | — | Vitest das validações por família; snapshots do `CarSide`; laboratório com o showroom |
+| **20. O seu carro** | marca, modelo e ano pela FIPE (Parallelum v2, com cache); a função `build-car` em fila (medidas e geração pelo Claude com busca, fotos do Wikimedia Commons, o spec como o GTA desenha, a segunda olhada), `car_models` por geração, push "está pronto", "Pedir outra tentativa"; sem logotipo nem marca | `car_models` | Vitest do agrupamento e do leitor do spec; teste da função com um pedido fixo; pgTAP de `car_models`; laboratório com um pedido real até o push |
+| **21. O banco conectado (opcional)** | os gastos pelo Open Finance, por um agregador autorizado (Pluggy ou Belvo) com contrato que só o Douglas assina; consentimento no app do banco; gastos sugeridos casados com a parada; o mínimo de dado, cifrado e apagado ao desconectar | as conexões e as transações | Vitest do casamento transação → parada; teste da função com transações fixas; pgTAP (só a própria pessoa lê); laboratório no sandbox do agregador |
 
 ---
 

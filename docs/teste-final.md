@@ -483,6 +483,9 @@ Anotações:
   com pinos menores.
 - [ ] **O pino.** Toque num pino: a folha mostra o nome, o horário, o endereço, Google Maps e Waze.
   Google Maps abre o app do Maps no lugar. Volte e toque Waze.
+- [ ] **A folha por cima do mapa** (fase 13). Com a folha do pino aberta, nenhum pino, estrada ou
+  tile aparece por cima do cartão branco: a folha cobre o mapa inteira, inclusive onde há pinos
+  embaixo dela. O mesmo com um toast na tela ("Parada salva"): ele fica por cima da folha.
 - [ ] **Ver no mapa.** Na página de um dia, **Ver no mapa**: o mapa abre naquele dia.
 - [ ] **Não é GPS.** Nada no mapa pede a sua posição, e não há "você está aqui".
 - [ ] **A atribuição e a área segura.** Role até o fim: "Leaflet | © OpenStreetMap" fica no canto de
