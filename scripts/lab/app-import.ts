@@ -108,9 +108,21 @@ export async function appImportar(ctx: ImportContext, today: string): Promise<Ch
     await step('cola o texto e lê', async () => {
       await p.goto(`${appUrl}/viagens/${trip}/importar`);
       await p.getByRole('textbox', { name: 'Roteiro' }).fill(LAB_IMPORT_TEXT);
+      // o app já sabe a cota ao abrir: sem leituras, o botão fica desligado com o aviso embaixo
+      const read = p.getByRole('button', { name: 'Ler o roteiro' });
+      const exhausted = p.getByText('As leituras de hoje acabaram.', { exact: true });
+      const opened = Date.now();
+      while (!(await read.isEnabled())) {
+        if (await exhausted.isVisible()) {
+          quota.message = 'As leituras de hoje acabaram.';
+          return;
+        }
+        if (Date.now() - opened > TIMEOUT) throw new Error('o botão "Ler o roteiro" não ligou');
+        await sleep(200);
+      }
       since = new Date(Date.now() - 5_000).toISOString();
       const t0 = Date.now();
-      await p.getByRole('button', { name: 'Ler o roteiro' }).click();
+      await read.click();
       // a primeira parada que aparece no preview, ou a revisão, se tudo chegou de uma vez
       const firstStop = p.getByRole('list', { name: 'Dias que chegaram' }).locator('li li');
       const review = p.getByRole('heading', { name: 'Revisar o roteiro', exact: true });
@@ -224,7 +236,7 @@ export async function appImportar(ctx: ImportContext, today: string): Promise<Ch
       scenario: 'app_importar',
       status: 'skip',
       latency_ms: Date.now() - startedAt,
-      detail: `O lab-a gastou as leituras do dia nas execuções de hoje; o app mostrou o limite: "${quota.message}"`,
+      detail: `O lab-a gastou as leituras do dia (D24) nas execuções de hoje; o app mostrou o limite: "${quota.message}"`,
       data: { ...data, limite: quota.message, passos: steps },
     };
   }
