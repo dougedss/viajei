@@ -111,7 +111,7 @@ const DIAG = `(async () => {
   const sync = typeof diag.sync === 'function' ? diag.sync() : null;
   let locks = null;
   try { locks = typeof diag.locks === 'function' ? await diag.locks() : null; } catch {}
-  return { sync, locks, tasks: globalThis.__viajeiLongTasks || [], now: Date.now(), visibility: document.visibilityState };
+  return { sync, locks, tasks: globalThis.__viajeiLongTasks || [], now: Date.now(), origin: Math.round(performance.timeOrigin), visibility: document.visibilityState };
 })()`;
 
 type Diag = {
@@ -119,22 +119,48 @@ type Diag = {
   locks: { held: string[]; pending: string[] } | null;
   tasks: [number, number][];
   now: number;
+  /** quando o documento nasceu (época em ms) */
+  origin: number;
   visibility: string;
 };
 
-/** O que a thread principal fez desde `since`: quantas tarefas longas, quanto somam e a maior. */
-function longTasksSince(tasks: readonly [number, number][], since: number) {
-  const mine = tasks.filter(([at]) => at + 50 >= since);
-  const total = mine.reduce((acc, [, d]) => acc + d, 0);
-  return {
-    quantas: mine.length,
-    total_ms: total,
-    maior_ms: mine.reduce((acc, [, d]) => Math.max(acc, d), 0),
-    // as primeiras, com o instante relativo em segundos: onde o tempo foi
-    primeiras: mine
-      .slice(0, 12)
-      .map(([at, d]) => `+${((at - since) / 1000).toFixed(1)}s ${String(d)} ms`),
+/**
+ * O que a thread principal fez no documento inteiro, com o toque como referência: quantas tarefas
+ * longas antes e depois dele, quanto somam, e as maiores com o instante relativo em segundos. É
+ * assim que se vê um palco 3D compilando shaders enquanto a fila esperava (fase 13).
+ */
+function longTasksAround(tasks: readonly [number, number][], clickedAt: number) {
+  const sum = (xs: readonly [number, number][]) => ({
+    quantas: xs.length,
+    total_ms: xs.reduce((acc, [, d]) => acc + d, 0),
+    maior_ms: xs.reduce((acc, [, d]) => Math.max(acc, d), 0),
+  });
+  const rel = (at: number) => {
+    const sec = ((at - clickedAt) / 1000).toFixed(1);
+    return sec.startsWith('-') ? `${sec}s` : `+${sec}s`;
   };
+  return {
+    antes_do_toque: sum(tasks.filter(([at, d]) => at + d <= clickedAt)),
+    depois_do_toque: sum(tasks.filter(([at, d]) => at + d > clickedAt)),
+    maiores: [...tasks]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([at, d]) => `${rel(at)} ${String(d)} ms`),
+  };
+}
+
+/** Os erros da página (exceções e `console.error`), para a falha dizer o que o app disse. */
+function watchErrors(page: Page): () => string[] {
+  const errors: string[] = [];
+  const push = (text: string) => {
+    errors.push(text.split('\n')[0]?.slice(0, 300) ?? '');
+    if (errors.length > 20) errors.shift();
+  };
+  page.on('pageerror', (err) => push(`erro: ${err.message}`));
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') push(`console: ${msg.text()}`);
+  });
+  return () => [...errors];
 }
 
 const removedAt = () => new Date().toISOString();
@@ -207,7 +233,7 @@ async function newContext(
   target: Pick<ProgressContext, 'appUrl' | 'bypass'>,
   celebrations: boolean,
   downloads = false,
-): Promise<{ context: BrowserContext; page: Page }> {
+): Promise<{ context: BrowserContext; page: Page; errors: () => string[] }> {
   const context = await browser.newContext({
     ...DEVICE,
     permissions: [],
@@ -224,8 +250,9 @@ async function newContext(
   });
   const page = await context.newPage();
   page.setDefaultTimeout(TIMEOUT);
+  const errors = watchErrors(page);
   await enterPreview(page, target.appUrl, target.bypass);
-  return { context, page };
+  return { context, page, errors };
 }
 
 // ------------------------------------------------------------------ progressão
@@ -383,6 +410,7 @@ export async function appProgressao(
     const A = await newContext(browser, ctx, true);
     pageA = A.page;
     const pa = A.page;
+    const errorsA = A.errors;
     const steps: [string, () => Promise<void>][] = [
       [
         'a máquina do dia',
@@ -471,8 +499,10 @@ export async function appProgressao(
                 : null,
               rastro: formatTrace(d.sync?.rastro ?? [], clickedAt),
               locks: d.locks,
-              tarefas_longas: longTasksSince(d.tasks, clickedAt),
+              tarefas_longas: longTasksAround(d.tasks, clickedAt),
+              pagina_aberta_ha_ms: clickedAt - d.origin,
               visibilidade: d.visibility,
+              erros: errorsA(),
               fila,
             };
           };
@@ -535,7 +565,7 @@ export async function appProgressao(
       ],
     ];
     const rackIndex = steps.findIndex(([name]) => name.startsWith('"Usar no carro"'));
-    return await runSteps(
+    const check = await runSteps(
       'app_progressao',
       opts.somenteRack
         ? 'A concluiu a primeira parada, o cartão apareceu e "Usar no carro" pôs o rack no servidor'
@@ -545,6 +575,13 @@ export async function appProgressao(
       opts.somenteRack ? steps.slice(0, rackIndex + 1) : steps,
       data,
     );
+    // o que o app disse no console de A, em qualquer resultado (a tela "Algo deu errado" não fala)
+    const errors = errorsA();
+    check.data = { ...check.data, erros_de_a: errors };
+    if (check.status === 'fail' && errors.length > 0) {
+      check.detail = `${check.detail}; erros de A: ${errors.slice(-5).join(' | ')}`.slice(0, 1800);
+    }
+    return check;
   } finally {
     await browser?.close().catch(() => undefined);
   }
