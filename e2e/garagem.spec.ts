@@ -19,8 +19,8 @@ async function novaViagem(page: Page): Promise<{ url: string; nome: string }> {
   await page.getByRole('textbox', { name: 'Início' }).fill(dateInSaoPaulo(30));
   await page.getByRole('textbox', { name: 'Fim' }).fill(dateInSaoPaulo(31));
   await page.getByRole('button', { name: 'Criar viagem' }).click();
-  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}$/);
-  return { url: page.url(), nome };
+  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
+  return { url: page.url().replace(/\/detalhes$/, ''), nome };
 }
 
 const swatch = (page: Page, nome: string) =>

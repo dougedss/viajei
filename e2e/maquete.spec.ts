@@ -29,8 +29,8 @@ async function viagemComParadas(page: Page): Promise<string> {
   await page.getByRole('textbox', { name: 'Início' }).fill(dateInSaoPaulo(30));
   await page.getByRole('textbox', { name: 'Fim' }).fill(dateInSaoPaulo(31));
   await page.getByRole('button', { name: 'Criar viagem' }).click();
-  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}$/);
-  const tripUrl = page.url();
+  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
+  const tripUrl = page.url().replace(/\/detalhes$/, '');
   await page.getByRole('link', { name: 'Editar roteiro' }).click();
   await page
     .getByRole('list', { name: 'Dias da viagem' })
@@ -54,7 +54,7 @@ test('o Modo Viagem monta a maquete e "Ver como lista" persiste', async ({ page 
   await entrar(page, 'dono@viajei.local');
   const tripUrl = await viagemComParadas(page);
 
-  await page.goto(`${tripUrl}/viagem`);
+  await page.goto(tripUrl);
   await expect(page.getByRole('heading', { name: 'Agora' })).toBeVisible();
   const maquete = page.locator('[data-world="webgl2"], [data-world="webgpu"]');
   await expect(maquete).toBeVisible({ timeout: 60_000 });
@@ -86,7 +86,7 @@ test('o Modo Viagem monta a maquete e "Ver como lista" persiste', async ({ page 
 test('?render=list força a lista, sem canvas e sem botão de voltar', async ({ page }) => {
   await entrar(page, 'dono@viajei.local');
   const tripUrl = await viagemComParadas(page);
-  await page.goto(`${tripUrl}/viagem?render=list`);
+  await page.goto(`${tripUrl}?render=list`);
   await expect(page.getByRole('heading', { name: 'Agora' })).toBeVisible();
   await expect(page.getByRole('list', { name: 'Trilha do dia' })).toBeVisible();
   await expect(page.locator('canvas')).toHaveCount(0);

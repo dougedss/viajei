@@ -18,7 +18,7 @@ async function criarViagem(page: Page, nome: string, inicio: string, fim: string
   await page.getByRole('textbox', { name: 'Início' }).fill(inicio);
   await page.getByRole('textbox', { name: 'Fim' }).fill(fim);
   await page.getByRole('button', { name: 'Criar viagem' }).click();
-  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}$/);
+  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
 }
 
 async function adicionarParada(

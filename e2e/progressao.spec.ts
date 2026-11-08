@@ -40,8 +40,8 @@ test('concluir uma parada → cartão do primeiro pé na estrada → Usar no car
   await page.getByRole('textbox', { name: 'Início' }).fill(dateInSaoPaulo());
   await page.getByRole('textbox', { name: 'Fim' }).fill(dateInSaoPaulo(1));
   await page.getByRole('button', { name: 'Criar viagem' }).click();
-  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}$/);
-  const tripUrl = page.url();
+  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
+  const tripUrl = page.url().replace(/\/detalhes$/, '');
   const tripId = tripUrl.split('/').at(-1) ?? '';
 
   // a barra do time começa no zero
@@ -59,7 +59,7 @@ test('concluir uma parada → cartão do primeiro pé na estrada → Usar no car
   await adicionarParada(page, { tipo: 'Natureza', nome: 'Cascata do Caracol', horario: '10:00' });
 
   // Partiu! conclui a saída de casa: é a primeira parada concluída
-  await page.goto(`${tripUrl}/viagem?render=list`);
+  await page.goto(`${tripUrl}?render=list`);
   await page.getByRole('button', { name: 'Partiu!' }).click();
   await expect(page.getByText('Saímos: Saída de casa', { exact: true })).toBeVisible();
 
@@ -80,7 +80,7 @@ test('concluir uma parada → cartão do primeiro pé na estrada → Usar no car
     .toBe(1);
 
   // a visão geral é um momento calmo: o cartão sai ali (um por vez; à noite, o Madrugador vem junto)
-  await page.goto(tripUrl);
+  await page.goto(`${tripUrl}/detalhes`);
   await expect(bar).not.toHaveAttribute('data-xp', '0', { timeout: 15_000 });
   const card = page.getByRole('dialog', { name: 'Primeiro pé na estrada' });
   for (let i = 0; i < 4 && !(await card.isVisible()); i++) {

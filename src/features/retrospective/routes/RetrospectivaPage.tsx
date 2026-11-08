@@ -110,7 +110,7 @@ function NotYet({ trip, state }: { trip: Trip; state: ReturnType<typeof retroSta
             ? `A retrospectiva fica pronta em ${d ?? ''}/${m ?? ''}, no dia seguinte ao fim da viagem.`
             : 'Esta viagem não teve paradas concluídas: não há filme para contar.'}
         </p>
-        <ButtonLink to={`/viagens/${trip.id}`} variant="secondary" size="md">
+        <ButtonLink to={`/viagens/${trip.id}/detalhes`} variant="secondary" size="md">
           Voltar à viagem
         </ButtonLink>
       </div>
@@ -647,7 +647,7 @@ function TopBar({
       )}
       {timeRef ? <span className="font-num text-[15px] tabular-nums">0:15</span> : null}
       <Link
-        to={`/viagens/${tripId}`}
+        to={`/viagens/${tripId}/detalhes`}
         className="grid size-12 place-items-center rounded-full bg-white/15"
         aria-label="Fechar a retrospectiva"
       >

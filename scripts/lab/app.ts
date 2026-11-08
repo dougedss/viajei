@@ -342,9 +342,11 @@ export async function runSteps(
   return result(scenario, done, ok, startedAt);
 }
 
-const tripUrl = (t: AppTarget, path = 'viagem') => `${t.appUrl}/viagens/${t.tripId}/${path}`;
+/** A tela da viagem (`/viagens/:id`, o mapa desde a fase 14), ou uma tela de detalhe dela. */
+const tripUrl = (t: AppTarget, path = '') =>
+  `${t.appUrl}/viagens/${t.tripId}${path && !path.startsWith('?') ? `/${path}` : path}`;
 /**
- * O Modo Viagem sem a maquete. Desde a D61 quem conta o que aconteceu é um só: com maquete, o replay;
+ * A tela da viagem sem a maquete. Desde a D61 quem conta o que aconteceu é um só: com maquete, o replay;
  * sem ela (ou com "reduzir movimento"), o card "Desde a última vez". Os cenários do card abrem assim;
  * a maquete tem o cenário dela (`appMaquete`).
  */
@@ -611,8 +613,9 @@ export function appReabrir(app: App, serverMarked: () => Promise<void>): Promise
  * (fase 13): as mesmas rotas da suíte e2e, com as viagens do lab-a, no perfil de Pixel 7 (412 px).
  */
 const TELAS_DA_VIAGEM = [
-  'viagem?render=list',
+  '?render=list',
   '',
+  'detalhes',
   'roteiro',
   'reservas',
   'checklists?aba=antes',
@@ -636,7 +639,9 @@ export function appExtras(app: App): Promise<Check> {
       [
         'abrir o "Agora"',
         async () => {
-          if (!page.url().startsWith(tripUrl(target))) await page.goto(listUrl(target));
+          if (new URL(page.url()).pathname !== new URL(tripUrl(target)).pathname) {
+            await page.goto(listUrl(target));
+          }
           await page.getByRole('heading', { name: 'Agora' }).waitFor();
         },
       ],

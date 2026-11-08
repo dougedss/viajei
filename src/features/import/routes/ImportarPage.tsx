@@ -57,7 +57,7 @@ export default function ImportarPage() {
   if (trip === null) return <NotFound />;
 
   const review = imp.stored ? applyGeo(imp.stored.review, geo) : null;
-  const back = `/viagens/${trip.id}`;
+  const back = `/viagens/${trip.id}/detalhes`;
 
   // a parada aberta no formulário, dentro da própria tela: a revisão continua onde estava
   const editingStop = review?.days.flatMap((d) => d.stops).find((s) => s.key === editing);

@@ -18,7 +18,7 @@ async function criarViagem(page: Page, nome: string, inicio: string, fim: string
   await page.getByRole('textbox', { name: 'Início' }).fill(inicio);
   await page.getByRole('textbox', { name: 'Fim' }).fill(fim);
   await page.getByRole('button', { name: 'Criar viagem' }).click();
-  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}$/);
+  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
 }
 
 async function adicionarParada(
@@ -67,7 +67,7 @@ test('os dias nascem das datas, as paradas entram no dia e o Agora mostra "sair 
 
   // Modo Viagem: a viagem é futura, então o dia atual é o primeiro; "sair às" é o horário da origem
   // a semântica do "Agora" não depende da maquete (ela tem o próprio e2e): a lista vem aberta
-  await page.goto(page.url().replace(/\/roteiro\/.*$/, '/viagem?render=list'));
+  await page.goto(page.url().replace(/\/roteiro\/.*$/, '?render=list'));
   const agora = page.getByRole('region', { name: 'Agora' });
   await expect(agora).toBeVisible();
   await expect(agora.getByText('Saída de Papanduva')).toBeVisible();

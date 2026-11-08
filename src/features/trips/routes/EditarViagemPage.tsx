@@ -18,7 +18,7 @@ export default function EditarViagemPage() {
 
   return (
     <div className="grid gap-5">
-      <PageHeader back={`/viagens/${trip.id}`} title="Editar viagem" />
+      <PageHeader back={`/viagens/${trip.id}/detalhes`} title="Editar viagem" />
       <TripForm
         key={trip.id}
         submitLabel="Salvar"
@@ -39,7 +39,7 @@ export default function EditarViagemPage() {
         onSubmit={async (values) => {
           await updateTrip(trip.id, values);
           toast.show({ title: 'Viagem salva', kind: 'ok' });
-          await navigate(`/viagens/${trip.id}`, { replace: true });
+          await navigate(`/viagens/${trip.id}/detalhes`, { replace: true });
         }}
       />
     </div>

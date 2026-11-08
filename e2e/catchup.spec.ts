@@ -45,8 +45,8 @@ test('o card "Desde a última vez" aparece depois de marcar Partiu! em outra ses
   await pageA.getByRole('textbox', { name: 'Início' }).fill(today());
   await pageA.getByRole('textbox', { name: 'Fim' }).fill(today(1));
   await pageA.getByRole('button', { name: 'Criar viagem' }).click();
-  await expect(pageA).toHaveURL(/\/viagens\/[0-9a-f-]{36}$/);
-  const tripUrl = pageA.url();
+  await expect(pageA).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
+  const tripUrl = pageA.url().replace(/\/detalhes$/, '');
 
   await pageA.getByRole('link', { name: 'Editar roteiro' }).click();
   await pageA
@@ -59,7 +59,7 @@ test('o card "Desde a última vez" aparece depois de marcar Partiu! em outra ses
   await adicionarParada(pageA, { tipo: 'Natureza', nome: 'Parque', horario: '10:00' });
 
   // o primeiro aparelho vê a maquete e sai: o travel_state fica salvo
-  await pageA.goto(`${tripUrl}/viagem?render=list`);
+  await pageA.goto(`${tripUrl}?render=list`);
   // a primeira visita à rota compila o Modo Viagem inteiro no Vite de dev: o mesmo prazo do B
   await expect(pageA.getByRole('heading', { name: 'Agora' })).toBeVisible({ timeout: 15_000 });
   await expect(pageA.getByText('Saída de casa').first()).toBeVisible();
@@ -74,7 +74,7 @@ test('o card "Desde a última vez" aparece depois de marcar Partiu! em outra ses
   await preencherLogin(pageB, email);
   // com uma viagem de hoje, `/` cai direto no Modo Viagem (D33)
   await expect(pageB.getByRole('heading', { name: 'Agora' })).toBeVisible({ timeout: 15_000 });
-  await pageB.goto(`${tripUrl}/viagem?render=list`);
+  await pageB.goto(`${tripUrl}?render=list`);
   await expect(pageB.getByRole('heading', { name: 'Agora' })).toBeVisible();
   await expect(pageB.getByText('Saída de casa').first()).toBeVisible({ timeout: 15_000 });
   await pageB.getByRole('button', { name: 'Partiu!' }).click();
@@ -85,7 +85,7 @@ test('o card "Desde a última vez" aparece depois de marcar Partiu! em outra ses
 
   // de volta ao primeiro: o que aconteceu desde a última vez
   await pageA.bringToFront();
-  await pageA.goto(`${tripUrl}/viagem?render=list`);
+  await pageA.goto(`${tripUrl}?render=list`);
   await expect(pageA.getByRole('heading', { name: 'Desde a última vez' })).toBeVisible({
     timeout: 20_000,
   });

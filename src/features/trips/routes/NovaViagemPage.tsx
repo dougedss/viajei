@@ -23,7 +23,7 @@ export default function NovaViagemPage() {
             description: 'Já está guardada neste celular.',
             kind: 'ok',
           });
-          await navigate(`/viagens/${id}`, { replace: true });
+          await navigate(`/viagens/${id}/detalhes`, { replace: true });
         }}
         alternate={{
           label: 'Criar e colar roteiro',
@@ -31,7 +31,7 @@ export default function NovaViagemPage() {
             if (!session) return;
             const id = await createTrip(values, session.user.id);
             // a visão geral fica atrás: o "Voltar" da importação leva à viagem, não ao formulário
-            await navigate(`/viagens/${id}`, { replace: true });
+            await navigate(`/viagens/${id}/detalhes`, { replace: true });
             await navigate(`/viagens/${id}/importar`);
           },
         }}

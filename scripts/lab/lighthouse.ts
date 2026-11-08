@@ -175,9 +175,11 @@ export async function labLighthouse(ctx: LighthouseContext, today: string): Prom
     { key: 'entrar', path: '/entrar', session: false },
     // a lista: `/viagens` nunca redireciona (o `/` cai no Modo Viagem com viagem de hoje, D33)
     { key: 'viagens', path: '/viagens', session: true },
-    { key: 'visao_geral', path: `/viagens/${trip}`, session: true },
+    // as chaves ficam as da D162 para os números continuarem comparáveis; desde a fase 14 a viagem é o
+    // mapa: `visao_geral` mede Detalhes e `modo_viagem` mede a tela da viagem pela lista do dia
+    { key: 'visao_geral', path: `/viagens/${trip}/detalhes`, session: true },
     { key: 'roteiro_dia', path: `/viagens/${trip}/roteiro/${day}`, session: true },
-    { key: 'modo_viagem', path: `/viagens/${trip}/viagem?render=list`, session: true },
+    { key: 'modo_viagem', path: `/viagens/${trip}?render=list`, session: true },
   ];
   const dir = await mkdtemp(join(tmpdir(), 'viajei-lighthouse-'));
   let context: BrowserContext | null = null;
@@ -206,7 +208,7 @@ export async function labLighthouse(ctx: LighthouseContext, today: string): Prom
     }
     await signInPage(page, ctx.appUrl, ctx.email, ctx.password);
     // o aparelho puxa as viagens do lab-a antes de medir (a primeira abertura é do sync, não da tela)
-    await page.goto(`${ctx.appUrl}/viagens/${trip}`);
+    await page.goto(`${ctx.appUrl}/viagens/${trip}/detalhes`);
     await page.getByRole('heading', { name: 'Laboratório · estrada' }).waitFor({ timeout: 30_000 });
     install = await installability(context, page);
     // as telas de quem entrou: com o service worker e o precache, que é como elas abrem de verdade

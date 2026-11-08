@@ -61,7 +61,7 @@ export default function MembrosPage() {
   return (
     <div className="grid gap-5">
       <PageHeader
-        back={`/viagens/${trip.id}`}
+        back={`/viagens/${trip.id}/detalhes`}
         title="Time"
         eyebrow={<span className="text-[15px] text-ink-2">{trip.name}</span>}
       />

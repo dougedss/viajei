@@ -35,9 +35,10 @@ export async function novaViagem(
   if (dados.origem) await page.getByLabel('Origem').fill(dados.origem);
   if (dados.orcamento) await page.getByLabel('Orçamento').fill(dados.orcamento);
   await page.getByRole('button', { name: 'Criar viagem' }).click();
-  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}$/);
+  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
   await expect(page.getByRole('heading', { name: dados.nome })).toBeVisible();
-  return page.url();
+  // a URL da viagem (o mapa); a criação cai em Detalhes, a visão geral
+  return page.url().replace(/\/detalhes$/, '');
 }
 
 /** Da visão geral para o dia `n` do roteiro. */

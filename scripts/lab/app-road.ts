@@ -332,7 +332,7 @@ function appAgoraReserva(r: RoadRun): Promise<Check> {
     [
       'abrir o "Agora" da estrada',
       async () => {
-        await r.goA(`${r.trip(estrada.trip, '/viagem')}?render=list`);
+        await r.goA(`${r.trip(estrada.trip)}?render=list`);
         await page.getByRole('heading', { name: 'Agora' }).waitFor({ timeout: SLOW });
       },
     ],
@@ -547,7 +547,7 @@ function appMissoes(r: RoadRun): Promise<Check> {
       [
         'Chegamos! na cascata abre "Como foi?" com a missão',
         async () => {
-          await r.goA(`${r.trip(estrada.trip, '/viagem')}?render=list`);
+          await r.goA(`${r.trip(estrada.trip)}?render=list`);
           await page.getByRole('button', { name: 'Chegamos!' }).click({ timeout: SLOW });
           const sheet = page.getByRole('dialog', { name: `Como foi ${ROAD.estrada.nature}?` });
           await sheet.waitFor();
@@ -692,7 +692,7 @@ function appGastos(r: RoadRun): Promise<Check> {
       [
         'o "+ Gasto" já vem com a parada e Atrações',
         async () => {
-          await r.goA(`${r.trip(estrada.trip, '/viagem')}?render=list`);
+          await r.goA(`${r.trip(estrada.trip)}?render=list`);
           await page.getByRole('button', { name: 'Gasto', exact: true }).click({ timeout: SLOW });
           const sheet = page.getByRole('dialog', { name: 'Novo gasto' });
           await sheet.waitFor();
@@ -753,7 +753,7 @@ function appSairPendente(r: RoadRun): Promise<Check> {
       [
         'sem rede, mais uma foto na memória',
         async () => {
-          await r.goA(`${r.trip(estrada.trip, '/viagem')}?render=list`);
+          await r.goA(`${r.trip(estrada.trip)}?render=list`);
           await page.getByRole('button', { name: 'Minha memória' }).waitFor({ timeout: SLOW });
           await r.offline(true);
           await addPhoto(r, 'mirante.png');

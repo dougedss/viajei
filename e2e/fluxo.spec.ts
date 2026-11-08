@@ -57,7 +57,7 @@ test('o fluxo principal: viagem, roteiro, Partiu! e Chegamos!, "Como foi?", gast
   });
 
   await test.step('no Modo Viagem: Partiu!, Chegamos! e o "Como foi?"', async () => {
-    await page.goto(`${tripUrl}/viagem?render=list`);
+    await page.goto(`${tripUrl}?render=list`);
     const agora = page.getByRole('region', { name: 'Agora' });
     // a primeira visita à rota compila o Modo Viagem inteiro no Vite de dev
     await expect(agora).toBeVisible({ timeout: 15_000 });

@@ -30,7 +30,7 @@ function useLaunchRedirect(ongoingId: string | undefined): void {
   useEffect(() => {
     if (!launch || !ongoingId || redirected.has(ongoingId)) return;
     redirected.add(ongoingId);
-    void navigate(`/viagens/${ongoingId}/viagem`, { replace: true });
+    void navigate(`/viagens/${ongoingId}`, { replace: true });
   }, [launch, ongoingId, navigate]);
 }
 

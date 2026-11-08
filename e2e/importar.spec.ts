@@ -79,7 +79,7 @@ test('colar o roteiro do seed → revisar → editar uma parada → salvar: a vi
   await expect(page.getByText('4 dias · 17 paradas')).toBeVisible();
 
   await page.getByRole('button', { name: 'Salvar na viagem' }).click();
-  await expect(page).toHaveURL(new RegExp(`/viagens/${tripId}$`));
+  await expect(page).toHaveURL(new RegExp(`/viagens/${tripId}/detalhes$`));
   await expect(page.getByText('17 paradas em 4 dias', { exact: true })).toBeVisible();
 
   // no servidor, pela outbox: as paradas com a origem ai, a reserva com o código exato e o contato
@@ -158,7 +158,7 @@ test('sem rede, o botão explica e o rascunho continua no aparelho', async ({ pa
   // sair da tela e voltar: o texto vem do aparelho (o Vite de dev não serve sem rede, por isso a
   // volta é com rede; o que se prova é que o rascunho não vivia só na tela)
   await page.getByRole('link', { name: 'Voltar' }).click();
-  await expect(page).toHaveURL(new RegExp(`/viagens/${tripId}$`));
+  await expect(page).toHaveURL(new RegExp(`/viagens/${tripId}/detalhes$`));
   await page.getByRole('link', { name: 'Colar roteiro' }).click();
   await expect(page.getByRole('textbox', { name: 'Roteiro' })).toHaveValue(
     'Sexta 7h saída de casa\nSábado 9h cascata',

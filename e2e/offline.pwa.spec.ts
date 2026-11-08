@@ -45,9 +45,9 @@ test('sem rede, o app recarrega inteiro do aparelho, e a edição sem sinal sobr
     await expect(page.getByRole('group', { name: 'Cascata do Caracol' })).toBeVisible({
       timeout: 15_000,
     });
-    await page.goto(tripUrl);
+    await page.goto(`${tripUrl}/detalhes`);
     await expect(page.getByRole('heading', { name: nome })).toBeVisible();
-    await page.goto(`${tripUrl}/viagem?render=list`);
+    await page.goto(`${tripUrl}?render=list`);
     await expect(page.getByRole('region', { name: 'Agora' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('Cascata do Caracol').first()).toBeVisible();
     await page.goto(dayUrl);

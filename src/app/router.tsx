@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { createBrowserRouter } from 'react-router';
+import { createBrowserRouter, replace } from 'react-router';
 import { AuthLayout } from './layouts/AuthLayout.tsx';
 import { NotFound } from './NotFound.tsx';
 import { RequireSession } from './RequireSession.tsx';
@@ -54,9 +54,17 @@ export const router = createBrowserRouter([
                 path: '/viagens/nova',
                 lazy: page(() => import('@/features/trips/routes/NovaViagemPage.tsx')),
               },
+              // a viagem é o mapa (fase 14): tocar na viagem abre a maquete inteira na tela; a visão
+              // geral de antes vira "Detalhes". A tela é inteira (sem o cabeçalho do app): o layout lê
+              // o `handle`
               {
                 path: '/viagens/:tripId',
-                lazy: page(() => import('@/features/trips/routes/ViagemPage.tsx')),
+                handle: { fullscreen: true },
+                lazy: page(() => import('@/features/travel-mode/routes/ViagemPage.tsx')),
+              },
+              {
+                path: '/viagens/:tripId/detalhes',
+                lazy: page(() => import('@/features/trips/routes/DetalhesPage.tsx')),
               },
               {
                 path: '/viagens/:tripId/editar',
@@ -75,8 +83,12 @@ export const router = createBrowserRouter([
                 lazy: page(() => import('@/features/itinerary/routes/DiaPage.tsx')),
               },
               {
+                // a rota antiga do Modo Viagem: os avisos push (`navigatePath`) e os links guardados
+                // continuam valendo. `replace` troca a entrada do histórico e preserva a query
+                // (`?render=list`, `?diag=1`, `?dia=`), antes de renderizar qualquer coisa
                 path: '/viagens/:tripId/viagem',
-                lazy: page(() => import('@/features/travel-mode/routes/ModoViagemPage.tsx')),
+                loader: ({ params, request }) =>
+                  replace(`/viagens/${params.tripId ?? ''}${new URL(request.url).search}`),
               },
               {
                 path: '/viagens/:tripId/reservas',

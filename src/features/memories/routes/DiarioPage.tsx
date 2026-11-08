@@ -58,7 +58,7 @@ export default function DiarioPage() {
   return (
     <div className="grid gap-5">
       <PageHeader
-        back={`/viagens/${trip.id}`}
+        back={`/viagens/${trip.id}/detalhes`}
         title="Diário"
         eyebrow={<span className="label-caps text-accent-ink">{trip.name}</span>}
       />
@@ -69,9 +69,9 @@ export default function DiarioPage() {
           title="O diário começa no primeiro Chegamos!"
           text="Cada parada concluída entra aqui, com a hora real, as notas, as fotos e as memórias de todo o time."
           action={
-            <ButtonLink to={`/viagens/${trip.id}/viagem`} size="md">
+            <ButtonLink to={`/viagens/${trip.id}`} size="md">
               <Navigation className="size-5" aria-hidden="true" />
-              Abrir o Modo Viagem
+              Abrir a viagem
             </ButtonLink>
           }
         />

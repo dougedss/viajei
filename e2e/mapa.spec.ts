@@ -33,7 +33,7 @@ test('o mapa mostra o dia, a folha do pino e troca de dia', async ({ page, conte
   await entrar(page, user.email);
 
   // o atalho da visão geral
-  await page.goto(`/viagens/${tripId}`);
+  await page.goto(`/viagens/${tripId}/detalhes`);
   await page.getByRole('link', { name: /^Mapa:/ }).click();
   await expect(page).toHaveURL(new RegExp(`/viagens/${tripId}/mapa`));
 

@@ -27,8 +27,8 @@ test('reserva com print abre sem rede, depois de recarregar', async ({ page, con
   await page.getByRole('textbox', { name: 'Início' }).fill(dateInSaoPaulo(30));
   await page.getByRole('textbox', { name: 'Fim' }).fill(dateInSaoPaulo(31));
   await page.getByRole('button', { name: 'Criar viagem' }).click();
-  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}$/);
-  const tripUrl = page.url();
+  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
+  const tripUrl = page.url().replace(/\/detalhes$/, '');
 
   await page.getByRole('link', { name: 'Reservas: 0' }).click();
   await page.getByRole('link', { name: 'Adicionar reserva' }).click();

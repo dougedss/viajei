@@ -19,8 +19,8 @@ async function viagem(page: Page, nome: string): Promise<string> {
   await page.getByRole('textbox', { name: 'Início' }).fill(dateInSaoPaulo(30));
   await page.getByRole('textbox', { name: 'Fim' }).fill(dateInSaoPaulo(31));
   await page.getByRole('button', { name: 'Criar viagem' }).click();
-  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}$/);
-  const tripUrl = page.url();
+  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
+  const tripUrl = page.url().replace(/\/detalhes$/, '');
   await page.getByRole('link', { name: 'Editar roteiro' }).click();
   await page
     .getByRole('list', { name: 'Dias da viagem' })
@@ -92,7 +92,7 @@ test('marcar Antes e Mala até 100% antes da viagem mostra "Pronto para partir"'
     .toBe(3);
 
   // a visão geral mostra o selo; o cartão não volta (uma vez por aparelho)
-  await page.goto(tripUrl);
+  await page.goto(`${tripUrl}/detalhes`);
   await expect(
     page.getByRole('link', { name: /Pronto para partir\s+As duas listas estão fechadas/ }),
   ).toBeVisible();

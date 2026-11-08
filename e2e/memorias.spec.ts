@@ -36,8 +36,8 @@ test('Chegamos! → "Como foi?" → nota, memória e foto sem rede → diário',
   await page.getByRole('textbox', { name: 'Início' }).fill(dateInSaoPaulo());
   await page.getByRole('textbox', { name: 'Fim' }).fill(dateInSaoPaulo(1));
   await page.getByRole('button', { name: 'Criar viagem' }).click();
-  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}$/);
-  const tripUrl = page.url();
+  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
+  const tripUrl = page.url().replace(/\/detalhes$/, '');
 
   await page.getByRole('link', { name: 'Editar roteiro' }).click();
   await page
@@ -49,7 +49,7 @@ test('Chegamos! → "Como foi?" → nota, memória e foto sem rede → diário',
   await adicionarParada(page, { tipo: 'Origem', nome: 'Saída de casa', horario: '07:00' });
   await adicionarParada(page, { tipo: 'Natureza', nome: 'Cascata do Caracol', horario: '10:00' });
 
-  await page.goto(`${tripUrl}/viagem?render=list`);
+  await page.goto(`${tripUrl}?render=list`);
   await page.getByRole('button', { name: 'Partiu!' }).click();
   await expect(page.getByText('Saímos: Saída de casa', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Chegamos!' }).click();

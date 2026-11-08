@@ -119,7 +119,7 @@ test('uma viagem passada abre a retrospectiva, chega ao card final e exporta o c
   const { page, tripId } = await viagemPassada(browser);
 
   // a visão geral tem a entrada da retrospectiva (a viagem terminou ontem)
-  await page.goto(`/viagens/${tripId}`);
+  await page.goto(`/viagens/${tripId}/detalhes`);
   await page.locator('[data-retro-entry]').click();
   await expect(page).toHaveURL(new RegExp(`/viagens/${tripId}/retrospectiva$`));
 

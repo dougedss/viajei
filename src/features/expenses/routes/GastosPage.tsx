@@ -101,7 +101,7 @@ export default function GastosPage() {
   return (
     <div className="grid gap-5">
       <PageHeader
-        back={`/viagens/${trip.id}`}
+        back={`/viagens/${trip.id}/detalhes`}
         title="Gastos"
         eyebrow={<span className="label-caps text-accent-ink">{trip.name}</span>}
         actions={

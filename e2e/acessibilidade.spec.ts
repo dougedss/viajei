@@ -220,7 +220,7 @@ for (const tema of ['light', 'dark'] as const) {
     await entrar(page, user.email);
     const t = `/viagens/${futura.tripId}`;
     // o primeiro pull traz as duas viagens para o Dexie; daí em diante cada tela abre do aparelho
-    await page.goto(t);
+    await page.goto(`${t}/detalhes`);
     await expect(page.getByRole('heading', { name: 'Serra gaúcha' })).toBeVisible({
       timeout: 20_000,
     });
@@ -229,7 +229,7 @@ for (const tema of ['light', 'dark'] as const) {
       ['/', 'Suas viagens'],
       ['/perfil', 'Perfil'],
       ['/viagens/nova', 'Nova viagem'],
-      [t, 'Serra gaúcha'],
+      [`${t}/detalhes`, 'Serra gaúcha'],
       [`${t}/editar`, 'Editar viagem'],
       [`${t}/importar`, 'Colar roteiro'],
       [`${t}/roteiro`, 'Roteiro'],
@@ -270,7 +270,7 @@ for (const tema of ['light', 'dark'] as const) {
       ['noite', 20, TEXTO_PX * 1.1],
     ] as const) {
       await page.clock.setFixedTime(ultimo(hora));
-      const rota = `${t}/viagem?render=list`;
+      const rota = `${t}?render=list`;
       await page.goto(rota);
       await expect(page.getByRole('region', { name: 'Agora' })).toBeVisible({ timeout: 15_000 });
       const nome = `${rota} (${quando})`;

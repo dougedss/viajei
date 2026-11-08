@@ -134,7 +134,7 @@ export default function MapaPage() {
   return (
     <div className="grid gap-4 pb-[max(16px,env(safe-area-inset-bottom))]">
       <PageHeader
-        back={`/viagens/${trip.id}`}
+        back={`/viagens/${trip.id}/detalhes`}
         title="Mapa"
         eyebrow={<span className="text-[15px] text-ink-2">{trip.name}</span>}
       />

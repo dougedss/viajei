@@ -281,7 +281,7 @@ export async function appMapaClima(ctx: MapContext, today: string): Promise<Chec
     }
     await clima.run('a faixa da visão geral tem os números de hoje', async () => {
       await c.setOffline(false);
-      await p.goto(`${appUrl}/viagens/${trip}`);
+      await p.goto(`${appUrl}/viagens/${trip}/detalhes`);
       const tile = p.locator(`[data-weather-strip] [data-weather-day="${today}"]`);
       await tile.locator('[data-weather-max]').waitFor({ timeout: 30_000 });
       const max = (await tile.locator('[data-weather-max]').textContent()) ?? '';

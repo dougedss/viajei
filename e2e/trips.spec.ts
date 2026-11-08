@@ -25,7 +25,7 @@ async function criarViagem(page: Page, nome: string) {
   await page.getByLabel('Origem').fill('Papanduva/SC');
   await page.getByLabel('Orçamento').fill('3.000,00');
   await page.getByRole('button', { name: 'Criar viagem' }).click();
-  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}$/);
+  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
   await expect(page.getByRole('heading', { name: nome })).toBeVisible();
 }
 

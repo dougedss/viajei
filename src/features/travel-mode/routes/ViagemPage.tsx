@@ -82,7 +82,7 @@ import { dayState, isDepartureNode } from '../rules.ts';
 
 const UNDO_MS = 10_000;
 
-export default function ModoViagemPage() {
+export default function ViagemPage() {
   const { tripId = '' } = useParams();
   const { session } = useSession();
   const trip = useTrip(tripId);
@@ -111,7 +111,7 @@ export default function ModoViagemPage() {
       <header className="grid grid-cols-1 gap-1">
         <div className="flex items-center justify-between gap-2">
           <Link
-            to={`/viagens/${trip.id}`}
+            to="/viagens"
             className="flex min-h-12 min-w-0 items-center mv-text-15 font-semibold text-ink-2"
           >
             <span className="truncate">{trip.name}</span>

@@ -1,4 +1,4 @@
-import { Bell, ClipboardPaste, Navigation, Pencil, Route, Trash2, Users } from 'lucide-react';
+import { Bell, ClipboardPaste, Pencil, Route, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { NotFound } from '@/app/NotFound.tsx';
@@ -32,7 +32,12 @@ import { WeatherStrip } from '@/features/weather/components/WeatherStrip.tsx';
 import { useTripWeather } from '@/features/weather/queries.ts';
 import { useSession } from '@/lib/supabase/session.ts';
 
-export default function ViagemPage() {
+/**
+ * "Detalhes" (`/viagens/:tripId/detalhes`): a visão geral da viagem, o centro das telas de detalhe
+ * (roteiro, reservas, gastos, listas, contatos, mapa 2D, diário, garagem, avisos, membros). A viagem
+ * em si é o mapa (`/viagens/:tripId`, fase 14): o "Voltar" daqui leva a ele.
+ */
+export default function DetalhesPage() {
   const { tripId = '' } = useParams();
   // tudo numa leitura: a tela espera e pinta inteira, sem seção chegando depois (D162)
   const overview = useTripOverview(tripId);
@@ -58,7 +63,7 @@ export default function ViagemPage() {
   return (
     <div className="grid gap-5">
       <PageHeader
-        back="/viagens"
+        back={`/viagens/${trip.id}`}
         title={trip.name}
         actions={
           <ButtonLink
@@ -199,7 +204,7 @@ export default function ViagemPage() {
             }
           />
         ) : (
-          <Card className="grid gap-3">
+          <Card>
             <p className="flex items-center gap-2 text-[16px]">
               <Route className="size-5 shrink-0 text-accent-ink" aria-hidden="true" />
               <span>
@@ -207,10 +212,6 @@ export default function ViagemPage() {
                 {tripDays.length === 1 ? 'dia' : 'dias'}
               </span>
             </p>
-            <ButtonLink to={`/viagens/${trip.id}/viagem`} size="md">
-              <Navigation className="size-5" aria-hidden="true" />
-              Abrir o Modo Viagem
-            </ButtonLink>
           </Card>
         )}
       </section>

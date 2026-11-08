@@ -167,7 +167,7 @@ export async function appImportar(ctx: ImportContext, today: string): Promise<Ch
     });
     await step('salva na viagem', async () => {
       await p.getByRole('button', { name: 'Salvar na viagem' }).click();
-      await p.waitForURL(`${appUrl}/viagens/${trip}`);
+      await p.waitForURL(`${appUrl}/viagens/${trip}/detalhes`);
     });
     await step('o servidor tem as paradas, a reserva e o contato', async () => {
       const end = Date.now() + 60_000;

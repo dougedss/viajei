@@ -21,8 +21,8 @@ async function criarViagem(
   await page.getByRole('textbox', { name: 'Fim' }).fill(dateInSaoPaulo(dados.fim));
   if (dados.orcamento) await page.getByLabel('Orçamento').fill(dados.orcamento);
   await page.getByRole('button', { name: 'Criar viagem' }).click();
-  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}$/);
-  return page.url();
+  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
+  return page.url().replace(/\/detalhes$/, '');
 }
 
 async function adicionarParada(page: Page, dados: { tipo: string; nome: string; horario: string }) {
@@ -129,7 +129,7 @@ test('gasto pelo "+ Gasto" do Modo Viagem aparece no total e na barra do orçame
   await adicionarParada(page, { tipo: 'Origem', nome: 'Saída de casa', horario: '07:00' });
   await adicionarParada(page, { tipo: 'Natureza', nome: 'Cascata do Caracol', horario: '10:00' });
 
-  await page.goto(`${tripUrl}/viagem?render=list`);
+  await page.goto(`${tripUrl}?render=list`);
   await page.getByRole('button', { name: 'Partiu!' }).click();
   await expect(page.getByText('Saímos: Saída de casa', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Chegamos!' }).click();

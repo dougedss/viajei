@@ -26,7 +26,7 @@ test('a faixa da visão geral, o dia e o "atualizado às" sem rede', async ({ pa
   const { tripId, days, dates } = await viagemNaSerra(user.id, 1);
   await entrar(page, user.email);
 
-  await page.goto(`/viagens/${tripId}`);
+  await page.goto(`/viagens/${tripId}/detalhes`);
   const strip = page.locator('[data-weather-strip]');
   await expect(strip).toBeVisible({ timeout: 20_000 });
   const first = strip.locator(`[data-weather-day="${dates[0]}"]`);
@@ -56,7 +56,7 @@ test('a faixa da visão geral, o dia e o "atualizado às" sem rede', async ({ pa
   ).toHaveCount(0);
 
   // sem rede: o que está guardado continua, com a hora em que veio
-  await page.goto(`/viagens/${tripId}`);
+  await page.goto(`/viagens/${tripId}/detalhes`);
   await expect(strip.locator(`[data-weather-day="${dates[0]}"] [data-weather-max]`)).toHaveText(
     '28°',
   );
@@ -78,7 +78,7 @@ test('o dia longe demais diz a partir de quando a previsão aparece', async ({ p
   const { tripId, days, dates } = await viagemNaSerra(user.id, 40);
   await entrar(page, user.email);
 
-  await page.goto(`/viagens/${tripId}`);
+  await page.goto(`/viagens/${tripId}/detalhes`);
   const strip = page.locator('[data-weather-strip]');
   await expect(strip.locator(`[data-weather-day="${dates[0]}"] [data-weather-later]`)).toHaveText(
     `previsão a partir de ${dm(dateInSaoPaulo(25))}`,

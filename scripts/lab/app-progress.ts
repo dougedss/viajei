@@ -377,7 +377,7 @@ export async function appProgressao(
       [
         'A abre o "Agora" e toca Partiu!',
         async () => {
-          await pa.goto(url('/viagem?render=list'));
+          await pa.goto(url('?render=list'));
           await pa.getByRole('button', { name: 'Partiu!' }).click({ timeout: SLOW });
           await pa.getByText('Saímos: Saída do laboratório', { exact: true }).waitFor();
         },
@@ -417,7 +417,7 @@ export async function appProgressao(
       [
         'o cartão aparece na visão geral',
         async () => {
-          await pa.goto(url());
+          await pa.goto(url('/detalhes'));
           const card = pa.getByRole('dialog', { name: 'Primeiro pé na estrada' });
           // de madrugada o Madrugador vem junto, na frente: "Agora não" nos outros
           for (let i = 0; i < 6 && !(await card.isVisible()); i++) {
@@ -488,7 +488,7 @@ export async function appProgressao(
           const B = await newContext(browser, ctx, false);
           pageB = B.page;
           await signInPage(B.page, appUrl, ctx.emails.b, ctx.passwords.b);
-          await B.page.goto(url());
+          await B.page.goto(url('/detalhes'));
           await until(
             async () =>
               must(

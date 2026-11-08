@@ -132,7 +132,7 @@ export default function ListasPage() {
   return (
     <div className="grid gap-5">
       <PageHeader
-        back={`/viagens/${trip.id}`}
+        back={`/viagens/${trip.id}/detalhes`}
         title="Listas"
         eyebrow={<span className="label-caps text-accent-ink">{trip.name}</span>}
       />

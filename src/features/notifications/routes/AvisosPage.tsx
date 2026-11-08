@@ -167,7 +167,11 @@ export default function AvisosPage() {
 
   return (
     <div className="grid gap-6">
-      <PageHeader back={`/viagens/${trip.id}`} title="Avisos" eyebrow={<Chip>{trip.name}</Chip>} />
+      <PageHeader
+        back={`/viagens/${trip.id}/detalhes`}
+        title="Avisos"
+        eyebrow={<Chip>{trip.name}</Chip>}
+      />
 
       <DeviceSection uid={uid} />
 

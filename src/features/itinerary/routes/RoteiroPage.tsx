@@ -23,15 +23,11 @@ export default function RoteiroPage() {
   return (
     <div className="grid gap-5">
       <PageHeader
-        back={`/viagens/${trip.id}`}
+        back={`/viagens/${trip.id}/detalhes`}
         title="Roteiro"
         eyebrow={<span className="text-[15px] text-ink-2">{trip.name}</span>}
         actions={
-          <ButtonLink
-            to={`/viagens/${trip.id}/viagem`}
-            size="sm"
-            aria-label="Agora: abrir o Modo Viagem"
-          >
+          <ButtonLink to={`/viagens/${trip.id}`} size="sm" aria-label="Agora: abrir a viagem">
             <Navigation className="size-4" aria-hidden="true" />
             Agora
           </ButtonLink>
