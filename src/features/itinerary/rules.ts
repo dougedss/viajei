@@ -1,7 +1,7 @@
 import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { comparePosition } from '@/lib/ids/position.ts';
 import type { DayRoute, Reservation, RouteLeg, Stop, TripDay } from '@/lib/db/schema.ts';
-import { formatDayNumeric } from '@/lib/time/index.ts';
+import { formatDayNumeric, formatStamp } from '@/lib/time/index.ts';
 
 /** Datas de `start` a `end`, inclusive, no formato das colunas `date`. */
 export function datesBetween(start: string, end: string): string[] {
@@ -91,13 +91,42 @@ export function isLocated(stop: Stop): stop is LocatedStop {
   return stop.lat !== null && stop.lng !== null;
 }
 
-/** Só as paradas com coordenada, na ordem: são os waypoints da rota do dia. */
+/**
+ * A parada que o GPS registrou sozinho com o mapa aberto (fase 15): um fato do dia, com a hora
+ * medida, e não um plano. Aparece na lista, na maquete e no diário, mas não é ponto de passagem:
+ * a rota do dia não muda (nem é pedida de novo ao servidor) porque o carro parou num posto.
+ */
+export function isAutoStop(stop: Pick<Stop, 'source'>): boolean {
+  return stop.source === 'auto';
+}
+
+/** "Registrada sozinha pelo GPS · das 14:20 às 14:35": as horas medidas da chegada e da saída. */
+export function autoLine(stop: Pick<Stop, 'done_at' | 'departed_at'>): string {
+  const base = 'Registrada sozinha pelo GPS';
+  if (!stop.done_at) return base;
+  const from = formatStamp(stop.done_at);
+  return stop.departed_at
+    ? `${base} · das ${from} às ${formatStamp(stop.departed_at)}`
+    : `${base} · chegada às ${from}`;
+}
+
+/** Ponto de passagem da rota do dia: uma parada do roteiro com coordenada. */
+export function isWaypoint(stop: Stop): stop is LocatedStop {
+  return isLocated(stop) && !isAutoStop(stop);
+}
+
+/** A parada do roteiro que vem depois da de índice `i` (a automática no meio não separa as duas). */
+function nextPlanned(ordered: readonly Stop[], i: number): Stop | undefined {
+  return ordered.slice(i + 1).find((s) => !isAutoStop(s));
+}
+
+/** Só as paradas do roteiro com coordenada, na ordem: são os waypoints da rota do dia. */
 export function routeWaypoints(
   stops: readonly Stop[],
 ): { stop: LocatedStop; lngLat: [number, number] }[] {
   return sortStops(stops)
     .filter((s) => s.deleted_at === null)
-    .filter(isLocated)
+    .filter(isWaypoint)
     .map((stop) => ({ stop, lngLat: [stop.lng, stop.lat] }));
 }
 
@@ -108,8 +137,8 @@ export function roundTravelMinutes(seconds: number): number {
 
 /**
  * Sugestão de `travel_minutes_to_next` a partir dos trechos da rota real, só para paradas sem
- * valor e cujo próximo na lista é o próximo waypoint (sem parada sem coordenada no meio). A
- * pessoa confirma; a sugestão nunca grava sozinha.
+ * valor e cujo próximo na lista é o próximo waypoint (sem parada sem coordenada no meio; uma
+ * automática no meio não conta). A pessoa confirma; a sugestão nunca grava sozinha.
  */
 export function suggestTravel(
   stops: readonly Stop[],
@@ -125,7 +154,7 @@ export function suggestTravel(
     const b = wps[k + 1]?.stop;
     if (!leg || !a || !b || a.travel_minutes_to_next !== null) continue;
     const ia = ordered.findIndex((s) => s.id === a.id);
-    if (ordered[ia + 1]?.id !== b.id) continue;
+    if (nextPlanned(ordered, ia)?.id !== b.id) continue;
     out.set(a.id, roundTravelMinutes(leg.duration_s));
   }
   return out;
@@ -149,7 +178,8 @@ export function formatKm(meters: number): string {
 
 /**
  * O trecho da rota real que sai de cada parada, quando a parada seguinte na lista é o próximo
- * waypoint (sem parada sem coordenada no meio). Para mostrar km e duração entre os nós.
+ * waypoint (sem parada sem coordenada no meio; uma automática no meio não conta). Para mostrar km
+ * e duração entre os nós.
  */
 export function legsByStop(
   stops: readonly Stop[],
@@ -165,7 +195,7 @@ export function legsByStop(
     const b = wps[k + 1]?.stop;
     if (!leg || !a || !b) continue;
     const ia = ordered.findIndex((s) => s.id === a.id);
-    if (ordered[ia + 1]?.id === b.id) out.set(a.id, leg);
+    if (nextPlanned(ordered, ia)?.id === b.id) out.set(a.id, leg);
   }
   return out;
 }

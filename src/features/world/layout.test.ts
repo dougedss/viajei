@@ -5,6 +5,7 @@ import type { DayRoute } from '@/lib/db/schema.ts';
 import { makeStop } from '@/test/factories.ts';
 import { gemeoStops } from '@/test/fixtures/dia-gemeo.ts';
 import { MINIATURE_BOX } from '@/art/stops/types.ts';
+import { indexRoute, projectOntoRoute } from '@/lib/geo/project.ts';
 import {
   buildLayout,
   fitCamera,
@@ -292,5 +293,58 @@ describe('layout misto: parada sem coordenada entre duas com rota', () => {
     expect(layout.fractionToS(0)).toBeCloseTo(layout.nodes[1]?.s ?? -1, 6);
     expect(layout.bands[0]?.kind).toBe('interior');
     expect(layout.bands[0]?.to_km).toBeCloseTo(30, 1);
+  });
+});
+
+describe('layout com uma parada que se registrou sozinha (fase 15)', () => {
+  const [origin, park, hotel, restaurant] = gemeoStops() as [
+    ReturnType<typeof makeStop>,
+    ReturnType<typeof makeStop>,
+    ReturnType<typeof makeStop>,
+    ReturnType<typeof makeStop>,
+  ];
+  // um posto à beira da estrada, num ponto da rota real entre a saída e o parque
+  const at = route.geometry[Math.floor(route.geometry.length * 0.3)] ?? [0, 0];
+  const posto = makeStop({
+    kind: 'fuel',
+    name: 'Posto da estrada',
+    source: 'auto',
+    lng: at[0] + 0.0005,
+    lat: at[1],
+    done_at: '2026-12-11T13:00:00.000Z',
+  });
+  const stops = [origin, posto, park, hotel, restaurant];
+
+  it('não é ponto de passagem: a rota real continua valendo, sem pedir outra', () => {
+    const layout = buildLayout({ dayId: 'auto', stops, route, place: place(), viewport: PHONE });
+    expect(layout.hasRoute).toBe(true);
+    expect(layout.nodes).toHaveLength(5);
+    // os outros nós ficam na quilometragem dos trechos, como sem ela
+    expect(layout.nodes[2]?.km).toBeCloseTo(448.063, 2);
+    expect(layout.realTotalKm).toBeCloseTo(layout.totalKm, 6);
+  });
+
+  it('fica onde a posição dela cai na estrada, entre os vizinhos', () => {
+    const layout = buildLayout({ dayId: 'auto', stops, route, place: place(), viewport: PHONE });
+    const index = indexRoute(route.geometry);
+    const expected =
+      projectOntoRoute(index, [posto.lng ?? 0, posto.lat ?? 0]).fraction *
+      (layout.realTotalKm ?? 0);
+    expect(layout.nodes[1]?.km).toBeCloseTo(expected, 3);
+    expect(layout.nodes[1]?.km).toBeGreaterThan(layout.nodes[0]?.km ?? 0);
+    expect(layout.nodes[1]?.km).toBeLessThan(layout.nodes[2]?.km ?? 0);
+  });
+
+  it('depois da última parada do roteiro, presa no fim da estrada', () => {
+    const late = { ...posto, lng: route.geometry[0]?.[0] ?? 0, lat: route.geometry[0]?.[1] ?? 0 };
+    const layout = buildLayout({
+      dayId: 'auto',
+      stops: [origin, park, hotel, restaurant, late],
+      route,
+      place: place(),
+      viewport: PHONE,
+    });
+    expect(layout.hasRoute).toBe(true);
+    expect(layout.nodes[4]?.km).toBeCloseTo(layout.nodes[3]?.km ?? -1, 6);
   });
 });

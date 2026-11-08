@@ -677,3 +677,67 @@ describe('time, sem sinal, costa e serra', () => {
     expect(keysOf(snap({ stops: [a, b, c] }))).not.toContain('downhill');
   });
 });
+
+describe('a parada que se registrou sozinha (fase 15): os pontos de uma chegada e nada a mais', () => {
+  const origin = newStop({
+    kind: 'origin',
+    name: 'Saída',
+    time: '07:00',
+    departed_at: at('07:02'),
+    done_at: at('07:02'),
+    travel_minutes_to_next: 60,
+  });
+  const posto = newStop({
+    kind: 'fuel',
+    name: 'Posto da estrada',
+    source: 'auto',
+    done_at: at('08:10'),
+    departed_at: at('08:25'),
+  });
+  const vinicola = newStop({ kind: 'winery', name: 'Vinícola', time: '10:00' });
+
+  it('conta como parada feita: 10 para o time, como uma chegada', () => {
+    expect(xpOf(snap({ stops: [origin, posto, vinicola] }))).toContain(`stop_done:${posto.id}:10`);
+  });
+
+  it('não é saída do roteiro, e não tira a pontualidade da saída de antes', () => {
+    const t = {
+      trip: makeTrip(),
+      days: [{ day: makeDay(), stops: [origin, posto, vinicola] }],
+      stops: [origin, posto, vinicola],
+    };
+    const ds = departures(t, []);
+    expect(ds.map((d) => d.stop.id)).toEqual([origin.id]);
+    expect(isOnTime(ds[0] ?? { at: 0, target: null })).toBe(true);
+    // uma parada comum antes da automática: o "sair às" é o da próxima do roteiro, não o dela
+    const park = newStop({
+      kind: 'nature',
+      name: 'Parque',
+      done_at: at('08:00'),
+      departed_at: at('08:05'),
+      travel_minutes_to_next: 60,
+    });
+    const day = [origin, park, posto, vinicola];
+    const parkDeparture = departures(
+      { trip: makeTrip(), days: [{ day: makeDay(), stops: day }], stops: day },
+      [],
+    ).find((d) => d.stop.id === park.id);
+    expect(parkDeparture?.target).toBe(Date.parse(at('09:00')));
+  });
+
+  it('não entra nas conquistas: nem a primeira parada, nem a viagem concluída', () => {
+    expect(achOf(snap({ stops: [posto] }), 'first_stop')).toBeNull();
+    expect(isTripConcluded(makeTrip(), [posto], AFTER)).toBe(false);
+    expect(xpOf(snap({ now: AFTER, stops: [posto] }))).not.toContain(
+      `trip_completed:${TRIP_ID}:100`,
+    );
+    const vinhedo = {
+      ...posto,
+      id: 'eeeeeeee-0000-4000-8000-000000000001',
+      kind: 'winery',
+      position: 'q1',
+    };
+    const duas = { ...vinhedo, id: 'eeeeeeee-0000-4000-8000-000000000002', position: 'q2' };
+    expect(achOf(snap({ stops: [vinhedo, duas] }), 'winery_2')).toBeNull();
+  });
+});

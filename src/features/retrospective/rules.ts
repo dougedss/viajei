@@ -1,7 +1,7 @@
 import { isDepartureKind, type AchievementKey } from '@shared/constants.ts';
 import { haversineM } from '@shared/geo.ts';
 import { toCents } from '@/features/expenses/rules.ts';
-import { activeStops, isLocated } from '@/features/itinerary/rules.ts';
+import { activeStops, isWaypoint } from '@/features/itinerary/rules.ts';
 import type {
   Attachment,
   ChecklistItem,
@@ -51,12 +51,15 @@ export function retroState(
 }
 
 // ------------------------------------------------------------------ os trechos rodados
-/** Os trechos da rota de um dia, um por par de paradas com coordenada, com as paradas das pontas. */
+/**
+ * Os trechos da rota de um dia, um por par de pontos de passagem (as paradas do roteiro com
+ * coordenada; a automática não é ponto de passagem), com as paradas das pontas.
+ */
 export function dayLegs(
   stops: readonly Stop[],
   route: Pick<DayRoute, 'legs'> | null,
 ): { from: Stop; to: Stop; leg: RouteLeg }[] {
-  const wps = activeStops(stops).filter(isLocated);
+  const wps = activeStops(stops).filter(isWaypoint);
   if (route?.legs.length !== wps.length - 1) return [];
   return route.legs.flatMap((leg, k) => {
     const from = wps[k];
@@ -246,7 +249,7 @@ export function spliceTrip(
     if (active.length === 0) continue;
     dayStarts.push(stops.length);
     stops.push(...active);
-    const wps = active.filter(isLocated);
+    const wps = active.filter(isWaypoint);
     const pieces = dayLegs(active, route);
     if (wps.length >= 2 && (!route || pieces.length === 0)) {
       valid = false;
@@ -279,7 +282,7 @@ export function spliceTrip(
     lastPoint = route.geometry.at(-1) ?? lastPoint;
     lastAlt = route.elevation.at(-1)?.[1] ?? lastAlt;
   }
-  const located = stops.filter(isLocated).length;
+  const located = stops.filter(isWaypoint).length;
   return {
     stops,
     dayStarts,

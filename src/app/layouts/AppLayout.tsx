@@ -16,6 +16,7 @@ import { XpGainHost } from '@/features/progression/components/XpGainHost.tsx';
 import { startProgress, stopProgress } from '@/features/progression/engine.ts';
 import { SyncChip } from '@/features/sync/components/SyncChip.tsx';
 import { SyncNotices } from '@/features/sync/components/SyncNotices.tsx';
+import { useAutoStopNaming } from '@/features/travel-mode/auto-stops.ts';
 import { invitesKeys } from '@/features/trips/queries.ts';
 import { syncEngine } from '@/lib/db/sync/engine.ts';
 import { supabase } from '@/lib/supabase/client.ts';
@@ -48,6 +49,8 @@ export function AppLayout() {
   const fullscreen = useMatches().some((m) => isFullscreen(m.handle));
   useServiceWorkerMessages();
   useClearBadgeWhenVisible();
+  // a parada que nasceu sem sinal ganha o nome do OSM quando a rede volta, em qualquer tela
+  useAutoStopNaming();
 
   useEffect(() => {
     if (!uid) return;

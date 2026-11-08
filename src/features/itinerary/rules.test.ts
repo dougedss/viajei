@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { makeDay, makeReservation, makeStop } from '@/test/factories.ts';
 import {
+  autoLine,
+  isWaypoint,
+  legsByStop,
   blockedMessage,
   datesBetween,
   dayTotals,
@@ -167,5 +170,45 @@ describe('paradas e rota', () => {
       travel_minutes: 420,
     });
     expect(dayTotals(stops, null).distance_m).toBeNull();
+  });
+});
+
+describe('a parada que se registrou sozinha (fase 15) não é ponto de passagem', () => {
+  const a = makeStop({
+    id: 'a',
+    position: 'a0',
+    lat: -29.5,
+    lng: -51.3,
+    done_at: '2026-12-12T13:00:00.000Z',
+  });
+  const auto = makeStop({
+    id: 'auto',
+    position: 'a0V',
+    source: 'auto',
+    lat: -29.49,
+    lng: -51.25,
+    done_at: '2026-12-12T17:20:00.000Z',
+    departed_at: '2026-12-12T17:35:00.000Z',
+  });
+  const b = makeStop({ id: 'b', position: 'a1', lat: -29.4, lng: -51.1 });
+
+  it('a rota do dia continua com os mesmos pontos: nada de rota nova por causa de um posto', () => {
+    expect(isWaypoint(auto)).toBe(false);
+    expect(isWaypoint(a)).toBe(true);
+    expect(routeWaypoints([a, auto, b]).map((w) => w.stop.id)).toEqual(['a', 'b']);
+  });
+
+  it('o trecho de a até b continua sendo de a, com a automática no meio da lista', () => {
+    const route = { legs: [{ distance_m: 12_000, duration_s: 900 }] };
+    expect(legsByStop([a, auto, b], route).get('a')).toEqual({
+      distance_m: 12_000,
+      duration_s: 900,
+    });
+  });
+
+  it('a linha das horas medidas', () => {
+    expect(autoLine(auto)).toMatch(/^Registrada sozinha pelo GPS · das \d\d:\d\d às \d\d:\d\d$/);
+    expect(autoLine({ ...auto, departed_at: null })).toMatch(/· chegada às \d\d:\d\d$/);
+    expect(autoLine({ done_at: null, departed_at: null })).toBe('Registrada sozinha pelo GPS');
   });
 });

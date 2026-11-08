@@ -73,7 +73,8 @@ import { gainXp, tappedRect } from '@/features/progression/xp-gain.ts';
 import { daySummary } from '@/features/weather/rules.ts';
 import { useTripWeather } from '@/features/weather/queries.ts';
 import { arrive, arriveAt, depart, skip, type Undoable } from '../actions.ts';
-import { useCatchup } from '../catchup.ts';
+import { useAutoStops } from '../auto-stops.ts';
+import { useCatchup, type Catchup } from '../catchup.ts';
 import {
   PassedQuestion,
   PositionAsk,
@@ -303,6 +304,8 @@ function DayView({
     },
     [],
   );
+  // o catch-up de agora, para as ações marcarem como vistos os eventos que elas mesmas produzem
+  const cuRef = useRef<Catchup | null>(null);
 
   const run = (
     label: string,
@@ -353,6 +356,26 @@ function DayView({
   const arriveSeen = state.next ? [`arrived:${state.next.id}`] : [];
   const skipSeen = state.next ? [`skipped:${state.next.id}`] : [];
 
+  // a parada fora do roteiro que se registra sozinha (fase 15): o detector lê cada leitura do
+  // acompanhamento; a parada nasce na outbox e chega aqui com o toast de Desfazer, como as marcações
+  const autoStops = useAutoStops({
+    tripId,
+    dayId,
+    uid,
+    active,
+    stops: state.stops,
+    route: route ?? null,
+    onRegistered: (stop, undo) => {
+      cuRef.current?.markSeen([`arrived:${stop.id}`]);
+      toast.show({
+        title: `Parada registrada: ${stop.name}`,
+        duration: UNDO_MS,
+        kind: 'ok',
+        action: { label: 'Desfazer', onClick: () => void undo() },
+      });
+    },
+  });
+
   // Partiu! e Chegamos! pelo GPS sempre que o mapa está aberto (fase 14): com a tela visível, o dia
   // de hoje, a viagem em andamento e a posição permitida
   const live = useLivePosition({
@@ -370,6 +393,7 @@ function DayView({
         'arrive',
         'live',
       ),
+    onFix: autoStops.onFix,
   });
   const cu = useCatchup({
     tripId,
@@ -383,7 +407,6 @@ function DayView({
     liveFix: live.fix,
     liveTracking: live.tracking,
   });
-  const cuRef = useRef<typeof cu | null>(null);
   useEffect(() => {
     cuRef.current = cu;
   }, [cu]);

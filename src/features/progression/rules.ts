@@ -5,7 +5,7 @@ import {
   type AchievementKey,
   type XpKind,
 } from '@shared/constants.ts';
-import { activeStops, isLocated } from '@/features/itinerary/rules.ts';
+import { activeStops, isAutoStop, isLocated, isWaypoint } from '@/features/itinerary/rules.ts';
 import { toCents } from '@/features/expenses/rules.ts';
 import { parseTrackPoints } from '@/features/travel-mode/track.ts';
 import type {
@@ -135,11 +135,13 @@ function nextDate(date: string): string {
  */
 export function isTripConcluded(
   trip: Pick<Trip, 'end_date'>,
-  stops: readonly Pick<Stop, 'done_at' | 'deleted_at'>[],
+  stops: readonly Pick<Stop, 'done_at' | 'deleted_at' | 'source'>[],
   now: number,
 ): boolean {
+  // a parada que se registrou sozinha não conclui viagem nenhuma: parar não dá ponto (fase 15)
   return (
-    todayInTripZone(now) > trip.end_date && stops.some((s) => s.deleted_at === null && s.done_at)
+    todayInTripZone(now) > trip.end_date &&
+    stops.some((s) => s.deleted_at === null && s.done_at && !isAutoStop(s))
   );
 }
 
@@ -247,14 +249,15 @@ export function departures(trip: TripData, tracks: readonly TripTrack[]): Depart
   for (const { day, stops } of trip.days) {
     const dayTracks = tracks.filter((t) => t.trip_day_id === day.id);
     stops.forEach((stop, i) => {
-      if (!stop.departed_at) return;
+      // a saída de uma parada que se registrou sozinha não é uma saída do roteiro (fase 15)
+      if (!stop.departed_at || isAutoStop(stop)) return;
       const node = isDepartureKind(stop.kind);
-      if (node && stops.slice(0, i).some((p) => p.departed_at !== null)) return;
+      if (node && stops.slice(0, i).some((p) => p.departed_at !== null && !isAutoStop(p))) return;
       let target: number | null = null;
       if (node) {
         target = stop.time ? wallToInstant(day.date, stop.time.slice(0, 5)) : null;
       } else {
-        const next = stops.slice(i + 1).find((n) => !n.skipped);
+        const next = stops.slice(i + 1).find((n) => !n.skipped && !isAutoStop(n));
         if (next?.time && stop.travel_minutes_to_next !== null) {
           target =
             wallToInstant(day.date, next.time.slice(0, 5)) - stop.travel_minutes_to_next * 60_000;
@@ -319,7 +322,7 @@ export function maxDescent(
   route: Pick<DayRoute, 'legs' | 'elevation'> | null,
 ): { drop: number; until: Stop } | null {
   if (!route) return null;
-  const wps = stops.filter(isLocated);
+  const wps = stops.filter(isWaypoint);
   if (wps.length < 2 || route.legs.length !== wps.length - 1) return null;
   const bounds: number[] = [0];
   for (const leg of route.legs) bounds.push((bounds.at(-1) ?? 0) + leg.distance_m);
@@ -387,7 +390,9 @@ export function deriveProgress(s: ProgressSnapshot): Progress {
     for (const stop of t.stops) {
       if (!stop.done_at) continue;
       add('stop_done', stop.id, tripId);
-      allDone.push({ stop, trip_id: tripId, at: stop.done_at });
+      // a parada que se registrou sozinha vale os pontos de uma chegada e nada a mais (fase 15): não
+      // entra nas conquistas, que são do roteiro
+      if (!isAutoStop(stop)) allDone.push({ stop, trip_id: tripId, at: stop.done_at });
     }
     // saídas pontuais e a sequência de três
     let streak = 0;
@@ -406,7 +411,7 @@ export function deriveProgress(s: ProgressSnapshot): Progress {
     // duas vinícolas no mesmo dia
     for (const { stops } of t.days) {
       const done = stops
-        .filter((st) => st.kind === 'winery' && st.done_at)
+        .filter((st) => st.kind === 'winery' && st.done_at && !isAutoStop(st))
         .map((st) => ({ at: st.done_at ?? '', trip_id: tripId }));
       const second = nth(done, WINERY_SAME_DAY);
       if (second) winery.push(second);
@@ -460,7 +465,9 @@ export function deriveProgress(s: ProgressSnapshot): Progress {
     }
     // todas as paradas avaliadas num dia terminado (as de saída nunca pedem nota)
     for (const { day, stops } of t.days) {
-      const rated = stops.filter((st) => st.done_at && !isDepartureKind(st.kind));
+      const rated = stops.filter(
+        (st) => st.done_at && !isDepartureKind(st.kind) && !isAutoStop(st),
+      );
       if (rated.length === 0 || !dayFinished(day, stops, today)) continue;
       const mine = rated.map((st) =>
         s.memories.find((m) => m.stop_id === st.id && m.user_id === s.uid && m.rating !== null),
@@ -475,7 +482,7 @@ export function deriveProgress(s: ProgressSnapshot): Progress {
       }
     }
     // nenhuma parada pendente (pulada não impede, D115) e pelo menos uma concluída
-    const done = t.stops.filter((st) => st.done_at);
+    const done = t.stops.filter((st) => st.done_at && !isAutoStop(st));
     if (done.length > 0 && t.stops.every((st) => st.done_at !== null || st.skipped)) {
       tripDone.push({
         at:

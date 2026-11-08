@@ -24,6 +24,8 @@ export type LiveArgs = {
   state: DayState;
   onAutoDepart: () => void;
   onAutoArrive: () => void;
+  /** cada leitura, para o detector de paradas fora do roteiro (fase 15) */
+  onFix?: (fix: Fix) => void;
 };
 
 export type Live = {
@@ -44,6 +46,7 @@ export function useLivePosition({
   state,
   onAutoDepart,
   onAutoArrive,
+  onFix,
 }: LiveArgs): Live {
   // o contexto da trilha é estável enquanto o dia e a pessoa não mudam: o efeito abaixo reinicia o
   // `watchPosition` (e zera as leituras guardadas) quando ele muda, e um objeto novo a cada render
@@ -57,10 +60,10 @@ export function useLivePosition({
   const [denied, setDenied] = useState(false);
   const supported = typeof navigator !== 'undefined' && 'geolocation' in navigator;
 
-  const latest = useRef({ state, onAutoDepart, onAutoArrive });
+  const latest = useRef({ state, onAutoDepart, onAutoArrive, onFix });
   useEffect(() => {
-    latest.current = { state, onAutoDepart, onAutoArrive };
-  }, [state, onAutoDepart, onAutoArrive]);
+    latest.current = { state, onAutoDepart, onAutoArrive, onFix };
+  }, [state, onAutoDepart, onAutoArrive, onFix]);
 
   const running = enabled && supported && ctx !== null;
 
@@ -84,12 +87,18 @@ export function useLivePosition({
       if (stopped) return;
       // a hora é a de quando a leitura chegou, não o carimbo do aparelho: o relógio do app é um só
       // (e o de mentira dos testes vale aqui também)
-      const f: Fix = { lng: pos.coords.longitude, lat: pos.coords.latitude, t: Date.now() };
+      const f: Fix = {
+        lng: pos.coords.longitude,
+        lat: pos.coords.latitude,
+        t: Date.now(),
+        accuracy: pos.coords.accuracy,
+      };
       fixes = pushFix(fixes, f);
       setFix(f);
       setDenied(false);
       recorder.push(f);
-      const { state: s, onAutoDepart: dep, onAutoArrive: arr } = latest.current;
+      const { state: s, onAutoDepart: dep, onAutoArrive: arr, onFix: seen } = latest.current;
+      seen?.(f);
       const decision = liveDecision(fixes, s, f.t);
       if (decision.autoDepart) {
         const from = s.at && !s.onRoad ? s.at : s.next;

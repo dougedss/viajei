@@ -1,8 +1,9 @@
 import type { StopKind } from '@shared/constants.ts';
-import { isLocated } from '@/features/itinerary/rules.ts';
+import { isAutoStop, isLocated, isWaypoint } from '@/features/itinerary/rules.ts';
 import { asStopKind } from '@/features/itinerary/stop-kinds.ts';
 import type { DayRoute, Stop } from '@/lib/db/schema.ts';
 import type { CuriosityKind, PlaceReading, SceneryKind, Segment } from '@/lib/geo/index.ts';
+import { indexRoute, projectOntoRoute } from '@/lib/geo/project.ts';
 import { cameraPosition, groundHit, projectPoint, type CameraFrame, type Vec3 } from './math.ts';
 import { MINIATURE_BOX, MINIATURE_ROAD_GAP } from '@/art/stops/types.ts';
 import { clamp, fbm, lerp, smooth } from './noise.ts';
@@ -196,13 +197,15 @@ function virtualKm(stop: Stop | undefined): number {
 }
 
 /**
- * Cada parada ganha um km no eixo do layout. Com rota, as paradas com coordenada ficam na
- * quilometragem real dos trechos; as sem coordenada são interpoladas pelos deslocamentos entre as
- * vizinhas, e as que vêm antes da primeira (ou depois da última) com coordenada ganham km virtuais.
- * Sem rota, tudo é virtual: deslocamento a 60 km/h, nunca menos que 15 km, para o S ter corpo.
+ * Cada parada ganha um km no eixo do layout. Com rota, os pontos de passagem (as paradas do roteiro
+ * com coordenada) ficam na quilometragem real dos trechos; a parada que se registrou sozinha (fase
+ * 15), que não é ponto de passagem, fica onde a posição dela cai na estrada, entre os vizinhos; as
+ * sem coordenada são interpoladas pelos deslocamentos entre as vizinhas, e as que vêm antes da
+ * primeira (ou depois da última) com lugar ganham km virtuais. Sem rota, tudo é virtual:
+ * deslocamento a 60 km/h, nunca menos que 15 km, para o S ter corpo.
  */
 function kmAxis(stops: readonly Stop[], route: LayoutInput['route']): KmAxis {
-  const located = stops.flatMap((s, i) => (isLocated(s) ? [i] : []));
+  const located = stops.flatMap((s, i) => (isWaypoint(s) ? [i] : []));
   const hasRoute =
     route !== null &&
     located.length >= 2 &&
@@ -218,10 +221,25 @@ function kmAxis(stops: readonly Stop[], route: LayoutInput['route']): KmAxis {
   located.forEach((idx, k) => {
     kmAt[idx] = along[k] ?? 0;
   });
-  // entre duas com coordenada: proporcional aos deslocamentos informados
-  for (let k = 0; k < located.length - 1; k++) {
-    const a = located[k] ?? 0;
-    const b = located[k + 1] ?? 0;
+  // a automática: a fração da estrada onde ela cai, presa entre os vizinhos (a ordem da lista manda)
+  const anchors = [...located];
+  const index = stops.some(isAutoStop) ? indexRoute(route.geometry) : null;
+  const realKm = along.at(-1) ?? 0;
+  stops.forEach((s, i) => {
+    if (!index || !isAutoStop(s) || !isLocated(s)) return;
+    const prev = anchors.filter((a) => a < i).at(-1);
+    const next = located.find((a) => a > i);
+    const lo = prev === undefined ? 0 : (kmAt[prev] ?? 0);
+    const hi = next === undefined ? realKm : (kmAt[next] ?? realKm);
+    const km = projectOntoRoute(index, [s.lng, s.lat]).fraction * realKm;
+    kmAt[i] = Math.min(Math.max(km, lo), Math.max(lo, hi));
+    anchors.push(i);
+    anchors.sort((x, y) => x - y);
+  });
+  // entre duas com lugar: proporcional aos deslocamentos informados
+  for (let k = 0; k < anchors.length - 1; k++) {
+    const a = anchors[k] ?? 0;
+    const b = anchors[k + 1] ?? 0;
     if (b - a <= 1) continue;
     const weights: number[] = [];
     for (let j = a; j < b; j++) {
@@ -234,9 +252,9 @@ function kmAxis(stops: readonly Stop[], route: LayoutInput['route']): KmAxis {
       kmAt[j] = (kmAt[a] ?? 0) + ((kmAt[b] ?? 0) - (kmAt[a] ?? 0)) * (acc / total);
     }
   }
-  const first = located[0] ?? 0;
+  const first = anchors[0] ?? 0;
   for (let j = first - 1; j >= 0; j--) kmAt[j] = (kmAt[j + 1] ?? 0) - virtualKm(stops[j]);
-  const last = located.at(-1) ?? 0;
+  const last = anchors.at(-1) ?? 0;
   for (let j = last + 1; j < stops.length; j++)
     kmAt[j] = (kmAt[j - 1] ?? 0) + virtualKm(stops[j - 1]);
   const kmOffset = -(kmAt[0] ?? 0);

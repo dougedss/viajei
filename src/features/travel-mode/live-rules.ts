@@ -7,7 +7,7 @@ import {
   isWithin,
   type Fix,
 } from '@/lib/geo/geofence.ts';
-import { isAutoStop } from './auto-stop.ts';
+import { isAutoStop } from '@/features/itinerary/rules.ts';
 import { isDepartureNode, type DayState } from './rules.ts';
 
 /**

@@ -1,5 +1,5 @@
 import { haversineM } from '@shared/geo.ts';
-import { activeStops } from '@/features/itinerary/rules.ts';
+import { activeStops, isAutoStop } from '@/features/itinerary/rules.ts';
 import type { Stop } from '@/lib/db/schema.ts';
 import { positionBetween } from '@/lib/ids/position.ts';
 import { uuidV5 } from '@/lib/ids/uuid.ts';
@@ -17,9 +17,7 @@ export const CELL_DEG = 0.0015;
 /** A janela de tempo: a mesma do "um lugar só a cada 2 h". */
 export const WINDOW_MS = SAME_PLACE_MS;
 
-export function isAutoStop(stop: Pick<Stop, 'source'>): boolean {
-  return stop.source === 'auto';
-}
+export { isAutoStop };
 
 /**
  * A chave natural: o lugar (a célula do centro) e a hora (a janela de 2 h da chegada). Os dois

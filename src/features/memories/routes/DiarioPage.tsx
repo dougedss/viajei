@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/ui/EmptyState.tsx';
 import { PageHeader } from '@/components/ui/PageHeader.tsx';
 import { StopKindIcon } from '@/features/itinerary/components/StopKindIcon.tsx';
 import { useTripDays, useTripStops } from '@/features/itinerary/queries.ts';
+import { isAutoStop } from '@/features/itinerary/rules.ts';
 import { MediaThumb } from '@/features/media/components/MediaThumb.tsx';
 import { MediaViewer } from '@/features/media/components/MediaViewer.tsx';
 import { asPersonColor } from '@/features/profile/queries.ts';
@@ -154,7 +155,13 @@ function DiaryDaySection({
                   <p className="text-[17px] leading-snug font-semibold break-words">
                     {e.stop.name}
                   </p>
-                  {by ? <p className="text-[14px] text-ink-2">{by} marcou</p> : null}
+                  {isAutoStop(e.stop) ? (
+                    <p className="text-[14px] text-ink-2" data-auto-stop>
+                      Registrada sozinha pelo GPS{by ? ` de ${by}` : ''}
+                    </p>
+                  ) : by ? (
+                    <p className="text-[14px] text-ink-2">{by} marcou</p>
+                  ) : null}
                 </div>
               </div>
               {e.memories.map((m) => (
