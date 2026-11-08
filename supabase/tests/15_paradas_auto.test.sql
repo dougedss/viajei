@@ -1,5 +1,5 @@
 begin;
-select plan(12);
+select plan(14);
 
 create function pg_temp.login(p uuid) returns void language plpgsql as $$
 begin
@@ -16,7 +16,7 @@ create function pg_temp.push1(p jsonb) returns text language sql as $$
   select r ->> 'status' || '|' || coalesce(r ->> 'code', '') || '|' || (r -> 'superseded')::text
     from jsonb_array_elements(public.sync_push(jsonb_build_array(p))) r;
 $$;
--- o status e se o nome e quem marcou ficaram com a outra edição (a ordem das chaves do jsonb não importa)
+-- o status e se o nome e quem marcou perderam para a outra edição (a ordem das chaves do jsonb não importa)
 create function pg_temp.push_lost(p jsonb) returns text language sql as $$
   select r ->> 'status' || '|' || (r -> 'superseded' @> '["name", "done_by"]'::jsonb)::text
     from jsonb_array_elements(public.sync_push(jsonb_build_array(p))) r;
@@ -88,13 +88,19 @@ select throws_ok($$insert into public.stops (id, trip_id, trip_day_id, position,
 select is(pg_temp.push1(pg_temp.auto_op(1, 'Posto Ipiranga', 'f0111111-1111-4111-8111-111111111111', '2026-11-01T14:28:00-03:00')),
           'applied||[]', 'o primeiro celular registra a parada');
 select pg_temp.login('f0222222-2222-4222-8222-222222222222');
-select is(pg_temp.push_lost(pg_temp.auto_op(2, 'Parada às 14h20', 'f0222222-2222-4222-8222-222222222222', '2026-11-01T14:27:00-03:00')),
-          'applied|true', 'o segundo, sem sinal e com a detecção mais velha, perde coluna a coluna');
+select is(pg_temp.push1(pg_temp.auto_op(2, 'Parada às 14h20', 'f0222222-2222-4222-8222-222222222222', '2026-11-01T14:27:00-03:00')),
+          'stale||[]', 'o segundo, sem sinal e com a detecção mais velha em tudo, é descartado (stale)');
 select is((select count(*) from public.stops where id = 'f5aaaaaa-aaaa-5aaa-8aaa-aaaaaaaaaaaa'), 1::bigint,
           'e a parada continua uma só');
 select is((select name || '|' || kind || '|' || source || '|' || done_by::text from public.stops where id = 'f5aaaaaa-aaaa-5aaa-8aaa-aaaaaaaaaaaa'),
           'Posto Ipiranga|fuel|auto|f0111111-1111-4111-8111-111111111111',
           'com o nome do OSM e quem detectou primeiro');
+select is(pg_temp.push_lost(pg_temp.auto_op(3, 'Posto Ipiranga', 'f0222222-2222-4222-8222-222222222222', '2026-11-01T14:29:00-03:00')),
+          'applied|false', 'o que detectou depois atualiza a mesma linha, coluna a coluna');
+select is((select count(*)::text || '|' || min(done_by::text) from public.stops
+            where trip_day_id = extensions.uuid_generate_v5('f1111111-1111-4111-8111-111111111111', '2026-12-11')
+              and source = 'auto' and lat = -29.1),
+          '1|f0222222-2222-4222-8222-222222222222', 'uma parada só no posto, com quem escreveu por último');
 select pg_temp.logout();
 
 select * from finish();
