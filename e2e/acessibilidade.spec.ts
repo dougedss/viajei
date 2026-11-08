@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
+import { LARGURA_ESTREITA, ROLAGEM_LATERAL } from '../src/features/lab/guards.ts';
 import { criarUsuario, SENHA } from './helpers/users.ts';
 import { montarViagem } from './helpers/viagem.ts';
 import { fakeOpenMeteo, fakeRouteDay, fakeTiles } from './helpers/world.ts';
@@ -11,10 +12,13 @@ import { fakeOpenMeteo, fakeRouteDay, fakeTiles } from './helpers/world.ts';
  * - alvos de toque de 48 px (o axe só confere os 24 px do WCAG 2.2); links no meio de um texto
  *   corrido ficam de fora, como no 2.5.8;
  * - texto do Modo Viagem ≥ 17 px de dia e 10% maior à noite;
- * - nenhuma tela rola para o lado na largura do celular (WCAG 1.4.10).
+ * - nenhuma tela rola para o lado na largura do celular (WCAG 1.4.10), a 393 px (iPhone 15) e a
+ *   360 px (os Android menores), com o texto que vem das pessoas: um link de 80 caracteres e um
+ *   endereço colado numa observação, um código de reserva comprido (fase 13).
  * As telas abrem com dados de verdade (uma viagem futura completa e uma que terminou ontem), gravados
  * direto no banco local. O que só o aparelho prova (VoiceOver, TalkBack, texto ampliado do sistema)
- * está no roteiro final (`docs/teste-final.md`).
+ * está no roteiro final (`docs/teste-final.md`). A guarda da rolagem é a mesma que o laboratório
+ * avalia todo dia na produção (`src/features/lab/guards.ts`).
  */
 
 // a falha aqui é de conteúdo, não de instabilidade: uma tentativa só, com o relatório inteiro
@@ -83,33 +87,6 @@ const textosPequenos = (min: number) => `(() => {
   return out;
 })()`;
 
-/**
- * Se a página rola para o lado, os primeiros elementos que passam da borda direita (o pai ainda cabe),
- * fora dos que estão dentro de uma faixa com rolagem própria.
- */
-const ROLAGEM_LATERAL = `(() => {
-  const vw = document.documentElement.clientWidth;
-  if (document.documentElement.scrollWidth <= vw + 1) return [];
-  const out = [];
-  const clipped = (el) => {
-    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
-      if (getComputedStyle(p).overflowX !== 'visible') return true;
-    }
-    return false;
-  };
-  for (const el of document.body.querySelectorAll('*')) {
-    const r = el.getBoundingClientRect();
-    if (r.right <= vw + 1 || !r.width) continue;
-    const parent = el.parentElement;
-    if (parent && parent !== document.body && parent.getBoundingClientRect().right > vw + 1) continue;
-    if (clipped(el)) continue;
-    const cls = typeof el.className === 'string' ? el.className.split(' ').slice(0, 3).join('.') : '';
-    out.push(el.tagName.toLowerCase() + (cls ? '.' + cls : '') + ' até ' + Math.round(r.right) + ' px');
-    if (out.length === 4) break;
-  }
-  return ['página com ' + document.documentElement.scrollWidth + ' px em ' + vw + ' px: ' + out.join(' | ')];
-})()`;
-
 /** O meio-dia ou as 20h mais recentes em São Paulo: o relógio só volta, nunca adianta a sessão. */
 function ultimo(hora: number): Date {
   const agora = new Date();
@@ -143,6 +120,16 @@ async function alvos(page: Page, rota: string, tema: string, achados: Achado[]) 
   }
   for (const a of await page.evaluate<string[]>(ROLAGEM_LATERAL)) {
     achados.push({ rota, tema, tipo: 'rolagem lateral', detalhe: a });
+  }
+  // a mesma tela nos 360 px dos Android menores, só para a rolagem (o axe já rodou): a janela
+  // encolhe, a página se refaz, e volta ao tamanho do aparelho antes da próxima rota
+  const size = page.viewportSize();
+  if (size && size.width !== LARGURA_ESTREITA) {
+    await page.setViewportSize({ width: LARGURA_ESTREITA, height: size.height });
+    for (const a of await page.evaluate<string[]>(ROLAGEM_LATERAL)) {
+      achados.push({ rota, tema, tipo: 'rolagem lateral', detalhe: `${a} (360 px)` });
+    }
+    await page.setViewportSize(size);
   }
 }
 

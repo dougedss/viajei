@@ -9,6 +9,7 @@ import {
   type Page,
   type Worker,
 } from '@playwright/test';
+import { ROLAGEM_LATERAL } from '../../src/features/lab/guards.ts';
 import type { LabScenario } from '../../src/features/lab/scenarios.ts';
 import type { Check } from './evaluate.ts';
 
@@ -457,12 +458,32 @@ export function appReabrir(app: App, serverMarked: () => Promise<void>): Promise
 }
 
 /** Modo painel liga e desliga; o dia sai como .ics. */
+/**
+ * As telas da viagem do laboratório que a guarda da rolagem lateral confere todo dia na produção
+ * (fase 13): as mesmas rotas da suíte e2e, com as viagens do lab-a, no perfil de Pixel 7 (412 px).
+ */
+const TELAS_DA_VIAGEM = [
+  'viagem?render=list',
+  '',
+  'roteiro',
+  'reservas',
+  'checklists?aba=antes',
+  'checklists?aba=missoes',
+  'contatos',
+  'gastos',
+  'mapa',
+  'diario',
+  'avisos',
+  'membros',
+  'garagem?render=list',
+] as const;
+
 export function appExtras(app: App): Promise<Check> {
   const { page, target } = app;
   return runSteps(
     app,
     'app_extras',
-    'Modo painel ligou e desligou; o .ics do dia baixou com o destino',
+    'Modo painel ligou e desligou; o .ics do dia baixou com o destino; nenhuma tela rola para o lado',
     [
       [
         'abrir o "Agora"',
@@ -500,6 +521,25 @@ export function appExtras(app: App): Promise<Check> {
           if (!text.startsWith('BEGIN:VCALENDAR')) throw new Error('o arquivo não é um VCALENDAR');
           if (!text.includes(`SUMMARY:${target.destinationName}`))
             throw new Error('o destino não está no .ics');
+        },
+      ],
+      [
+        'nenhuma tela rola para o lado',
+        async () => {
+          const achados: string[] = [];
+          for (const path of TELAS_DA_VIAGEM) {
+            await page.goto(tripUrl(target, path));
+            await page.locator('h1').first().waitFor();
+            // o roteiro do dia: pela lista, porque o id do dia é de quem preparou a viagem
+            for (const a of await page.evaluate<string[]>(ROLAGEM_LATERAL)) {
+              achados.push(`/${path}: ${a}`);
+            }
+          }
+          await page.goto(`${target.appUrl}/viagens`);
+          await page.locator('h1').first().waitFor();
+          for (const a of await page.evaluate<string[]>(ROLAGEM_LATERAL))
+            achados.push(`/viagens: ${a}`);
+          if (achados.length > 0) throw new Error(achados.join(' || '));
         },
       ],
     ],

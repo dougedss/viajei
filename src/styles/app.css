@@ -174,6 +174,15 @@
     outline-offset: 2px;
     border-radius: 10px;
   }
+  /* O texto que vem das pessoas (nomes, endereços, observações, códigos, links) nunca alarga a
+     página: uma palavra mais larga que a tela quebra onde for preciso. `anywhere`, e não
+     `break-word`: só ele entra na conta do tamanho mínimo do elemento, que é o que uma coluna
+     automática de grid ou flex usa para crescer até o texto (fase 13; o caso da D161). As faixas
+     que rolam de propósito têm `white-space: nowrap` e não quebram. */
+  main,
+  [role='dialog'] {
+    overflow-wrap: anywhere;
+  }
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

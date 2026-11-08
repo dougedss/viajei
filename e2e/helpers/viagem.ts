@@ -12,6 +12,16 @@ export type Montada = {
 const at = (date: string, hhmm: string) => new Date(`${date}T${hhmm}:00-03:00`).toISOString();
 
 /**
+ * O texto que vem das pessoas e não quebra sozinho (fase 13): um link de 88 caracteres sem espaço, um
+ * endereço colado sem espaços e um código de reserva comprido. A guarda da rolagem lateral tem de
+ * passar com eles em toda tela, a 393 e a 360 px.
+ */
+export const LINK_LONGO =
+  'https://reservas.exemplo.com.br/confirmacao/2026/12/11/STF-2026-4471/hospedes/2/detalhes';
+export const ENDERECO_COLADO = 'Rua Coronel Pedro Benetti,1300,Centro,Gramado,RS,95670-000';
+export const CODIGO_COMPRIDO = 'STF-2026-4471-GRAMADO-STEFFEN-HOSPEDES-2-XYZ';
+
+/**
  * Uma viagem com tudo o que as telas mostram (dias, paradas, reserva, contato, gasto, as três listas
  * e uma memória), gravada direto no banco local dos testes com a chave secreta. Serve aos testes que
  * olham as telas (acessibilidade) e não à criação, que tem os próprios testes pela tela.
@@ -82,7 +92,8 @@ export async function montarViagem(
       travel_minutes_to_next: null,
       lat: -29.37,
       lng: -51.37,
-      notes: null,
+      // a observação com o link e o endereço colados: a tela tem de quebrar as duas palavras
+      notes: `Check-in a partir das 14h.\n${LINK_LONGO}\n${ENDERECO_COLADO}`,
       done_at: null,
       done_by: null,
     },
@@ -108,7 +119,8 @@ export async function montarViagem(
       type: 'hotel',
       name: 'Hotel Steffen',
       start_at: at(first, '14:00'),
-      confirmation_code: 'STF-2026-4471',
+      confirmation_code: CODIGO_COMPRIDO,
+      address: ENDERECO_COLADO,
       amount: 560,
       phone: '+5551997527596',
       cancel_until: first,
