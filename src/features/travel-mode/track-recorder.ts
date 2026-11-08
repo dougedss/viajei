@@ -53,7 +53,7 @@ export type TrackRecorder = {
   pending: () => number;
 };
 
-/** Acumula leituras do modo painel e grava a cada 60 s ou 20 pontos. */
+/** Acumula leituras do acompanhamento e grava a cada 60 s ou 20 pontos. */
 export function createTrackRecorder(
   ctx: TrackContext,
   now: () => number = Date.now,

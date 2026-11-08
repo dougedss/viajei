@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Fix } from '@/lib/geo/geofence.ts';
 import { makeStop } from '@/test/factories.ts';
-import { departureStop, panelDecision, pushFix } from './panel-rules.ts';
+import { departureStop, liveDecision, liveEnabled, pushFix } from './live-rules.ts';
 
 const PARK = { lng: -50.0, lat: -25.91 };
 const HOTEL = { lng: -50.0, lat: -25.82 };
@@ -17,13 +17,21 @@ const fix = (p: { lng: number; lat: number }, t: number, dLng = 0): Fix => ({
   t,
 });
 
-describe('modo painel', () => {
+describe('o acompanhamento da posição', () => {
+  it('só com a tela visível, no dia de hoje, na viagem em andamento e com a posição permitida', () => {
+    const all = { visible: true, isToday: true, ongoing: true, consent: true };
+    expect(liveEnabled(all)).toBe(true);
+    for (const key of ['visible', 'isToday', 'ongoing', 'consent'] as const) {
+      expect(liveEnabled({ ...all, [key]: false }), key).toBe(false);
+    }
+  });
+
   it('Partiu! automático só depois de ter visto o carro na parada', () => {
     const state = { at: { ...park(), done_at: 'x' }, next: hotel(), onRoad: false };
     const far = [fix(PARK, 0, 0.01)]; // 1 km do parque, sem nunca ter estado lá
-    expect(panelDecision(far, state, 0).autoDepart).toBe(false);
+    expect(liveDecision(far, state, 0).autoDepart).toBe(false);
     const there = pushFix(pushFix([], fix(PARK, 0)), fix(PARK, MIN, 0.004)); // 400 m depois
-    expect(panelDecision(there, state, MIN).autoDepart).toBe(true);
+    expect(liveDecision(there, state, MIN).autoDepart).toBe(true);
   });
 
   it('a saída do nó de origem usa o próprio nó quando ainda não há at', () => {
@@ -33,7 +41,7 @@ describe('modo painel', () => {
       pushFix([], fix({ lng: -50.0, lat: -26.0 }, 0)),
       fix({ lng: -50.0, lat: -26.0 }, MIN, 0.005),
     );
-    expect(panelDecision(fixes, state, MIN).autoDepart).toBe(true);
+    expect(liveDecision(fixes, state, MIN).autoDepart).toBe(true);
     expect(
       departureStop({ at: { ...park(), departed_at: 'x' }, next: hotel(), onRoad: true }),
     ).toBeNull();
@@ -47,26 +55,26 @@ describe('modo painel', () => {
     };
     let fixes: Fix[] = [];
     for (let i = 0; i <= 2; i++) fixes = pushFix(fixes, fix(HOTEL, i * MIN, 0.0003));
-    expect(panelDecision(fixes, state, 2 * MIN).autoArrive).toBe(false);
+    expect(liveDecision(fixes, state, 2 * MIN).autoArrive).toBe(false);
     fixes = pushFix(fixes, fix(HOTEL, 3 * MIN, 0.0003));
-    expect(panelDecision(fixes, state, 3 * MIN).autoArrive).toBe(true);
+    expect(liveDecision(fixes, state, 3 * MIN).autoArrive).toBe(true);
     const node = { at: null, next: origin(), onRoad: false };
-    expect(panelDecision(fixes, node, 3 * MIN).autoArrive).toBe(false);
+    expect(liveDecision(fixes, node, 3 * MIN).autoArrive).toBe(false);
   });
 
   it('parado por 10 min: baixa precisão; andou: volta ao normal', () => {
     const state = { at: null, next: park(), onRoad: false };
     let fixes: Fix[] = [];
     for (let i = 0; i <= 10; i++) fixes = pushFix(fixes, fix(HOTEL, i * MIN, 0.0002 * (i % 2)));
-    expect(panelDecision(fixes, state, 10 * MIN).lowPower).toBe(true);
+    expect(liveDecision(fixes, state, 10 * MIN).lowPower).toBe(true);
     fixes = pushFix(fixes, fix(HOTEL, 11 * MIN, 0.01));
-    expect(panelDecision(fixes, state, 11 * MIN).lowPower).toBe(false);
+    expect(liveDecision(fixes, state, 11 * MIN).lowPower).toBe(false);
   });
 
   it('o buffer guarda só 15 min', () => {
     const fixes = pushFix(pushFix([], fix(PARK, 0)), fix(PARK, 16 * MIN));
     expect(fixes).toHaveLength(1);
-    expect(panelDecision([], { at: null, next: null, onRoad: false }, 0)).toEqual({
+    expect(liveDecision([], { at: null, next: null, onRoad: false }, 0)).toEqual({
       autoDepart: false,
       autoArrive: false,
       lowPower: false,

@@ -8,8 +8,8 @@ import type { MediaItem } from '@/lib/media/hooks.ts';
  * quais cards aparecem, e o diário montado a partir das paradas, das memórias e das fotos.
  */
 
-/** De onde veio o Chegamos!. Só o toque na tela, fora do modo painel, abre a folha sozinha. */
-export type ArrivalSource = 'tap' | 'panel' | 'catchup' | 'question' | 'notification' | 'remote';
+/** De onde veio o Chegamos!. Só o toque na tela abre a folha sozinha. */
+export type ArrivalSource = 'tap' | 'live' | 'catchup' | 'question' | 'notification' | 'remote';
 
 /** A folha abre 1,2 s depois do confete: dá tempo de ver a festa. */
 export const SHEET_DELAY_MS = 1200;
@@ -17,18 +17,18 @@ export const SHEET_DELAY_MS = 1200;
 export type PromptDecision = 'sheet' | 'card' | 'none';
 
 /**
- * Nunca por cima de quem dirige: com o modo painel ligado, ou quando o Chegamos! veio da
- * notificação, do catch-up automático, da pergunta "vocês passaram por…" ou de outro membro, a
- * folha não abre sozinha; vira um card discreto. Nó de saída não tem "como foi".
+ * Nunca por cima de quem dirige: quando o Chegamos! veio da posição (o acompanhamento com o mapa
+ * aberto, fase 14, ou a leitura ao abrir), da notificação, da pergunta "vocês passaram por…" ou de
+ * outro membro, a folha não abre sozinha; vira um card discreto. Só o toque na tela, que é de quem
+ * está olhando para ela, abre a folha (D83, decidido em 08/11). Nó de saída não tem "como foi".
  */
 export function memoryPrompt(input: {
   source: ArrivalSource;
-  panelOn: boolean;
   stop: Pick<Stop, 'kind'>;
   answered: boolean;
 }): PromptDecision {
   if (isDepartureNode(input.stop) || input.answered) return 'none';
-  return input.source === 'tap' && !input.panelOn ? 'sheet' : 'card';
+  return input.source === 'tap' ? 'sheet' : 'card';
 }
 
 /**

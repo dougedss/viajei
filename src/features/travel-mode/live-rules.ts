@@ -10,14 +10,30 @@ import {
 import { isDepartureNode, type DayState } from './rules.ts';
 
 /**
- * As decisões do modo painel, puras: a cada leitura de GPS, o que marcar sozinho e quanto GPS
- * gastar. Partiu! só depois de o painel ter visto o carro na parada (uma leitura dentro do raio):
- * um GPS que começa longe não "sai" de lugar nenhum. Chegamos! pela presença de 3 min no raio.
+ * As decisões do acompanhamento da posição, puras (as regras da D47, antes do modo painel): quando
+ * acompanhar, e a cada leitura de GPS o que marcar sozinho e quanto GPS gastar. Partiu! só depois
+ * de ter visto o carro na parada (uma leitura dentro do raio): um GPS que começa longe não "sai"
+ * de lugar nenhum. Chegamos! pela presença de 3 min no raio. Parado por 10 min, leituras de baixa
+ * precisão a cada 60 s.
  */
 export const FIX_BUFFER_MS = 15 * 60_000;
 export const STATIONARY_MS = 10 * 60_000;
 export const STATIONARY_RADIUS_M = 100;
 export const LOW_POWER_INTERVAL_MS = 60_000;
+
+/**
+ * O acompanhamento existe enquanto o mapa está na tela (fase 14): a tela visível, o dia mostrado
+ * sendo hoje, a viagem em andamento e a posição permitida pela pessoa (a pergunta do app, D48). Fora
+ * disso, nada acompanha: o sistema apaga a tela e corta o GPS, e está tudo bem.
+ */
+export function liveEnabled(input: {
+  visible: boolean;
+  isToday: boolean;
+  ongoing: boolean;
+  consent: boolean;
+}): boolean {
+  return input.visible && input.isToday && input.ongoing && input.consent;
+}
 
 type Located = Stop & { lat: number; lng: number };
 function located(stop: Stop | null): stop is Located {
@@ -29,7 +45,7 @@ export function pushFix(fixes: readonly Fix[], fix: Fix): Fix[] {
   return [...fixes, fix].filter((f) => fix.t - f.t <= FIX_BUFFER_MS).sort((a, b) => a.t - b.t);
 }
 
-export type PanelDecision = {
+export type LiveDecision = {
   /** o carro saiu de `at` (ou do nó de saída que era a próxima) */
   autoDepart: boolean;
   /** o carro está há 3 min na próxima */
@@ -45,11 +61,11 @@ export function departureStop(state: Pick<DayState, 'at' | 'next' | 'onRoad'>): 
   return null;
 }
 
-export function panelDecision(
+export function liveDecision(
   fixes: readonly Fix[],
   state: Pick<DayState, 'at' | 'next' | 'onRoad'>,
   now: number,
-): PanelDecision {
+): LiveDecision {
   const latest = fixes.at(-1);
   if (!latest) return { autoDepart: false, autoArrive: false, lowPower: false };
 

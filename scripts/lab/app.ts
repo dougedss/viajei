@@ -607,7 +607,7 @@ export function appReabrir(app: App, serverMarked: () => Promise<void>): Promise
   );
 }
 
-/** Modo painel liga e desliga; o dia sai como .ics. */
+/** A posição acompanhada com o mapa aberto; "Tela acesa" liga e desliga; o dia sai como .ics. */
 /**
  * As telas da viagem do laboratório que a guarda da rolagem lateral confere todo dia na produção
  * (fase 13): as mesmas rotas da suíte e2e, com as viagens do lab-a, no perfil de Pixel 7 (412 px).
@@ -634,7 +634,7 @@ export function appExtras(app: App): Promise<Check> {
   return runSteps(
     app,
     'app_extras',
-    'Modo painel ligou e desligou; o .ics do dia baixou com o destino; nenhuma tela rola para o lado',
+    'A posição acompanhada; "Tela acesa" ligou e desligou; o .ics do dia baixou com o destino; nenhuma tela rola para o lado',
     [
       [
         'abrir o "Agora"',
@@ -646,24 +646,35 @@ export function appExtras(app: App): Promise<Check> {
         },
       ],
       [
-        'ligar o modo painel',
+        'a posição está sendo acompanhada com o mapa aberto',
         async () => {
-          const toggle = page.getByRole('button', { name: 'Modo painel' });
+          // a pessoa permitiu a posição no `app_reabrir`: com o mapa na tela, no dia de hoje, a barra
+          // do "Agora" diz que o GPS está acompanhando (fase 14)
+          await page.locator('[data-gps]').waitFor();
+        },
+      ],
+      [
+        'ligar "Tela acesa"',
+        async () => {
+          const toggle = page.getByRole('button', { name: 'Tela acesa' });
           await toggle.click();
           await until(
             () => toggle.getAttribute('aria-pressed'),
             (v) => v === 'true',
             'o botão não ficou ligado',
           );
-          // ligado, a barra do "Agora" diz que a posição está sendo acompanhada
-          await page.locator('[data-gps]').waitFor();
         },
       ],
       [
-        'desligar o modo painel',
+        'desligar "Tela acesa"',
         async () => {
-          await page.getByRole('button', { name: 'Modo painel' }).click();
-          await page.locator('[data-gps]').waitFor({ state: 'detached' });
+          const toggle = page.getByRole('button', { name: 'Tela acesa' });
+          await toggle.click();
+          await until(
+            () => toggle.getAttribute('aria-pressed'),
+            (v) => v === 'false',
+            'o botão não desligou',
+          );
         },
       ],
       [

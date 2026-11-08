@@ -15,7 +15,7 @@ import {
  * `autoArrive` usa a hora de agora (com desfazer), e as `passed` são perguntas, não marcações.
  *
  * Sem posição, a melhor estimativa é o último ponto da trilha mais recente de quem compartilha
- * posição (modo painel de outro aparelho) ou, na falta dela, a última parada concluída pelo time.
+ * posição (o mapa aberto em outro aparelho) ou, na falta dela, a última parada concluída pelo time.
  */
 export type PositionSource = 'gps' | 'team-track' | 'last-done';
 

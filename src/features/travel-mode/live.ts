@@ -1,27 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Fix } from '@/lib/geo/geofence.ts';
-import {
-  LOW_POWER_INTERVAL_MS,
-  panelDecision,
-  pushFix,
-  STATIONARY_RADIUS_M,
-} from './panel-rules.ts';
+import { isWithin } from '@/lib/geo/geofence.ts';
+import { liveDecision, LOW_POWER_INTERVAL_MS, pushFix, STATIONARY_RADIUS_M } from './live-rules.ts';
 import type { DayState } from './rules.ts';
 import { createTrackRecorder, type TrackContext } from './track-recorder.ts';
-import { isWithin } from '@/lib/geo/geofence.ts';
 
 /**
- * Modo painel: para quem deixa o celular no suporte. Ligado: tela acesa (Wake Lock, repedido ao
- * voltar à aba), GPS contínuo de alta precisão movendo o carrinho, Partiu! e Chegamos! automáticos
- * por presença (as regras puras de panel-rules.ts) e a trilha gravada. Parado por 10 min, troca para
- * leituras de baixa precisão a cada 60 s; movimento volta ao normal. Desligado, nada disso roda.
+ * O acompanhamento da posição enquanto o mapa está na tela (fase 14): `watchPosition` de alta
+ * precisão movendo o carrinho, Partiu! e Chegamos! automáticos por presença (as regras puras de
+ * `live-rules.ts`, D47) e a trilha gravada. Parado por 10 min, troca para leituras de baixa precisão
+ * a cada 60 s; movimento volta ao normal. Liga e desliga com `enabled` (a tela visível, o dia de
+ * hoje, a viagem em andamento, a posição permitida: `liveEnabled`). A tela acesa é outro assunto
+ * (`useWakeLock`): sem ela, o sistema apaga a tela e corta o GPS, e está tudo bem.
  */
 const AUTO_REPEAT_GUARD_MS = 10 * 60_000;
 
-export type PanelArgs = {
-  /** o botão do topo está ligado */
-  on: boolean;
-  /** o dia é hoje e a viagem está acontecendo */
+export type LiveArgs = {
   enabled: boolean;
   ctx: TrackContext | null;
   state: DayState;
@@ -29,27 +23,26 @@ export type PanelArgs = {
   onAutoArrive: () => void;
 };
 
-export type Panel = {
-  /** ligado e rodando (o dia é hoje e a viagem está acontecendo) */
-  on: boolean;
+export type Live = {
+  /** acompanhando agora */
+  tracking: boolean;
   supported: boolean;
   lowPower: boolean;
   fix: Fix | null;
+  /** o navegador negou a posição: a frase diz isso uma vez, sem insistir */
+  denied: boolean;
 };
 
-// a lib do TS declara wakeLock como obrigatório; nem todo navegador o tem
-type WakeLockNavigator = Partial<Pick<Navigator, 'wakeLock'>>;
-
-export function usePanelMode({
-  on,
+export function useLivePosition({
   enabled,
   ctx,
   state,
   onAutoDepart,
   onAutoArrive,
-}: PanelArgs): Panel {
+}: LiveArgs): Live {
   const [lowPower, setLowPower] = useState(false);
   const [fix, setFix] = useState<Fix | null>(null);
+  const [denied, setDenied] = useState(false);
   const supported = typeof navigator !== 'undefined' && 'geolocation' in navigator;
 
   const latest = useRef({ state, onAutoDepart, onAutoArrive });
@@ -57,29 +50,17 @@ export function usePanelMode({
     latest.current = { state, onAutoDepart, onAutoArrive };
   }, [state, onAutoDepart, onAutoArrive]);
 
-  // ligado só enquanto o dia é hoje e a viagem está acontecendo; fora disso, nada roda
-  const running = on && enabled;
+  const running = enabled && supported && ctx !== null;
 
   useEffect(() => {
-    if (!running || !ctx || !supported) return;
+    if (!enabled || !supported || ctx === null) return;
     const recorder = createTrackRecorder(ctx);
     let fixes: Fix[] = [];
     let watchId: number | null = null;
     let lowTimer: ReturnType<typeof setInterval> | null = null;
     let anchor: Fix | null = null;
     let lastAuto: { key: string; t: number } | null = null;
-    let lock: WakeLockSentinel | null = null;
     let stopped = false;
-
-    const requestLock = async () => {
-      const nav: WakeLockNavigator = navigator;
-      if (!nav.wakeLock) return;
-      try {
-        lock = await nav.wakeLock.request('screen');
-      } catch {
-        /* sem Wake Lock (bateria baixa, aba oculta): o GPS continua */
-      }
-    };
 
     const fire = (key: string, t: number, action: () => void) => {
       if (lastAuto?.key === key && t - lastAuto.t < AUTO_REPEAT_GUARD_MS) return;
@@ -89,12 +70,15 @@ export function usePanelMode({
 
     const handle = (pos: GeolocationPosition) => {
       if (stopped) return;
-      const f: Fix = { lng: pos.coords.longitude, lat: pos.coords.latitude, t: pos.timestamp };
+      // a hora é a de quando a leitura chegou, não o carimbo do aparelho: o relógio do app é um só
+      // (e o de mentira dos testes vale aqui também)
+      const f: Fix = { lng: pos.coords.longitude, lat: pos.coords.latitude, t: Date.now() };
       fixes = pushFix(fixes, f);
       setFix(f);
+      setDenied(false);
       recorder.push(f);
       const { state: s, onAutoDepart: dep, onAutoArrive: arr } = latest.current;
-      const decision = panelDecision(fixes, s, f.t);
+      const decision = liveDecision(fixes, s, f.t);
       if (decision.autoDepart) {
         const from = s.at && !s.onRoad ? s.at : s.next;
         fire(`depart:${from?.id ?? ''}`, f.t, dep);
@@ -112,7 +96,8 @@ export function usePanelMode({
       }
     };
     const onError = (err: GeolocationPositionError) => {
-      console.warn('viajei: GPS do painel', err.message);
+      if (err.code === err.PERMISSION_DENIED) setDenied(true);
+      console.warn('viajei: posição', err.message);
     };
     const startWatch = () => {
       watchId = navigator.geolocation.watchPosition(handle, onError, {
@@ -141,24 +126,23 @@ export function usePanelMode({
       setLowPower(false);
       startWatch();
     };
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void requestLock();
-    };
 
-    void requestLock();
-    document.addEventListener('visibilitychange', onVisible);
     startWatch();
 
     return () => {
       stopped = true;
-      document.removeEventListener('visibilitychange', onVisible);
       if (watchId !== null) navigator.geolocation.clearWatch(watchId);
       if (lowTimer !== null) clearInterval(lowTimer);
-      void lock?.release();
       void recorder.flush();
       setLowPower(false);
     };
-  }, [running, ctx, supported]);
+  }, [enabled, supported, ctx]);
 
-  return { on: running, supported, lowPower, fix: running ? fix : null };
+  return {
+    tracking: running && !denied,
+    supported,
+    lowPower: running && lowPower,
+    fix: running ? fix : null,
+    denied,
+  };
 }

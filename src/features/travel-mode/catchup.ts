@@ -43,7 +43,7 @@ export type CatchupArgs = {
   geoAllowed: boolean;
   /** o dia é hoje e a viagem está acontecendo */
   active: boolean;
-  /** a última leitura do modo painel, quando ligado */
+  /** a última leitura do acompanhamento com o mapa aberto, quando há */
   liveFix: Fix | null;
 };
 

@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { BookOpen, CalendarOff, Gauge, SlidersHorizontal, Star, Ticket } from 'lucide-react';
+import { BookOpen, CalendarOff, SlidersHorizontal, Star, Sun, Ticket } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useLocation, useParams } from 'react-router';
 import { NotFound } from '@/app/NotFound.tsx';
@@ -19,6 +19,7 @@ import { todayISO, tripStatus } from '@/features/trips/rules.ts';
 import type { Profile, Trip } from '@/lib/db/schema.ts';
 import { cx } from '@/lib/cx.ts';
 import { useSession } from '@/lib/supabase/session.ts';
+import { useDocumentVisible } from '@/lib/visibility.ts';
 import { WorldSlot, type EventsOwner, type ReviewPhoto } from '@/features/world/WorldSlot.tsx';
 import { useRenderPref, writeRenderPref } from '@/features/world/prefs.ts';
 import { dismissMemoryPrompt } from '@/features/memories/actions.ts';
@@ -65,10 +66,17 @@ import { NowBar } from '../components/NowBar.tsx';
 import { RetroCard } from '../components/RetroCard.tsx';
 import { useRetroSeen } from '../retro-seen.ts';
 import { useNightTheme, useNow } from '../hooks.ts';
-import { usePanelMode } from '../panel.ts';
+import { useLivePosition } from '../live.ts';
+import { liveEnabled } from '../live-rules.ts';
 import { declineGeo, grantGeo, useGeoConsent, useTeamTracks } from '../queries.ts';
 import { dayState, isDepartureNode } from '../rules.ts';
 import { dayBar, overlayCard } from '../screen.ts';
+import {
+  useScreenAwakePref,
+  useWakeLock,
+  wakeLockSupported,
+  writeScreenAwakePref,
+} from '../wake-lock.ts';
 
 const UNDO_MS = 10_000;
 
@@ -88,19 +96,22 @@ export default function ViagemPage() {
   const night = useNightTheme(now);
   useTravelText(night);
   const [override, setOverride] = useState<string | null>(null);
-  // o modo painel (GPS contínuo com a tela acesa), ligado pelo botão do topo
-  const [panelOn, setPanelOn] = useState(false);
+  // "Tela acesa": lembrado por aparelho; só vale no dia de hoje da viagem em andamento, com a tela
+  // visível (o navegador solta o lock quando a página some)
+  const awake = useScreenAwakePref();
   const pref = useRenderPref();
   const { search } = useLocation();
   const support = useSupport();
+  const today = todayISO(now);
+  const bar = dayBar({ days: days ?? [], today, overrideId: override });
+  const { day, index } = bar;
+  const active =
+    day !== null && day.date === today && !!trip && tripStatus(trip, today) === 'ongoing';
+  useWakeLock(awake && active);
 
   if (trip === undefined || days === undefined) return <Splash />;
   if (trip === null) return <NotFound />;
 
-  const today = todayISO(now);
-  const bar = dayBar({ days, today, overrideId: override });
-  const { day, index } = bar;
-  const active = day !== null && day.date === today && tripStatus(trip, today) === 'ongoing';
   const profiles = new Map<string, Profile>();
   for (const m of members) if (m.profile) profiles.set(m.profile.id, m.profile);
   // a lista ou a maquete: a escolha some quando não há maquete possível ou a URL força a lista
@@ -125,15 +136,15 @@ export default function ViagemPage() {
         onToday={() => setOverride(null)}
         render={render}
       >
-        {active ? (
+        {active && wakeLockSupported() ? (
           <button
             type="button"
             className="grid size-12 shrink-0 place-items-center rounded-full text-ink-2 aria-pressed:bg-accent-soft aria-pressed:text-accent-ink"
-            aria-pressed={panelOn}
-            aria-label="Modo painel"
-            onClick={() => setPanelOn((v) => !v)}
+            aria-pressed={awake}
+            aria-label="Tela acesa"
+            onClick={() => writeScreenAwakePref(!awake)}
           >
-            <Gauge className="size-6" aria-hidden="true" />
+            <Sun className="size-6" aria-hidden="true" />
           </button>
         ) : null}
       </DayBar>
@@ -150,7 +161,6 @@ export default function ViagemPage() {
           profiles={profiles}
           active={active}
           finishedTrip={tripStatus(trip, today) === 'past'}
-          panelOn={panelOn}
         />
       ) : (
         <div className="grid flex-1 content-center safe-x">
@@ -197,12 +207,10 @@ type DayViewProps = {
   uid: string;
   members: readonly MemberWithProfile[];
   profiles: Map<string, Profile>;
-  /** o dia é hoje e a viagem está acontecendo: catch-up com GPS, painel e selo só assim */
+  /** o dia é hoje e a viagem está acontecendo: catch-up com GPS, acompanhamento e selo só assim */
   active: boolean;
   /** a viagem terminou: o cartão "Viajei!" por cima do último dia */
   finishedTrip: boolean;
-  /** o modo painel ligado pelo botão do topo */
-  panelOn: boolean;
 };
 
 function DayView({
@@ -215,7 +223,6 @@ function DayView({
   profiles,
   active,
   finishedTrip,
-  panelOn,
 }: DayViewProps) {
   const tripId = trip.id;
   const dayId = day.id;
@@ -231,6 +238,7 @@ function DayView({
   const weather = useTripWeather(trip);
   const forecast = weather.entries.get(dayId);
   const geo = useGeoConsent();
+  const visible = useDocumentVisible();
   const [dismissedPassed, setDismissedPassed] = useState<string[]>([]);
   // quem conta "o que aconteceu desde a última vez": a maquete (replay) ou o card; nunca os dois
   const [owner, setOwner] = useState<EventsOwner | null>(null);
@@ -255,8 +263,8 @@ function DayView({
   );
   const [memoryStopId, setMemoryStopId] = useState<string | null>(null);
   const [reservationId, setReservationId] = useState<string | null>(null);
-  // o momento calmo da tela: fechar a folha "Como foi?" (até o próximo Partiu!), nunca com o modo
-  // painel. Os cartões que já esperavam na fila nesse instante saem aí; os outros esperam.
+  // o momento calmo da tela: fechar a folha "Como foi?" (até o próximo Partiu!). Os cartões que já
+  // esperavam na fila nesse instante saem aí; os outros esperam.
   const [calmSince, setCalmSince] = useState<number | null>(null);
   const sheetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
@@ -276,7 +284,9 @@ function DayView({
     setBusy(true);
     // a parada que este Chegamos! conclui, para a folha "Como foi?" saber de quem é
     const arriving = effect === 'arrive' ? state.next : null;
-    // o "+10" aparece onde o dedo tocou (a posição fica guardada antes do botão mudar)
+    // o "+10" aparece onde o dedo tocou (a posição fica guardada antes do botão mudar); as marcações
+    // automáticas passam por aqui com `at: null`: sem o "+10", que é só do toque (o XP de verdade vem
+    // do motor de progressão, que deriva `stop_done` de qualquer `done_at`)
     const at = source === 'tap' ? tappedRect() : null;
     if (effect === 'depart') setCalmSince(null);
     void action()
@@ -290,12 +300,7 @@ function DayView({
         }
         if (
           arriving &&
-          memoryPrompt({
-            source,
-            panelOn: panel.on,
-            stop: arriving,
-            answered: answered.has(arriving.id),
-          }) === 'sheet'
+          memoryPrompt({ source, stop: arriving, answered: answered.has(arriving.id) }) === 'sheet'
         ) {
           if (sheetTimer.current) clearTimeout(sheetTimer.current);
           sheetTimer.current = setTimeout(() => setMemoryStopId(arriving.id), SHEET_DELAY_MS);
@@ -318,19 +323,20 @@ function DayView({
   const arriveSeen = state.next ? [`arrived:${state.next.id}`] : [];
   const skipSeen = state.next ? [`skipped:${state.next.id}`] : [];
 
-  const panel = usePanelMode({
-    on: panelOn,
-    enabled: active && uid !== '',
+  // Partiu! e Chegamos! pelo GPS sempre que o mapa está aberto (fase 14): com a tela visível, o dia
+  // de hoje, a viagem em andamento e a posição permitida
+  const live = useLivePosition({
+    enabled: liveEnabled({ visible, isToday: active, ongoing: active, consent: geo.allowed }),
     ctx: uid ? { tripId, dayId, uid } : null,
     state,
-    onAutoDepart: () => run(departLabel, () => depart(state, uid), departSeen, 'depart'),
+    onAutoDepart: () => run(departLabel, () => depart(state, uid), departSeen, 'depart', 'live'),
     onAutoArrive: () =>
       run(
         `Chegamos: ${state.next?.name ?? ''}`,
         () => arrive(state, uid),
         arriveSeen,
         'arrive',
-        'panel',
+        'live',
       ),
   });
   const cu = useCatchup({
@@ -342,7 +348,7 @@ function DayView({
     teamTracks,
     geoAllowed: geo.allowed,
     active,
-    liveFix: panel.fix,
+    liveFix: live.fix,
   });
   const cuRef = useRef<typeof cu | null>(null);
   useEffect(() => {
@@ -465,7 +471,7 @@ function DayView({
   const card = overlayCard({
     since: owner === 'card' && cu.events.length > 0,
     passed: active && question !== undefined,
-    position: active && geo.loaded && !geo.allowed && !geo.declined && !panel.on,
+    position: active && geo.loaded && !geo.allowed && !geo.declined,
     memory: promptStop !== null,
     retro,
   });
@@ -578,8 +584,9 @@ function DayView({
               active ? (
                 <PositionLine
                   position={cu.position}
-                  tracking={panel.on}
-                  lowPower={panel.lowPower}
+                  tracking={live.tracking}
+                  lowPower={live.lowPower}
+                  denied={live.denied}
                 />
               ) : null
             }
@@ -597,7 +604,7 @@ function DayView({
         }}
       />
       <CelebrationHost
-        active={!panel.on && calmSince !== null}
+        active={calmSince !== null}
         since={calmSince ?? 0}
         tripId={tripId}
         showSummary={false}

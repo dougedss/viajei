@@ -14,28 +14,19 @@ import { answeredStops, buildDiary, isEmptyMemory, memoryPrompt, pendingPrompts 
 const nature = { kind: 'nature' };
 
 describe('quando a folha "Como foi?" abre sozinha', () => {
-  it('só no Chegamos! tocado na tela, fora do modo painel', () => {
-    expect(memoryPrompt({ source: 'tap', panelOn: false, stop: nature, answered: false })).toBe(
-      'sheet',
-    );
+  it('só no Chegamos! tocado na tela', () => {
+    expect(memoryPrompt({ source: 'tap', stop: nature, answered: false })).toBe('sheet');
   });
 
-  it('nunca por cima de quem dirige: painel, notificação, catch-up, pergunta e outro membro viram card', () => {
-    for (const source of ['panel', 'notification', 'catchup', 'question', 'remote'] as const) {
-      expect(memoryPrompt({ source, panelOn: false, stop: nature, answered: false })).toBe('card');
+  it('nunca por cima de quem dirige: a posição, a notificação, o catch-up, a pergunta e outro membro viram card', () => {
+    for (const source of ['live', 'notification', 'catchup', 'question', 'remote'] as const) {
+      expect(memoryPrompt({ source, stop: nature, answered: false })).toBe('card');
     }
-    expect(memoryPrompt({ source: 'tap', panelOn: true, stop: nature, answered: false })).toBe(
-      'card',
-    );
   });
 
   it('nó de saída e parada já respondida não pedem nada', () => {
-    expect(
-      memoryPrompt({ source: 'tap', panelOn: false, stop: { kind: 'origin' }, answered: false }),
-    ).toBe('none');
-    expect(memoryPrompt({ source: 'tap', panelOn: false, stop: nature, answered: true })).toBe(
-      'none',
-    );
+    expect(memoryPrompt({ source: 'tap', stop: { kind: 'origin' }, answered: false })).toBe('none');
+    expect(memoryPrompt({ source: 'tap', stop: nature, answered: true })).toBe('none');
   });
 });
 

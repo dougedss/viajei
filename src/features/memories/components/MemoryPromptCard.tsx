@@ -14,7 +14,7 @@ type Props = {
 };
 
 /**
- * O lugar da folha quando ela não pode abrir sozinha (modo painel, notificação, catch-up, outro
+ * O lugar da folha quando ela não pode abrir sozinha (a posição, notificação, catch-up, outro
  * membro): um card discreto no Modo Viagem, até ser respondido ou dispensado.
  */
 export function MemoryPromptCard({ stop, uid, profiles, more, onOpen, onDismiss }: Props) {

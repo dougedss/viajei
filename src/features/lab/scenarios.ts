@@ -77,8 +77,9 @@ export const LAB_SCENARIOS = {
       'Na lista, "Desde a última vez" mostra a saída; a posição marca Chegamos! e vira o card "Como foi?"',
   },
   app_extras: {
-    label: 'App · painel e calendário',
-    description: 'Modo painel liga e desliga; o dia sai como .ics',
+    label: 'App · posição, tela acesa e calendário',
+    description:
+      'Com o mapa aberto a posição é acompanhada; "Tela acesa" liga e desliga; o dia sai como .ics',
   },
   app_maquete: {
     label: 'App · maquete',

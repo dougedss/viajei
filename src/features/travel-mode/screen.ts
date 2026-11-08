@@ -25,9 +25,9 @@ export type DayBarState<T extends DayLike> = {
   canNext: boolean;
 };
 
-/** "sáb, 12 dez" em pt-BR, sem os pontos das abreviações. */
+/** "sáb, 12 dez" em pt-BR (no date-fns pt-BR o dia curto é `EEEEEE`; `EEE` é o nome inteiro). */
 export function formatDayBar(date: string): string {
-  return format(parseISO(date), 'EEE, d MMM', { locale: ptBR }).replace(/\./g, '').toLowerCase();
+  return format(parseISO(date), 'EEEEEE, d MMM', { locale: ptBR }).replace(/\./g, '').toLowerCase();
 }
 
 export function dayLabel(date: string, index: number): string {

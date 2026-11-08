@@ -168,15 +168,23 @@ export function PositionLine({
   position,
   tracking = false,
   lowPower = false,
+  denied = false,
 }: {
   position: CatchupPosition | null;
   tracking?: boolean;
   lowPower?: boolean;
+  /** o navegador negou a posição: uma frase, sem insistir (a pergunta do app é outra, D48) */
+  denied?: boolean;
 }) {
   const gps = tracking ? (
     <span className="inline-flex items-center gap-1 font-semibold text-on-time-ink" data-gps>
       <span className="size-2 rounded-full bg-on-time" aria-hidden="true" />
       GPS{lowPower ? ' econômico' : ''}
+    </span>
+  ) : denied ? (
+    <span className="inline-flex items-center gap-1" data-gps-denied>
+      <MapPinOff className="size-4 shrink-0" aria-hidden="true" />
+      Posição negada no navegador: os botões continuam valendo
     </span>
   ) : null;
   if (!position) {
