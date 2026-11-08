@@ -163,11 +163,12 @@ function winery(ctx: Ctx): void {
     block(ctx, 3.1, 0.5, 0.26, p.leaf, 0, 0.5, z);
     block(ctx, 3.1, 0.04, 0.04, p.cars.chrome, 0, 1.05, z);
   }
-  const barrel = mesh(ctx, new CylinderGeometry(0.42, 0.42, 1.0, 12), p.barrel, 0.9, 0.42, 1.0);
+  // o barril deitado, apoiado pelos aros (raio 0,44: o chão é o aro, não a madeira)
+  const barrel = mesh(ctx, new CylinderGeometry(0.42, 0.42, 1.0, 12), p.barrel, 0.9, 0.44, 1.0);
   barrel.rotation.z = Math.PI / 2;
   const hoop = new CylinderGeometry(0.44, 0.44, 0.06, 12);
   for (const dx of [-0.32, 0.32]) {
-    const h = mesh(ctx, hoop, p.cars.chrome, 0.9 + dx, 0.42, 1.0);
+    const h = mesh(ctx, hoop, p.cars.chrome, 0.9 + dx, 0.44, 1.0);
     h.rotation.z = Math.PI / 2;
   }
 }
