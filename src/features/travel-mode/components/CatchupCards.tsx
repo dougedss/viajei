@@ -169,15 +169,22 @@ export function PositionLine({
   tracking = false,
   lowPower = false,
   denied = false,
+  fixAt = null,
 }: {
   position: CatchupPosition | null;
   tracking?: boolean;
   lowPower?: boolean;
   /** o navegador negou a posição: uma frase, sem insistir (a pergunta do app é outra, D48) */
   denied?: boolean;
+  /** a hora da última leitura do acompanhamento (só como marca, para os testes saberem que ela chegou) */
+  fixAt?: number | null;
 }) {
   const gps = tracking ? (
-    <span className="inline-flex items-center gap-1 font-semibold text-on-time-ink" data-gps>
+    <span
+      className="inline-flex items-center gap-1 font-semibold text-on-time-ink"
+      data-gps
+      data-fix-at={fixAt ?? undefined}
+    >
       <span className="size-2 rounded-full bg-on-time" aria-hidden="true" />
       GPS{lowPower ? ' econômico' : ''}
     </span>

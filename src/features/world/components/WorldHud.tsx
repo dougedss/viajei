@@ -49,9 +49,14 @@ type Props = {
 
 export const HUD_TOP = 44;
 export const HUD_BOTTOM = 72;
-/** a pílula presa ao topo fica logo abaixo da faixa de cima do palco */
-const PINNED_TOP = HUD_TOP + 52;
+/**
+ * A pílula presa ao topo: a âncora é a base dela (a pílula sobe a partir daí, uns 70 px com a haste),
+ * então fica inteira abaixo da faixa de cima do palco (o clima, "Rever o dia", até ~56 px)
+ */
+const PINNED_TOP = 136;
 const PINNED_MARGIN_X = 56;
+/** a pílula inteira cabe na tela: a base do nó abaixo da faixa de cima e acima do pé, com folga lateral */
+const IN_VIEW = { top: PINNED_TOP, bottom: 24, side: 24 };
 
 /**
  * Põe cada pílula onde o nó dela está na tela, pelo enquadramento atual: só as em cena; a da próxima
@@ -63,14 +68,22 @@ function placePills(
   nodes: readonly LayoutNode[],
   nextId: string | null,
 ): void {
-  const { width } = runtime.viewport;
+  const { width, height } = runtime.viewport;
   for (const node of nodes) {
     const el = root.querySelector<HTMLElement>(`[data-pill="${node.stop_id}"]`);
     if (!el) continue;
     const [x, y, z] = node.position;
     const p = runtime.project([x, y + PILL_LIFT, z]);
-    const pinned = !p.visible && p.depth > 0 && node.stop_id === nextId;
-    if (p.visible) {
+    // em cena de verdade: a pílula inteira dentro do palco (a projeção tolera uma margem fora dele,
+    // que aqui viraria uma pílula cortada pela borda)
+    const inView =
+      p.depth > 0 &&
+      p.x >= IN_VIEW.side &&
+      p.x <= width - IN_VIEW.side &&
+      p.y >= IN_VIEW.top &&
+      p.y <= height - IN_VIEW.bottom;
+    const pinned = !inView && p.depth > 0 && node.stop_id === nextId;
+    if (inView) {
       el.style.left = `${String(Math.round(p.x))}px`;
       el.style.top = `${String(Math.round(p.y))}px`;
       el.hidden = false;

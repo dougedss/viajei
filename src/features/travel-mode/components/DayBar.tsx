@@ -34,10 +34,10 @@ export function DayBar<T extends DayLike>({
 }: Props<T>) {
   return (
     <header className="shrink-0 bg-paper pt-[env(safe-area-inset-top,0px)] safe-x" data-day-bar>
-      <div className="flex h-11 items-center justify-between gap-2">
+      <div className="flex h-12 items-center justify-between gap-2">
         <Link
           to="/viagens"
-          className="flex min-h-11 min-w-0 flex-1 items-center mv-text-15 font-semibold text-ink-2"
+          className="flex min-h-12 min-w-0 flex-1 items-center mv-text-15 font-semibold text-ink-2"
         >
           <span className="truncate">{tripName}</span>
         </Link>

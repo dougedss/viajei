@@ -4,6 +4,7 @@ import type { Catchup } from '@/features/travel-mode/catchup.ts';
 import type { DayState } from '@/features/travel-mode/rules.ts';
 import type { RouteStatus } from '@/features/itinerary/route.ts';
 import type { DaySummary } from '@/features/weather/rules.ts';
+import type { ConvoyCar } from './convoy.ts';
 import type { DayRoute, Profile, RouteLeg, Stop, Trip, WeatherEntry } from '@/lib/db/schema.ts';
 import { readUrlFlags } from '@/lib/three/prefs.ts';
 import { ThreeBoundary } from '@/lib/three/ThreeBoundary.tsx';
@@ -21,7 +22,7 @@ export type EventsOwner = 'world' | 'card';
 
 export type { ReviewPhoto } from './replay.ts';
 
-/** O espaço, em px, que a barra do "Agora" cobre embaixo: a lista rola até acima dela. */
+/** O espaço, em px, que a barra do "Agora" costuma cobrir embaixo: a conta do quadro largo da maquete. */
 export const NOW_BAR_INSET = 136;
 
 export type WorldSlotProps = {
@@ -45,6 +46,10 @@ export type WorldSlotProps = {
   reviewPhotos?: readonly ReviewPhoto[] | undefined;
   /** tocar numa parada (a miniatura, a pílula, a linha da lista) abre a folha dela (fase 14) */
   onOpenStop?: ((stopId: string) => void) | undefined;
+  /** quem do time está em outro carro: um carro pequeno na estrada por pessoa (D179) */
+  convoy?: readonly ConvoyCar[] | undefined;
+  /** a altura medida do que fica sobre o pé da tela: a lista do dia termina acima disso */
+  bottomInset: number;
   /**
    * A previsão do dia guardada no aparelho (funciona sem rede): o chip do clima na abertura e na faixa
    * de cima, e a chuva nas pílulas. Só HTML: nada do tempo entra na cena 3D.
@@ -93,7 +98,11 @@ export function ListView({
   notice,
   stopExtras,
   onOpenStop,
-}: Pick<WorldSlotProps, 'state' | 'legs' | 'profiles' | 'route' | 'stopExtras' | 'onOpenStop'> & {
+  bottomInset,
+}: Pick<
+  WorldSlotProps,
+  'state' | 'legs' | 'profiles' | 'route' | 'stopExtras' | 'onOpenStop' | 'bottomInset'
+> & {
   notice?: string;
 }) {
   return (
@@ -105,7 +114,7 @@ export function ListView({
       notice={notice}
       stopExtras={stopExtras}
       onOpenStop={onOpenStop}
-      bottomInset={NOW_BAR_INSET}
+      bottomInset={bottomInset}
     />
   );
 }

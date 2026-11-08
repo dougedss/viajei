@@ -243,10 +243,10 @@ function appListas(r: RoadRun): Promise<Check> {
         },
       ],
       [
-        'B vê o selo na visão geral',
+        'B vê o selo em Detalhes',
         async () => {
           const b = await r.peer();
-          await b.goto(r.trip(listas.trip));
+          await b.goto(r.trip(listas.trip, '/detalhes'));
           await b
             .getByRole('link', { name: /Pronto para partir\s+As duas listas estão fechadas/ })
             .waitFor();

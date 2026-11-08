@@ -49,7 +49,10 @@ export type CatchupArgs = {
 
 export type Catchup = CatchupResult & {
   events: TravelEvent[];
+  /** a posição deste aparelho agora: a do acompanhamento quando há, senão a leitura única */
   fix: Fix | null;
+  /** a leitura única ao abrir (ou ao voltar à tela): é dela que vem o Chegamos! do catch-up */
+  readFix: Fix | null;
   /** o estado anterior deste aparelho, para a fase 5 animar o replay */
   prev: TravelState | null;
   /** o estado anterior já foi lido (mesmo que não exista): a maquete pode decidir o replay */
@@ -77,10 +80,29 @@ export function useCatchup(args: CatchupArgs): Catchup {
 
   const fix = liveFix && (!gpsFix || liveFix.t >= gpsFix.t) ? liveFix : gpsFix;
 
-  const result = useMemo(
-    () => catchup({ stops: state.stops, at: state.at, next: state.next, route, fix, teamTracks }),
-    [state.stops, state.at, state.next, route, fix, teamTracks],
-  );
+  // a posição e as "passadas" pela leitura mais nova; o Chegamos! automático só pela leitura única
+  // ao abrir: com o mapa aberto, quem decide a chegada é a presença de 3 min (`live-rules.ts`), e
+  // cada leitura do acompanhamento não pode valer uma chegada (fase 14)
+  const result = useMemo(() => {
+    const now = catchup({
+      stops: state.stops,
+      at: state.at,
+      next: state.next,
+      route,
+      fix,
+      teamTracks,
+    });
+    if (fix === gpsFix) return now;
+    const once = catchup({
+      stops: state.stops,
+      at: state.at,
+      next: state.next,
+      route,
+      fix: gpsFix,
+      teamTracks,
+    });
+    return { ...now, autoArrive: once.autoArrive };
+  }, [state.stops, state.at, state.next, route, fix, gpsFix, teamTracks]);
 
   const events = useMemo(
     () => eventsSince(prev, state.stops, uid, result.passed),
@@ -159,5 +181,5 @@ export function useCatchup(args: CatchupArgs): Catchup {
     setPrev((p) => (p ? { ...p, seen_event_ids: [...new Set([...p.seen_event_ids, ...ids])] } : p));
   }, [events, dayId]);
 
-  return { ...result, events, fix, prev, loaded, dismissEvents, markSeen, run };
+  return { ...result, events, fix, readFix: gpsFix, prev, loaded, dismissEvents, markSeen, run };
 }

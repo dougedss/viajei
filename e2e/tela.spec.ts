@@ -1,7 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { LARGURA_ESTREITA, ROLAGEM_LATERAL } from '../src/features/lab/guards.ts';
-import { entrar } from './helpers/app.ts';
-import { criarUsuario } from './helpers/users.ts';
+import { criarUsuario, SENHA } from './helpers/users.ts';
 import { viagemNaSerra } from './helpers/world.ts';
 
 /**
@@ -42,7 +41,12 @@ test('a tela da viagem não rola, "Hoje" volta, e a ação e Detalhes ficam sob 
   const user = await criarUsuario('Tela');
   // a viagem de hoje (dois dias): o "Agora" tem Partiu! e as setas têm para onde ir
   const { tripId } = await viagemNaSerra(user.id, 0);
-  await entrar(page, user.email);
+  // com uma viagem de hoje, entrar cai direto na tela da viagem (D33), não na lista
+  await page.goto('/entrar');
+  await page.getByLabel('E-mail').fill(user.email);
+  await page.getByLabel('Senha', { exact: true }).fill(SENHA);
+  await page.getByRole('button', { name: 'Entrar' }).click();
+  await expect(page.getByRole('region', { name: 'Agora' })).toBeVisible({ timeout: 20_000 });
 
   await test.step('com a lista: nada rola, a 393 e a 360 px', async () => {
     await page.goto(`/viagens/${tripId}?render=list`);

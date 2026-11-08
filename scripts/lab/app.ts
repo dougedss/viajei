@@ -582,6 +582,11 @@ export function appReabrir(app: App, serverMarked: () => Promise<void>): Promise
             .getByText(new RegExp(`Saímos: ${target.originName}`))
             .first()
             .waitFor();
+          // um cartão por vez sobre a maquete (fase 14, D175): o pedido de posição espera este
+          await page.getByRole('button', { name: 'Ok', exact: true }).click();
+          await page
+            .getByRole('heading', { name: 'Desde a última vez' })
+            .waitFor({ state: 'detached' });
         },
       ],
       [

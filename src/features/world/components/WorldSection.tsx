@@ -492,6 +492,7 @@ function WorldStage(p: StageProps) {
           onFrame={quality.onFrame}
           onFirstFrame={onFirstFrame}
           onTapStop={p.onOpenStop}
+          convoy={p.convoy}
         />
       </WorldCanvas>
       {!firstFrame ? (

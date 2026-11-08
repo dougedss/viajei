@@ -69,8 +69,9 @@ test('a tela da viagem monta a maquete e "Ver como lista" persiste', async ({ pa
   await expect(folha).toContainText('Natureza · Dia 1 · 2ª parada');
   await expect(folha.getByRole('link', { name: 'Ver no roteiro' })).toBeVisible();
   await expect(folha.getByRole('button', { name: 'Gasto' })).toBeVisible();
+  // a folha desce com animação; no SwiftShader da CI a maquete segura a thread por segundos
   await page.keyboard.press('Escape');
-  await expect(folha).toBeHidden();
+  await expect(folha).toBeHidden({ timeout: 30_000 });
 
   // a lista do dia não está na tela: entra no lugar da maquete pelo botão do topo
   await expect(page.getByRole('list', { name: 'Trilha do dia' })).toHaveCount(0);

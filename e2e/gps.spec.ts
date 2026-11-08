@@ -94,8 +94,10 @@ test('com o mapa aberto, a posição marca Partiu! e Chegamos! sozinha, com Desf
     await expect(page.getByRole('region', { name: 'Agora' })).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText('Casa').first()).toBeVisible({ timeout: 15_000 });
     await page.getByRole('button', { name: 'Usar posição' }).click();
-    // a posição passa a ser acompanhada: o ponto "GPS" na barra do "Agora"
+    // a posição passa a ser acompanhada: o ponto "GPS" na barra do "Agora", e a primeira leitura
+    // (a da Casa) chega antes de o carro sair; sem ela, a regra não teria visto o carro na parada
     await expect(page.locator('[data-gps]')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-gps][data-fix-at]')).toBeAttached({ timeout: 15_000 });
   });
 
   await test.step('vê o carro na Casa e sai: Partiu! sozinho', async () => {
@@ -118,9 +120,11 @@ test('com o mapa aberto, a posição marca Partiu! e Chegamos! sozinha, com Desf
     await expect(page.getByText('Chegamos: Parque', { exact: true })).toHaveCount(0);
     await page.clock.fastForward('01:40');
     await context.setGeolocation(PARQUE);
+    // uma chegada só, mesmo com várias leituras dentro do raio (a regra não repete em 10 min)
     await expect(page.getByText('Chegamos: Parque', { exact: true })).toBeVisible({
       timeout: 15_000,
     });
+    await expect(page.getByText('Chegamos: Parque', { exact: true })).toHaveCount(1);
     // a chegada pela posição vira o card "Como foi?", sem abrir a folha (D83)
     await expect(page.getByRole('region', { name: 'Como foi Parque?' })).toBeVisible();
     await expect(page.getByRole('dialog', { name: 'Como foi Parque?' })).toHaveCount(0);

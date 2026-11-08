@@ -9,7 +9,7 @@ import {
   Sun,
   Ticket,
 } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { NotFound } from '@/app/NotFound.tsx';
 import { Splash } from '@/app/Splash.tsx';
@@ -34,7 +34,10 @@ import type { Profile, Trip } from '@/lib/db/schema.ts';
 import { cx } from '@/lib/cx.ts';
 import { useSession } from '@/lib/supabase/session.ts';
 import { useDocumentVisible } from '@/lib/visibility.ts';
+import { convoy, teamPoints } from '@/features/world/convoy.ts';
+import { useElementSize } from '@/features/world/hooks/useElementSize.ts';
 import { WorldSlot, type EventsOwner, type ReviewPhoto } from '@/features/world/WorldSlot.tsx';
+import { indexRoute } from '@/lib/geo/project.ts';
 import { useRenderPref, writeRenderPref } from '@/features/world/prefs.ts';
 import { dismissMemoryPrompt } from '@/features/memories/actions.ts';
 import { HowWasItSheet } from '@/features/memories/components/HowWasItSheet.tsx';
@@ -246,6 +249,10 @@ function DayView({
   const toast = useToast();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
+  // o que fica sobre o pé da tela (o cartão, "Detalhes", o "Agora"), medido: a lista do dia termina
+  // acima disso, para nada rolar até debaixo da barra
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const overlay = useElementSize(overlayRef);
   // a folha da parada (a miniatura, a pílula ou a linha da lista) e o gasto que nasce dela
   const [openStopId, setOpenStopId] = useState<string | null>(null);
   const [expenseDraft, setExpenseDraft] = useState<ExpenseDraft | null>(null);
@@ -378,10 +385,11 @@ function DayView({
     cuRef.current = cu;
   }, [cu]);
 
-  // Chegamos! automático do catch-up: uma vez por leitura, com o mesmo toast de desfazer
+  // Chegamos! automático do catch-up: uma vez por leitura única (ao abrir, ao voltar à tela), com o
+  // mesmo toast de desfazer; as leituras do acompanhamento são da regra da D47 (`useLivePosition`)
   const autoHandled = useRef(new Set<string>());
   const autoStop = cu.autoArrive;
-  const fixAt = cu.fix?.t ?? 0;
+  const fixAt = cu.readFix?.t ?? 0;
   useEffect(() => {
     if (!active || !autoStop || !state.arriveAvailable || state.next?.id !== autoStop.id) return;
     const key = `${autoStop.id}:${fixAt}`;
@@ -399,6 +407,22 @@ function DayView({
 
   const pendingPassed = cu.passed.filter((s) => !dismissedPassed.includes(s.id));
   const question = pendingPassed[0];
+
+  // o comboio (D179): quem do time está em outro carro, pela última posição que mandou
+  const routeIndex = useMemo(
+    () => (route && route.geometry.length >= 2 ? indexRoute(route.geometry) : null),
+    [route],
+  );
+  const convoyCars = useMemo(
+    () =>
+      convoy({
+        me: cu.fix ? [cu.fix.lng, cu.fix.lat] : null,
+        team: teamPoints(teamTracks),
+        now: now.getTime(),
+        route: routeIndex,
+      }),
+    [cu.fix, teamTracks, now, routeIndex],
+  );
 
   // selo no ícone ao ir para o plano de fundo durante a viagem
   const leaveAtMs = state.leaveAt?.getTime() ?? null;
@@ -529,12 +553,17 @@ function DayView({
             stopExtras={stopExtras}
             reviewPhotos={reviewPhotos}
             onOpenStop={setOpenStopId}
+            convoy={convoyCars}
+            bottomInset={overlay.height}
             weather={{ summary: daySummary(forecast), stops: forecast?.stops ?? {} }}
           />
         )}
 
         {/* sobre a maquete, de baixo para cima: o "Agora", "Detalhes" e o cartão da vez */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex flex-col gap-3 px-3 pb-[max(12px,env(safe-area-inset-bottom,0px))]">
+        <div
+          ref={overlayRef}
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex flex-col gap-3 px-3 pb-[max(12px,env(safe-area-inset-bottom,0px))]"
+        >
           {card === 'since' ? (
             <div className="pointer-events-auto">
               <SinceLastTime
@@ -614,6 +643,7 @@ function DayView({
                   tracking={live.tracking}
                   lowPower={live.lowPower}
                   denied={live.denied}
+                  fixAt={live.fix?.t ?? null}
                 />
               ) : null
             }

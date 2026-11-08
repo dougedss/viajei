@@ -5,11 +5,13 @@ import { createEnvironment } from '@/art/environment.ts';
 import type { Palette } from '@/art/palette.ts';
 import { createSceneTextures } from '@/art/textures.ts';
 import type { CarSpec } from '@/art/cars/types.ts';
+import type { ConvoyCar } from '../convoy.ts';
 import type { StopStatus } from '@/features/travel-mode/rules.ts';
 import type { MotionEvent } from '../motion.ts';
 import type { WorldTier } from '../quality.ts';
 import { Car } from './Car.tsx';
 import { CameraRig } from './CameraRig.tsx';
+import { ConvoyCars } from './ConvoyCars.tsx';
 import { buildHeightField } from './heightfield.ts';
 import { Lighting, type LightingHandle } from './Lighting.tsx';
 import { Miniatures } from './Miniatures.tsx';
@@ -38,6 +40,8 @@ export type WorldSceneProps = {
   onFirstFrame: () => void;
   /** tocar numa miniatura abre a folha da parada (fase 14) */
   onTapStop?: ((stopId: string) => void) | undefined;
+  /** o comboio: quem do time está em outro carro (D179) */
+  convoy?: readonly ConvoyCar[] | undefined;
   /**
    * A câmera e o laço de outra cena sobre o mesmo cenário (o filme da retrospectiva, fase 9). Sem
    * isto, a câmera que segue o carro e o laço da maquete.
@@ -56,6 +60,7 @@ export function WorldScene({
   onFrame,
   onFirstFrame,
   onTapStop,
+  convoy,
   controls,
 }: WorldSceneProps) {
   const gl = useThree((s) => s.gl) as unknown as WebGPURenderer;
@@ -126,6 +131,14 @@ export function WorldScene({
         group={groups.objects}
       />
       <Car runtime={runtime} field={field} car={car} group={groups.objects} />
+      {convoy && convoy.length > 0 ? (
+        <ConvoyCars
+          runtime={runtime}
+          cars={convoy}
+          carFor={() => ({ model: car.model, color: 'mist', accessories: [], plate: null })}
+          group={groups.objects}
+        />
+      ) : null}
       <Miniatures runtime={runtime} field={field} onTap={onTapStop} />
       {controls ?? (
         <>

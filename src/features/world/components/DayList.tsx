@@ -21,7 +21,8 @@ type Props = {
   stopExtras?: ((stop: Stop) => ReactNode) | undefined;
   /** tocar no nome de uma parada abre a folha dela */
   onOpenStop?: ((stopId: string) => void) | undefined;
-  /** o espaço reservado embaixo para a barra do "Agora", em px */
+  /** a altura do que fica sobre o pé da tela (a barra do "Agora", "Detalhes", o cartão), em px: a
+   * lista termina acima disso, para o que rola até o fim não ficar debaixo da barra */
   bottomInset: number;
 };
 
@@ -41,8 +42,8 @@ export function DayList({
   return (
     <section
       aria-labelledby="h-lista"
-      className="absolute inset-0 overflow-y-auto bg-paper px-4 pt-3"
-      style={{ paddingBottom: bottomInset + 16 }}
+      className="absolute inset-x-0 top-0 overflow-y-auto bg-paper px-4 pt-3 pb-4"
+      style={{ bottom: bottomInset }}
       data-day-list
     >
       <div className="flex items-baseline gap-3 pb-3">
