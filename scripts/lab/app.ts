@@ -52,9 +52,95 @@ export type App = {
   target: AppTarget;
   cdp: CDPSession | null;
   registrationId: string | null;
+  /** os erros que a página do app soltou até agora (exceções e `console.error`) */
+  errors: () => string[];
 };
 
-type Step = { step: string; ok: boolean; detail?: string };
+type Step = { step: string; ok: boolean; ms: number; detail?: string };
+
+/**
+ * As tarefas longas da thread principal (50 ms ou mais), desde que a página abriu: é o que diz se o
+ * app estava ocupado enquanto um passo esperava (fase 13). Entra como script de início do contexto;
+ * `longTasksAround` resume em volta de um instante.
+ */
+export const LONG_TASKS_INIT = `(() => {
+  const tasks = [];
+  globalThis.__viajeiLongTasks = tasks;
+  if (typeof PerformanceObserver === 'undefined') return;
+  try {
+    new PerformanceObserver((list) => {
+      for (const e of list.getEntries()) {
+        tasks.push([Math.round(performance.timeOrigin + e.startTime), Math.round(e.duration)]);
+        if (tasks.length > 3000) tasks.shift();
+      }
+    }).observe({ type: 'longtask', buffered: true });
+  } catch {}
+})();`;
+
+export function longTasksAround(tasks: readonly [number, number][], at: number) {
+  const sum = (xs: readonly [number, number][]) => ({
+    quantas: xs.length,
+    total_ms: xs.reduce((acc, [, d]) => acc + d, 0),
+    maior_ms: xs.reduce((acc, [, d]) => Math.max(acc, d), 0),
+  });
+  const rel = (t: number) => {
+    const sec = ((t - at) / 1000).toFixed(1);
+    return sec.startsWith('-') ? `${sec}s` : `+${sec}s`;
+  };
+  return {
+    antes: sum(tasks.filter(([t, d]) => t + d <= at)),
+    depois: sum(tasks.filter(([t, d]) => t + d > at)),
+    maiores: [...tasks]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([t, d]) => `${rel(t)} ${String(d)} ms`),
+  };
+}
+
+/** Os erros da página (exceções e `console.error`), para a falha dizer o que o app disse. */
+export function watchErrors(page: Page): () => string[] {
+  const errors: string[] = [];
+  const push = (text: string) => {
+    errors.push(text.split('\n')[0]?.slice(0, 300) ?? '');
+    if (errors.length > 20) errors.shift();
+  };
+  page.on('pageerror', (err) => push(`erro: ${err.message}`));
+  page.on('console', (msg) => {
+    // a barra da Vercel bloqueada pelo próprio laboratório (D106) não é erro do app
+    if (msg.type() === 'error' && !msg.text().includes('ERR_BLOCKED_BY_CLIENT')) {
+      push(`console: ${msg.text()}`);
+    }
+  });
+  return () => [...errors];
+}
+
+/** O que a página do app estava fazendo num instante: as tarefas longas, os toasts e os erros. */
+const PAGE_DIAG = `(() => ({
+  tasks: globalThis.__viajeiLongTasks || [],
+  toasts: [...document.querySelectorAll('[role=status]')].map((el) => (el.textContent || '').trim().slice(0, 80)),
+  permissao: typeof Notification === 'undefined' ? 'sem Notification' : Notification.permission,
+  visibilidade: document.visibilityState,
+}))()`;
+
+type PageDiag = {
+  tasks: [number, number][];
+  toasts: string[];
+  permissao: string;
+  visibilidade: string;
+};
+
+/** Um diagnóstico curto da página em volta de `at`, para a mensagem da falha. */
+export async function pageDiagnosis(app: App, at: number): Promise<string> {
+  const d = await app.page.evaluate<PageDiag>(PAGE_DIAG).catch(() => null);
+  if (!d) return JSON.stringify({ erros: app.errors() });
+  return JSON.stringify({
+    tarefas_longas: longTasksAround(d.tasks, at),
+    toasts: d.toasts,
+    permissao: d.permissao,
+    visibilidade: d.visibilidade,
+    erros: app.errors().slice(-5),
+  });
+}
 export const TIMEOUT = 20_000;
 
 /**
@@ -195,8 +281,10 @@ export async function openApp(target: AppTarget): Promise<App> {
   });
   await context.addInitScript({ content: initScript(target.subscription) });
   await context.addInitScript({ content: QUIET });
+  await context.addInitScript({ content: LONG_TASKS_INIT });
   const page = await context.newPage();
   page.setDefaultTimeout(TIMEOUT);
+  const errors = watchErrors(page);
   // o Chromium sem tela responde "negado" a notificações que ninguém concedeu; num aparelho de
   // verdade o estado é "ainda não perguntado" (prompt), e é ele que faz a folha de avisos aparecer
   const session = await context.newCDPSession(page);
@@ -209,7 +297,7 @@ export async function openApp(target: AppTarget): Promise<App> {
   });
   await session.detach();
   await enterPreview(page, target.appUrl, target.bypass);
-  return { browser, context, page, target, cdp: null, registrationId: null };
+  return { browser, context, page, target, cdp: null, registrationId: null, errors };
 }
 
 export async function closeApp(app: App): Promise<void> {
@@ -238,12 +326,13 @@ export async function runSteps(
   const startedAt = Date.now();
   const done: Step[] = [];
   for (const [step, run] of steps) {
+    const t0 = Date.now();
     try {
       await run();
-      done.push({ step, ok: true });
+      done.push({ step, ok: true, ms: Date.now() - t0 });
     } catch (err) {
       const message = (err instanceof Error ? err.message : String(err)).split('\n')[0] ?? '';
-      done.push({ step, ok: false, detail: message.slice(0, 700) });
+      done.push({ step, ok: false, ms: Date.now() - t0, detail: message.slice(0, 900) });
       await app.page
         .screenshot({ path: join(app.target.artifactsDir, `${scenario}.png`), fullPage: true })
         .catch(() => undefined);
@@ -307,7 +396,19 @@ export function appAvisos(app: App): Promise<Check> {
           // o "Permitir" do navegador, no toque em "Ativar avisos"
           await app.context.grantPermissions(['notifications'], { origin: target.appUrl });
           await sheet.getByRole('button', { name: 'Ativar avisos' }).click();
-          await page.getByText('Avisos ativados').waitFor();
+          const clickedAt = Date.now();
+          try {
+            await page.getByText('Avisos ativados').waitFor();
+          } catch (err) {
+            // o toast não veio: o que a página fazia (fase 13: a thread principal, os toasts, os erros)
+            const message = err instanceof Error ? (err.message.split('\n')[0] ?? '') : String(err);
+            throw new Error(
+              `${message} (o toast depois do toque); a página: ${await pageDiagnosis(app, clickedAt)}`,
+              {
+                cause: err,
+              },
+            );
+          }
         },
       ],
       [

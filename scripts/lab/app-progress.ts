@@ -6,7 +6,16 @@ import type { LabScenario } from '../../src/features/lab/scenarios.ts';
 import { formatTrace, type TraceEntry } from '../../src/lib/db/sync/trace.ts';
 import { uuidV5 } from '../../src/lib/ids/uuid.ts';
 import { wallToInstant } from '../../src/lib/time/zone.ts';
-import { DEVICE, enterPreview, QUIET, signInPage, TIMEOUT } from './app.ts';
+import {
+  DEVICE,
+  enterPreview,
+  LONG_TASKS_INIT,
+  longTasksAround,
+  QUIET,
+  signInPage,
+  TIMEOUT,
+  watchErrors,
+} from './app.ts';
 import { addDays } from './arm.ts';
 import { must, ok, syncPush, type Op } from './client.ts';
 import { wall, type Check } from './evaluate.ts';
@@ -56,23 +65,6 @@ const OUTBOX = `async () => {
   db.close();
   return rows.map((o) => [o.table, o.op, o.state, o.attempts, Math.round((o.next_at - Date.now()) / 1000) + 's', o.last_error].join(' '));
 }`;
-/**
- * As tarefas longas da thread principal (50 ms ou mais), desde que a página abriu: é o que diz se o
- * app estava ocupado enquanto a fila esperava (fase 13). Entra como script de início do contexto.
- */
-const LONG_TASKS_INIT = `(() => {
-  const tasks = [];
-  globalThis.__viajeiLongTasks = tasks;
-  if (typeof PerformanceObserver === 'undefined') return;
-  try {
-    new PerformanceObserver((list) => {
-      for (const e of list.getEntries()) {
-        tasks.push([Math.round(performance.timeOrigin + e.startTime), Math.round(e.duration)]);
-        if (tasks.length > 3000) tasks.shift();
-      }
-    }).observe({ type: 'longtask', buffered: true });
-  } catch {}
-})();`;
 
 /**
  * O índice de CPU da máquina, pela receita do Lighthouse (`benchmarkIndex`): meio segundo de
@@ -123,48 +115,6 @@ type Diag = {
   origin: number;
   visibility: string;
 };
-
-/**
- * O que a thread principal fez no documento inteiro, com o toque como referência: quantas tarefas
- * longas antes e depois dele, quanto somam, e as maiores com o instante relativo em segundos. É
- * assim que se vê um palco 3D compilando shaders enquanto a fila esperava (fase 13).
- */
-function longTasksAround(tasks: readonly [number, number][], clickedAt: number) {
-  const sum = (xs: readonly [number, number][]) => ({
-    quantas: xs.length,
-    total_ms: xs.reduce((acc, [, d]) => acc + d, 0),
-    maior_ms: xs.reduce((acc, [, d]) => Math.max(acc, d), 0),
-  });
-  const rel = (at: number) => {
-    const sec = ((at - clickedAt) / 1000).toFixed(1);
-    return sec.startsWith('-') ? `${sec}s` : `+${sec}s`;
-  };
-  return {
-    antes_do_toque: sum(tasks.filter(([at, d]) => at + d <= clickedAt)),
-    depois_do_toque: sum(tasks.filter(([at, d]) => at + d > clickedAt)),
-    maiores: [...tasks]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8)
-      .map(([at, d]) => `${rel(at)} ${String(d)} ms`),
-  };
-}
-
-/** Os erros da página (exceções e `console.error`), para a falha dizer o que o app disse. */
-function watchErrors(page: Page): () => string[] {
-  const errors: string[] = [];
-  const push = (text: string) => {
-    errors.push(text.split('\n')[0]?.slice(0, 300) ?? '');
-    if (errors.length > 20) errors.shift();
-  };
-  page.on('pageerror', (err) => push(`erro: ${err.message}`));
-  page.on('console', (msg) => {
-    // a barra da Vercel bloqueada pelo próprio laboratório (D106) não é erro do app
-    if (msg.type() === 'error' && !msg.text().includes('ERR_BLOCKED_BY_CLIENT')) {
-      push(`console: ${msg.text()}`);
-    }
-  });
-  return () => [...errors];
-}
 
 const removedAt = () => new Date().toISOString();
 const tomb =
