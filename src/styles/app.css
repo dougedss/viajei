@@ -183,6 +183,14 @@
   [role='dialog'] {
     overflow-wrap: anywhere;
   }
+  /* Um campo nunca alarga a página: o `<input type="date">` tem largura mínima própria (uns
+     170 px com o padding), maior que a coluna de uma grade de dois campos a 360 px, e `w-full` não
+     encolhe abaixo dela. Com o mínimo zerado, a coluna manda (fase 13). */
+  input,
+  select,
+  textarea {
+    min-width: 0;
+  }
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

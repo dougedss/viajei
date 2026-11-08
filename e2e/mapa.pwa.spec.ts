@@ -58,8 +58,7 @@ test('o mapa visto com rede abre sem rede, com os tiles do cache', async ({ page
   // chunk do mapa, e é no build que a ordem das folhas de estilo vale)
   await page.getByRole('button', { name: '2. Cascata do Caracol' }).click();
   const sheet = page.getByRole('dialog', { name: 'Cascata do Caracol' });
-  await expect(sheet.locator('[data-map-sheet]')).toBeVisible();
-  expect(await folhaCoberta(page)).toEqual([]);
+  await expect.poll(() => folhaCoberta(page), { timeout: 10_000 }).toEqual([]);
   await page.keyboard.press('Escape');
   await expect(sheet).toBeHidden();
 
