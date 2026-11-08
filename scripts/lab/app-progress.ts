@@ -685,7 +685,9 @@ export async function appRetrospectiva(ctx: ProgressContext): Promise<Check> {
             }
             const t0 = Date.now();
             await sheet.getByRole('button', { name: 'Gerar vídeo' }).click();
-            await sheet.locator('[data-export-state="done"]').waitFor({ timeout: 15 * 60_000 });
+            // o Chrome da máquina do GitHub exporta em WebM · VP9 (sem H.264), por software: de 3 a
+            // 13 min em 07/11, e uma execução a 70% nos 15 min; 25 min de prazo (D151)
+            await sheet.locator('[data-export-state="done"]').waitFor({ timeout: 25 * 60_000 });
             data.exportacao_ms = Date.now() - t0;
             const meta = await page.evaluate<{ duration: number; width: number; height: number }>(`
               new Promise((resolve, reject) => {

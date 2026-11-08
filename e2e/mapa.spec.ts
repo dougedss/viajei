@@ -1,6 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
 import { criarUsuario, SENHA } from './helpers/users.ts';
-import { fakeOpenMeteo, fakeRouteDay, fakeTiles, viagemNaSerra } from './helpers/world.ts';
+import { appendFileSync } from 'node:fs';
+import {
+  fakeOpenMeteo,
+  fakeRouteDay,
+  fakeTiles,
+  viagemDoSeed,
+  viagemNaSerra,
+} from './helpers/world.ts';
 
 async function entrar(page: Page, email: string) {
   await page.goto('/entrar');
@@ -101,4 +108,49 @@ test('o mapa mostra o dia, a folha do pino e troca de dia', async ({ page, conte
   await page.getByRole('link', { name: 'Ver no mapa' }).click();
   await expect(page).toHaveURL(new RegExp(`/viagens/${tripId}/mapa\\?dia=${days[1]}$`));
   await expect(map).toHaveAttribute('data-map', days[1]);
+});
+
+/**
+ * O primeiro quadro com a viagem do seed inteira: 4 dias, 18 paradas e a estrada densa (milhares de
+ * pontos). As rotas chegam na primeira abertura (a tela busca as que faltam); a medida é a segunda,
+ * com tudo no Dexie, como no celular depois de visto. O número vai para o resumo do job da CI e para
+ * as anotações do relatório (D153).
+ */
+test('o mapa da viagem do seed inteira: o primeiro quadro', async ({ page, context }) => {
+  test.setTimeout(150_000);
+  await fakeTiles(context);
+  await fakeOpenMeteo(context);
+  const road = await fakeRouteDay(context);
+  const user = await criarUsuario('MapaSeed');
+  const { tripId } = await viagemDoSeed(user.id, 2);
+  await entrar(page, user.email);
+
+  const map = page.locator('[data-map="viagem"]');
+  await page.goto(`/viagens/${tripId}/mapa?dia=viagem`);
+  await expect(map.locator('[data-map-pin]')).toHaveCount(18, { timeout: 30_000 });
+  await expect
+    .poll(() => map.locator('[data-map-route="route"]').count(), { timeout: 60_000 })
+    .toBeGreaterThanOrEqual(10);
+  const lines = await map.locator('[data-map-route]').count();
+
+  const frames: number[] = [];
+  page.on('console', (msg) => {
+    const m = /mapa no primeiro quadro em (\d+) ms/.exec(msg.text());
+    if (m) frames.push(Number(m[1]));
+  });
+  const t0 = Date.now();
+  await page.reload();
+  await expect(map.locator('[data-map-pin]')).toHaveCount(18, { timeout: 30_000 });
+  await expect(map.locator('[data-map-route]')).toHaveCount(lines);
+  await expect(map).toHaveAttribute('data-map-ready', 'true');
+  const drawn = Date.now() - t0;
+  const svgPoints = await page.evaluate<number>(
+    `[...document.querySelectorAll('[data-map] path.map-line')].reduce((n, p) => n + (p.getAttribute('d') || '').split(/[ML]/).length - 1, 0)`,
+  );
+  const note = `viagem do seed: ${String(road.points())} pontos de estrada, ${String(svgPoints)} no SVG depois da simplificação do Leaflet; ${String(lines)} trechos; primeiro quadro ${String(frames[0] ?? '?')} ms da montagem; tudo na tela ${String(drawn)} ms do recarregar`;
+  test.info().annotations.push({ type: 'medida', description: note });
+  console.log(`::notice title=Mapa · primeiro quadro::${note}`);
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n- Mapa · ${note}\n`);
+  }
 });

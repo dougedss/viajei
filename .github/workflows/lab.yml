@@ -46,7 +46,8 @@ jobs:
   laboratorio:
     name: os cenários de ponta a ponta
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # a exportação do vídeo da retrospectiva leva até ~25 min numa máquina lenta (D151)
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
 

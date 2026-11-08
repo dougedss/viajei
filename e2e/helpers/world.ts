@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 import type { BrowserContext, Route } from '@playwright/test';
 import { inserir } from './db.ts';
@@ -130,7 +131,8 @@ export async function fakeOpenMeteo(context: BrowserContext): Promise<{ count: (
 }
 
 /** A rota do dia: a `route-day` respondendo com uma estrada que passa por um ponto entre cada par. */
-export async function fakeRouteDay(context: BrowserContext): Promise<void> {
+export async function fakeRouteDay(context: BrowserContext): Promise<{ points: () => number }> {
+  let total = 0;
   await context.route('**/functions/v1/route-day', async (route: Route) => {
     if (route.request().method() === 'OPTIONS') {
       await route.fulfill({
@@ -145,12 +147,23 @@ export async function fakeRouteDay(context: BrowserContext): Promise<void> {
       return;
     }
     const body = route.request().postDataJSON() as { waypoints: [number, number][] };
+    // uma estrada densa, como a de verdade (o traçado simplificado a 25 m tem milhares de pontos num
+    // dia de 400 km): um ponto a cada ~150 m, com uma curva suave entre as paradas
     const geometry: [number, number][] = [];
     body.waypoints.forEach((p, i) => {
       const next = body.waypoints[i + 1];
-      geometry.push(p);
-      if (next) geometry.push([(p[0] + next[0]) / 2 + 0.01, (p[1] + next[1]) / 2 + 0.01]);
+      if (!next) {
+        geometry.push(p);
+        return;
+      }
+      const steps = Math.max(2, Math.round(Math.hypot(next[0] - p[0], next[1] - p[1]) / 0.0014));
+      for (let k = 0; k < steps; k++) {
+        const t = k / steps;
+        const bend = Math.sin(t * Math.PI) * 0.02;
+        geometry.push([p[0] + (next[0] - p[0]) * t + bend, p[1] + (next[1] - p[1]) * t + bend]);
+      }
     });
+    total += geometry.length;
     await route.fulfill({
       json: {
         provider: 'ors',
@@ -165,6 +178,7 @@ export async function fakeRouteDay(context: BrowserContext): Promise<void> {
       headers: { 'access-control-allow-origin': '*' },
     });
   });
+  return { points: () => total };
 }
 
 /**
@@ -222,4 +236,59 @@ export async function viagemNaSerra(
     stop(days[1], 'a0', 'winery', 'Casa Valduga', '13:30', -29.17924, -51.55581),
   ]);
   return { tripId, days, dates };
+}
+
+type SeedStop = {
+  name: string;
+  kind: string;
+  time?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+};
+
+/**
+ * A viagem do seed inteira (4 dias, 18 paradas com coordenadas), montada direto no banco local com os
+ * dias a partir de `daysAhead`: é com ela que o primeiro quadro do mapa se mede.
+ */
+export async function viagemDoSeed(
+  ownerId: string,
+  daysAhead: number,
+): Promise<{ tripId: string; stops: number; days: string[] }> {
+  const seed = JSON.parse(readFileSync('supabase/seed/viagem-rs.json', 'utf8')) as {
+    days: { stops: SeedStop[] }[];
+  };
+  const tripId = uuidV4();
+  const dates = seed.days.map((_, i) => dateInSaoPaulo(daysAhead + i));
+  const now = new Date().toISOString();
+  await inserir('trips', [
+    {
+      id: tripId,
+      owner_id: ownerId,
+      name: 'RS do seed',
+      start_date: dates[0],
+      end_date: dates.at(-1),
+      updated_at: now,
+    },
+  ]);
+  const days = dates.map((d) => uuidV5(tripId, d));
+  await inserir(
+    'trip_days',
+    days.map((id, i) => ({ id, trip_id: tripId, date: dates[i], updated_at: now })),
+  );
+  const rows = seed.days.flatMap((d, i) =>
+    d.stops.map((s, k) => ({
+      id: uuidV4(),
+      trip_id: tripId,
+      trip_day_id: days[i],
+      position: `a${String(k)}`,
+      kind: s.kind,
+      name: s.name,
+      time: s.time ?? null,
+      lat: s.lat ?? null,
+      lng: s.lng ?? null,
+      updated_at: now,
+    })),
+  );
+  await inserir('stops', rows);
+  return { tripId, stops: rows.length, days };
 }
