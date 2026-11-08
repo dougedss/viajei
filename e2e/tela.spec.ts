@@ -19,24 +19,61 @@ const SEM_ROLAGEM = `(() => {
   return out;
 })()`;
 
-/** Quanto a lista do dia entra, em px, por baixo do que está sobre a maquete (o cartão da vez, "Detalhes", o "Agora"); zero é o certo. */
-const LISTA_SOB_A_BARRA = `(() => {
-  const lista = document.querySelector('[data-day-list]');
+/**
+ * O topo do que está sobre a maquete (o cartão da vez, "Detalhes", o "Agora"): a caixa ocupa o palco
+ * inteiro e empilha de baixo para cima, então o topo é o do filho mais alto que tem altura.
+ */
+const TOPO_DA_BARRA = `const topoDaBarra = () => {
   const sobre = document.querySelector('[data-overlay]');
-  if (!lista || !sobre) return 9999;
-  return lista.getBoundingClientRect().bottom - sobre.getBoundingClientRect().top;
+  if (!sobre) return null;
+  let top = sobre.getBoundingClientRect().bottom;
+  for (const c of sobre.children) {
+    const r = c.getBoundingClientRect();
+    if (r.height > 0) top = Math.min(top, r.top);
+  }
+  return top;
+};`;
+
+/** Quanto a lista do dia entra, em px, por baixo do que está sobre a maquete; zero é o certo. */
+const LISTA_SOB_A_BARRA = `(() => {
+  ${TOPO_DA_BARRA}
+  const lista = document.querySelector('[data-day-list]');
+  const top = topoDaBarra();
+  if (!lista || top === null) return 9999;
+  return lista.getBoundingClientRect().bottom - top;
 })()`;
 
 /** As pílulas em cena cuja base (a âncora, `top`) entra por baixo do que está sobre a maquete. */
 const PILULAS_SOB_A_BARRA = `(() => {
-  const sobre = document.querySelector('[data-overlay]');
-  if (!sobre) return ['sem a barra'];
-  const top = sobre.getBoundingClientRect().top;
+  ${TOPO_DA_BARRA}
+  const top = topoDaBarra();
+  if (top === null) return ['sem a barra'];
   return [...document.querySelectorAll('[data-pill]:not([hidden])')]
     .map((el) => [el.getAttribute('data-pill'), parseFloat(el.style.top) - top])
     .filter(([, d]) => d > 0)
     .map(([id, d]) => id + ' entra ' + Math.round(d) + ' px');
 })()`;
+
+/**
+ * Os layout shifts desta página desde a navegação (o que o Lighthouse soma no CLS), com quem mexeu:
+ * um cartão que chega depois dos dados não pode empurrar o que já estava na tela.
+ */
+const DESLOCAMENTOS = `new Promise((resolve) => {
+  const out = [];
+  new PerformanceObserver((list) => {
+    for (const e of list.getEntries()) {
+      if (e.hadRecentInput) continue;
+      const quem = (e.sources || [])
+        .map((s) => (s.node && s.node.nodeType === 1 ? s.node.tagName.toLowerCase() + '.' + String(s.node.className).slice(0, 60) : '?'))
+        .join(' | ');
+      out.push({ valor: e.value, quem });
+    }
+  }).observe({ type: 'layout-shift', buffered: true });
+  setTimeout(() => resolve(out), 300);
+})`;
+
+/** O CLS máximo da tela da viagem: a fase 13 media de 0,002 a 0,035; a 14 chegou a 0,12 (D180). */
+const CLS_MAXIMO = 0.05;
 
 /** O elemento no centro de um alvo (o último que casa, se `last`) é ele mesmo ou um filho: nada o cobre. */
 const SOB_O_DEDO = (selector: string, last = false) => `(() => {
@@ -77,6 +114,11 @@ test('a tela da viagem não rola, "Hoje" volta, e a ação e Detalhes ficam sob 
     // a lista rola dentro da área da maquete e termina onde começa o que está sobre ela: nenhuma
     // linha fica por baixo do cartão da vez (aqui, o pedido de posição) nem do "Agora"
     await expect.poll(() => page.evaluate<number>(LISTA_SOB_A_BARRA)).toBeLessThanOrEqual(1);
+    // o pedido de posição chegou depois dos dados e não empurrou nada (o CLS da D180)
+    await expect(page.getByRole('button', { name: 'Usar posição' })).toBeVisible();
+    const shifts = await page.evaluate<{ valor: number; quem: string }[]>(DESLOCAMENTOS);
+    const cls = shifts.reduce((acc, x) => acc + x.valor, 0);
+    expect(cls, `layout shifts da lista: ${JSON.stringify(shifts)}`).toBeLessThan(CLS_MAXIMO);
     await page.locator('[data-stop-row]').last().scrollIntoViewIfNeeded();
     await expect.poll(() => page.evaluate<string>(SOB_O_DEDO('[data-stop-row]', true))).toBe('');
     const size = page.viewportSize();

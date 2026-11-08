@@ -38,7 +38,6 @@ import { cx } from '@/lib/cx.ts';
 import { useSession } from '@/lib/supabase/session.ts';
 import { useDocumentVisible } from '@/lib/visibility.ts';
 import { convoy, teamPoints } from '@/features/world/convoy.ts';
-import { useElementSize } from '@/features/world/hooks/useElementSize.ts';
 import { WorldSlot, type EventsOwner, type ReviewPhoto } from '@/features/world/WorldSlot.tsx';
 import { indexRoute } from '@/lib/geo/project.ts';
 import { useRenderPref, writeRenderPref } from '@/features/world/prefs.ts';
@@ -90,6 +89,7 @@ import { useLivePosition } from '../live.ts';
 import { liveEnabled } from '../live-rules.ts';
 import { declineGeo, grantGeo, useGeoConsent, useTeamTracks } from '../queries.ts';
 import { dayState, isDepartureNode } from '../rules.ts';
+import { useOverlayInset } from '../overlay-inset.ts';
 import { dayBar, overlayCard } from '../screen.ts';
 import {
   useScreenAwakePref,
@@ -252,7 +252,7 @@ function DayView({
   const [busy, setBusy] = useState(false);
   // o que fica sobre o pé da tela (o cartão, "Detalhes", o "Agora"), medido: a lista do dia termina
   // acima disso, para nada rolar até debaixo da barra
-  const [observeOverlay, overlay] = useElementSize();
+  const [observeOverlay, overlayInset] = useOverlayInset();
   // a folha da parada (a miniatura, a pílula ou a linha da lista) e o gasto que nasce dela
   const [openStopId, setOpenStopId] = useState<string | null>(null);
   const [expenseDraft, setExpenseDraft] = useState<ExpenseDraft | null>(null);
@@ -557,7 +557,7 @@ function DayView({
             reviewPhotos={reviewPhotos}
             onOpenStop={setOpenStopId}
             convoy={convoyCars}
-            bottomInset={overlay.height}
+            bottomInset={overlayInset}
             weather={{ summary: daySummary(forecast), stops: forecast?.stops ?? {} }}
           />
         )}
@@ -565,7 +565,7 @@ function DayView({
         {/* sobre a maquete, de baixo para cima: o "Agora", "Detalhes" e o cartão da vez */}
         <div
           ref={observeOverlay}
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex flex-col gap-3 px-3 pb-[max(12px,env(safe-area-inset-bottom,0px))]"
+          className="pointer-events-none absolute inset-0 z-30 flex flex-col justify-end gap-3 px-3 pb-[max(12px,env(safe-area-inset-bottom,0px))]"
           data-overlay
         >
           {card === 'since' ? (
