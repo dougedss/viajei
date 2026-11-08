@@ -12,7 +12,10 @@ import { PageHeader } from '@/components/ui/PageHeader.tsx';
 import { Sheet } from '@/components/ui/Sheet.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { CalendarExport } from '@/features/notifications/components/CalendarExport.tsx';
-import { PushAskSheet } from '@/features/notifications/components/PushAskSheet.tsx';
+import {
+  PushAskSheet,
+  PushInstallCard,
+} from '@/features/notifications/components/PushAskSheet.tsx';
 import { asPersonColor } from '@/features/profile/queries.ts';
 import { CelebrationHost } from '@/features/progression/components/CelebrationHost.tsx';
 import { LevelBar } from '@/features/progression/components/LevelBar.tsx';
@@ -286,6 +289,7 @@ export default function DetalhesPage() {
       </section>
 
       <PushAskSheet trip={trip} />
+      <PushInstallCard trip={trip} />
       <ExpenseSheet
         open={expenseDraft ? { draft: expenseDraft } : null}
         trip={trip}

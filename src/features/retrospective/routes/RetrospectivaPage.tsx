@@ -293,8 +293,7 @@ function Retro({ trip, days, stops }: { trip: Trip; days: TripDay[]; stops: Stop
   );
   const place = useTripPlace(spliced.route);
 
-  const stageRef = useRef<HTMLDivElement>(null);
-  const size = useElementSize(stageRef);
+  const [observe, size] = useElementSize();
   const layout = useMemo<WorldLayout | null>(
     () =>
       size.width > 0 && size.height > 0 && spliced.stops.length > 0
@@ -387,7 +386,7 @@ function Retro({ trip, days, stops }: { trip: Trip; days: TripDay[]; stops: Stop
         <CarSide car={car} />
       </div>
       <div
-        ref={stageRef}
+        ref={observe}
         className="relative isolate h-[calc(100svh-72px)] min-h-[560px] overflow-hidden bg-[#0d1220]"
       >
         {cardsOnly ? (

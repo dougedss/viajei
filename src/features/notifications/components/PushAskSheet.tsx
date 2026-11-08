@@ -1,62 +1,32 @@
-import { useLiveQuery } from 'dexie-react-hooks';
 import { BellRing, Clock3, LockKeyhole } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button.tsx';
 import { Sheet } from '@/components/ui/Sheet.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { InstallCard } from '@/features/pwa/components/InstallCard.tsx';
-import { todayISO } from '@/features/trips/rules.ts';
-import { db, type Trip } from '@/lib/db/schema.ts';
-import { useSession } from '@/lib/supabase/session.ts';
-import { askKeys, shouldOfferPush } from '../ask.ts';
-import { isFirstOpenSession } from '../first-open.ts';
-import { PushSetupError, subscribePush, usePushStatus } from '../subscription.ts';
+import type { Trip } from '@/lib/db/schema.ts';
+import { PushSetupError, subscribePush } from '../subscription.ts';
+import { usePushOffer } from '../use-push-offer.ts';
+
+type Props = { trip: Pick<Trip, 'id' | 'name' | 'start_date' | 'end_date'> };
 
 /**
  * A folha "Avisos da viagem": uma vez por aparelho e viagem, na primeira abertura de uma viagem que
- * começa em até 7 dias, nunca na primeira abertura do app. A permissão é pedida no toque. No iPhone
- * fora da Tela de Início, a folha de instalação vem antes, com a frase que liga as duas coisas.
+ * começa em até 7 dias, nunca na primeira abertura do app (`usePushOffer`). A permissão é pedida no
+ * toque. É uma folha: pode ficar na raiz de qualquer tela. No iPhone fora da Tela de Início não é
+ * ela que aparece, e sim o `PushInstallCard`, que é um cartão em linha e precisa de um lugar na tela.
  */
-export function PushAskSheet({
-  trip,
-}: {
-  trip: Pick<Trip, 'id' | 'name' | 'start_date' | 'end_date'>;
-}) {
-  const { session } = useSession();
-  const push = usePushStatus();
+export function PushAskSheet({ trip }: Props) {
+  const offer = usePushOffer(trip);
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const asked = useLiveQuery(
-    async () => (await db.sync_state.get(askKeys.asked(trip.id))) !== undefined,
-    [trip.id],
-  );
-
-  if (asked === undefined || !push.checked || !session) return null;
-  const offer = shouldOfferPush({
-    today: todayISO(),
-    trip,
-    asked,
-    firstOpen: isFirstOpenSession(),
-    status: push.status,
-  });
-  if (!offer) return null;
-
-  const close = () =>
-    void db.sync_state.put({ key: askKeys.asked(trip.id), value: new Date().toISOString() });
-
-  if (push.status === 'not-installed') {
-    return (
-      <InstallCard
-        lead="No iPhone, os avisos de hora de sair só chegam com o Viajei na Tela de Início. Instale primeiro; depois é um toque para ativar."
-        onDismiss={close}
-      />
-    );
-  }
+  if (!offer || offer.status === 'not-installed') return null;
+  const { userId, close } = offer;
 
   const activate = async () => {
     setBusy(true);
     try {
-      const status = await subscribePush(session.user.id);
+      const status = await subscribePush(userId);
       if (status === 'subscribed') {
         toast.show({
           title: 'Avisos ativados',
@@ -112,5 +82,21 @@ export function PushAskSheet({
         Agora não
       </Button>
     </Sheet>
+  );
+}
+
+/**
+ * No iPhone fora da Tela de Início, a oferta dos avisos é o cartão de instalação, com a frase que
+ * liga as duas coisas: os avisos só chegam com o app instalado. É um cartão em linha: quem o põe
+ * escolhe onde (em Detalhes, no corpo; na tela da viagem, no lugar do cartão da vez, sobre a maquete).
+ */
+export function PushInstallCard({ trip }: Props) {
+  const offer = usePushOffer(trip);
+  if (offer?.status !== 'not-installed') return null;
+  return (
+    <InstallCard
+      lead="No iPhone, os avisos de hora de sair só chegam com o Viajei na Tela de Início. Instale primeiro; depois é um toque para ativar."
+      onDismiss={offer.close}
+    />
   );
 }

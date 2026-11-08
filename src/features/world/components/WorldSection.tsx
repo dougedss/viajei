@@ -41,8 +41,7 @@ export default function WorldSection(props: WorldSlotProps) {
   const support = useSupport();
   const reducedMotion = useReducedMotion();
   const place = usePlace(props.route);
-  const hostRef = useRef<HTMLDivElement>(null);
-  const size = useElementSize(hostRef);
+  const [observe, size] = useElementSize();
   const [failed, setFailed] = useState<string | null>(null);
   const [backend, setBackend] = useState<Backend | null>(null);
   const { search } = useLocation();
@@ -84,7 +83,7 @@ export default function WorldSection(props: WorldSlotProps) {
 
   return (
     <div
-      ref={hostRef}
+      ref={observe}
       className="absolute inset-0 overflow-hidden bg-stage"
       data-world={backend ?? undefined}
     >

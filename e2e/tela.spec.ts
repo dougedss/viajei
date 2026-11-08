@@ -19,9 +19,18 @@ const SEM_ROLAGEM = `(() => {
   return out;
 })()`;
 
-/** O elemento no centro de um alvo é ele mesmo (ou um filho): nada o cobre. */
-const SOB_O_DEDO = (selector: string) => `(() => {
-  const el = document.querySelector(${JSON.stringify(selector)});
+/** Quanto a lista do dia entra, em px, por baixo do que está sobre a maquete (o cartão da vez, "Detalhes", o "Agora"); zero é o certo. */
+const LISTA_SOB_A_BARRA = `(() => {
+  const lista = document.querySelector('[data-day-list]');
+  const sobre = document.querySelector('[data-overlay]');
+  if (!lista || !sobre) return 9999;
+  return lista.getBoundingClientRect().bottom - sobre.getBoundingClientRect().top;
+})()`;
+
+/** O elemento no centro de um alvo (o último que casa, se `last`) é ele mesmo ou um filho: nada o cobre. */
+const SOB_O_DEDO = (selector: string, last = false) => `(() => {
+  const todos = document.querySelectorAll(${JSON.stringify(selector)});
+  const el = ${last ? 'todos[todos.length - 1]' : 'todos[0]'};
   if (!el) return 'não achei';
   const r = el.getBoundingClientRect();
   const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
@@ -54,6 +63,11 @@ test('a tela da viagem não rola, "Hoje" volta, e a ação e Detalhes ficam sob 
     await expect(agora).toBeVisible({ timeout: 20_000 });
     await expect(page.getByRole('list', { name: 'Trilha do dia' })).toBeVisible();
     await semRolagem(page, 'lista a 393 px');
+    // a lista rola dentro da área da maquete e termina onde começa o que está sobre ela: nenhuma
+    // linha fica por baixo do cartão da vez (aqui, o pedido de posição) nem do "Agora"
+    await expect.poll(() => page.evaluate<number>(LISTA_SOB_A_BARRA)).toBeLessThanOrEqual(1);
+    await page.locator('[data-stop-row]').last().scrollIntoViewIfNeeded();
+    await expect.poll(() => page.evaluate<string>(SOB_O_DEDO('[data-stop-row]', true))).toBe('');
     const size = page.viewportSize();
     if (size) {
       await page.setViewportSize({ width: LARGURA_ESTREITA, height: size.height });

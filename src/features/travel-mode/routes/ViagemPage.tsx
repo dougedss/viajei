@@ -27,7 +27,10 @@ import { useDayStops, useTripDays, useTripStops } from '@/features/itinerary/que
 import { useDayRoute } from '@/features/itinerary/route.ts';
 import { legsByStop } from '@/features/itinerary/rules.ts';
 import { applyBadge, badgeCount } from '@/features/notifications/badge.ts';
-import { PushAskSheet } from '@/features/notifications/components/PushAskSheet.tsx';
+import {
+  PushAskSheet,
+  PushInstallCard,
+} from '@/features/notifications/components/PushAskSheet.tsx';
 import { useTrip, useTripMembers, type MemberWithProfile } from '@/features/trips/queries.ts';
 import { formatMoney, todayISO, tripStatus } from '@/features/trips/rules.ts';
 import type { Profile, Trip } from '@/lib/db/schema.ts';
@@ -249,8 +252,7 @@ function DayView({
   const [busy, setBusy] = useState(false);
   // o que fica sobre o pé da tela (o cartão, "Detalhes", o "Agora"), medido: a lista do dia termina
   // acima disso, para nada rolar até debaixo da barra
-  const overlayRef = useRef<HTMLDivElement>(null);
-  const overlay = useElementSize(overlayRef);
+  const [observeOverlay, overlay] = useElementSize();
   // a folha da parada (a miniatura, a pílula ou a linha da lista) e o gasto que nasce dela
   const [openStopId, setOpenStopId] = useState<string | null>(null);
   const [expenseDraft, setExpenseDraft] = useState<ExpenseDraft | null>(null);
@@ -561,8 +563,9 @@ function DayView({
 
         {/* sobre a maquete, de baixo para cima: o "Agora", "Detalhes" e o cartão da vez */}
         <div
-          ref={overlayRef}
+          ref={observeOverlay}
           className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex flex-col gap-3 px-3 pb-[max(12px,env(safe-area-inset-bottom,0px))]"
+          data-overlay
         >
           {card === 'since' ? (
             <div className="pointer-events-auto">
@@ -609,11 +612,10 @@ function DayView({
               <RetroCard tripId={tripId} done={stops.filter((s) => s.done_at !== null).length} />
             </div>
           ) : (
-            // a folha "Avisos da viagem" (D48) e, no iPhone fora da Tela de Início, o cartão de
-            // instalação, que é um cartão em linha: entram no lugar do cartão da vez, nunca empurrando
-            // a maquete (a tela é inteira)
+            // no iPhone fora da Tela de Início, a oferta dos avisos é um cartão em linha (D48): entra
+            // no lugar do cartão da vez, nunca empurrando a maquete (a tela é inteira)
             <div className="pointer-events-auto">
-              <PushAskSheet trip={trip} />
+              <PushInstallCard trip={trip} />
             </div>
           )}
           <div className="flex justify-end">
@@ -659,6 +661,8 @@ function DayView({
       </div>
 
       {/* a folha da parada, por cima do canvas: a mesma do mapa 2D, mais Chegamos! e o gasto */}
+      {/* a folha "Avisos da viagem" (D48) é uma folha: fica na raiz, por cima de tudo */}
+      <PushAskSheet trip={trip} />
       <StopSheet
         stop={openStop}
         tripId={tripId}
