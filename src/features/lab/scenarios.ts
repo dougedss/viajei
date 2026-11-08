@@ -156,7 +156,7 @@ export const LAB_SCENARIOS = {
   lighthouse: {
     label: 'Lighthouse',
     description:
-      'Desempenho, acessibilidade e boas práticas ≥ 90 no celular (mediana de 3), e o app instalável',
+      'Desempenho, acessibilidade e boas práticas ≥ 90 no celular (mediana de 3) numa máquina normal, e o app instalável; numa máquina lenta, medido e não cobrado',
   },
 } as const;
 

@@ -11,7 +11,6 @@ import { EmptyState } from '@/components/ui/EmptyState.tsx';
 import { PageHeader } from '@/components/ui/PageHeader.tsx';
 import { Sheet } from '@/components/ui/Sheet.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
-import { loadExampleTrip } from '@/features/itinerary/seed.ts';
 import { CalendarExport } from '@/features/notifications/components/CalendarExport.tsx';
 import { PushAskSheet } from '@/features/notifications/components/PushAskSheet.tsx';
 import { asPersonColor } from '@/features/profile/queries.ts';
@@ -170,7 +169,12 @@ export default function ViagemPage() {
                     loading={loadingExample}
                     onClick={() => {
                       setLoadingExample(true);
-                      void loadExampleTrip(trip, session?.user.id ?? '')
+                      // só em desenvolvimento, e só no toque: o carregador puxa o schema e o plano da
+                      // importação, que não têm o que fazer na visão geral de produção (fase 13, D162)
+                      void import('@/features/itinerary/seed.ts')
+                        .then(({ loadExampleTrip }) =>
+                          loadExampleTrip(trip, session?.user.id ?? ''),
+                        )
                         .then((r) =>
                           toast.show({
                             title: 'Viagem de exemplo carregada',

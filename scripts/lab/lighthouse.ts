@@ -11,6 +11,7 @@ import {
   CATEGORIES,
   LIGHTHOUSE_RUNS,
   median,
+  verdict,
   type Category,
   type Scores,
 } from './lighthouse-score.ts';
@@ -44,7 +45,7 @@ export type LighthouseContext = {
   reportsDir?: string;
 };
 
-type Run = { scores: Scores; lcp_ms: number; tbt_ms: number; cls: number };
+type Run = { scores: Scores; lcp_ms: number; tbt_ms: number; cls: number; benchmark: number };
 type Lhr = NonNullable<Awaited<ReturnType<typeof lighthouse>>>['lhr'];
 
 /** O que o relatório diz do porquê, em poucas linhas: o elemento do LCP, o que mexe, o JS que pesa. */
@@ -99,6 +100,7 @@ async function measure(url: string, warm: boolean): Promise<{ run: Run; lhr: Lhr
     lcp_ms: Math.round(audit('largest-contentful-paint')),
     tbt_ms: Math.round(audit('total-blocking-time')),
     cls: Math.round(audit('cumulative-layout-shift') * 1000) / 1000,
+    benchmark: lhr.environment.benchmarkIndex,
   };
   return { run, lhr };
 }
@@ -133,6 +135,8 @@ async function runs(
     tbt_ms: med((r) => r.tbt_ms),
     cls: med((r) => r.cls),
     performance_runs: all.map((r) => r.scores.performance),
+    /** o índice de CPU da máquina em cada execução: a nota se lê com ele (fase 13) */
+    benchmarks: all.map((r) => Math.round(r.benchmark)),
     porque: last ? diagnose(last) : null,
   };
 }
@@ -227,9 +231,11 @@ export async function labLighthouse(ctx: LighthouseContext, today: string): Prom
 
   const scores = Object.fromEntries(Object.entries(results).map(([k, v]) => [k, v.scores]));
   const below = belowTarget(scores);
+  // a máquina do dia: a mediana do índice de CPU de todas as execuções que contam para a meta
+  const benchmarks = Object.values(results).flatMap((r) => r.benchmarks);
+  const benchmark = benchmarks.length > 0 ? median(benchmarks) : null;
   const problems = [
     ...(failure ? [failure] : []),
-    ...below,
     ...(install && install.errors.length > 0 ? [`instalação: ${install.errors.join(', ')}`] : []),
     ...(install && !install.manifest ? ['o manifest tem erro'] : []),
     ...(install && !install.service_worker ? ['o service worker não assumiu a página'] : []),
@@ -238,16 +244,20 @@ export async function labLighthouse(ctx: LighthouseContext, today: string): Prom
     const v = Object.values(scores).map((s) => s[c]);
     return v.length ? `${String(Math.min(...v))}–${String(Math.max(...v))}` : '?';
   };
+  const result = verdict({
+    below,
+    benchmark,
+    problems,
+    ok: `Mediana de ${String(LIGHTHOUSE_RUNS)} no celular (entrar fria; as de dentro com o app instalado): desempenho ${range('performance')}, acessibilidade ${range('accessibility')}, boas práticas ${range('best-practices')}; instalável`,
+  });
   return {
     scenario: 'lighthouse',
-    status: problems.length > 0 ? 'fail' : 'pass',
+    status: result.status,
     latency_ms: Date.now() - startedAt,
-    detail:
-      problems.length > 0
-        ? problems.join('; ').slice(0, 900)
-        : `Mediana de ${String(LIGHTHOUSE_RUNS)} no celular (entrar fria; as de dentro com o app instalado): desempenho ${range('performance')}, acessibilidade ${range('accessibility')}, boas práticas ${range('best-practices')}; instalável`,
+    detail: result.detail.slice(0, 900),
     data: {
       versao: '13.5.0',
+      indice_cpu: benchmark,
       rotas: results,
       frias: Object.fromEntries(
         Object.entries(cold).map(([k, v]) => [
