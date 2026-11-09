@@ -161,7 +161,7 @@ tabela daquela seção traduz os que importam. O conteúdo das árvores não mud
 
 ## Fase 14 · A viagem abre no mapa
 
-### Portão de entrada (aberto às 13h50 de 08/11)
+### Portão de entrada (aberto às 13h35 de 08/11)
 - fase 13 na `main`: sim, `b099be8` (`fase 13: correções`) e `fa100cd` (o ajuste de botão), a ponta.
 - CI da `main` em `fa100cd`: verde (run 42499564442).
 - laboratório na produção: verde na mesma árvore (run 42496760740, 13h14, em `84dbf27` antes da
@@ -171,19 +171,76 @@ tabela daquela seção traduz os que importam. O conteúdo das árvores não mud
   13h35 com a história reescrita).
 - cota do Actions: não se aplica.
 - dependência (13 → 14): satisfeita. Nada a pular.
-- `docs/fases/fase-14.md` escrito às 13h45 pelo orquestrador, a partir do plano, das D168 a D173 e
-  de um levantamento do código em `fa100cd` (rotas, `ModoViagemPage`, o painel e o catch-up, o
-  mundo 3D e a câmera, as miniaturas, `STOP_KINDS`, os testes e o laboratório). Seções 0 a 4 como
-  os da fase 12 e 13; a seção 2 com a regra precisa do `.env.local`, a proibição da coautoria e a
-  nota de que a reescrita da história foi única. Fora do git até o commit de fechamento da fase.
+- `docs/fases/fase-14.md` escrito às 13h33 pelo orquestrador (o cabeçalho dele diz 13h45), a partir
+  do plano, das D168 a D173 e de um levantamento do código em `fa100cd`. Seções 0 a 4 como os da
+  fase 12 e 13; a seção 2 com a regra precisa do `.env.local`, a proibição da coautoria e a nota de
+  que a reescrita da história foi única.
 
 ### Sessão
-- **Abertura:** 08/11/2026 às 13h5x, headless, na pasta principal, binário da extensão 2.1.319,
-  texto de abertura em `fase-14.kickoff.txt` (o modelo da seção 1.3 do orquestrador mais sete
-  pontos: o estado em `fa100cd`, a história reescrita e a proibição da coautoria, os dois arquivos
-  fora do git, o repositório público, o `.env.local`, nenhum teste em aparelho, o processo do
-  laboratório). Monitor de sinais de vida a cada 30 min.
-- **Fim:** _(a preencher)_ · `session_id`: _(a preencher)_ · retomadas: 0 · custo: _(a preencher)_
+- **Abertura:** 08/11/2026 às 13h36, headless, na pasta principal, binário da extensão 2.1.319, no
+  Fable 5.1, texto de abertura em `fase-14.kickoff.txt` (o modelo da seção 1.3 do orquestrador mais
+  sete pontos). `session_id` `440f4ce4-23f2-4f09-9bd6-d63ff36e5fd5`.
+- **15h00, o Douglas pede a pausa:** "quando terminar a fase 14 vamos parar e depois seguir naquele
+  modelo que estávamos fazendo, eu solicitando no chat para cada passo". A cadeia 13 → 20 do
+  orquestrador para na fase 14; as fases 15 a 20 seguem uma por vez, a pedido dele.
+- **Retomada 1 às 18h15, no Opus 5.5, a pedido do Douglas** ("altere para o modelo opus então,
+  estamos gastando muito o fable"): o processo do Fable foi encerrado às 18h14 com a sessão só
+  lendo código (sem laboratório rodando), e retomado com `--resume` e `--model claude-opus-5-5`, com
+  a nota `fase-14.continue.txt`. No segundo anterior ao encerramento o Fable tinha feito o commit
+  `0d722b3`, com a causa do `app_reabrir` vermelho em três laboratórios.
+- **Encerramento às 19h59, pelo orquestrador, a pedido do Douglas**, que mandou subir direto sem
+  esperar mais laboratório ("já estamos fazendo isso há muito tempo, não quero mais esperar"). A
+  sessão estava esperando a CI e o laboratório de `910f3d2`; ela não escreveu o resumo final, e o
+  estado que ela deixou está na memória do projeto e na seção da fase 14 de `decisoes.md`.
+- **Duração:** 6h23. **Uso** (tokens somados da transcrição; o custo em dólar não foi gravado,
+  porque o processo foi encerrado nas duas vezes antes do JSON final):
 
-### Portão de saída
-_(a preencher)_
+| Modelo | Respostas | Saída | Leitura de cache | Escrita de cache |
+|---|---|---|---|---|
+| Fable 5.1 (13h36 a 18h14) | 227 | 0,53 M | 101 M | 1,25 M |
+| Opus 5.5 (18h15 a 19h59) | 80 | 0,12 M | 26 M | 0,39 M |
+
+- **O que a sessão fez (D174 a D180):** a viagem abre na maquete inteira (`/viagens/:id`), a visão
+  geral virou Detalhes (`/detalhes`), `/viagem` redireciona; a tela sem rolagem com a barra do dia,
+  o "Agora" embaixo e um cartão por vez; o GPS sempre que o mapa está aberto, com Partiu! e
+  Chegamos! sozinhos e "Tela acesa" no lugar do painel; a câmera atrás do carro olhando a próxima
+  parada; uma miniatura por tipo de parada e a folha da parada ao toque; o comboio (o carro do time
+  na estrada). 886 Vitest, 430 pgTAP, 48 Playwright; Lighthouse 93 a 100 com índice ≥ 2.800;
+  acessibilidade 100; CLS da tela de 0,12 para 0,002.
+- **Laboratórios no preview:** sete concluídos, todos com um a seis vermelhos, cada um num cenário diferente
+  (os seletores da tela nova, a pílula da origem, a folha dos avisos, três vezes o `app_reabrir`, o
+  "Como foi?" cobrindo a maquete), e um oitavo rodando no merge. Mais da metade da sessão foi espera de laboratório de 25 min,
+  um depois de cada correção. **Esse processo não se repete:** a fase 15 em diante roda o
+  laboratório uma vez no preview e uma na produção (`docs/fases/fase-15.md`, seção 1).
+
+### Portão de saída (19h59 de 08/11, por decisão do Douglas)
+- **`main` em `910f3d2`**, fast-forward de `fa100cd` pelo orquestrador às 19h59 (`git push origin
+  910f3d2:main`, identidades conferidas: `dougedss` no gh, no SSH e no e-mail), 25 commits, nenhum
+  com `Co-Authored-By: Claude`. Commit de fechamento `71ba3f5` `fase 14: a viagem abre no mapa`.
+- **Não cumprido, por decisão do Douglas:** o laboratório no preview verde no sha do merge. A CI
+  estava verde em `4267450` (o mesmo código do app; até `910f3d2` mudaram só `scripts/lab/app.ts` e
+  `docs/decisoes.md`), e o laboratório de `4267450` deu 32 verdes, 1 vermelho e 2 pulados (o
+  vermelho, `app_maquete`, era o roteiro do laboratório, corrigido em `910f3d2`). No merge rodavam a
+  CI da `main` (run 42532939036) e o laboratório do preview em `910f3d2` (run 42532413270).
+- **Laboratório da produção:** nenhum disparado depois do merge. O agendado diário confere; o 3.0
+  da `fase-15.md` manda a próxima sessão ler os três resultados antes do código.
+- `docs/decisoes.md`: seção da fase 14 com D174 a D180, sequenciais. `fase-14.md` e este relatório
+  entraram no commit de fechamento. Memória do projeto atualizada pela sessão e completada pelo
+  orquestrador às 20h10.
+- **Sem prova (sem aparelho):** o comboio renderizado, Partiu!/Chegamos! pelo GPS no carro, "Tela
+  acesa" e a bateria, o fps num celular, o toque na miniatura 3D, a tela com as áreas seguras de um
+  iPhone (`teste-final.md` 1.24 e 2.14).
+- **Ficou no remoto:** `fase-14` (já na `main`) e `fase-14-prova` (temporária, só um teste); a fase
+  15 apaga a segunda.
+
+## Depois da fase 14 · a pausa
+
+A orquestração autônoma parou aqui, a pedido do Douglas. Às 20h10 o orquestrador escreveu
+`docs/fases/fase-15.md` (a partir do plano, das D174 a D180 e de um levantamento do código em
+`910f3d2`), com o laboratório do jeito novo, para o Douglas abrir num chat novo. Fica fora do git até
+o commit de fechamento da fase 15, junto com este relatório.
+
+**Pendências só do Douglas:** o nome do app (Roteirei recomendado; fase 18), o contrato do
+agregador (fase 21), a CLI da Vercel deste Mac logada na conta de cliente `reitechkairos-commits`
+(não se usa), o `.env.local` carregado no shell para o psql de leitura (regra precisa nos prompts
+desde a fase 14), o `progressao.spec` instável (D167).

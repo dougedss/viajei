@@ -212,7 +212,7 @@ tem um sedã não faz sentido.
 
 **O que entra**
 
-- **O carro no perfil.** `profiles.car_model`, `car_color`, `car_accessories` (migration 0013; copia
+- **O carro no perfil.** `profiles.car_model`, `car_color`, `car_accessories` (migration 0014: a 0013 foi o Posto da fase 15; copia
   da viagem mais recente de que a pessoa é dona). **Cada pessoa vê o próprio carro** na maquete, no
   card e na retrospectiva, em qualquer viagem (decisão do Douglas, 08/11); a viagem deixa de ter
   carro. O perfil de cada membro já viaja com a viagem pelo pull (D113), então os carros dos outros
