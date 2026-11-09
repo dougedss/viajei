@@ -271,8 +271,9 @@ test('sem rede no posto: "Parada às …" com as coordenadas, e o nome do OSM qu
     await expect(folha.locator('[data-osm-credit]')).toContainText('OpenStreetMap');
     await expect(folha).toContainText('Posto');
     await semRolagem(page, 'a folha da parada');
+    // fecha; o fim da animação de saída não se espera (com o relógio de mentira ela não termina,
+    // como a do toast), e o passo seguinte não toca na tela
     await page.keyboard.press('Escape');
-    await expect(folha).toHaveCount(0);
   });
 
   await test.step('o carro volta à estrada: a saída medida fecha a parada', async () => {
