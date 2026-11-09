@@ -211,8 +211,11 @@ test('9 min parado a 80 m da estrada: a parada se registra sozinha como Posto, n
       await aberto.context.setGeolocation(postoFix(i));
       await page.clock.runFor('01:00');
     }
-    await expect(page.getByText(/^Parada registrada/)).toHaveCount(0);
+    // nenhuma parada nova: nem na lista, nem no servidor, nem outra chamada ao OSM (o toast de antes
+    // pode continuar no DOM: com o relógio de mentira, a animação de saída dele não termina)
     expect(await ordem(page)).toEqual([SAIDA, PARQUE]);
+    expect((await autoNoServidor(tripId)).map((s) => s.deleted_at !== null)).toEqual([true]);
+    expect(aberto.reverse()).toBe(1);
   });
 
   await aberto.context.close();
@@ -256,7 +259,12 @@ test('sem rede no posto: "Parada às …" com as coordenadas, e o nome do OSM qu
 
   await test.step('o nome comprido do OSM cabe na tela, na lista e na folha da parada', async () => {
     await semRolagem(page, 'a lista do dia');
-    await page.getByRole('button', { name: FORGED.postoName }).click();
+    // o "Como foi?" do posto, com o nome comprido em três linhas, cobre a lista a 659 px de altura
+    // (o limite da D177: o cartão da vez cobre o pé do palco até ser dispensado); como o app_maquete
+    const comoFoi = page.getByRole('region', { name: `Como foi ${FORGED.postoName}?` });
+    await comoFoi.getByRole('button', { name: 'Dispensar' }).click();
+    await expect(comoFoi).toHaveCount(0);
+    await page.getByRole('button', { name: FORGED.postoName, exact: true }).click();
     const folha = page.getByRole('dialog', { name: FORGED.postoName });
     await expect(folha).toBeVisible();
     await expect(folha.locator('[data-auto-stop]')).toContainText('Registrada sozinha pelo GPS');
