@@ -57,6 +57,7 @@ import {
   type TripKey,
 } from './evaluate.ts';
 import { appProgressao, appRetrospectiva, type ProgressContext } from './app-progress.ts';
+import { appParadaAuto } from './app-parada.ts';
 import { roadScenarios, ROAD_SCENARIOS } from './app-road.ts';
 import { appImportar } from './app-import.ts';
 import { appMapaClima } from './app-map.ts';
@@ -947,6 +948,12 @@ async function main(): Promise<number> {
     ).catch((err: unknown) => failedCheck('app_resync', err));
     checks.push(late);
     log(`app: app_resync ${late.status} · ${late.detail}`);
+    // fase 15: a parada que se registra sozinha, com o lab-a e o lab-b no mesmo carro
+    const parada = await appParadaAuto(progress, today).catch((err: unknown) =>
+      failedCheck('app_parada_auto', err),
+    );
+    checks.push(parada);
+    log(`app: app_parada_auto ${parada.status} · ${parada.detail}`);
     const lh = await labLighthouse(
       {
         appUrl: cfg.appOrigin,
@@ -962,6 +969,7 @@ async function main(): Promise<number> {
   } else {
     checks.push(
       skipped('app_resync', 'Sem navegador nesta execução.'),
+      skipped('app_parada_auto', 'Sem navegador nesta execução.'),
       skipped('lighthouse', 'Sem navegador nesta execução.'),
     );
   }

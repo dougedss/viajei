@@ -27,6 +27,7 @@ ficam na pasta como registro; tudo o que eles pedem está aqui.
 | Android | o dia 2 do Ensaio, com uma volta curta de carro | 2.3 a 2.14 | 3 h 20 |
 | Com hora marcada | a manhã do dia 2, às 9h do dia seguinte ao fim do Ensaio, 07/12 e 10/12 | 1.23 | 5 min cada |
 | iPhone D (fase 14) | o dia 1 do Ensaio, no carro de verdade, com o mapa aberto | 1.24 | 40 min |
+| iPhone E (fase 15) | no carro, com o mapa aberto, uma parada de verdade num posto | 1.25 | 30 min |
 
 **Total: umas 7 h 30 no iPhone e 3 h 15 no Android**, perto de 11 h em três dias seguidos, mais os
 toques com hora marcada. A sentada C pode ficar para depois do Android.
@@ -94,7 +95,9 @@ Um agente automático roda todo dia às 3h07 na produção, e no preview de cada
   real com a IA (D139), o mapa com tiles de verdade e sem rede, e o clima (D151);
 - desta fase: o ensaio do expurgo, o aparelho atrasado e o Lighthouse. A CI roda ainda o fluxo
   principal e o offline num WebKit com o perfil do iPhone 15, e confere contraste, alvos de toque e
-  nomes de botão.
+  nomes de botão;
+- a parada que se registra sozinha (fase 15), com uma trilha forjada: o lab-a e o lab-b no mesmo
+  "carro", 9 min a 80 m da estrada, uma parada só no servidor, Posto, com o nome e as horas (D188).
 
 Por isso este roteiro fica com o que só um aparelho de verdade prova: a entrega do push pela Apple
 e pelo FCM, com o app fechado e o celular bloqueado; o selo no ícone; os botões da notificação no
@@ -716,6 +719,31 @@ documentação do que só um aparelho prova; a CI e o laboratório provam o rest
 
 Anotações:
 
+### 1.25 Paradas que se registram sozinhas · 30 min (fase 15) · sem prova até a viagem
+
+Como o 1.24, fica como documentação até a viagem (D181 a D189). O detector, o nome e os dois
+celulares estão provados com trilhas forjadas na CI e no laboratório; o que falta é um GPS de
+verdade, um posto de verdade e o OpenStreetMap de verdade.
+
+- [ ] **A parada no posto.** Com o mapa aberto e a posição permitida, pare num posto fora do
+  roteiro por uns 10 min, com o carro no pátio (fora da pista). Uns 8 min depois de parar: o toast
+  "Parada registrada: <nome do posto>" com Desfazer, sem pergunta nenhuma. Anote quanto demorou e se
+  o nome é o do posto.
+- [ ] **Na lista e na maquete.** A parada aparece entre a última feita e a próxima, com o ícone do
+  Posto e a miniatura da bomba com cobertura; a folha dela diz "Registrada sozinha pelo GPS" com as
+  horas e o crédito do OpenStreetMap. Depois, o "Como foi?" como cartão.
+- [ ] **A saída.** Volte à estrada: a folha passa a dizer "das HH:MM às HH:MM". Nenhum "Saímos de…"
+  repetido.
+- [ ] **O Desfazer.** Numa segunda parada (um semáforo longo, uma fila), se ela se registrar, toque
+  em Desfazer: ela some, e parar de novo no mesmo lugar não a registra outra vez.
+- [ ] **Sem sinal.** Num trecho sem sinal (ou com o modo avião depois de abrir o mapa), uma parada
+  vira "Parada às HH:MM"; quando o sinal volta, ela ganha o nome do OSM sozinha.
+- [ ] **Os dois celulares.** Com o mapa aberto nos dois aparelhos do carro, a mesma parada aparece
+  uma vez só nos dois.
+- [ ] **O trânsito.** Num congestionamento de menos de 20 min, nada se registra.
+
+Anotações:
+
 ## Parte 2 · Android
 
 O mesmo percurso, mais curto: aqui está só o que muda no Android, e no fim o resto, item a item,
@@ -903,6 +931,8 @@ Anotações:
 - [ ] **O TalkBack na tela nova.** A barra do dia (o nome, as setas, "Hoje", "Lista"), a região
   "Agora" com a ação principal, as pílulas como botões com o nome e o horário, e a lista do dia no
   lugar da maquete.
+- [ ] **A parada no posto (fase 15), o mesmo do 1.25** no Android: o toast com o nome, a parada na
+  lista e na maquete, a saída, o Desfazer e o "Parada às HH:MM" que ganha nome quando o sinal volta.
 
 Anotações:
 

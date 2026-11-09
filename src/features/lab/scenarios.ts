@@ -149,6 +149,11 @@ export const LAB_SCENARIOS = {
     description:
       'O dry_run diário da função purge responde, não mexe em nada e nada fora da regra se qualifica',
   },
+  app_parada_auto: {
+    label: 'App · parada automática',
+    description:
+      'A e B no mesmo carro, 9 min a 80 m da estrada: uma parada só, Posto, com o nome do OSM e as horas medidas',
+  },
   app_resync: {
     label: 'App · aparelho atrasado',
     description:
