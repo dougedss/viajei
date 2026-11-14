@@ -92,18 +92,24 @@ describe.each([
   });
 
   // o ícone do tipo de parada é um elemento gráfico (3:1) no papel e no cartão; as cores são as
-  // mesmas nos dois temas. Achado da fase 15, sem correção nela: Deslocamento (2,70) e Vinícola
-  // (2,75) no cartão escuro; o teste as segura onde estão, e uma cor nova não entra assim
-  const below: Record<string, Partial<Record<string, number>>> = {
-    escuro: { transit: 2.7, winery: 2.75 },
+  // mesmas nos dois temas, menos Deslocamento e Vinícola, que davam 2,70 e 2,75:1 no cartão escuro
+  // (D181) e ganharam um tom por tema (fase 16), já a 4,5:1, a medida de texto
+  const INK: Partial<Record<string, string>> = {
+    transit: 'stop-transit-ink',
+    winery: 'stop-winery-ink',
   };
   it.each(STOP_KIND_KEYS)('o ícone do tipo %s passa de 3:1 no papel e no cartão', (kind) => {
-    const color = t(`stop-${kind}`);
-    expect(ratio(color, t('paper'))).toBeGreaterThanOrEqual(3);
-    const known = below[name]?.[kind];
-    if (known === undefined) expect(ratio(color, t('card'))).toBeGreaterThanOrEqual(3);
-    else expect(ratio(color, t('card'))).toBeGreaterThanOrEqual(known - 0.01);
+    const color = t(INK[kind] ?? `stop-${kind}`);
+    for (const s of surfaces) expect(ratio(color, t(s))).toBeGreaterThanOrEqual(3);
   });
+
+  it.each(['transit', 'winery'])(
+    'o texto do tipo %s passa de 4,5:1 no papel e no cartão (fase 16)',
+    (kind) => {
+      const color = t(`stop-${kind}-ink`);
+      for (const s of surfaces) expect(ratio(color, t(s))).toBeGreaterThanOrEqual(4.5);
+    },
+  );
 });
 
 describe('cores fixas', () => {

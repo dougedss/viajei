@@ -1,16 +1,19 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { checkDays, DaysBlockedError, syncDays } from '@/features/itinerary/actions.ts';
+import { bornPrefs } from '@/features/notifications/prefs.ts';
 import { mutate } from '@/lib/db/mutate.ts';
 import { db } from '@/lib/db/schema.ts';
 import { syncEngine } from '@/lib/db/sync/engine.ts';
 import { uuidV4, uuidV5 } from '@/lib/ids/uuid.ts';
 import { supabase } from '@/lib/supabase/client.ts';
+import { useSession } from '@/lib/supabase/session.ts';
 import { invitesKeys } from './queries.ts';
 import type { TripFormValues } from './schemas.ts';
 
 /**
  * Cria a viagem no Dexie e enfileira; o dono entra em trip_members como projeção local (o servidor
- * o cria por trigger e o pull confirma). Funciona sem sinal e devolve o id na hora.
+ * o cria por trigger e o pull confirma). Os avisos dela nascem com os padrões do Perfil (fase 16).
+ * Funciona sem sinal e devolve o id na hora.
  */
 export async function createTrip(values: TripFormValues, uid: string): Promise<string> {
   const id = uuidV4();
@@ -42,6 +45,7 @@ export async function createTrip(values: TripFormValues, uid: string): Promise<s
     deleted_at: null,
   });
   await syncDays(id, values); // um dia por data, id determinístico
+  await bornPrefs(uid, id);
   return id;
 }
 
@@ -105,13 +109,20 @@ export async function removeMember(memberId: string): Promise<void> {
 
 export function useAcceptInvite() {
   const queryClient = useQueryClient();
+  const { session } = useSession();
+  const uid = session?.user.id ?? '';
   return useMutation({
     mutationFn: async (memberId: string) => {
       const { data, error } = await supabase.rpc('accept_invite', { p_member_id: memberId });
       if (error) throw error;
       return data;
     },
-    onSuccess: () => syncEngine.schedule(0), // a participação nova chega pelo pull e a viagem é puxada
+    // a participação nova chega pelo pull e a viagem é puxada; depois dele (que traria uma linha de
+    // avisos de uma participação anterior), os avisos dela nascem com os padrões do Perfil (fase 16)
+    onSuccess: async (tripId) => {
+      await syncEngine.syncNow();
+      if (uid) await bornPrefs(uid, tripId);
+    },
     onSettled: () => queryClient.invalidateQueries({ queryKey: invitesKeys.pending }),
   });
 }

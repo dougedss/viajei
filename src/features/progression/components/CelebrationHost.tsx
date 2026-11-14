@@ -130,7 +130,7 @@ function SummaryCard({ summary, tripId }: { summary: Summary; tripId: string | u
       {summary.keys.length > 0 ? (
         <ul className="grid grid-cols-2 gap-2">
           {summary.keys.map((k) => (
-            <li key={k}>
+            <li key={k} className="min-w-0">
               <AchievementBadge name={k} unlocked />
             </li>
           ))}

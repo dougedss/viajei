@@ -1,6 +1,5 @@
-import { BellOff, BellRing, CalendarDays, Smartphone } from 'lucide-react';
-import { useState } from 'react';
-import { useParams } from 'react-router';
+import { CalendarDays, ChevronRight, Smartphone } from 'lucide-react';
+import { Link, useParams } from 'react-router';
 import {
   isAvailableKind,
   LEAD_MINUTE_OPTIONS,
@@ -9,133 +8,25 @@ import {
 } from '@shared/constants.ts';
 import { NotFound } from '@/app/NotFound.tsx';
 import { Splash } from '@/app/Splash.tsx';
-import { Button } from '@/components/ui/Button.tsx';
 import { Card } from '@/components/ui/Card.tsx';
 import { Chip } from '@/components/ui/Chip.tsx';
 import { PageHeader } from '@/components/ui/PageHeader.tsx';
 import { Switch } from '@/components/ui/Switch.tsx';
-import { useCelebrationsPref, writeCelebrationsPref } from '@/features/progression/prefs.ts';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { useTripDays, useTripStops } from '@/features/itinerary/queries.ts';
-import { InstallCard } from '@/features/pwa/components/InstallCard.tsx';
 import { useTrip } from '@/features/trips/queries.ts';
 import { todayISO } from '@/features/trips/rules.ts';
-import { isIOS } from '@/lib/pwa/install.ts';
 import { useSession } from '@/lib/supabase/session.ts';
 import { currentDay } from '@/lib/time/index.ts';
-import { useSoundPref, writeSoundPref } from '@/lib/audio/index.ts';
 import { cx } from '@/lib/cx.ts';
 import { savePrefs, usePrefs } from '../prefs.ts';
-import { PushSetupError, subscribePush, unsubscribePush, usePushStatus } from '../subscription.ts';
 import { CalendarExport } from '../components/CalendarExport.tsx';
 
-const STATUS_LABEL = {
-  subscribed: 'Avisos ligados',
-  granted: 'Avisos desligados',
-  default: 'Avisos desligados',
-  denied: 'Avisos bloqueados',
-  'not-installed': 'Instale para receber avisos',
-  unsupported: 'Indisponível neste navegador',
-} as const;
-
-function DeviceSection({ uid }: { uid: string }) {
-  const push = usePushStatus();
-  const toast = useToast();
-  const [busy, setBusy] = useState(false);
-  const ios = isIOS();
-
-  const run = async (fn: () => Promise<unknown>, ok: string) => {
-    setBusy(true);
-    try {
-      await fn();
-      toast.show({ title: ok, kind: 'ok' });
-    } catch (err) {
-      toast.show({
-        title: err instanceof PushSetupError ? err.message : 'Não deu certo. Tente de novo.',
-        kind: 'late',
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (!push.checked) return null;
-  const on = push.status === 'subscribed';
-  return (
-    <section className="grid gap-3" aria-labelledby="h-aparelho">
-      <h2 id="h-aparelho" className="label-caps text-accent-ink">
-        Neste aparelho
-      </h2>
-      {push.status === 'not-installed' ? (
-        <InstallCard
-          lead="No iPhone, os avisos só chegam com o Viajei na Tela de Início. Instale e volte aqui para ativar."
-          persistent
-        />
-      ) : (
-        <Card className="grid gap-3">
-          <p className="flex items-center gap-3 text-[17px] font-semibold">
-            <span
-              className={cx(
-                'grid size-10 shrink-0 place-items-center rounded-full',
-                on ? 'bg-on-time/15 text-on-time-ink' : 'bg-accent-soft text-accent-ink',
-              )}
-            >
-              {on ? (
-                <BellRing className="size-5" aria-hidden="true" />
-              ) : (
-                <BellOff className="size-5" aria-hidden="true" />
-              )}
-            </span>
-            <span>
-              {STATUS_LABEL[push.status]}
-              <span className="block text-[14px] font-normal text-ink-2">
-                {ios
-                  ? 'iPhone'
-                  : navigator.userAgent.includes('Android')
-                    ? 'Android'
-                    : 'Este navegador'}
-              </span>
-            </span>
-          </p>
-          {push.status === 'denied' ? (
-            <p className="text-[15px] text-ink-2">
-              {ios
-                ? 'Para reativar: Ajustes → Notificações → Viajei → Permitir notificações.'
-                : 'Para reativar: toque no cadeado ao lado do endereço → Notificações → Permitir.'}{' '}
-              Enquanto isso, o calendário abaixo avisa 15 min antes de cada saída.
-            </p>
-          ) : null}
-          {push.status === 'unsupported' ? (
-            <p className="text-[15px] text-ink-2">
-              Este navegador não recebe avisos. Use o calendário abaixo: ele avisa 15 min antes de
-              cada saída.
-            </p>
-          ) : null}
-          {on ? (
-            <Button
-              variant="secondary"
-              size="md"
-              loading={busy}
-              onClick={() => void run(unsubscribePush, 'Avisos desligados neste aparelho')}
-            >
-              Desligar neste aparelho
-            </Button>
-          ) : push.status === 'default' || push.status === 'granted' ? (
-            <Button
-              size="md"
-              loading={busy}
-              onClick={() => void run(() => subscribePush(uid), 'Avisos ativados')}
-            >
-              <BellRing className="size-5" aria-hidden="true" />
-              Ativar avisos
-            </Button>
-          ) : null}
-        </Card>
-      )}
-    </section>
-  );
-}
-
+/**
+ * Os avisos de uma viagem (`/viagens/:tripId/avisos`): as preferências desta viagem (valem em todos
+ * os aparelhos da pessoa) e o calendário. O que é do aparelho (a permissão, os sons, os cartões de
+ * conquista) mora no Perfil desde a fase 16, e aqui fica um link para lá.
+ */
 export default function AvisosPage() {
   const { tripId = '' } = useParams();
   const { session } = useSession();
@@ -143,8 +34,6 @@ export default function AvisosPage() {
   const days = useTripDays(tripId);
   const stops = useTripStops(tripId);
   const { prefs, row } = usePrefs(tripId);
-  const sound = useSoundPref();
-  const celebrations = useCelebrationsPref();
   const toast = useToast();
   const uid = session?.user.id ?? '';
 
@@ -173,7 +62,19 @@ export default function AvisosPage() {
         eyebrow={<Chip>{trip.name}</Chip>}
       />
 
-      <DeviceSection uid={uid} />
+      <Card className="grid gap-2" data-device-link>
+        <p className="text-[15px] text-ink-2">
+          A permissão de avisos deste aparelho, os sons do Modo Viagem e os cartões de conquista
+          valem para todas as viagens: ficam no Perfil.
+        </p>
+        <Link
+          to="/perfil#h-avisos-aparelho"
+          className="inline-flex min-h-12 items-center gap-1 text-[15px] font-semibold text-accent-ink"
+        >
+          Avisos neste aparelho
+          <ChevronRight className="size-4" aria-hidden="true" />
+        </Link>
+      </Card>
 
       <section className="grid gap-3" aria-labelledby="h-prefs">
         <div className="grid gap-0.5">
@@ -240,31 +141,6 @@ export default function AvisosPage() {
               onChange={(v) => save({ kinds: { [k]: v } })}
             />
           ))}
-        </Card>
-      </section>
-
-      <section className="grid gap-3" aria-labelledby="h-sons">
-        <div className="grid gap-0.5">
-          <h2 id="h-sons" className="label-caps text-accent-ink">
-            Sons e conquistas
-          </h2>
-          <p className="text-[14px] text-ink-2">
-            Só neste aparelho. Sons mudos com "reduzir movimento".
-          </p>
-        </div>
-        <Card className="grid gap-3">
-          <Switch
-            label="Sons do Modo Viagem"
-            description="Buzina no Partiu!, sino no Chegamos!, ronco do motor no replay."
-            checked={sound}
-            onChange={writeSoundPref}
-          />
-          <Switch
-            label="Cartões de conquista"
-            description="Ao desbloquear, um cartão com o acessório encaixando no carro, num momento calmo."
-            checked={celebrations}
-            onChange={writeCelebrationsPref}
-          />
         </Card>
       </section>
 

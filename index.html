@@ -10,6 +10,23 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Viajei" />
     <title>Viajei</title>
+    <script>
+      // O tema escolhido no Perfil (fase 16), antes do primeiro quadro: nada pisca ao abrir. É a
+      // `applyTheme` de src/lib/theme.ts escrita à mão (o mesmo `viajei:theme`, as mesmas cores).
+      (function () {
+        try {
+          var t = localStorage.getItem('viajei:theme');
+          if (t !== 'light' && t !== 'dark') return;
+          document.documentElement.dataset.theme = t;
+          var c = t === 'dark' ? '#111722' : '#F4F4F2';
+          document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) {
+            m.setAttribute('content', c);
+          });
+        } catch (e) {
+          /* sem localStorage: o tema do sistema */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

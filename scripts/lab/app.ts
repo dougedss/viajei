@@ -375,7 +375,7 @@ export function appAvisos(app: App): Promise<Check> {
   return runSteps(
     app,
     'app_avisos',
-    'Entrou, viu o "Agora", ativou os avisos pela folha e /avisos diz "Avisos ligados"',
+    'Entrou, viu o "Agora", ativou os avisos pela folha e o Perfil diz "Avisos ligados"',
     [
       [
         'entrar',
@@ -439,10 +439,13 @@ export function appAvisos(app: App): Promise<Check> {
         },
       ],
       [
-        '/avisos mostra "Avisos ligados"',
+        'o Perfil mostra "Avisos ligados" (a permissão é do aparelho desde a fase 16)',
         async () => {
-          await page.goto(tripUrl(target, 'avisos'));
-          await page.getByText('Avisos ligados').waitFor();
+          await page.goto(`${target.appUrl}/perfil`);
+          await page
+            .getByRole('region', { name: 'Avisos neste aparelho' })
+            .getByText('Avisos ligados')
+            .waitFor();
         },
       ],
       [

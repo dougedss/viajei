@@ -1,7 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { PersonColor } from '@shared/constants.ts';
 import { connectivity } from '@/lib/db/connectivity.ts';
-import { db } from '@/lib/db/schema.ts';
+import { mutate } from '@/lib/db/mutate.ts';
+import { db, syncKeys, type Profile } from '@/lib/db/schema.ts';
 import { syncEngine } from '@/lib/db/sync/engine.ts';
 import { mediaQueue, stopMedia } from '@/lib/media/index.ts';
 import { supabase } from '@/lib/supabase/client.ts';
@@ -49,4 +50,17 @@ export async function signOutNow(): Promise<void> {
   await supabase.auth.signOut();
   await db.delete();
   await db.open();
+}
+
+/**
+ * Os padrões dos avisos das viagens novas (fase 16), no perfil, pela outbox: a antecedência e a hora
+ * do briefing com que a linha de avisos de uma viagem nasce. Offline, como o carro.
+ */
+export async function saveNotifyDefaults(
+  patch: Partial<Pick<Profile, 'notify_lead_minutes' | 'notify_morning_time'>>,
+): Promise<void> {
+  if (Object.keys(patch).length === 0) return;
+  const uid = (await db.sync_state.get(syncKeys.uid))?.value;
+  if (!uid) throw new Error('sem a pessoa deste aparelho');
+  await mutate.patch('profiles', uid, patch);
 }

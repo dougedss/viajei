@@ -23,7 +23,7 @@ export function AchievementBadge({
   return (
     <span
       className={cx(
-        'flex min-h-12 items-center gap-2.5 rounded-card bg-card px-3 py-2 shadow-[inset_0_0_0_1px_var(--color-line)]',
+        'flex min-h-12 min-w-0 items-center gap-2.5 rounded-card bg-card px-3 py-2 shadow-[inset_0_0_0_1px_var(--color-line)]',
         className,
       )}
       data-achievement={name}
@@ -39,7 +39,12 @@ export function AchievementBadge({
           <Lock className="size-4 text-ink-2" aria-hidden="true" />
         )}
       </span>
-      <b className={cx('text-[15px] leading-tight font-semibold', !unlocked && 'text-ink-2')}>
+      <b
+        className={cx(
+          'min-w-0 text-[15px] leading-tight font-semibold [overflow-wrap:anywhere]',
+          !unlocked && 'text-ink-2',
+        )}
+      >
         {def.name}
       </b>
     </span>

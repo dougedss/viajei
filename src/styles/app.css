@@ -24,6 +24,9 @@
   --sky-a: #f6dcc5;
   --sky-b: #f2eee6;
   --shadow-card: 0 10px 30px -12px rgb(28 34 48 / 0.28);
+  /* o texto e o ícone dos tipos de parada mais escuros, sobre o papel e o cartão (fase 16, D181) */
+  --stop-transit-ink: #5b6474;
+  --stop-winery-ink: #8a4f8e;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
@@ -43,6 +46,8 @@
     --sky-a: #0f1627;
     --sky-b: #26304a;
     --shadow-card: 0 10px 30px -12px rgb(0 0 0 / 0.6);
+    --stop-transit-ink: #8f97a6;
+    --stop-winery-ink: #b28ab6;
   }
 }
 :root[data-theme='dark'] {
@@ -62,6 +67,8 @@
   --sky-a: #0f1627;
   --sky-b: #26304a;
   --shadow-card: 0 10px 30px -12px rgb(0 0 0 / 0.6);
+  --stop-transit-ink: #8f97a6;
+  --stop-winery-ink: #b28ab6;
 }
 
 @theme inline {
@@ -84,6 +91,8 @@
   --color-sky-a: var(--sky-a);
   --color-sky-b: var(--sky-b);
   --shadow-card: var(--shadow-card);
+  --color-stop-transit-ink: var(--stop-transit-ink);
+  --color-stop-winery-ink: var(--stop-winery-ink);
 }
 
 @theme {

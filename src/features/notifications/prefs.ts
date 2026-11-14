@@ -7,14 +7,19 @@ import {
   type NotificationKind,
 } from '@shared/constants.ts';
 import { mutate } from '@/lib/db/mutate.ts';
-import { db, type NotificationPref } from '@/lib/db/schema.ts';
+import { db, type NotificationPref, type Profile } from '@/lib/db/schema.ts';
 import { uuidV5 } from '@/lib/ids/uuid.ts';
 import { hhmm } from '@/lib/time/index.ts';
 
 /**
  * Preferências de aviso por pessoa e viagem. Leitura ao vivo do Dexie com os padrões por cima
- * do que falta; escrita pela `mutate` (offline primeiro), com id `v5(user_id, trip_id)`: a linha
- * nasce na primeira mudança, e dois aparelhos da mesma pessoa escrevem a mesma linha.
+ * do que falta; escrita pela `mutate` (offline primeiro), com id `v5(user_id, trip_id)`: dois
+ * aparelhos da mesma pessoa escrevem a mesma linha.
+ *
+ * Onde a linha nasce: até a fase 15, só na primeira mudança em Avisos (sem ela, o servidor usa os
+ * padrões da coluna, 15 min e 7h). Desde a 16, também quando a viagem nasce no aparelho e quando a
+ * pessoa aceita um convite, com a antecedência e a hora do briefing que ela escolheu no Perfil para
+ * as viagens novas (`profiles.notify_*`). As viagens que já existiam sem linha continuam como eram.
  */
 export type Prefs = {
   enabled: boolean;
@@ -51,6 +56,20 @@ export function mergePrefs(
     lead_minutes: row.lead_minutes,
     morning_time: hhmm(row.morning_time),
     kinds,
+  };
+}
+
+/** Os padrões de uma viagem nova: os do Perfil da pessoa (ou os do app, sem perfil no aparelho). */
+export function newTripDefaults(
+  profile: Pick<Profile, 'notify_lead_minutes' | 'notify_morning_time'> | null | undefined,
+): Prefs {
+  const lead: unknown = profile?.notify_lead_minutes;
+  const morning: unknown = profile?.notify_morning_time;
+  return {
+    ...DEFAULT_PREFS,
+    kinds: { ...DEFAULT_PREFS.kinds },
+    lead_minutes: typeof lead === 'number' ? lead : DEFAULT_PREFS.lead_minutes,
+    morning_time: typeof morning === 'string' ? hhmm(morning) : DEFAULT_PREFS.morning_time,
   };
 }
 
@@ -104,3 +123,23 @@ export async function savePrefs(uid: string, tripId: string, patch: PrefsPatch):
 }
 
 export { NOTIFICATION_KIND_KEYS };
+
+/**
+ * A linha de uma viagem nova (criada aqui ou aceita por convite), com os padrões do Perfil. Se ela
+ * já existe no aparelho (o pull a trouxe, de outro aparelho ou de uma participação anterior), nada
+ * muda: o que a pessoa escolheu vale.
+ */
+export async function bornPrefs(uid: string, tripId: string): Promise<void> {
+  const id = await prefsId(uid, tripId);
+  if (await db.notification_prefs.get(id)) return;
+  const values = newTripDefaults(await db.profiles.get(uid));
+  const now = new Date().toISOString();
+  await mutate.insert('notification_prefs', {
+    id,
+    user_id: uid,
+    trip_id: tripId,
+    ...values,
+    created_at: now,
+    updated_at: now,
+  });
+}

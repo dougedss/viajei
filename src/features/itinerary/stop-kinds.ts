@@ -1,11 +1,15 @@
 import { isDepartureKind, STOP_KINDS, type StopKind } from '@shared/constants.ts';
 
-/** Classes completas, para o Tailwind enxergar cada cor de tipo de parada. */
+/**
+ * Classes completas, para o Tailwind enxergar cada cor de tipo de parada. O texto e o ícone de
+ * Deslocamento e Vinícola sobre o papel e o cartão usam o tom de cada tema (fase 16: davam 2,7:1 no
+ * cartão escuro, D181); o círculo com o ícone branco (`KIND_BG`) fica com a cor fixa.
+ */
 export const KIND_TEXT: Record<StopKind, string> = {
   origin: 'text-stop-origin',
-  transit: 'text-stop-transit',
+  transit: 'text-stop-transit-ink',
   nature: 'text-stop-nature',
-  winery: 'text-stop-winery',
+  winery: 'text-stop-winery-ink',
   hotel: 'text-stop-hotel',
   food: 'text-stop-food',
   event: 'text-stop-event',

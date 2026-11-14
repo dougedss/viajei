@@ -60,6 +60,23 @@ describe('descrição das pendências', () => {
     );
   });
 
+  it('o perfil pela outbox e os avisos que nascem com a viagem (fase 16)', () => {
+    const profile = (values: Record<string, unknown>) =>
+      op({ table: 'profiles', trip_id: null, row_id: 'u', values });
+    expect(describeOp(profile({ car_model: 'suv', car_finish: 'pearl' }), ctx)).toEqual({
+      title: 'O seu carro',
+      detail: 'carro, acabamento do carro',
+    });
+    expect(describeOp(profile({ notify_lead_minutes: 30 }), ctx)).toEqual({
+      title: 'Avisos das viagens novas',
+      detail: 'antecedência padrão',
+    });
+    expect(describeOp(op({ table: 'notification_prefs', op: 'upsert' }), ctx)).toEqual({
+      title: 'Avisos da viagem',
+      detail: 'Serra',
+    });
+  });
+
   it('estado em palavras', () => {
     expect(stateLabel({ state: 'pending', attempts: 0, last_error: null })).toBe(
       'Aguardando envio',

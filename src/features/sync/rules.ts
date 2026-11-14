@@ -95,7 +95,18 @@ export function describeOp(op: OutboxOp, ctx: OpContext): OpDescription {
     return { title: photo ? 'Foto da memória' : 'Anexo da reserva', detail: trip };
   }
   if (op.table === 'notification_prefs') {
+    // a linha que nasce com a viagem (fase 16), com os padrões do Perfil
+    if (op.op === 'upsert') return { title: 'Avisos da viagem', detail: trip };
     return { title: `Avisos · ${trip}`, detail: describeColumns(Object.keys(op.values)) };
+  }
+  if (op.table === 'profiles') {
+    // o perfil pela outbox (fase 16): o carro, ou os padrões dos avisos das viagens novas
+    const columns = Object.keys(op.values);
+    const car = columns.some((c) => c.startsWith('car_'));
+    return {
+      title: car ? 'O seu carro' : 'Avisos das viagens novas',
+      detail: describeColumns(columns),
+    };
   }
   const who =
     ctx.memberName ??
