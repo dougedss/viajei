@@ -1,5 +1,5 @@
 begin;
-select plan(26);
+select plan(27);
 
 create function pg_temp.login(p uuid) returns void language plpgsql as $$
 begin
@@ -93,10 +93,16 @@ select is((select car_color || '|' || car_finish from public.profiles where id =
           'grape|matte', 'e o carro muda (a versão do futuro é limitada a agora + 2 min pelo sync_guard)');
 select is(pg_temp.push1('{"seq":2,"table":"profiles","id":"c1111111-1111-4111-8111-111111111111","op":"patch","values":{"car_color":"night"},"versions":{"car_color":"2020-01-01T00:00:00Z"},"updated_at":"2020-01-01T00:00:00Z"}'),
           'stale||[]', 'uma escolha mais velha que a do servidor volta stale (versão por coluna)');
+-- o perfil de quem viaja junto é visível (o time vê o carro): o patch não acha a linha para mudar
+-- (a policy de update é só a própria) e volta stale, sem mudar nada
 select is(pg_temp.push1('{"seq":3,"table":"profiles","id":"c2222222-2222-4222-8222-222222222222","op":"patch","values":{"car_model":"kombi"},"versions":{"car_model":"2030-01-01T00:00:00Z"},"updated_at":"2030-01-01T00:00:00Z"}'),
-          'error|P0002|[]', 'o patch no perfil de outra pessoa não acha a linha (RLS)');
-select is(pg_temp.push1('{"seq":4,"table":"profiles","id":"c1111111-1111-4111-8111-111111111111","op":"patch","values":{"xp_total":9999},"versions":{"xp_total":"2030-01-01T00:00:00Z"},"updated_at":"2030-01-01T00:00:00Z"}'),
-          'error|42501|[]', 'nem pela outbox o client muda o resumo da progressão');
+          'stale||[]', 'o patch no perfil de outra pessoa não muda a linha (RLS de update)');
+select is((select car_model from public.profiles where id = 'c2222222-2222-4222-8222-222222222222'), 'hatch',
+          'e o carro dela continua o dela');
+-- a coluna sem grant fica de fora do update (C3): o patch só leva o updated_at, e o resumo fica
+select pg_temp.push1('{"seq":4,"table":"profiles","id":"c1111111-1111-4111-8111-111111111111","op":"patch","values":{"xp_total":9999},"versions":{"xp_total":"2030-01-01T00:00:00Z"},"updated_at":"2030-01-01T00:00:00Z"}');
+select is((select xp_total from public.profiles where id = 'c1111111-1111-4111-8111-111111111111'),
+          0, 'nem pela outbox o client muda o resumo da progressão');
 select is((select scope || '|' || mode || '|' || rank from private.sync_tables where name = 'profiles'), 'self|lww|5',
           'o perfil entra na whitelist com o escopo self, antes de todas as tabelas');
 
