@@ -335,6 +335,8 @@ export async function appParadaAuto(ctx: ParadaContext, today: string): Promise<
         'a lista de A não tem a parada uma vez só',
       );
       data.chamadas_osm_b = B.reverse();
+      // pedidos do app abertos há mais de 30 s (o condutor do relógio deixou de esperar por eles)
+      data.pedidos_travados = A.rede.travados() + B.rede.travados();
       // nada de segunda linha no servidor depois de os dois sincronizarem
       if ((await autoStops()).length !== 1) throw new Error('virou duas no servidor');
     });

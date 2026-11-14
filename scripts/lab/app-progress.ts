@@ -797,7 +797,11 @@ export async function appRetrospectiva(ctx: ProgressContext): Promise<Check> {
           'o filme chega ao card final com os números certos',
           async () => {
             await page.locator('[data-film="ended"]').waitFor({ timeout: SLOW });
+            // o filme é refeito quando a rota de um dia chega depois (o caminho certo, fase 9): o card
+            // final que vale é o do último filme. Espera os números dele, como o e2e (fase 16: uma
+            // leitura sem espera pegou o instante entre um filme e outro)
             const final = page.locator('[data-final-card]');
+            await final.locator('[data-stat="dias"]').waitFor({ timeout: SLOW });
             const stats = await final.locator('[data-stat]').allTextContents();
             const budget = (await final.locator('[data-budget]').textContent()) ?? '';
             data.numeros = { stats, budget };

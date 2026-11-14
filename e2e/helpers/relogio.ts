@@ -11,7 +11,9 @@ import type { BrowserContext, Page, Request } from '@playwright/test';
  * 10 e 13/11). Num aparelho de verdade isso não acontece: um minuto dá tempo a qualquer resposta.
  *
  * Por isso o relógio anda em passos de 5 s (menos que o menor prazo do app, os 6 s do OSM) e, antes de
- * cada passo, espera a rede da página ficar quieta. E a posição só conta quando o app a leu: depois de
+ * cada passo, espera os pedidos do próprio app voltarem (`pedidoDoApp`; um pedido de fora que nunca
+ * fecha não segura nada, e um do app aberto há mais de 30 s conta como travado e também não). E a
+ * posição só conta quando o app a leu: depois de
  * `setGeolocation`, espera o `data-fix-at` mudar, para a leitura ter a hora certa (entregue no meio de
  * um `runFor`, ela levaria uma hora qualquer do minuto).
  */
@@ -19,32 +21,53 @@ import type { BrowserContext, Page, Request } from '@playwright/test';
 /** O maior passo do relógio: menor que o prazo mais curto do app (o OSM, 6 s). */
 export const PASSO_MS = 5_000;
 
-/** Quanto se espera a rede quieta antes de andar mesmo assim (um pedido preso é problema do app). */
-const QUIETA_MS = 30_000;
+/**
+ * Quanto um pedido do app pode ficar aberto antes de contar como travado: daí em diante ele não
+ * segura mais o relógio (o prazo do próprio app, no relógio de mentira, cuida dele).
+ */
+const TRAVADO_MS = 30_000;
+
+/**
+ * Os pedidos que importam: os do próprio app, que têm prazo no relógio de mentira (o sync e as
+ * funções do Supabase, o OSM, o Open-Meteo). Um pedido de fora que nunca fecha não diz nada do app:
+ * esperar por todos os pedidos da página travou o laboratório do preview da fase 16 por 50 min (no
+ * preview da Vercel, a barra de ferramentas que ela injeta é o candidato; D200).
+ */
+export function pedidoDoApp(url: string): boolean {
+  return (
+    /\/(rest|auth|functions|storage)\/v1\//.test(url) ||
+    url.startsWith('https://nominatim.openstreetmap.org/') ||
+    url.startsWith('https://api.open-meteo.com/')
+  );
+}
 
 export type Rede = {
-  /** os pedidos HTTP da página ainda sem resposta */
+  /** os pedidos do app ainda sem resposta (os travados também) */
   emVoo: () => number;
-  /** espera não haver pedido sem resposta; devolve quanto esperou, em ms */
+  /** os pedidos do app abertos há mais de 30 s, que já não seguram o relógio */
+  travados: () => number;
+  /** espera não haver pedido do app recente sem resposta; devolve quanto esperou, em ms */
   quieta: () => Promise<number>;
 };
 
 const pausa = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-/** Conta os pedidos da página que ainda não voltaram (o Realtime, por WebSocket, não entra). */
+/** Conta os pedidos do app que ainda não voltaram, com a hora em que saíram (o Realtime não entra). */
 export function redeDa(page: Page): Rede {
-  const abertos = new Set<Request>();
+  const abertos = new Map<Request, number>();
   const fecha = (r: Request) => abertos.delete(r);
   page.on('request', (r) => {
-    if (r.resourceType() !== 'websocket' && r.resourceType() !== 'eventsource') abertos.add(r);
+    if (pedidoDoApp(r.url())) abertos.set(r, Date.now());
   });
   page.on('requestfinished', fecha);
   page.on('requestfailed', fecha);
+  const recentes = () => [...abertos.values()].filter((t) => Date.now() - t < TRAVADO_MS).length;
   return {
     emVoo: () => abertos.size,
+    travados: () => abertos.size - recentes(),
     quieta: async () => {
       const t0 = Date.now();
-      while (abertos.size > 0 && Date.now() - t0 < QUIETA_MS) await pausa(20);
+      while (recentes() > 0) await pausa(20);
       return Date.now() - t0;
     },
   };

@@ -264,8 +264,12 @@ test('com a rede lenta da produção: o relógio não derruba o sync, e a parada
       // a página pode ter desistido do pedido nesse meio tempo
       await route.continue().catch(() => undefined);
     });
+    // um pedido de fora que nunca fecha, como os do preview da Vercel: o condutor do relógio não pode
+    // esperar por ele (no laboratório do preview da fase 16, esperar travou o cenário por 50 min)
+    await context.route('https://vercel.live/**', () => new Promise<void>(() => undefined));
   });
   const { page } = aberto;
+  await page.evaluate("void fetch('https://vercel.live/_next-live/feedback').catch(() => {})");
   const desde = await page.evaluate(() => Date.now());
 
   await pararNoPosto(aberto);
