@@ -23,7 +23,7 @@ type Props = {
 
 /** O que muda o carro montado: um carro novo quando a pessoa troca qualquer coisa nele. */
 function specKey(c: CarSpec): string {
-  return `${c.model}|${c.color}|${c.accessories.join(',')}`;
+  return `${c.model}|${c.color}|${c.finish}|${c.wheels}|${c.accessories.join(',')}`;
 }
 
 /** menor que o carro de quem olha, para a hierarquia ficar clara */

@@ -115,15 +115,21 @@ describe('o texto do cartão', () => {
     expect(accessoryFor('coast')).toBe('board');
   });
 
-  it('nível: o modelo novo, e no 5 o dourado', () => {
+  it('nível: o que vai no carro (a escada da fase 16), e no 5 o dourado e o seu carro, depois', () => {
     expect(celebrationText({ kind: 'level', level: 2, at: NOW })).toMatchObject({
       title: 'Nível 2 · Viajante',
-      body: 'O sedã está liberado na garagem.',
-      unlock: 'O sedã',
+      body: 'O metálico e a roda de cinco raios estão liberados na garagem.',
+      unlock: 'O metálico e a roda de cinco raios',
     });
-    expect(celebrationText({ kind: 'level', level: 5, at: NOW })).toMatchObject({
+    expect(celebrationText({ kind: 'level', level: 4, at: NOW }).unlock).toBe(
+      'O fosco e a roda de aço',
+    );
+    // o seu carro não é escolha ainda: entra na frase, não no que se usa
+    expect(celebrationText({ kind: 'level', level: 5, at: NOW })).toEqual({
+      eyebrow: 'Nível novo',
       title: 'Nível 5 · Lenda da Estrada',
-      body: 'A kombi e o dourado estão liberados na garagem.',
+      body: 'O dourado está liberado na garagem. O seu carro de verdade, com a marca, o modelo e o ano, chega numa versão futura do Viajei.',
+      unlock: 'O dourado',
     });
   });
 });

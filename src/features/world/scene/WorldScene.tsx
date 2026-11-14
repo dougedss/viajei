@@ -139,7 +139,15 @@ export function WorldScene({
           runtime={runtime}
           cars={convoy}
           carFor={
-            carFor ?? (() => ({ model: car.model, color: 'mist', accessories: [], plate: null }))
+            carFor ??
+            (() => ({
+              model: car.model,
+              color: 'mist',
+              finish: 'solid',
+              wheels: 'classic',
+              accessories: [],
+              plate: null,
+            }))
           }
           group={groups.objects}
         />

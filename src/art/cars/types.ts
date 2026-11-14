@@ -1,17 +1,26 @@
-import type { CarAccessoryKey, CarColor, CarModel } from '@shared/constants.ts';
+import type {
+  CarAccessoryKey,
+  CarColor,
+  CarFinish,
+  CarModel,
+  CarWheels,
+} from '@shared/constants.ts';
 import type { Group, MeshPhysicalNodeMaterial, MeshStandardMaterial, Object3D } from 'three/webgpu';
 
 export type { CarAccessoryKey } from '@shared/constants.ts';
 export { CAR_ACCESSORY_KEYS } from '@shared/constants.ts';
 
 /**
- * O que descreve um carro para desenhar, em 3D ou de lado: o modelo, a cor, os acessórios na ordem
- * em que foram escolhidos e o nome da viagem (a placa personalizada usa quando o acessório está
- * ligado). `normalizeCar` produz isto a partir da linha da viagem, já limpo.
+ * O que descreve um carro para desenhar, em 3D ou de lado: o modelo, a cor, o acabamento da tinta,
+ * o estilo das rodas, os acessórios na ordem em que foram escolhidos e o texto da placa (a placa
+ * personalizada usa quando o acessório está ligado). `normalizeCar` produz isto a partir do perfil
+ * da pessoa (fase 16), já limpo.
  */
 export type CarSpec = {
   model: CarModel;
   color: CarColor;
+  finish: CarFinish;
+  wheels: CarWheels;
   accessories: readonly CarAccessoryKey[];
   plate: string | null;
 };
@@ -51,6 +60,10 @@ export type CarRig = {
   readonly headMat: MeshStandardMaterial;
   readonly tailMat: MeshStandardMaterial;
   setColor: (color: CarColor, opts?: { animate?: boolean }) => void;
+  /** o acabamento da tinta (lisa, metálica, perolada, fosca): a mesma tinta, outros números */
+  setFinish: (finish: CarFinish, opts?: { animate?: boolean }) => void;
+  /** o estilo das rodas: troca o aro das quatro, que continuam girando */
+  setWheels: (wheels: CarWheels) => void;
   /** liga e desliga na hora; mantém as faixas e os espaços de quem continua */
   setAccessories: (keys: readonly string[]) => void;
   /** liga um acessório: desce e encaixa com mola (ou aparece na hora) */

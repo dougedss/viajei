@@ -4,24 +4,40 @@ import {
   CAR_ACCESSORIES,
   CAR_ACCESSORY_KEYS,
   CAR_COLORS,
+  CAR_FINISHES,
   CAR_MODELS,
+  CAR_WHEELS,
+  OWN_CAR,
   type CarAccessoryKey,
   type CarColor,
+  type CarFinish,
   type CarModel,
+  type CarWheels,
 } from '@shared/constants.ts';
+import { WheelMark } from '@/art/cars/CarSide.tsx';
 import type { CarSpec } from '@/art/cars/types.ts';
-import type { TeamProgress } from '@/features/progression/team.ts';
+import { levelName, type TeamProgress } from '@/features/progression/team.ts';
 import { cx } from '@/lib/cx.ts';
-import { accessoryState, colorState, modelState, type ItemState, type Tap } from '../rules.ts';
+import {
+  accessoryState,
+  colorState,
+  finishState,
+  modelState,
+  wheelsState,
+  type ItemState,
+  type Tap,
+} from '../rules.ts';
 
 /**
- * As três linhas da garagem, como no style tile: Modelo (os cinco, com o nível de cada bloqueado),
- * Pintura (as oito cores; o dourado com "nv 5") e Acessórios (todos, os bloqueados com cadeado).
- * Tudo é tocável: o bloqueado abre a prévia com a frase do que falta. Alvos de 48 px, rolagem na
- * horizontal quando não cabe.
+ * As linhas da garagem (fase 16, a escada nova): Modelo (os cinco, livres: escolha o seu carro),
+ * Pintura (as oito cores; o dourado no nível 5), Acabamento e Rodas (o que os níveis liberam),
+ * Acessórios (pelas conquistas) e, no fim, "O seu carro", trancado até uma versão futura. Tudo o que
+ * se escolhe é tocável: o bloqueado abre a prévia com a frase do que falta. Alvos de 48 px, rolagem
+ * na horizontal quando não cabe.
  */
 type Props = {
-  trip: CarSpec;
+  /** o carro gravado (o do perfil): o que ele já usa e o progresso não libera continua (`kept`) */
+  mine: CarSpec;
   shown: CarSpec;
   progress: TeamProgress;
   onTap: (tap: Tap) => void;
@@ -29,10 +45,12 @@ type Props = {
 
 const MODELS = Object.keys(CAR_MODELS) as CarModel[];
 const COLORS = Object.keys(CAR_COLORS) as CarColor[];
+const FINISHES = Object.keys(CAR_FINISHES) as CarFinish[];
+const WHEELS = Object.keys(CAR_WHEELS) as CarWheels[];
 
 /**
  * O que falta para liberar vira a descrição acessível do botão: o nome continua sendo o que está
- * escrito nele (WCAG 2.5.3, quem usa a voz diz "SUV"), e o leitor de tela lê a regra logo depois.
+ * escrito nele (WCAG 2.5.3, quem usa a voz diz "Fosca"), e o leitor de tela lê a regra logo depois.
  */
 function LockedHint({ state, id }: { state: ItemState; id: string }) {
   if (state.status !== 'locked') return null;
@@ -69,41 +87,66 @@ function pillClass(pressed: boolean, locked: boolean): string {
   );
 }
 
-export function OptionRows({ trip, shown, progress, onTap }: Props) {
+/** Um botão de pílula com o cadeado e o "nv N" quando bloqueado. */
+function Pill({
+  state,
+  pressed,
+  hintId,
+  level,
+  onClick,
+  children,
+}: {
+  state: ItemState;
+  pressed: boolean;
+  hintId: string;
+  level: number;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  const locked = state.status === 'locked';
+  return (
+    <button
+      type="button"
+      className={pillClass(pressed, locked)}
+      aria-pressed={pressed}
+      aria-describedby={locked ? hintId : undefined}
+      data-state={state.status}
+      onClick={onClick}
+    >
+      {locked ? <Lock className="size-4" aria-hidden="true" /> : null}
+      {children}
+      {locked ? (
+        <small className="num text-[13px] font-semibold text-ink-2" aria-hidden="true">
+          nv {level}
+        </small>
+      ) : null}
+      <LockedHint state={state} id={hintId} />
+    </button>
+  );
+}
+
+export function OptionRows({ mine, shown, progress, onTap }: Props) {
+  const ownCarOpen = progress.level >= OWN_CAR.level;
   return (
     <div className="grid gap-5">
-      <Row title="Modelo" id="h-garagem-modelo">
-        {MODELS.map((m) => {
-          const state = modelState(m, progress, trip);
-          const locked = state.status === 'locked';
-          const pressed = shown.model === m;
-          const hintId = `garagem-modelo-${m}`;
-          return (
-            <button
-              key={m}
-              type="button"
-              className={pillClass(pressed, locked)}
-              aria-pressed={pressed}
-              aria-describedby={locked ? hintId : undefined}
-              data-state={state.status}
-              onClick={() => onTap({ kind: 'model', model: m })}
-            >
-              {locked ? <Lock className="size-4" aria-hidden="true" /> : null}
-              {CAR_MODELS[m].label}
-              {locked ? (
-                <small className="num text-[13px] font-semibold text-ink-2" aria-hidden="true">
-                  nv {CAR_MODELS[m].level}
-                </small>
-              ) : null}
-              <LockedHint state={state} id={hintId} />
-            </button>
-          );
-        })}
+      <Row title="Modelo · escolha o seu carro" id="h-garagem-modelo">
+        {MODELS.map((m) => (
+          <Pill
+            key={m}
+            state={modelState(m, progress, mine)}
+            pressed={shown.model === m}
+            hintId={`garagem-modelo-${m}`}
+            level={CAR_MODELS[m].level}
+            onClick={() => onTap({ kind: 'model', model: m })}
+          >
+            {CAR_MODELS[m].label}
+          </Pill>
+        ))}
       </Row>
 
       <Row title="Pintura" id="h-garagem-pintura">
         {COLORS.map((c) => {
-          const state = colorState(c, progress, trip);
+          const state = colorState(c, progress, mine);
           const locked = state.status === 'locked';
           const pressed = shown.color === c;
           const hintId = `garagem-pintura-${c}`;
@@ -152,9 +195,40 @@ export function OptionRows({ trip, shown, progress, onTap }: Props) {
         })}
       </Row>
 
+      <Row title="Acabamento" id="h-garagem-acabamento">
+        {FINISHES.map((f) => (
+          <Pill
+            key={f}
+            state={finishState(f, progress, mine)}
+            pressed={shown.finish === f}
+            hintId={`garagem-acabamento-${f}`}
+            level={CAR_FINISHES[f].level}
+            onClick={() => onTap({ kind: 'finish', finish: f })}
+          >
+            {CAR_FINISHES[f].label}
+          </Pill>
+        ))}
+      </Row>
+
+      <Row title="Rodas" id="h-garagem-rodas">
+        {WHEELS.map((w) => (
+          <Pill
+            key={w}
+            state={wheelsState(w, progress, mine)}
+            pressed={shown.wheels === w}
+            hintId={`garagem-rodas-${w}`}
+            level={CAR_WHEELS[w].level}
+            onClick={() => onTap({ kind: 'wheels', wheels: w })}
+          >
+            <WheelMark style={w} className="-ml-1 size-7 shrink-0" />
+            {CAR_WHEELS[w].label}
+          </Pill>
+        ))}
+      </Row>
+
       <Row title="Acessórios · desbloqueados por conquista" id="h-garagem-acessorios">
         {CAR_ACCESSORY_KEYS.map((k: CarAccessoryKey) => {
-          const state = accessoryState(k, progress, trip);
+          const state = accessoryState(k, progress, mine);
           const locked = state.status === 'locked';
           const pressed = shown.accessories.includes(k);
           const hintId = `garagem-acessorio-${k}`;
@@ -175,6 +249,29 @@ export function OptionRows({ trip, shown, progress, onTap }: Props) {
           );
         })}
       </Row>
+
+      {/* o último nível: o seu carro de verdade (fase 20). Nada a escolher aqui, e nada finge que há */}
+      <section
+        className="grid gap-1 rounded-card bg-card p-4 shadow-[inset_0_0_0_1px_var(--color-line)]"
+        aria-labelledby="h-garagem-seu-carro"
+        data-own-car={ownCarOpen ? 'liberado' : 'trancado'}
+      >
+        <h2
+          id="h-garagem-seu-carro"
+          className="flex items-center gap-2 font-num text-[19px] font-semibold"
+        >
+          {ownCarOpen ? null : <Lock className="size-4 text-ink-2" aria-hidden="true" />}
+          {OWN_CAR.label}
+          {ownCarOpen ? null : (
+            <small className="num text-[13px] font-semibold text-ink-2">nv {OWN_CAR.level}</small>
+          )}
+        </h2>
+        <p className="text-[15px] leading-snug text-ink-2">
+          {ownCarOpen
+            ? OWN_CAR.later
+            : `No nível ${OWN_CAR.level} (${levelName(OWN_CAR.level)}). ${OWN_CAR.later}`}
+        </p>
+      </section>
     </div>
   );
 }

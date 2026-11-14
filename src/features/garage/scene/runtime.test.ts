@@ -6,7 +6,14 @@ import { SWAP } from '../swap.ts';
 import { GarageRuntime } from './runtime.ts';
 
 const ENV = { reduced: false, hidden: false };
-const hatch: CarSpec = { model: 'hatch', color: 'sunset', accessories: [], plate: 'Serra' };
+const hatch: CarSpec = {
+  model: 'hatch',
+  color: 'sunset',
+  finish: 'solid',
+  wheels: 'classic',
+  accessories: [],
+  plate: 'Serra',
+};
 
 /** O runtime ligado a uma cena, sem renderer; `frames` conta os pedidos de quadro. */
 function setup(car = hatch) {

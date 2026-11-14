@@ -19,12 +19,13 @@ import type { Backend } from '@/lib/three/renderer.ts';
 import { ThreeBoundary } from '@/lib/three/ThreeBoundary.tsx';
 import { useSupport } from '@/lib/three/useSupport.ts';
 import { useThemeOverride } from '@/lib/theme.ts';
-import { CAR_MODELS } from '@shared/constants.ts';
+import { joinPt } from '@/art/cars/describe.ts';
+import { CAR_FINISHES, CAR_MODELS } from '@shared/constants.ts';
 import { saveCar } from '../actions.ts';
 import { OptionRows } from '../components/OptionRows.tsx';
 import { garageBack } from '../links.ts';
 import { useMyProfile } from '../my-car.ts';
-import { carOf, decide, droppedMessage, modelState, type Tap } from '../rules.ts';
+import { carOf, decide, droppedMessage, keptNames, type Tap } from '../rules.ts';
 import { STUDIO_BACKGROUND } from '../scene/studio-colors.ts';
 
 const GarageStage = lazy(() => import('../components/GarageStage.tsx'));
@@ -48,6 +49,18 @@ export default function GaragemPage() {
   useThemeOverride('dark');
 
   if (profile === undefined) return <Splash />;
+  // o perfil ainda não chegou a este aparelho (o primeiro sync depois de entrar): o carro é gravado
+  // nele, então a garagem espera, e diz o que está esperando
+  if (profile === null) {
+    return (
+      <div className="grid gap-5">
+        <PageHeader back={garageBack(state)} title="Garagem" />
+        <p className="text-[16px] text-ink-2" role="status" data-garage-waiting>
+          Trazendo o seu carro. Sem internet, ele aparece aqui depois da primeira sincronização.
+        </p>
+      </div>
+    );
+  }
   return <Garage profile={profile} progress={progress} search={search} back={garageBack(state)} />;
 }
 
@@ -59,14 +72,13 @@ function Garage({
   search,
   back,
 }: {
-  /** `null`: o perfil ainda não chegou a este aparelho (vale o carro padrão até o primeiro sync) */
-  profile: Profile | null;
+  profile: Profile;
   progress: TeamProgress;
   search: string;
   back: string;
 }) {
   // fora de uma viagem, a placa personalizada leva o nome da pessoa
-  const myCar = useMemo(() => carOf(profile, profile?.name ?? null), [profile]);
+  const myCar = useMemo(() => carOf(profile, profile.name), [profile]);
   const [preview, setPreview] = useState<Preview | null>(null);
   const shown = preview?.car ?? myCar;
   const toast = useToast();
@@ -96,6 +108,7 @@ function Garage({
     if (out.dropped.length > 0) {
       toast.show({ title: droppedMessage(out.dropped, out.car.model), kind: 'info' });
     }
+    if (out.swapped) toast.show({ title: out.swapped, kind: 'info' });
     // sem palco 3D não há o instante do encaixe nem a troca rodando: o som sai no toque
     if (sideOnly && tap.kind === 'accessory' && out.car.accessories.includes(tap.key)) onSeat();
     if (sideOnly && out.car.model !== shown.model) onSwapSide();
@@ -110,8 +123,10 @@ function Garage({
   };
 
   const model = CAR_MODELS[shown.model];
-  const state = modelState(shown.model, progress, myCar);
-  const status = preview ? 'prévia' : model.level === 1 ? 'livre' : `nv ${model.level}`;
+  const status = preview
+    ? 'prévia'
+    : `tinta ${CAR_FINISHES[shown.finish].label.toLocaleLowerCase('pt-BR')}`;
+  const kept = preview ? [] : keptNames(myCar, progress);
 
   return (
     <div className="grid gap-5">
@@ -185,16 +200,20 @@ function Garage({
             Voltar ao seu carro
           </Button>
         </section>
-      ) : state.status === 'kept' ? (
-        <p className="text-[14px] text-ink-2">
-          Este modelo continua no seu carro. Se trocar, ele só volta no nível {model.level} (
-          {levelName(model.level)}).
+      ) : kept.length > 0 ? (
+        <p className="text-[14px] text-ink-2" data-kept>
+          {capitalize(joinPt(kept))} {kept.length > 1 ? 'continuam' : 'continua'} no seu carro. Se
+          trocar, {kept.length > 1 ? 'voltam' : 'volta'} com o seu progresso.
         </p>
       ) : null}
 
-      <OptionRows trip={myCar} shown={shown} progress={progress} onTap={onTap} />
+      <OptionRows mine={myCar} shown={shown} progress={progress} onTap={onTap} />
     </div>
   );
+}
+
+function capitalize(t: string): string {
+  return t.charAt(0).toLocaleUpperCase('pt-BR') + t.slice(1);
 }
 
 /** A vista lateral grande no lugar do palco: sem 3D, a mesma garagem. */
@@ -202,7 +221,7 @@ function SideStage({ car }: { car: CarSpec }) {
   return (
     <div className="absolute inset-0 grid place-items-center bg-[radial-gradient(70%_55%_at_50%_45%,#3b4150_0%,#1c2029_55%,#14171c_100%)] px-4 pt-12 pb-6">
       <CarSide
-        key={`${car.model}-${car.color}`}
+        key={`${car.model}-${car.color}-${car.finish}-${car.wheels}`}
         car={car}
         className="h-auto max-h-full w-full max-w-[560px] drop-shadow-[0_18px_24px_rgb(0_0_0/.45)] motion-safe:animate-[garage-hop_.45s_ease-out]"
       />

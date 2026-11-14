@@ -90,17 +90,26 @@ function drive(
 
 export function Car({ runtime, field, car, group }: Props) {
   const invalidate = useThree((s) => s.invalidate);
-  // um carro por modelo; cor, acessórios e placa mudam no carro já montado
+  // um carro por modelo; cor, acabamento, rodas, acessórios e placa mudam no carro já montado
   const rig = useMemo(
     () =>
       buildCar(
-        { model: car.model, color: 'sunset', accessories: [], plate: null },
+        {
+          model: car.model,
+          color: 'sunset',
+          finish: 'solid',
+          wheels: 'classic',
+          accessories: [],
+          plate: null,
+        },
         { wake: invalidate },
       ),
     [car.model, invalidate],
   );
   useEffect(() => {
     rig.setColor(car.color);
+    rig.setFinish(car.finish);
+    rig.setWheels(car.wheels);
     rig.setAccessories(car.accessories);
     rig.setPlate(car.plate);
     invalidate();

@@ -1,4 +1,4 @@
-import type { CarAccessoryKey, CarColor } from '@shared/constants.ts';
+import type { CarAccessoryKey, CarColor, CarFinish, CarWheels } from '@shared/constants.ts';
 import {
   BoxGeometry,
   CylinderGeometry,
@@ -6,7 +6,9 @@ import {
   Group,
   Mesh,
   MeshStandardMaterial,
+  Object3D as SceneObject,
   PlaneGeometry,
+  RingGeometry,
   Shape,
   ShapeGeometry,
   SpotLight,
@@ -51,6 +53,7 @@ import {
 } from './placement.ts';
 import { archOf, archRadius, outline, type CarProfile, type PathCmd, type Pt } from './profile.ts';
 import type { AttachOptions, BuildOptions, CarRig, CarSpec, RigAnchors } from './types.ts';
+import { HUB_R, RIM_R, spokeAngles, WHEEL_DESIGNS } from './wheels.ts';
 
 function shapeOf(cmds: readonly PathCmd[]): Shape {
   const s = new Shape();
@@ -104,6 +107,14 @@ class ProfileRig implements CarRig {
   private plateLabel: string | null;
   private plateOn = false;
   private selected: CarAccessoryKey[] = [];
+  private paintColor: CarColor;
+  private paintFinish: CarFinish;
+  private wheelStyle: CarWheels | null = null;
+  /** a face de cada estilo de roda, montada na primeira vez e dividida pelas quatro */
+  private readonly wheelFaces = new Map<
+    CarWheels,
+    readonly { geometry: BufferGeometry; material: Material }[]
+  >();
   private placement: Placement;
   private tween: { from: PaintState; to: PaintState; t0: number | null; now: PaintState } | null =
     null;
@@ -124,7 +135,9 @@ class ProfileRig implements CarRig {
     this.mats = carMaterials();
     this.headMat = this.mats.head;
     this.tailMat = this.mats.tail;
-    this.paintKit = createPaint(profile, spec.color);
+    this.paintColor = spec.color;
+    this.paintFinish = spec.finish;
+    this.paintKit = createPaint(profile, spec.color, spec.finish);
 
     this.buildBody();
     this.buildGlass();
@@ -137,6 +150,7 @@ class ProfileRig implements CarRig {
     ]);
     for (const mesh of this.batch.bake(this.kit, quiet)) this.inner.add(mesh);
     this.buildWheels();
+    this.setWheels(spec.wheels);
     if (opts.beams ?? true) this.buildNightLights();
 
     this.defaultPlate = this.kit.own(createPlateTexture());
@@ -353,18 +367,11 @@ class ProfileRig implements CarRig {
     }
   }
 
+  /** As quatro rodas: a borracha, que gira; a face (o aro no estilo escolhido) entra em `setWheels`. */
   private buildWheels(): void {
     const p = this.profile;
     const { radius: r, tire: t } = p.wheels;
     const tireGeo = this.kit.geometry('tire', () => new CylinderGeometry(r, r, t, 28));
-    const rimGeo = this.kit.geometry(
-      'rim',
-      () => new CylinderGeometry(r * 0.64, r * 0.64, t + 0.01, 14),
-    );
-    const hubGeo = this.kit.geometry(
-      'hub',
-      () => new CylinderGeometry(r * 0.2, r * 0.2, t + 0.03, 8),
-    );
     const z = p.wheels.track / 2;
     for (const [x, wz] of [
       [p.wheels.front, z],
@@ -377,10 +384,147 @@ class ProfileRig implements CarRig {
       w.rotation.x = Math.PI / 2;
       const tire = new Mesh(tireGeo, this.mats.rubber);
       tire.castShadow = true;
-      w.add(tire, new Mesh(rimGeo, this.mats.rim), new Mesh(hubGeo, this.mats.dark));
+      w.add(tire);
       this.inner.add(w);
       this.wheels.push(w);
     }
+  }
+
+  /**
+   * A face de um estilo de roda (`wheels.ts`), no espaço da roda (o eixo é o y local; as faces ficam
+   * em ±y). A clássica é a de sempre: o disco e o cubo. As vazadas juntam as peças por material numa
+   * malha só (o fundo escuro, a borda, os raios e o cubo); a de aço, o disco, os furos e a tampinha.
+   * As peças saem dos dois lados da roda, para servirem às quatro.
+   */
+  private wheelFace(style: CarWheels): readonly { geometry: BufferGeometry; material: Material }[] {
+    const hit = this.wheelFaces.get(style);
+    if (hit) return hit;
+    const { radius: r, tire: t } = this.profile.wheels;
+    const d = WHEEL_DESIGNS[style];
+    let parts: { geometry: BufferGeometry; material: Material }[];
+    if (style === 'classic') {
+      parts = [
+        {
+          geometry: this.kit.geometry(
+            'rim',
+            () => new CylinderGeometry(r * 0.64, r * 0.64, t + 0.01, 14),
+          ),
+          material: this.mats.rim,
+        },
+        {
+          geometry: this.kit.geometry(
+            'hub',
+            () => new CylinderGeometry(r * 0.2, r * 0.2, t + 0.03, 8),
+          ),
+          material: this.mats.dark,
+        },
+      ];
+    } else {
+      const tone =
+        d.tone === 'chrome'
+          ? this.mats.chrome
+          : d.tone === 'steel'
+            ? this.mats.steel
+            : this.mats.rim;
+      const batch = new StaticBatch();
+      const put = (geometry: BufferGeometry, material: Material, at: SceneObject) => {
+        at.updateMatrix();
+        batch.add(geometry, material, at.matrix);
+      };
+      const place = (x: number, y: number, z: number, ry = 0, rx = 0) => {
+        const o = new SceneObject();
+        o.position.set(x, y, z);
+        o.rotation.set(rx, ry, 0);
+        return o;
+      };
+      const face = t / 2;
+      if (d.face === 'spokes' && d.spokes) {
+        const { count, width } = d.spokes;
+        put(
+          this.kit.geometry(`wheel-barrel-${style}`, () => {
+            return new CylinderGeometry(r * RIM_R, r * RIM_R, t + 0.004, 20);
+          }),
+          this.mats.dark,
+          place(0, 0, 0),
+        );
+        const ring = this.kit.geometry(
+          `wheel-lip-${style}`,
+          () => new RingGeometry(r * (RIM_R - 0.07), r * (RIM_R + 0.02), 24),
+        );
+        const length = r * (RIM_R - HUB_R);
+        const spoke = this.kit.geometry(
+          `wheel-spoke-${style}`,
+          () => new BoxGeometry(r * width, 0.016, length),
+        );
+        const mid = r * (RIM_R + HUB_R) * 0.5;
+        for (const side of [1, -1]) {
+          const y = side * (face + 0.008);
+          put(ring, tone, place(0, y, 0, 0, -side * (Math.PI / 2)));
+          for (const a of spokeAngles(count)) {
+            put(spoke, tone, place(Math.cos(a) * mid, y, Math.sin(a) * mid, Math.PI / 2 - a));
+          }
+        }
+        put(
+          this.kit.geometry(
+            `wheel-hub-${style}`,
+            () => new CylinderGeometry(r * HUB_R, r * HUB_R, t + 0.03, 12),
+          ),
+          tone,
+          place(0, 0, 0),
+        );
+      } else {
+        put(
+          this.kit.geometry(
+            'wheel-steel-disc',
+            () => new CylinderGeometry(r * RIM_R, r * RIM_R, t + 0.01, 20),
+          ),
+          tone,
+          place(0, 0, 0),
+        );
+        if (d.holes) {
+          const hole = this.kit.geometry(
+            'wheel-steel-hole',
+            () => new CylinderGeometry(r * (d.holes?.r ?? 0), r * (d.holes?.r ?? 0), t + 0.016, 10),
+          );
+          for (const a of spokeAngles(d.holes.count)) {
+            put(
+              hole,
+              this.mats.dark,
+              place(Math.cos(a) * r * d.holes.at, 0, Math.sin(a) * r * d.holes.at),
+            );
+          }
+        }
+        put(
+          this.kit.geometry(
+            'wheel-steel-cap',
+            () => new CylinderGeometry(r * 0.2, r * 0.2, t + 0.024, 12),
+          ),
+          this.mats.chrome,
+          place(0, 0, 0),
+        );
+      }
+      parts = batch.bake(this.kit).map((m) => ({
+        geometry: m.geometry,
+        material: m.material as Material,
+      }));
+    }
+    this.wheelFaces.set(style, parts);
+    return parts;
+  }
+
+  setWheels(style: CarWheels): void {
+    if (this.disposed || style === this.wheelStyle) return;
+    this.wheelStyle = style;
+    const parts = this.wheelFace(style);
+    for (const w of this.wheels) {
+      const old = w.getObjectByName('face');
+      if (old) w.remove(old);
+      const g = new Group();
+      g.name = 'face';
+      for (const { geometry, material } of parts) g.add(new Mesh(geometry, material));
+      w.add(g);
+    }
+    this.wake();
   }
 
   private buildNightLights(): void {
@@ -578,8 +722,20 @@ class ProfileRig implements CarRig {
   // ------------------------------------------------------------------ cor, placa, noite, rodas
   setColor(color: CarColor, opts?: { animate?: boolean }): void {
     if (this.disposed) return;
-    const target = paintState(color, this.profile.twoTone !== null);
-    if (!opts?.animate) {
+    this.paintColor = color;
+    this.paintTo(opts?.animate === true);
+  }
+
+  setFinish(finish: CarFinish, opts?: { animate?: boolean }): void {
+    if (this.disposed) return;
+    this.paintFinish = finish;
+    this.paintTo(opts?.animate === true);
+  }
+
+  /** A tinta vai para a cor e o acabamento de agora: na hora, ou interpolando os uniformes. */
+  private paintTo(animate: boolean): void {
+    const target = paintState(this.paintColor, this.paintFinish, this.profile.twoTone !== null);
+    if (!animate) {
       this.tween = null;
       this.paintKit.apply(target);
       return;
@@ -671,6 +827,13 @@ class ProfileRig implements CarRig {
       visible,
       placement: this.placement,
       color: `#${this.paintKit.state.lower.getHexString()}`,
+      finish: {
+        metal: this.paintKit.state.metal[0],
+        rough: this.paintKit.state.rough[0],
+        coat: this.paintKit.state.coat,
+        iridescence: this.paintKit.state.iridescence,
+      },
+      wheels: this.wheelStyle,
       plate: this.plateMat.map === this.defaultPlate ? 'VIAJEI' : plateText(this.plateLabel),
     };
   }
@@ -690,6 +853,9 @@ export type RigDebug = {
   visible: CarAccessoryKey[];
   placement: Placement;
   color: string;
+  /** os números da tinta da saia agora: o acabamento */
+  finish: { metal: number; rough: number; coat: number; iridescence: number };
+  wheels: CarWheels | null;
   plate: string;
 };
 

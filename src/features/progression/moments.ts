@@ -3,10 +3,11 @@ import {
   CAR_ACCESSORIES,
   CAR_ACCESSORY_KEYS,
   LEVELS,
+  OWN_CAR,
   type AchievementKey,
   type CarAccessoryKey,
 } from '@shared/constants.ts';
-import { levelOf, modelName, unlocksAt } from './level.ts';
+import { levelOf, unlockNames, unlocksAt } from './level.ts';
 import type { AchievementGrant } from './rules.ts';
 
 /**
@@ -123,17 +124,24 @@ export function celebrationText(c: Celebration): CelebrationText {
     };
   }
   const level = LEVELS.find((l) => l.level === c.level) ?? LEVELS[0];
-  const { models, colors } = unlocksAt(level.level);
-  const freed = [...models.map(modelName), ...colors.map(() => 'o dourado')];
+  // o seu carro não é escolha ainda (a fase 20 o constrói): entra na frase, não no que se usa
+  const ownCar = unlocksAt(level.level).ownCar;
+  const freed = unlockNames(level.level).filter((n) => !n.startsWith(OWN_CAR.short));
+  const later = ownCar ? ` ${OWN_CAR.later}` : '';
   return {
     eyebrow: 'Nível novo',
     title: `Nível ${level.level} · ${level.name}`,
     body:
       freed.length > 0
-        ? `${capitalize(freed.join(' e '))} ${freed.length > 1 ? 'estão liberados' : 'está liberado'} na garagem.`
-        : 'Mais um nível para o time.',
-    unlock: freed.map(capitalize).join(' e '),
+        ? `${capitalize(joinPt(freed))} ${freed.length > 1 ? 'estão liberados' : 'está liberado'} na garagem.${later}`
+        : `Mais um nível para você.${later}`,
+    unlock: capitalize(joinPt(freed)),
   };
+}
+
+function joinPt(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? '';
+  return `${items.slice(0, -1).join(', ')} e ${items[items.length - 1] ?? ''}`;
 }
 
 function capitalize(s: string): string {

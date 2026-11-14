@@ -228,6 +228,11 @@ export class GarageRuntime {
     }
     const rig = this.rig;
     if (car.color !== prev.color) rig.setColor(car.color, { animate: opts.animate });
+    if (car.finish !== prev.finish) rig.setFinish(car.finish, { animate: opts.animate });
+    if (car.wheels !== prev.wheels) {
+      rig.setWheels(car.wheels);
+      if (opts.onSeat) opts.onSeat();
+    }
     rig.setPlate(car.plate);
     const removed = prev.accessories.filter((k) => !car.accessories.includes(k));
     const added = car.accessories.filter((k) => !prev.accessories.includes(k));
@@ -252,6 +257,8 @@ export class GarageRuntime {
       this.parked.delete(car.model);
       next = parked;
       next.setColor(car.color);
+      next.setFinish(car.finish);
+      next.setWheels(car.wheels);
       next.setAccessories(car.accessories);
       next.setPlate(car.plate);
     } else {

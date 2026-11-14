@@ -20,6 +20,15 @@ const FULL: CarSpec['accessories'] = [
   'sticker_mountains',
 ];
 
+const LEAF_SUV: CarSpec = {
+  model: 'suv',
+  color: 'leaf',
+  finish: 'solid',
+  wheels: 'classic',
+  accessories: [],
+  plate: null,
+};
+
 /** Os ids do `useId` mudam com a ordem dos testes; o desenho não. */
 function stable(html: string): string {
   return html.replace(/car[a-zA-Z0-9]+-/g, 'car-');
@@ -28,7 +37,16 @@ function stable(html: string): string {
 describe.each(MODELS)('a vista lateral do %s', (model) => {
   it('sem cosméticos', () => {
     const { container } = render(
-      <CarSide car={{ model, color: 'sunset', accessories: [], plate: null }} />,
+      <CarSide
+        car={{
+          model,
+          color: 'sunset',
+          finish: 'solid',
+          wheels: 'classic',
+          accessories: [],
+          plate: null,
+        }}
+      />,
     );
     const svg = container.querySelector('svg');
     expect(svg?.getAttribute('data-car-model')).toBe(model);
@@ -38,7 +56,17 @@ describe.each(MODELS)('a vista lateral do %s', (model) => {
 
   it('com todos os cosméticos que cabem', () => {
     const { container } = render(
-      <CarSide car={{ model, color: 'gold', accessories: FULL, plate: 'Serra' }} />,
+      // o Dourado era metálico pela cor até a fase 15; desde a 16, pelo acabamento: o mesmo desenho
+      <CarSide
+        car={{
+          model,
+          color: 'gold',
+          finish: 'metallic',
+          wheels: 'classic',
+          accessories: FULL,
+          plate: 'Serra',
+        }}
+      />,
     );
     expect(stable(container.innerHTML)).toMatchSnapshot();
   });
@@ -48,7 +76,14 @@ describe('acessibilidade', () => {
   it('role img com a descrição do carro, ou um rótulo próprio', () => {
     render(
       <CarSide
-        car={{ model: 'hatch', color: 'sunset', accessories: ['rack', 'bike'], plate: null }}
+        car={{
+          model: 'hatch',
+          color: 'sunset',
+          finish: 'solid',
+          wheels: 'classic',
+          accessories: ['rack', 'bike'],
+          plate: null,
+        }}
       />,
     );
     expect(
@@ -56,7 +91,14 @@ describe('acessibilidade', () => {
     ).toBeInTheDocument();
     render(
       <CarSide
-        car={{ model: 'kombi', color: 'sky', accessories: [], plate: null }}
+        car={{
+          model: 'kombi',
+          color: 'sky',
+          finish: 'solid',
+          wheels: 'classic',
+          accessories: [],
+          plate: null,
+        }}
         label="O carro"
       />,
     );
@@ -64,14 +106,45 @@ describe('acessibilidade', () => {
   });
 
   it('o tamanho do desenho não muda quando o carro ganha acessórios', () => {
-    const a = render(
-      <CarSide car={{ model: 'suv', color: 'leaf', accessories: [], plate: null }} />,
-    );
-    const b = render(
-      <CarSide car={{ model: 'suv', color: 'leaf', accessories: FULL, plate: null }} />,
-    );
+    const a = render(<CarSide car={{ ...LEAF_SUV, accessories: [] }} />);
+    const b = render(<CarSide car={{ ...LEAF_SUV, accessories: FULL }} />);
     expect(a.container.querySelector('svg')?.getAttribute('viewBox')).toBe(
       b.container.querySelector('svg')?.getAttribute('viewBox'),
     );
+  });
+});
+
+describe('o acabamento e as rodas (fase 16)', () => {
+  const svgOf = (car: Partial<CarSpec>) =>
+    render(<CarSide car={{ ...LEAF_SUV, ...car }} />).container.querySelector('svg');
+
+  it('cada estilo de roda se desenha nas duas rodas: raios, furos ou o disco de sempre', () => {
+    const count = (wheels: CarSpec['wheels'], what: string) =>
+      svgOf({ wheels })?.querySelectorAll(`[data-wheel-style="${wheels}"] ${what}`).length ?? 0;
+    expect(count('five', '[data-spoke]')).toBe(10);
+    expect(count('wire', '[data-spoke]')).toBe(28);
+    expect(count('steel', '[data-hole]')).toBe(12);
+    const classic = svgOf({ wheels: 'classic' });
+    expect(classic?.querySelectorAll('[data-wheel-style]')).toHaveLength(0);
+    expect(classic?.querySelectorAll('[data-spoke], [data-hole]')).toHaveLength(0);
+    expect(classic?.getAttribute('data-car-wheels')).toBe('classic');
+  });
+
+  it('com as calotas, o aro não aparece (elas o cobrem)', () => {
+    const svg = svgOf({ wheels: 'five', accessories: ['hubcaps'] });
+    expect(svg?.querySelectorAll('[data-spoke]')).toHaveLength(0);
+  });
+
+  it('cada acabamento muda o degradê da tinta, do mesmo perfil', () => {
+    const stops = (finish: CarSpec['finish']) =>
+      [...(svgOf({ finish })?.querySelectorAll('linearGradient[id$="-paint"] stop') ?? [])].map(
+        (s) => s.getAttribute('stop-color'),
+      );
+    const all = (['solid', 'metallic', 'pearl', 'matte'] as const).map((f) => stops(f).join());
+    expect(new Set(all).size).toBe(4);
+    // a perolada tem a película (um tom a mais); a fosca é quase plana
+    expect(stops('pearl')).toHaveLength(4);
+    expect(stops('matte')).toHaveLength(3);
+    expect(svgOf({ finish: 'pearl' })?.getAttribute('data-car-finish')).toBe('pearl');
   });
 });

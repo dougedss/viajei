@@ -118,14 +118,59 @@ export const MEDIA = {
 } as const;
 export type AttachmentMime = (typeof MEDIA.mimes)[number];
 
+/**
+ * Os cinco modelos, livres desde o nível 1 (fase 16, decisão 4 do Douglas): o carro representa o
+ * carro que a pessoa tem, e desbloquear um SUV para quem tem um sedã não faz sentido. A Kombi deixou
+ * de ser prêmio. Os níveis passaram a liberar o que vai no carro (as cores, os acabamentos e as rodas
+ * abaixo).
+ */
 export const CAR_MODELS = {
   hatch: { label: 'Hatch', level: 1 },
-  sedan: { label: 'Sedã', level: 2 },
-  suv: { label: 'SUV', level: 3 },
-  pickup: { label: 'Picape', level: 4 },
-  kombi: { label: 'Kombi', level: 5 },
+  sedan: { label: 'Sedã', level: 1 },
+  suv: { label: 'SUV', level: 1 },
+  pickup: { label: 'Picape', level: 1 },
+  kombi: { label: 'Kombi', level: 1 },
 } as const;
 export type CarModel = keyof typeof CAR_MODELS;
+
+/**
+ * O acabamento da tinta (fase 16), um material físico de verdade (D66): a lisa com pouco metal e
+ * verniz, a metálica, a perolada (a película fina que muda de tom com o ângulo, a iridescência) e a
+ * fosca (sem verniz). Espelha o `check` de `profiles.car_finish`.
+ */
+export const CAR_FINISHES = {
+  solid: { label: 'Lisa', short: 'a tinta lisa', level: 1 },
+  metallic: { label: 'Metálica', short: 'o metálico', level: 2 },
+  pearl: { label: 'Perolada', short: 'o perolado', level: 3 },
+  matte: { label: 'Fosca', short: 'o fosco', level: 4 },
+} as const;
+export type CarFinish = keyof typeof CAR_FINISHES;
+
+/**
+ * Os estilos de roda (fase 16), no 3D e na vista lateral: a clássica de sempre, a de cinco raios, a
+ * raiada (muitos raios finos, a de arame) e a de aço com furos. Espelha `profiles.car_wheels`. A
+ * fase 19 acrescenta o quinto estilo e o tamanho.
+ */
+export const CAR_WHEELS = {
+  classic: { label: 'Clássica', short: 'a roda clássica', level: 1 },
+  five: { label: 'Cinco raios', short: 'a roda de cinco raios', level: 2 },
+  wire: { label: 'Raiada', short: 'a roda raiada', level: 3 },
+  steel: { label: 'Aço', short: 'a roda de aço', level: 4 },
+} as const;
+export type CarWheels = keyof typeof CAR_WHEELS;
+
+/**
+ * O último nível libera o seu carro de verdade (marca, modelo e ano), que a fase 20 constrói. Até
+ * lá ele aparece trancado na garagem, com o que falta e a explicação de que chega numa versão futura:
+ * nada a escolher, e nada finge que há.
+ */
+export const OWN_CAR = {
+  level: 5,
+  label: 'O seu carro',
+  short: 'o seu carro',
+  later:
+    'O seu carro de verdade, com a marca, o modelo e o ano, chega numa versão futura do Viajei.',
+} as const;
 
 export const CAR_COLORS = {
   sunset: { label: 'Pôr do sol', hex: '#E96A3B', level: 1 },

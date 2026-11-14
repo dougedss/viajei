@@ -1,6 +1,6 @@
 import { useId } from 'react';
-import { CAR_COLORS } from '@shared/constants.ts';
-import { darken, lighten } from '../color.ts';
+import { CAR_COLORS, type CarFinish, type CarWheels } from '@shared/constants.ts';
+import { darken, lighten, mixHex } from '../color.ts';
 import { describeCar } from './describe.ts';
 import { placeAccessories, type LaneItem, type Placement } from './placement.ts';
 import {
@@ -30,11 +30,19 @@ import {
 import { viewBoxOf } from './side.ts';
 import { STICKER_ART, STICKER_RING, STICKER_STROKE, type StickerArt } from './stickers.ts';
 import type { CarSpec } from './types.ts';
+import {
+  HUB_R,
+  RIM_R,
+  spokeAngles,
+  WHEEL_BARREL_HEX,
+  WHEEL_DESIGNS,
+  WHEEL_TONE_HEX,
+} from './wheels.ts';
 
 /**
- * O carro de lado, em SVG, a partir do mesmo `CarProfile` do 3D: carroceria na cor da viagem (a
- * kombi em saia e blusa), vidros, rodas (com calota cromada quando houver), luzes e os cosméticos
- * de teto e de lado. Sem three, no chunk principal, nítido em qualquer tamanho e offline. O
+ * O carro de lado, em SVG, a partir do mesmo `CarProfile` do 3D: carroceria na cor e no acabamento
+ * da pessoa (a kombi em saia e blusa), vidros, rodas no estilo escolhido (com calota cromada quando
+ * houver), luzes e os cosméticos de teto e de lado. Sem three, no chunk principal, nítido em qualquer tamanho e offline. O
  * `viewBox` de cada modelo já reserva o espaço do acessório mais alto, para o carro não mudar de
  * tamanho quando ganha um rack. Nariz para a direita.
  */
@@ -56,10 +64,84 @@ function f(n: number): string {
   return String(Math.round(n * 1000) / 1000);
 }
 
-function Wheel({ at, r, hubcaps, id }: { at: Pt; r: number; hubcaps: boolean; id: string }) {
+/** A face de uma roda no estilo escolhido (a clássica é o desenho de sempre, abaixo). */
+function WheelFace({ x, y, r, style }: { x: number; y: number; r: number; style: CarWheels }) {
+  const d = WHEEL_DESIGNS[style];
+  const tone = WHEEL_TONE_HEX[d.tone];
+  const rim = r * RIM_R;
+  const at = (a: number, k: number) => [f(x + Math.cos(a) * k), f(y + Math.sin(a) * k)] as const;
+  if (d.face === 'spokes' && d.spokes) {
+    const { count, width } = d.spokes;
+    return (
+      <>
+        <circle cx={f(x)} cy={f(y)} r={f(rim)} fill={WHEEL_BARREL_HEX} />
+        {spokeAngles(count).map((a) => {
+          const [x0, y0] = at(a, r * HUB_R);
+          const [x1, y1] = at(a, rim * 0.96);
+          return (
+            <path
+              key={a}
+              data-spoke
+              d={`M${x0} ${y0}L${x1} ${y1}`}
+              stroke={tone}
+              strokeWidth={f(r * width)}
+              strokeLinecap={count > 6 ? 'butt' : 'round'}
+            />
+          );
+        })}
+        <circle
+          cx={f(x)}
+          cy={f(y)}
+          r={f(rim * 0.97)}
+          fill="none"
+          stroke={tone}
+          strokeWidth={f(r * 0.07)}
+        />
+        <circle cx={f(x)} cy={f(y)} r={f(r * HUB_R)} fill={tone} />
+        <circle cx={f(x)} cy={f(y)} r={f(r * 0.07)} fill="#3B4250" />
+      </>
+    );
+  }
+  // o disco de aço com os furos
+  const holes = d.holes;
+  return (
+    <>
+      <circle cx={f(x)} cy={f(y)} r={f(rim)} fill={tone} />
+      <circle
+        cx={f(x)}
+        cy={f(y)}
+        r={f(rim * 0.94)}
+        fill="none"
+        stroke={darken(tone, 0.25)}
+        strokeWidth={f(r * 0.04)}
+      />
+      {holes
+        ? spokeAngles(holes.count).map((a) => {
+            const [hx, hy] = at(a, r * holes.at);
+            return <circle key={a} data-hole cx={hx} cy={hy} r={f(r * holes.r)} fill={WELL} />;
+          })
+        : null}
+      <circle cx={f(x)} cy={f(y)} r={f(r * 0.2)} fill={lighten(tone, 0.25)} />
+    </>
+  );
+}
+
+function Wheel({
+  at,
+  r,
+  hubcaps,
+  style,
+  id,
+}: {
+  at: Pt;
+  r: number;
+  hubcaps: boolean;
+  style: CarWheels;
+  id: string;
+}) {
   const [x, y] = at;
   return (
-    <g>
+    <g data-wheel-style={style === 'classic' ? undefined : style}>
       <circle cx={f(x)} cy={f(y)} r={f(r)} fill={TIRE} />
       {hubcaps ? (
         <>
@@ -74,6 +156,8 @@ function Wheel({ at, r, hubcaps, id }: { at: Pt; r: number; hubcaps: boolean; id
           />
           <circle cx={f(x)} cy={f(y)} r={f(r * 0.16)} fill="#C9CED6" />
         </>
+      ) : style !== 'classic' ? (
+        <WheelFace x={x} y={y} r={r} style={style} />
       ) : (
         <>
           <circle cx={f(x)} cy={f(y)} r={f(r * 0.6)} fill={RIM} />
@@ -264,6 +348,62 @@ function Lights({ p, placement }: { p: CarProfile; placement: Placement }) {
   );
 }
 
+/**
+ * Uma roda sozinha, de frente, no estilo dado: o desenho dos botões da linha Rodas da garagem.
+ * Decorativa (quem diz o nome é o botão).
+ */
+export function WheelMark({ style, className }: { style: CarWheels; className?: string }) {
+  const r = 1;
+  return (
+    <svg viewBox="-1.05 -1.05 2.1 2.1" className={className} aria-hidden="true">
+      <g transform="scale(1 -1)">
+        <circle cx={0} cy={0} r={r} fill={TIRE} />
+        {style === 'classic' ? (
+          <>
+            <circle cx={0} cy={0} r={r * 0.6} fill={RIM} />
+            <path
+              d={`M0 ${f(-r * 0.5)}V${f(r * 0.5)}M${f(-r * 0.5)} 0H${f(r * 0.5)}M${f(-r * 0.35)} ${f(-r * 0.35)}L${f(r * 0.35)} ${f(r * 0.35)}M${f(-r * 0.35)} ${f(r * 0.35)}L${f(r * 0.35)} ${f(-r * 0.35)}`}
+              stroke="#6C747F"
+              strokeWidth={f(r * 0.07)}
+            />
+            <circle cx={0} cy={0} r={f(r * 0.18)} fill="#3B4250" />
+          </>
+        ) : (
+          <WheelFace x={0} y={0} r={r} style={style} />
+        )}
+      </g>
+    </svg>
+  );
+}
+
+/**
+ * O degradê da tinta pelo acabamento, o mesmo do 3D em desenho: a lisa com a sombra embaixo e o
+ * brilho em cima; a metálica com o brilho mais claro; a perolada com o tom quente-frio da película
+ * subindo para o brilho; a fosca quase plana, sem verniz para refletir.
+ */
+function paintStops(c: string, finish: CarFinish): (readonly [string, string])[] {
+  if (finish === 'matte') {
+    return [
+      ['0', darken(c, 0.14)],
+      ['0.5', c],
+      ['1', lighten(c, 0.06)],
+    ];
+  }
+  if (finish === 'pearl') {
+    return [
+      ['0', darken(c, 0.22)],
+      ['0.4', c],
+      ['0.72', mixHex(c, '#F3ECFF', 0.38)],
+      ['1', lighten(c, 0.34)],
+    ];
+  }
+  return [
+    ['0', darken(c, 0.26)],
+    ['0.45', c],
+    ['1', lighten(c, finish === 'metallic' ? 0.32 : 0.2)],
+  ];
+}
+
 export function CarSide({ car, className, label }: Props) {
   const raw = useId();
   const id = `car${raw.replace(/[^a-zA-Z0-9]/g, '')}`;
@@ -287,9 +427,9 @@ export function CarSide({ car, className, label }: Props) {
 
   const paintFill = (c: string, key: string) => (
     <linearGradient id={`${id}-${key}`} x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stopColor={darken(c, 0.26)} />
-      <stop offset="0.45" stopColor={c} />
-      <stop offset="1" stopColor={lighten(c, gold ? 0.32 : 0.2)} />
+      {paintStops(c, car.finish).map(([offset, stop]) => (
+        <stop key={offset} offset={offset} stopColor={stop} />
+      ))}
     </linearGradient>
   );
 
@@ -320,6 +460,8 @@ export function CarSide({ car, className, label }: Props) {
       aria-label={label ?? describeCar(car)}
       data-car-model={car.model}
       data-car-color={car.color}
+      data-car-finish={car.finish}
+      data-car-wheels={car.wheels}
     >
       <defs>
         {paintFill(color, 'paint')}
@@ -442,8 +584,20 @@ export function CarSide({ car, className, label }: Props) {
           return key && spot ? <Sticker key={key} spot={spot} art={STICKER_ART[key]} /> : null;
         })}
 
-        <Wheel at={front} r={p.wheels.radius} hubcaps={placement.hubcaps} id={id} />
-        <Wheel at={rear} r={p.wheels.radius} hubcaps={placement.hubcaps} id={id} />
+        <Wheel
+          at={front}
+          r={p.wheels.radius}
+          hubcaps={placement.hubcaps}
+          style={car.wheels}
+          id={id}
+        />
+        <Wheel
+          at={rear}
+          r={p.wheels.radius}
+          hubcaps={placement.hubcaps}
+          style={car.wheels}
+          id={id}
+        />
 
         {placement.rack ? <Rack p={p} /> : null}
         {far.map((item) => (

@@ -9,10 +9,31 @@ export function joinPt(items: readonly string[]): string {
   return `${items.slice(0, -1).join(', ')} e ${items[items.length - 1] ?? ''}`;
 }
 
-/** O rótulo acessível do carro: "Hatch Pôr do sol com rack e bicicleta". */
+/** O acabamento e as rodas no rótulo, só quando não são os de sempre (fase 16). */
+const FINISH_TEXT = {
+  solid: '',
+  metallic: 'tinta metálica',
+  pearl: 'tinta perolada',
+  matte: 'tinta fosca',
+} as const;
+const WHEELS_TEXT = {
+  classic: '',
+  five: 'rodas de cinco raios',
+  wire: 'rodas raiadas',
+  steel: 'rodas de aço',
+} as const;
+
+/**
+ * O rótulo acessível do carro: "Hatch Pôr do sol com rack e bicicleta"; com o acabamento e as rodas
+ * quando não são os de sempre: "SUV Céu, tinta perolada, rodas raiadas, com rack".
+ */
 export function describeCar(car: CarSpec): string {
-  const base = `${CAR_MODELS[car.model].label} ${CAR_COLORS[car.color].label}`;
+  const extras = [FINISH_TEXT[car.finish], WHEELS_TEXT[car.wheels]].filter((t) => t !== '');
+  const head = [`${CAR_MODELS[car.model].label} ${CAR_COLORS[car.color].label}`, ...extras].join(
+    ', ',
+  );
   const placement = placeAccessories(PROFILES[car.model], car.accessories);
   const items = placedKeys(placement, car.accessories).map((k) => CAR_ACCESSORIES[k].short);
-  return items.length > 0 ? `${base} com ${joinPt(items)}` : base;
+  if (items.length === 0) return head;
+  return `${head}${extras.length > 0 ? ',' : ''} com ${joinPt(items)}`;
 }

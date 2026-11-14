@@ -1,4 +1,4 @@
-import { CAR_MODELS, type CarModel } from '@shared/constants.ts';
+import { CAR_MODELS } from '@shared/constants.ts';
 import { X } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -12,7 +12,7 @@ import { useToast } from '@/components/ui/toast-context.ts';
 import { saveCar } from '@/features/garage/actions.ts';
 import { useGarageLink } from '@/features/garage/links.ts';
 import { useMyProfile } from '@/features/garage/my-car.ts';
-import { carOf, decide, type Tap } from '@/features/garage/rules.ts';
+import { carOf, decideAll, type Tap } from '@/features/garage/rules.ts';
 import { STUDIO_BACKGROUND } from '@/features/garage/scene/studio-colors.ts';
 import { useTrip, useTripMembers } from '@/features/trips/queries.ts';
 import { audio } from '@/lib/audio/index.ts';
@@ -34,7 +34,7 @@ import {
   type Celebration,
   type Summary,
 } from '../moments.ts';
-import { useTeamProgress } from '../useTeamProgress.ts';
+import { useMyCarProgress } from '../useTeamProgress.ts';
 import { AchievementBadge } from './AchievementBadge.tsx';
 
 const GarageStage = lazy(() => import('@/features/garage/components/GarageStage.tsx'));
@@ -144,14 +144,22 @@ function SummaryCard({ summary, tripId }: { summary: Summary; tripId: string | u
 }
 
 // ------------------------------------------------------------------ o cartão de desbloqueio
-/** O que "Usar no carro" faz neste carro: o toque da garagem que liga o acessório ou troca o modelo. */
-function tapFor(c: Celebration): Tap | null {
+/**
+ * O que "Usar no carro" faz: os toques da garagem que ligam o acessório da conquista, ou que põem no
+ * carro o que o nível novo liberou (o acabamento e a roda; no último, o dourado). Escolhas, não
+ * obrigação: "Agora não" deixa tudo liberado na garagem.
+ */
+function tapsFor(c: Celebration): Tap[] {
   if (c.kind === 'achievement') {
     const key = accessoryFor(c.key);
-    return key ? { kind: 'accessory', key } : null;
+    return key ? [{ kind: 'accessory', key }] : [];
   }
-  const model: CarModel | undefined = unlocksAt(c.level).models[0];
-  return model ? { kind: 'model', model } : null;
+  const u = unlocksAt(c.level);
+  return [
+    ...u.finishes.slice(0, 1).map((finish): Tap => ({ kind: 'finish', finish })),
+    ...u.wheels.slice(0, 1).map((wheels): Tap => ({ kind: 'wheels', wheels })),
+    ...u.colors.slice(0, 1).map((color): Tap => ({ kind: 'color', color })),
+  ];
 }
 
 function UnlockSheet({
@@ -166,7 +174,8 @@ function UnlockSheet({
   const id = celebrationId(celebration);
   const text = celebrationText(celebration);
   const trip = useTrip(tripId ?? '');
-  const progress = useTeamProgress(tripId ?? '');
+  // o carro é da pessoa, e quem libera é o progresso dela (fase 16)
+  const progress = useMyCarProgress();
   const toast = useToast();
   const reduced = useReducedMotion();
   const [closing, setClosing] = useState(false);
@@ -182,18 +191,14 @@ function UnlockSheet({
     void confettiBurst(0.55).catch(() => undefined);
   }, [reduced]);
 
-  const tap = tapFor(celebration);
+  const taps = tapsFor(celebration);
   // o carro é da pessoa (fase 16): o cartão mostra o dela, com o nome da viagem na placa quando há
   const profile = useMyProfile();
   const garage = useGarageLink();
   const car = profile === undefined ? null : carOf(profile, trip?.name ?? profile?.name ?? null);
-  const outcome = car && tap ? decide(car, car, tap, progress) : null;
-  const already =
-    car !== null &&
-    tap !== null &&
-    (tap.kind === 'accessory'
-      ? car.accessories.includes(tap.key)
-      : tap.kind === 'model' && car.model === tap.model);
+  const outcome = car && taps.length > 0 ? decideAll(car, taps, progress) : null;
+  // nada a mudar: o carro já tem tudo o que o cartão traria
+  const already = outcome?.kind === 'save' && Object.keys(outcome.patch).length === 0;
   const after: CarSpec | null = outcome?.kind === 'save' ? outcome.car : null;
 
   const close = useCallback(() => {

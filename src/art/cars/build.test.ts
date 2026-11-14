@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Box3, Group, Vector3 } from 'three/webgpu';
+import { Box3, Group, Vector3, type Mesh, type Object3D } from 'three/webgpu';
 import {
   CAR_ACCESSORIES,
   CAR_ACCESSORY_KEYS,
@@ -9,6 +9,7 @@ import {
   type CarModel,
 } from '@shared/constants.ts';
 import { buildCar, type CarSpec } from './index.ts';
+import { FINISH } from './materials.ts';
 import { DROP, OUT_MS, PAINT_MS, POP_MS } from './motion.ts';
 import { dimensions } from './profile.ts';
 import { PROFILES } from './profiles/index.ts';
@@ -17,7 +18,14 @@ import type { DebugRig } from './rig.ts';
 const MODELS = Object.keys(CAR_MODELS) as CarModel[];
 
 function spec(model: CarModel, accessories: CarAccessoryKey[] = []): CarSpec {
-  return { model, color: 'sunset', accessories, plate: 'RS — concurso em Montenegro' };
+  return {
+    model,
+    color: 'sunset',
+    finish: 'solid',
+    wheels: 'classic',
+    accessories,
+    plate: 'RS — concurso em Montenegro',
+  };
 }
 
 function build(s: CarSpec, wake?: () => void): DebugRig {
@@ -179,6 +187,38 @@ describe('tinta', () => {
     rig.dispose();
   });
 
+  it('o acabamento muda os números da tinta, interpolando como a cor (fase 16)', () => {
+    const wake = vi.fn();
+    const rig = build(spec('suv'), wake);
+    expect(rig.debug.finish).toEqual(FINISH.solid);
+    rig.setFinish('matte', { animate: true });
+    expect(wake).toHaveBeenCalled();
+    rig.update(0);
+    rig.update(PAINT_MS / 2);
+    expect(rig.debug.finish.coat).toBeGreaterThan(0);
+    expect(rig.debug.finish.coat).toBeLessThan(1);
+    expect(rig.update(PAINT_MS + 1)).toBe(false);
+    // a fosca: sem verniz e rugosa
+    expect(rig.debug.finish).toEqual(FINISH.matte);
+    rig.setFinish('pearl');
+    expect(rig.debug.finish.iridescence).toBe(1);
+    // a cor troca sem perder o acabamento
+    rig.setColor('grape');
+    expect(rig.debug.finish).toEqual(FINISH.pearl);
+    expect(rig.debug.color).toBe(CAR_COLORS.grape.hex.toLowerCase());
+    rig.dispose();
+  });
+
+  it('a mesma tinta (o mesmo grafo) em todos os acabamentos: trocar não compila outra', () => {
+    const rig = build(spec('hatch'));
+    const paint = rig.paint;
+    for (const f of ['metallic', 'pearl', 'matte', 'solid'] as const) {
+      rig.setFinish(f);
+      expect(rig.paint).toBe(paint);
+    }
+    rig.dispose();
+  });
+
   it('faróis, lanternas e faróis de milha acendem à noite', () => {
     const rig = build(spec('pickup', ['fog_lights']));
     rig.setNight(0);
@@ -187,5 +227,38 @@ describe('tinta', () => {
     expect(rig.headMat.emissiveIntensity).toBeGreaterThan(2);
     expect(rig.tailMat.emissiveIntensity).toBeGreaterThan(1.5);
     rig.dispose();
+  });
+});
+
+describe('rodas (fase 16)', () => {
+  const faceOf = (w: Object3D) => w.getObjectByName('face');
+
+  it('cada estilo troca a face das quatro rodas, que dividem a mesma geometria', () => {
+    for (const model of MODELS) {
+      const rig = build(spec(model));
+      expect(rig.debug.wheels).toBe('classic');
+      for (const style of ['five', 'wire', 'steel', 'classic'] as const) {
+        rig.setWheels(style);
+        expect(rig.debug.wheels).toBe(style);
+        const faces = rig.wheels.map(faceOf);
+        expect(faces.every((f) => f !== undefined)).toBe(true);
+        // uma face por roda, nunca duas
+        for (const w of rig.wheels) {
+          expect(w.children.filter((c) => c.name === 'face')).toHaveLength(1);
+        }
+        const geometries = faces.map((f) => (f?.children[0] as Mesh | undefined)?.geometry);
+        expect(new Set(geometries).size).toBe(1);
+      }
+      rig.dispose();
+    }
+  });
+
+  it('o carro nasce com a roda do perfil, e a face gira junto com a roda', () => {
+    const rig = build({ ...spec('kombi'), wheels: 'wire' });
+    expect(rig.debug.wheels).toBe('wire');
+    const face = faceOf(rig.wheels[0] as Object3D);
+    expect(face?.parent).toBe(rig.wheels[0]);
+    rig.dispose();
+    expect(rig.debug.resources).toBe(0);
   });
 });
