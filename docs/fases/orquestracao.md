@@ -244,3 +244,43 @@ o commit de fechamento da fase 15, junto com este relatório.
 agregador (fase 21), a CLI da Vercel deste Mac logada na conta de cliente `reitechkairos-commits`
 (não se usa), o `.env.local` carregado no shell para o psql de leitura (regra precisa nos prompts
 desde a fase 14), o `progressao.spec` instável (D167).
+
+## Fase 15 · Paradas que se registram sozinhas (08 e 09/11, a pedido do Douglas)
+
+Aberta pelo Douglas num chat novo perto das 20h de 08/11, com o `fase-15.md` escrito pelo
+orquestrador, no Opus 5.5. Fechada pela própria sessão: fast-forward de `910f3d2` para
+**`2dde90d`** (`fase 15: paradas que se registram sozinhas`) às 22h22 de Brasília, 9 commits, sem
+coautoria. O laboratório rodou do jeito novo, duas vezes: no preview em `2dde90d` (run
+42542616612: 33 verdes, 0 vermelhos, 3 pulados pelo horário) e na produção depois do merge (run
+42546176723: 33 verdes, 0 vermelhos, 3 pulados). CI do fechamento verde (run 42542536826: 999
+Vitest, 444 pgTAP, 50 Playwright) e CI da `main` verde (run 42545272669). Decisões D181 a D189; a
+migration `0013_paradas_auto` no hospedado; `import-itinerary` v3 e `send-notifications` v8
+publicadas (o aviso push abre a tela da viagem: a pendência do `navigatePath` da fase 14 fechou).
+O que a sessão deixou está na memória do projeto e na seção da fase 15 de `decisoes.md`.
+
+**Depois do merge, o laboratório agendado da produção alternou no mesmo sha:** verde em 09, 12 e
+14/11; vermelho em 10/11 (`app_parada_auto`), 11/11 (a máquina do GitHub sem DNS para o espelho do
+Ubuntu, nenhum cenário rodou) e 13/11 (`app_parada_auto` e `app_clima`). É a 3.0 do `fase-16.md`.
+
+## Fase 16 · A garagem é da pessoa, e o perfil
+
+### Portão de entrada (aberto às 15h de 14/11, a pedido do Douglas: "proximo")
+- fase 15 na `main`: sim, `2dde90d`, a ponta.
+- CI da `main` em `2dde90d`: verde (run 42545272669).
+- laboratório da produção: verde no sha logo depois do merge (run 42546176723) e no agendado de
+  14/11 (36 cenários verdes); os vermelhos de 10, 11 e 13/11 vão para a 3.0 da fase, não bloqueiam.
+- `docs/decisoes.md` com a seção da fase 15: sim, D181 a D189. **As D da fase 16 começam na D190.**
+- memória do projeto atualizada depois da fase 15: sim (pela sessão), completada pelo orquestrador
+  em 14/11.
+- dependência (13 → 16): satisfeita (a 16 não depende da 14 nem da 15, mas as duas estão na `main`).
+- `docs/fases/fase-16.md` escrito às 15h de 14/11 pelo orquestrador, a partir do plano (a fase 16
+  e as decisões 3, 4 e 9 do Douglas), das D181 a D189 e de um levantamento do código em `2dde90d`
+  (a garagem, os carros, a progressão, o perfil, os avisos, o tema, `profiles` e `trips` no banco).
+  Com a 3.0 (os três vermelhos do agendado), a `0014` (o carro no perfil, com a cópia da viagem
+  mais recente de que a pessoa é dona, a única escrita em dado real permitida), a escada nova
+  (modelos livres; cores, acabamentos e rodas por nível; "o seu carro" no 5, trancado até a fase
+  20), o perfil em seções, o tema, o laboratório do jeito da fase 15. Fora do git até o commit de
+  fechamento da fase, junto com este relatório.
+
+### Sessão
+_(aberta pelo Douglas num chat novo; a preencher pela sessão ou pelo orquestrador no próximo passo)_

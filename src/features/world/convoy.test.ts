@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { LngLat } from '@shared/geo.ts';
 import { indexRoute } from '@/lib/geo/project.ts';
-import { CONVOY_MAX_AGE_MS, convoy, teamPoints } from './convoy.ts';
+import { makeProfile, OTHER_UID, UID } from '@/test/factories.ts';
+import { CONVOY_MAX_AGE_MS, convoy, convoyCarFor, teamPoints } from './convoy.ts';
 
 // um trecho reto para o norte: 0,01° de latitude ≈ 1,11 km
 const ORIGIN: LngLat = [-50.0, -26.0];
@@ -76,5 +77,35 @@ describe('o comboio', () => {
       { user_id: 'dani', points: 'nada' },
     ]);
     expect(points).toEqual([{ user_id: 'ana', point: [-50, -25.95], t: 1_700_000_060_000 }]);
+  });
+});
+
+describe('o carro de cada pessoa no comboio (fase 16)', () => {
+  it('cada um com o carro do perfil dele, sem placa; quem não tem perfil aqui, o padrão', () => {
+    const carFor = convoyCarFor(
+      new Map([
+        [UID, makeProfile({ car_model: 'kombi', car_color: 'leaf', car_finish: 'pearl' })],
+        [
+          OTHER_UID,
+          makeProfile({
+            id: OTHER_UID,
+            car_model: 'pickup',
+            car_color: 'night',
+            car_wheels: 'steel',
+            car_accessories: ['rack', 'bike'],
+          }),
+        ],
+      ]),
+    );
+    expect(carFor(UID)).toMatchObject({ model: 'kombi', color: 'leaf', finish: 'pearl' });
+    expect(carFor(OTHER_UID)).toEqual({
+      model: 'pickup',
+      color: 'night',
+      finish: 'solid',
+      wheels: 'steel',
+      accessories: ['rack', 'bike'],
+      plate: null,
+    });
+    expect(carFor('quem-nao-veio')).toMatchObject({ model: 'hatch', color: 'sunset' });
   });
 });

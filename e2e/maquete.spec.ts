@@ -171,7 +171,17 @@ test('o carro da pessoa é o mesmo na maquete de duas viagens diferentes', async
       })),
     ),
   );
-  await entrar(page, user.email);
+  // com viagem de hoje, o "/" cai na tela da viagem assim que o primeiro sync a traz (D33): depois
+  // de entrar, vale qualquer uma das duas telas
+  await page.goto('/entrar');
+  await page.getByLabel('E-mail').fill(user.email);
+  await page.getByLabel('Senha', { exact: true }).fill(SENHA);
+  await page.getByRole('button', { name: 'Entrar' }).click();
+  await expect(
+    page
+      .getByRole('heading', { name: 'Suas viagens' })
+      .or(page.getByRole('region', { name: 'Agora' })),
+  ).toBeVisible({ timeout: 20_000 });
   for (const trip of viagens) {
     await page.goto(`/viagens/${trip}`);
     const maquete = page.locator('[data-world="webgl2"], [data-world="webgpu"]');

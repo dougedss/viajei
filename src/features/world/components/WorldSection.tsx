@@ -15,6 +15,7 @@ import { useQuality } from '@/lib/three/useQuality.ts';
 import { useSupport } from '@/lib/three/useSupport.ts';
 import { formatStamp } from '@/lib/time/index.ts';
 import { placeCar } from '../car-position.ts';
+import { convoyCarFor } from '../convoy.ts';
 import { useElementSize } from '../hooks/useElementSize.ts';
 import { usePlace } from '../hooks/usePlace.ts';
 import { buildLayout, type WorldLayout } from '../layout.ts';
@@ -147,8 +148,7 @@ function WorldStage(p: StageProps) {
   // chegam pelo pull da viagem, e funcionam sem sinal (D113)
   const me = p.profiles.get(uid);
   const car = useMemo(() => carOf(me, p.trip.name), [me, p.trip.name]);
-  const profiles = p.profiles;
-  const carFor = useCallback((userId: string) => carOf(profiles.get(userId), null), [profiles]);
+  const carFor = useMemo(() => convoyCarFor(p.profiles), [p.profiles]);
   const [motion] = useState(() => new MotionController(layout.nodes[0]?.s ?? 0, reducedMotion));
   const [runtime] = useState(() => new WorldRuntime(layout, motion, p.night));
   const [backend, setBackend] = useState<Backend | null>(null);

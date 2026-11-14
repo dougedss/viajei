@@ -28,8 +28,9 @@ ficam na pasta como registro; tudo o que eles pedem está aqui.
 | Com hora marcada | a manhã do dia 2, às 9h do dia seguinte ao fim do Ensaio, 07/12 e 10/12 | 1.23 | 5 min cada |
 | iPhone D (fase 14) | o dia 1 do Ensaio, no carro de verdade, com o mapa aberto | 1.24 | 40 min |
 | iPhone E (fase 15) | no carro, com o mapa aberto, uma parada de verdade num posto | 1.25 | 30 min |
+| iPhone F (fase 16) | em casa, com outra pessoa do time no aparelho dela | 1.26 | 25 min |
 
-**Total: umas 7 h 30 no iPhone e 3 h 15 no Android**, perto de 11 h em três dias seguidos, mais os
+**Total: umas 8 h no iPhone e 3 h 15 no Android**, perto de 11 h em três dias seguidos, mais os
 toques com hora marcada. A sentada C pode ficar para depois do Android.
 
 ## O que separar antes
@@ -744,6 +745,34 @@ verdade, um posto de verdade e o OpenStreetMap de verdade.
 
 Anotações:
 
+### 1.26 O carro é da pessoa, e o perfil · 25 min (fase 16) · sem prova até a viagem
+
+Como o 1.24 e o 1.25, fica como documentação até a viagem (D190 a D200). A escada, a garagem no
+perfil, o tema e o carro dos outros estão provados na CI e no laboratório; o que falta é a tinta e a
+roda vistas num aparelho de verdade, o tema na barra do sistema e o carro de outra pessoa chegando
+ao seu celular.
+
+- [ ] **O seu carro em toda viagem.** No Perfil, "O seu carro" mostra o carro; abra a garagem por
+  ali, troque o modelo (todos livres) e a cor. Volte: o Perfil, o card de cada viagem e a maquete
+  de duas viagens mostram o mesmo carro.
+- [ ] **O acabamento e as rodas.** Na garagem, o metálico e a roda de cinco raios (nível 2), o
+  perolado e a raiada (3), o fosco e a de aço (4): o que o seu nível libera grava; o resto abre a
+  prévia com o que falta. Anote se a perolada muda de tom ao girar o carro, se a fosca fica sem
+  brilho e se as rodas giram com o carro na troca de modelo. O fps da garagem com a perolada.
+- [ ] **"O seu carro" trancado** no fim da garagem, com o que falta e a explicação, sem nada a tocar.
+- [ ] **O carro dos outros.** Com outra pessoa do time no aparelho dela, ela troca o carro; em
+  Membros da viagem, o carro dela muda no seu celular sem recarregar (ou em até um minuto).
+- [ ] **O tema.** Em Aparência, "Escuro" com o iPhone no claro: o app escurece na hora, a barra do
+  Safari (ou do app instalado) acompanha, e fechar e abrir de novo não pisca claro. "Do sistema"
+  volta a seguir o iPhone.
+- [ ] **Avisos neste aparelho.** A permissão, os sons e os cartões de conquista estão no Perfil;
+  Avisos da viagem tem o link para lá. Escolha 30 min e 6h30 para as viagens novas, crie uma viagem
+  e confira em Avisos dela.
+- [ ] **O VoiceOver no Perfil e na garagem:** as seções pelos títulos, os botões das linhas
+  Acabamento e Rodas com o nome e, no trancado, o que falta.
+
+Anotações:
+
 ## Parte 2 · Android
 
 O mesmo percurso, mais curto: aqui está só o que muda no Android, e no fim o resto, item a item,
@@ -933,6 +962,9 @@ Anotações:
   lugar da maquete.
 - [ ] **A parada no posto (fase 15), o mesmo do 1.25** no Android: o toast com o nome, a parada na
   lista e na maquete, a saída, o Desfazer e o "Parada às HH:MM" que ganha nome quando o sinal volta.
+- [ ] **O carro é da pessoa (fase 16), o mesmo do 1.26** no Android: o mesmo carro em toda viagem,
+  o acabamento e as rodas na garagem (e o fps com a perolada), o carro de quem viaja junto em
+  Membros, o tema escuro com a barra do Chrome acompanhando, e o TalkBack no Perfil.
 
 Anotações:
 

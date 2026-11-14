@@ -1,6 +1,6 @@
-# Viajei · Prompt de implementação (v6, 09/11/2026)
+# Viajei · Prompt de implementação (v7, 14/11/2026)
 
-**Histórico.** v6 (09/11/2026, fim da fase 15): as paradas que se registram sozinhas com o mapa aberto (o detector, o lugar pelo Nominatim reverso, `source: 'auto'` com as horas medidas, os dois celulares numa parada só), o tipo Posto (`fuel`) e os avisos abrindo `/viagens/:tripId`. v5 (08/11/2026, fim da fase 14): a viagem abre no mapa; a tela da viagem inteira, sem rolagem; o GPS sempre que o mapa está aberto e "Tela acesa" no lugar do modo painel; a câmera que segue o carro; as miniaturas; Detalhes e a tabela de rotas. v4 (08/11/2026): a regra do não-preencher e as fases 13 a 21.
+**Histórico.** v7 (14/11/2026, fim da fase 16): o carro é da pessoa (no perfil, o mesmo em qualquer viagem, o dos outros pelo perfil deles); os modelos livres e a escada nova (cores, acabamentos e rodas por nível, "o seu carro" no último); `/perfil/garagem`; o perfil em seções, o tema do aparelho e os padrões dos avisos das viagens novas. v6 (09/11/2026, fim da fase 15): as paradas que se registram sozinhas com o mapa aberto (o detector, o lugar pelo Nominatim reverso, `source: 'auto'` com as horas medidas, os dois celulares numa parada só), o tipo Posto (`fuel`) e os avisos abrindo `/viagens/:tripId`. v5 (08/11/2026, fim da fase 14): a viagem abre no mapa; a tela da viagem inteira, sem rolagem; o GPS sempre que o mapa está aberto e "Tela acesa" no lugar do modo painel; a câmera que segue o carro; as miniaturas; Detalhes e a tabela de rotas. v4 (08/11/2026): a regra do não-preencher e as fases 13 a 21.
 
 > Você é o agente de implementação do Viajei. Este documento é a fonte de verdade do projeto: contexto, regras de trabalho, stack, produto, mundo 3D, uso com a tela apagada, offline, modelo de dados, gamificação e plano por fases. Ele consolida o planejamento, o Passo 0 já apresentado (`docs/passo-0-2026-11-04.md`), as decisões de 04/11/2026 sobre a maquete 3D (`docs/atualizacao-prompt-3d.md`) e as decisões do mesmo dia sobre notificações, catch-up e replay (`docs/atualizacao-prompt-notificacoes.md`). Leia os quatro antes de agir. Comece pelo **Passo 0** da última seção e espere aprovação formal antes de escrever código.
 
@@ -98,7 +98,7 @@ Versões conferidas no npm em 04/11/2026 pelo chat de implementação. Reconfira
 - Cada usuário tem suas viagens. O dono convida por e-mail. Papéis: **owner** (tudo, inclusive membros e exclusão) e **member** (vê e edita tudo da viagem, menos membros e exclusão).
 - Convite sem envio de e-mail pelo app: fica pendente em `trip_members` e aparece na tela inicial de quem logar com aquele e-mail **confirmado**. RPCs `claim_invites`, `accept_invite`, `decline_invite`, `my_pending_invites`.
 - Exclusão de viagem é **soft** (só o dono); expurgo por job no servidor depois de 30 dias. Membro removido ou viagem expurgada: o `sync_pull` responde `revoked` e o app limpa os dados locais.
-- Viagem tem: nome, datas, origem, orçamento, observações e o **carro da viagem** (`car_model`, `car_color`, `car_accessories`).
+- Viagem tem: nome, datas, origem, orçamento e observações. **O carro é da pessoa, não da viagem** (fase 16, D191): mora no perfil, e cada um vê o próprio carro em qualquer viagem; os dos outros chegam pelo perfil deles.
 
 ### 4.2 Roteiro por dia
 - Viagem → dias → paradas. **Dias são derivados das datas da viagem**: um por data, id determinístico `v5(trip_id, date)`, criados pelo client ao salvar a viagem e ao mudar as datas. Sem `position`.
@@ -254,7 +254,7 @@ db.version(1).stores({
   sync_state: 'key',
 });
 ```
-Ao mudar o esquema, suba a versão. Tabelas de dados podem ser limpas e rebaixadas; **a `outbox` nunca é apagada sem ter sido enviada**. Perfil é editado online (TanStack Query), não pela outbox.
+Ao mudar o esquema, suba a versão. Tabelas de dados podem ser limpas e rebaixadas; **a `outbox` nunca é apagada sem ter sido enviada**. Do perfil, o nome e a cor são editados online (TanStack Query); **o carro e os padrões dos avisos sobem pela outbox** (fase 16, D191): o perfil entrou no sync com o escopo `self` (a própria linha da pessoa, rank 5), o pull do usuário traz o próprio perfil e o pull da viagem, os do time.
 
 ---
 
@@ -303,8 +303,8 @@ Pedido pelo Douglas: quem abre o app depois de um tempo quer ver o carrinho anda
 
 ### 6.5 Garagem 3D estilo showroom
 - Luz de estúdio, carro girando com o dedo, tinta com verniz e brilho metálico, acessórios encaixando com animação e som.
-- Cinco carros modelados **por código** em low-poly com luz realista: hatch (livre), sedã (nível 2), SUV (3), picape (4), kombi (5). Oito cores, dourado só no nível 5. Acessórios desbloqueados por conquista (seção 10). Trocar por modelos de artista depois não muda código.
-- O carro escolhido aparece na maquete, no card da viagem, no cabeçalho, na retrospectiva e na imagem compartilhada. Arte compartilhada em `src/art/`.
+- Cinco carros modelados **por código** em low-poly com luz realista: hatch, sedã, SUV, picape e kombi, **livres desde o nível 1** ("escolha o seu carro", fase 16). Oito cores, dourado só no nível 5. **Quatro acabamentos de tinta** (lisa, metálica, perolada, fosca), material físico de verdade por uniformes no mesmo grafo (D195), e **quatro estilos de roda** (clássica, cinco raios, raiada, aço), de um módulo de dados que o 3D e a vista lateral leem; as calotas cobrem o aro. Os níveis liberam cores, acabamentos e rodas; o último, "o seu carro" de verdade (fase 20). Acessórios desbloqueados por conquista (seção 10). Trocar por modelos de artista depois não muda código.
+- **O carro é da pessoa** (fase 16): a garagem mora em `/perfil/garagem`, e o carro dela aparece na maquete, no card da viagem, no topo de Detalhes, na retrospectiva, no mapa e na imagem compartilhada, em qualquer viagem; o comboio e Membros mostram o carro de cada pessoa. Arte compartilhada em `src/art/`.
 
 ### 6.6 Sons e microinterações
 Confete ao concluir e ao desbloquear; vibração curta no Android; anel de contagem animado; transições com motion; efeitos sonoros curtos e opcionais (buzina no Partiu!, encaixe de acessório, sino na conquista, ronco discreto durante o replay) com toggle por dispositivo em `localStorage`, ligados por padrão. Tudo respeita `prefers-reduced-motion`.
@@ -376,11 +376,12 @@ O código compartilhado entre front e Edge Functions vive em `supabase/functions
 /viagens/:tripId/mapa
 /viagens/:tripId/diario
 /viagens/:tripId/retrospectiva      "Viajei!"
-/viagens/:tripId/garagem
+/viagens/:tripId/garagem             (a garagem antiga: redireciona para /perfil/garagem, com a query; fase 16)
 /viagens/:tripId/avisos             preferências de notificação da viagem
 /viagens/:tripId/membros
 /viagens/:tripId/importar
-/perfil
+/perfil                             o perfil em seções: Você, O seu carro, Progresso, Avisos neste aparelho, Aparência, Dados, Laboratório
+/perfil/garagem                     a garagem da pessoa (fase 16); o "voltar" leva para onde a pessoa estava
 ```
 Durante a viagem (hoje entre `start_date` e `end_date`), `/` redireciona para a tela da viagem do dia. As notificações abrem `/viagens/:tripId` desde a fase 15 (D182); as que já tinham ido, com `/viagens/:tripId/viagem`, são redirecionadas (D174). As telas de detalhe voltam para `/detalhes`; o "Voltar" de Detalhes vai à tela da viagem; o nome pequeno da tela da viagem leva à lista.
 
@@ -399,9 +400,11 @@ Durante a viagem (hoje entre `start_date` e `end_date`), `/` redireciona para a 
 Todas as sincronizadas têm as **colunas de sync**: `created_at`, `updated_at`, `field_versions jsonb`, `synced_at` e, nas tabelas da viagem, `deleted_at`. Enums como `text` com `check`.
 
 ```
-profiles         id → auth.users, name, color
-trips            id, owner_id, name, start_date, end_date, origin, budget, notes,
-                 car_model, car_color, car_accessories text[]
+profiles         id → auth.users, name, color, xp_total, achievement_keys (do servidor),
+                 car_model, car_color, car_accessories text[], car_finish, car_wheels,
+                 notify_lead_minutes, notify_morning_time                      (fase 16, 0014)
+trips            id, owner_id, name, start_date, end_date, origin, budget, notes
+                 (car_model, car_color, car_accessories ficam até uma migration depois: ninguém lê)
 trip_members     id = v5(trip_id, 'owner' | 'invite:' || email), trip_id, user_id null, invited_email,
                  role owner|member, status pending|accepted, invited_by
 trip_days        id = v5(trip_id, date), trip_id, date, title, notes          (sem position, sem theme)
@@ -519,7 +522,7 @@ Derivadas dos dados pelo client (`features/progression/rules.ts`, puro e testado
 | `coast` | Pé na areia | chegou a menos de 1 km do mar (posição real) | prancha |
 | `downhill` | Serra abaixo | desceu 500 m num dia | adesivo de serra |
 
-Modelos por nível: hatch livre, sedã no 2, SUV no 3, picape no 4, kombi no 5. Sete cores livres; dourado no nível 5. Nenhum cosmético remete a velocidade; missões de vinícola registram rótulo e foto, nunca consumo. Sem ranking entre membros: a equipe conquista junto.
+**A escada (fase 16, D194):** os cinco modelos e as sete cores livres desde o nível 1, com a tinta lisa e a roda clássica; nível 2, o metálico e a roda de cinco raios; nível 3, o perolado e a raiada; nível 4, o fosco e a de aço; nível 5, o dourado e "o seu carro" (trancado até a fase 20, com o que falta e a explicação). **Quem libera é o progresso da pessoa** (o XP e as conquistas dela), não o do time: o carro é dela; a barra do time mostra o nível sem prometer o que ele libera. O que já estava no carro e o nível da pessoa não libera continua. Nenhum cosmético remete a velocidade; missões de vinícola registram rótulo e foto, nunca consumo. Sem ranking entre membros: a equipe conquista junto.
 
 ---
 
@@ -528,7 +531,7 @@ Modelos por nível: hatch livre, sedã no 2, SUV no 3, picape no 4, kombi no 5. 
 - **Tom:** menos infantil, inspirado em placas de rodovia e fim de tarde na estrada. Divertido e adulto.
 - **Tipografia:** **Barlow** para texto e **Barlow Condensed** para números e títulos, self-hosted.
 - **Paleta:** ponto de partida no style tile v1 (Pôr do sol `#F2622E` como acento, Azul noite `#16213D`, Asfalto `#3A4766`, Faixa `#FFD166`; estados No horário `#12A66A`, Aperta `#F2A516`, Atrasado `#E5484D`; neutros frios), **revisada para menos saturação**: asfalto, céu em degradê, laranja só como acento. Branco sobre o laranja dá 3,7:1, só em texto grande. Texto do Modo Viagem ≥ 17 px, +10% à noite.
-- **Tokens** em `@theme` do Tailwind 4; tema claro e escuro; noite automática no Modo Viagem.
+- **Tokens** em `@theme` do Tailwind 4; tema claro e escuro, que a pessoa escolhe no Perfil (do sistema, claro ou escuro, por aparelho, aplicado antes do primeiro quadro; fase 16); noite automática no Modo Viagem. As cores dos tipos de parada que ficavam abaixo de 3:1 num tema ganham um tom por tema (D198).
 - **Alvos de toque** ≥ 48 px. Contraste AA. Estados vazios ilustrados e com ação.
 - **Performance:** rotas lazy, imagens comprimidas, render 3D sob demanda, Lighthouse PWA e Performance acima de 90 no celular.
 - **Glossário de UI:** Viagem, Dia, Parada, Agora, Partiu!, Chegamos!, Sair às, Fora da rota, Curiosidade, Modo painel, Rever o dia, Avisos, Pendentes, Missões, Garagem, Diário, Retrospectiva, Conquistas, Nível.
@@ -556,7 +559,7 @@ Cada fase termina com testes passando, CI verde, `docs/decisoes.md` atualizado e
 | **13. Correções** | o mapa por cima da folha, a rolagem horizontal, o rack que não sobe (o defeito do sync), o Lighthouse da visão geral cobrado só numa máquina normal, o que o teste do Douglas achar; o plano das fases 13 a 21 e esta v4 | — | e2e do mapa (a folha por cima) e da rolagem lateral a 393 e 360 px com link, endereço colado e código; Vitest da causa do rack; laboratório no preview e na produção |
 | **14. A viagem abre no mapa** · feita (08/11, D174 a D180) | `/viagens/:tripId` vira a maquete inteira na tela, sem rolagem; a visão geral vira "Detalhes"; barra do topo com a data e "Hoje"; "Agora" compacto embaixo com Partiu! e Chegamos!, automáticos pelo GPS sempre que o mapa está aberto (`watchPosition`, regras da D47, Desfazer); o carro grande; miniaturas 3D por tipo de parada; o comboio (a regra; a renderização conforme a D179) | — | Vitest do layout, da câmera, das miniaturas, do GPS e do comboio; e2e das rotas, da tela sem rolagem, do GPS e da folha; laboratório no preview e na produção; um bloco no teste final |
 | **15. Paradas que se registram sozinhas** · feita (09/11, D181 a D189) | com o mapa aberto, o detector puro (8 min a 60 m e fora da linha da estrada, ou 20 min em qualquer lugar; trânsito ignorado), o lugar pelo Nominatim reverso, a parada com `source: 'auto'` e horas medidas, os dois celulares numa parada só, o tipo Posto (`fuel`); os avisos abrem `/viagens/:tripId` | 0013 (os `check` de `stops.kind` e `stops.source`) | Vitest com trilhas forjadas (as reais de `trip_tracks` são 5, de catch-up, sem nada a calibrar); pgTAP da 0013; e2e da parada com e sem rede; laboratório `app_parada_auto` com o lab-a e o lab-b no mesmo carro |
-| **16. A garagem é da pessoa, e o perfil** | `profiles.car_model`, `car_color`, `car_accessories` (cada pessoa vê o próprio carro em qualquer viagem); modelos livres, níveis liberam cores, acabamentos e rodas, o último nível libera o seu carro; `/perfil/garagem`; o perfil em seções | 0014 (a 0013 foi da fase 15) | pgTAP da migration e dos grants (`car_*` só pela própria pessoa); Vitest das regras novas; e2e do perfil; laboratório |
+| **16. A garagem é da pessoa, e o perfil** · feita (14/11, D190 a D200) | `profiles.car_model`, `car_color`, `car_accessories` (cada pessoa vê o próprio carro em qualquer viagem); modelos livres, níveis liberam cores, acabamentos e rodas, o último nível libera o seu carro; `/perfil/garagem`; o perfil em seções | 0014 (a 0013 foi da fase 15) | pgTAP da migration e dos grants (`car_*` só pela própria pessoa); Vitest das regras novas; e2e do perfil; laboratório |
 | **17. Criar a viagem conversando** | sai o formulário de nova viagem; um campo só com três caminhos (o formato do Viajei lido no aparelho, um roteiro em texto livre pela importação, uma descrição ou "quero sair hoje" pela conversa com até 3 perguntas ditas antes); a saída de hoje com lugares conferidos no OSM; o pedido para outras IAs; "O que você gosta" no perfil; limites e privacidade da fase 10 | — | Vitest do leitor do formato (com o seed e inválidos), da decisão entre os caminhos e da conferência de lugares; teste da função com entrada fixa; e2e do campo; laboratório com uma leitura real |
 | **18. Reservas e gastos sem digitar** | "Ler a confirmação" colada, anexada, por `share_target` no Android e por e-mail encaminhado para um endereço por pessoa (Cloudflare Email Routing → `inbound-mail`), com "Reservas recebidas" e push; "Fotografar a nota" e o QR da NFC-e; a nota anexada ao gasto. O e-mail depende de um domínio próprio | o endereço por pessoa e as reservas recebidas | Vitest dos leitores e da escolha da viagem pelas datas; teste das funções com entradas fixas (PDF, print, nota, e-mail bruto); e2e; laboratório com um e-mail de verdade até o push |
 | **19. O gerador de carros** | o perfil estendido (famílias de teto, proporções, frente, traseira, portas, detalhes, rodas) e o `CarSpec` que vira `CarProfile`; os cinco carros reescritos como specs sem mudança visual; sem IA e sem servidor | — | Vitest das validações por família; snapshots do `CarSide`; laboratório com o showroom |

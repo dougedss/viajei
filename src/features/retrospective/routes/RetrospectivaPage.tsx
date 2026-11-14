@@ -278,7 +278,10 @@ function Retro({ trip, days, stops }: { trip: Trip; days: TripDay[]; stops: Stop
   const myProfile = useMyProfile();
   const car = useMemo(() => carOf(myProfile, trip.name), [myProfile, trip.name]);
   const carHost = useRef<HTMLDivElement>(null);
-  const carImage = useCarImage(carHost, `${car.model}:${car.color}:${car.accessories.join(',')}`);
+  const carImage = useCarImage(
+    carHost,
+    `${car.model}:${car.color}:${car.finish}:${car.wheels}:${car.accessories.join(',')}`,
+  );
 
   const numbers = useMemo(
     () => filmNumbers({ trip, days: dayData, routes: routes ?? [], expenses }),

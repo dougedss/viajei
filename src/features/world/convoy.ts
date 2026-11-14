@@ -1,4 +1,6 @@
 import { haversineM, type LngLat } from '@shared/geo.ts';
+import type { CarSpec } from '@/art/cars/types.ts';
+import { carOf, type CarSource } from '@/features/garage/rules.ts';
 import type { TripTrack } from '@/lib/db/schema.ts';
 import { isOffRoute, projectOntoRoute, type RouteIndex } from '@/lib/geo/project.ts';
 
@@ -70,4 +72,15 @@ export function convoy(input: {
     });
   }
   return out.sort((a, b) => a.fraction - b.fraction);
+}
+
+/**
+ * O carro de cada pessoa do comboio (fase 16): o do perfil dela, que chega com a viagem pelo pull
+ * (D113) e funciona sem sinal; sem placa (de longe, na estrada, não se lê). Quem ainda não tem o
+ * perfil no aparelho aparece com o carro padrão.
+ */
+export function convoyCarFor(
+  profiles: ReadonlyMap<string, CarSource>,
+): (userId: string) => CarSpec {
+  return (userId) => carOf(profiles.get(userId), null);
 }

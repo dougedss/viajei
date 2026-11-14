@@ -198,7 +198,9 @@ Um agente que exercita o app de ponta a ponta, na produção, sem ninguém pegar
 | Progressão (fase 9)          | `app_progressao`, `app_retrospectiva`                                                                                                        |
 | Importação (fase 10)         | `app_importar`: uma leitura real da IA por execução                                                                                          |
 | Mapa e clima (fase 11)       | `app_mapa`, `app_clima`, com os tiles e o Open-Meteo de verdade                                                                              |
-| Polimento (fase 12)          | `expurgo`, `app_resync`, `lighthouse`                                                                                                        |
+| Polimento (fase 12)          | `expurgo`, `app_resync`, `lighthouse` (desde a fase 16, também o perfil e a garagem)                                                         |
+| Na estrada (fase 15)         | `app_parada_auto`: o lab-a e o lab-b no mesmo carro, a mesma trilha forjada, uma parada só                                                   |
+| O carro da pessoa (fase 16)  | `app_garagem`: A troca o carro na garagem do perfil, e Membros de B mostra o carro novo sem recarregar                                       |
 
 Os três da fase 12:
 
@@ -307,12 +309,17 @@ A maquete (`src/features/world`) desenha o dia: o traçado em S entre as paradas
 
 ### Garagem
 
-`/viagens/<id>/garagem`, aberta pelo carro no topo de Detalhes: um showroom 3D (`src/features/garage`) em que o carro da viagem gira num disco sob luz de estúdio. Arrastar gira, na vertical inclina, pinçar aproxima. Embaixo, Modelo, Pintura e Acessórios.
+`/perfil/garagem`, aberta pelo carro no topo de Detalhes, pelos atalhos da viagem e pelo Perfil: um showroom 3D (`src/features/garage`) em que o carro **da pessoa** gira num disco sob luz de estúdio. Arrastar gira, na vertical inclina, pinçar aproxima. Embaixo, Modelo, Pintura, Acabamento, Rodas e Acessórios, e no fim "O seu carro", trancado até uma versão futura. `/viagens/<id>/garagem` redireciona para ela.
 
-- **Os carros:** cinco modelos por código, cada um um `CarProfile` que gera o 3D (`buildCar`) e a vista lateral em SVG (`CarSide`), usada no card da viagem, na visão geral e na garagem sem 3D.
-- **O que está liberado** vem do progresso do time (o maior nível e a união das conquistas dos membros). Tocar em algo bloqueado abre a prévia, que nunca grava.
-- **Cada escolha** grava só a coluna tocada (`car_model`, `car_color` ou `car_accessories`) pela outbox, e funciona offline.
+- **O carro é da pessoa** (fase 16): mora no perfil (`profiles.car_*`) e é o mesmo na maquete, no card, na retrospectiva e no mapa de qualquer viagem; o comboio e Membros mostram o carro de cada um.
+- **Os carros:** cinco modelos por código, cada um um `CarProfile` que gera o 3D (`buildCar`) e a vista lateral em SVG (`CarSide`). O acabamento (lisa, metálica, perolada, fosca) é material físico; as rodas (clássica, cinco raios, raiada, aço) saem de `src/art/cars/wheels.ts`, que o 3D e a vista lateral leem.
+- **O que está liberado** vem do progresso da pessoa: os modelos são livres; os níveis liberam cores, acabamentos e rodas; as conquistas, os acessórios. Tocar em algo bloqueado abre a prévia, que nunca grava.
+- **Cada escolha** grava só a coluna tocada no perfil pela outbox, e funciona offline.
 - **`?garagem=tudo`** libera tudo para conferência visual, só em `pnpm dev`: o build de produção nem contém o código.
+
+### Perfil
+
+`/perfil`, em seções: Você (nome, cor, e-mail), O seu carro, Progresso, Avisos neste aparelho (a permissão, os sons, os cartões de conquista e os padrões das viagens novas), Aparência (o tema do sistema, claro ou escuro, por aparelho), Dados (sair) e, para quem tem, o Laboratório.
 
 ### Reservas, fotos e anexos
 
@@ -343,7 +350,7 @@ As fotos das memórias ("Como foi?", no Modo Viagem e no diário) e os prints e 
 
 ### Progressão
 
-XP, níveis e as 15 conquistas (`src/features/progression`), sem ranking. As regras (`rules.ts`, puro) derivam dos dados o conjunto inteiro de XP e conquistas da pessoa; o motor grava só o que falta, somente-anexar, com id determinístico. Desmarcar não tira XP, remarcar não dá de novo. Nada é gravado enquanto a ação tem menos de 12 s, para o Desfazer valer (D117). O nível do time é o maior nível dos membros, pelo resumo público no perfil (D113). O cartão de desbloqueio sai num momento calmo, um por vez, nunca por cima de outra folha. Regras e divergências: D112 a D120.
+XP, níveis e as 15 conquistas (`src/features/progression`), sem ranking. As regras (`rules.ts`, puro) derivam dos dados o conjunto inteiro de XP e conquistas da pessoa; o motor grava só o que falta, somente-anexar, com id determinístico. Desmarcar não tira XP, remarcar não dá de novo. Nada é gravado enquanto a ação tem menos de 12 s, para o Desfazer valer (D117). O nível do time é o maior nível dos membros, pelo resumo público no perfil (D113), e só aparece na barra da viagem: desde a fase 16, o que vai no carro é liberado pelo progresso da própria pessoa (D194). O cartão de desbloqueio sai num momento calmo, um por vez, nunca por cima de outra folha. Regras e divergências: D112 a D120, D194.
 
 ### Retrospectiva
 
