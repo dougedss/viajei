@@ -57,6 +57,7 @@ import {
   type TripKey,
 } from './evaluate.ts';
 import { appProgressao, appRetrospectiva, type ProgressContext } from './app-progress.ts';
+import { appGaragem } from './app-garagem.ts';
 import { appParadaAuto } from './app-parada.ts';
 import { roadScenarios, ROAD_SCENARIOS } from './app-road.ts';
 import { appImportar } from './app-import.ts';
@@ -954,6 +955,12 @@ async function main(): Promise<number> {
     );
     checks.push(parada);
     log(`app: app_parada_auto ${parada.status} · ${parada.detail}`);
+    // fase 16: o carro é da pessoa, e o de A chega ao lab-b pelo perfil (o comboio dos dois)
+    const garagem = await appGaragem(progress, today).catch((err: unknown) =>
+      failedCheck('app_garagem', err),
+    );
+    checks.push(garagem);
+    log(`app: app_garagem ${garagem.status} · ${garagem.detail}`);
     const lh = await labLighthouse(
       {
         appUrl: cfg.appOrigin,
@@ -970,6 +977,7 @@ async function main(): Promise<number> {
     checks.push(
       skipped('app_resync', 'Sem navegador nesta execução.'),
       skipped('app_parada_auto', 'Sem navegador nesta execução.'),
+      skipped('app_garagem', 'Sem navegador nesta execução.'),
       skipped('lighthouse', 'Sem navegador nesta execução.'),
     );
   }

@@ -38,3 +38,29 @@ export async function inserir(table: string, rows: Record<string, unknown>[]): P
   });
   if (!res.ok) throw new Error(`${table} ${res.status}: ${await res.text()}`);
 }
+
+/**
+ * Atualiza linhas no banco local dos testes, com a chave secreta (como o servidor faria): o carro de
+ * uma pessoa no perfil, por exemplo, sem passar pela garagem.
+ */
+export async function atualizar(
+  table: string,
+  query: string,
+  values: Record<string, unknown>,
+): Promise<void> {
+  const env = localEnv();
+  const apiUrl = env.API_URL;
+  const secret = env.SECRET_KEY ?? env.SERVICE_ROLE_KEY;
+  if (!apiUrl || !secret) throw new Error('supabase status não devolveu API_URL e SECRET_KEY');
+  const res = await fetch(`${apiUrl}/rest/v1/${table}?${query}`, {
+    method: 'PATCH',
+    headers: {
+      apikey: secret,
+      Authorization: `Bearer ${secret}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify(values),
+  });
+  if (!res.ok) throw new Error(`${table} ${res.status}: ${await res.text()}`);
+}

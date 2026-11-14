@@ -186,6 +186,9 @@ export async function labLighthouse(ctx: LighthouseContext, today: string): Prom
     { key: 'visao_geral', path: `/viagens/${trip}/detalhes`, session: true },
     { key: 'roteiro_dia', path: `/viagens/${trip}/roteiro/${day}`, session: true },
     { key: 'modo_viagem', path: `/viagens/${trip}?render=list`, session: true },
+    // fase 16: o perfil em seções e a garagem da pessoa (pela vista lateral: o 3D não mede o celular)
+    { key: 'perfil', path: '/perfil', session: true },
+    { key: 'garagem', path: '/perfil/garagem?render=list', session: true },
   ];
   const dir = await mkdtemp(join(tmpdir(), 'viajei-lighthouse-'));
   let context: BrowserContext | null = null;

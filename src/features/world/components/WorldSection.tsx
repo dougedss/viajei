@@ -81,11 +81,14 @@ export default function WorldSection(props: WorldSlotProps) {
     return <ListView {...props} notice="Maquete indisponível neste aparelho." />;
   }
 
+  // o carro na estrada, para os testes: o de quem olha (fase 16), o mesmo em qualquer viagem
+  const shownCar = carOf(props.profiles.get(props.uid), props.trip.name);
   return (
     <div
       ref={observe}
       className="absolute inset-0 overflow-hidden bg-stage"
       data-world={backend ?? undefined}
+      data-world-car={`${shownCar.model}:${shownCar.color}:${shownCar.finish}:${shownCar.wheels}`}
     >
       {layout && support !== 'pending' ? (
         <WorldStage

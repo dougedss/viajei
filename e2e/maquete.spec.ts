@@ -1,5 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import { dateInSaoPaulo } from './helpers/dates.ts';
+import { atualizar, inserir } from './helpers/db.ts';
+import { uuidV4, uuidV5 } from './helpers/ids.ts';
+import { criarUsuario } from './helpers/users.ts';
 
 const SENHA = 'viajei123';
 
@@ -113,4 +116,66 @@ test('?render=list força a lista, sem canvas e sem o botão de alternar', async
   await expect(folha).toContainText('Origem · Dia 1 · saída');
   await page.keyboard.press('Escape');
   await expect(folha).toBeHidden();
+});
+
+/**
+ * O carro é da pessoa (fase 16): a picape Uva perolada de rodas raiadas da pessoa é a mesma na
+ * maquete de duas viagens diferentes de hoje. O carro mora no perfil, e a viagem não tem carro.
+ */
+test('o carro da pessoa é o mesmo na maquete de duas viagens diferentes', async ({ page }) => {
+  test.setTimeout(240_000);
+  const user = await criarUsuario('Maquete');
+  const now = new Date().toISOString();
+  await atualizar('profiles', `id=eq.${user.id}`, {
+    car_model: 'pickup',
+    car_color: 'grape',
+    car_finish: 'pearl',
+    car_wheels: 'wire',
+    updated_at: now,
+  });
+  const today = dateInSaoPaulo(0);
+  const viagens = [uuidV4(), uuidV4()];
+  await inserir(
+    'trips',
+    viagens.map((id, i) => ({
+      id,
+      owner_id: user.id,
+      name: `Carro ${String(i + 1)} ${String(Date.now())}`,
+      start_date: today,
+      end_date: today,
+      updated_at: now,
+    })),
+  );
+  await inserir(
+    'trip_days',
+    viagens.map((trip) => ({
+      id: uuidV5(trip, today),
+      trip_id: trip,
+      date: today,
+      updated_at: now,
+    })),
+  );
+  await inserir(
+    'stops',
+    viagens.flatMap((trip) =>
+      ['Saída de casa', 'Parque'].map((name, i) => ({
+        id: uuidV4(),
+        trip_id: trip,
+        trip_day_id: uuidV5(trip, today),
+        position: `a${String(i)}`,
+        kind: i === 0 ? 'origin' : 'nature',
+        name,
+        time: i === 0 ? '07:00' : '18:00',
+        travel_minutes_to_next: null,
+        updated_at: now,
+      })),
+    ),
+  );
+  await entrar(page, user.email);
+  for (const trip of viagens) {
+    await page.goto(`/viagens/${trip}`);
+    const maquete = page.locator('[data-world="webgl2"], [data-world="webgpu"]');
+    await expect(maquete).toBeVisible({ timeout: 60_000 });
+    await expect(maquete).toHaveAttribute('data-world-car', 'pickup:grape:pearl:wire');
+  }
 });

@@ -65,7 +65,7 @@ export const LAB_SCENARIOS = {
   app_avisos: {
     label: 'App · ativar avisos',
     description:
-      'Entra, abre o "Agora", ativa pela folha na segunda abertura e vê "Avisos ligados"',
+      'Entra, abre o "Agora", ativa pela folha na segunda abertura e vê "Avisos ligados" no Perfil',
   },
   app_notificacao: {
     label: 'App · Partiu! na notificação',
@@ -153,6 +153,11 @@ export const LAB_SCENARIOS = {
     label: 'App · parada automática',
     description:
       'A e B no mesmo carro, 9 min a 80 m da estrada: uma parada só, Posto, com o nome do OSM e as horas medidas',
+  },
+  app_garagem: {
+    label: 'App · garagem da pessoa',
+    description:
+      'A troca o carro na garagem do perfil e, sem recarregar, Membros de B mostra o carro novo de A',
   },
   app_resync: {
     label: 'App · aparelho atrasado',
