@@ -7,14 +7,7 @@ import {
   TRIP_SCOPED_TABLES,
   type SyncTable,
 } from '../registry.ts';
-import {
-  syncKeys,
-  type Profile,
-  type RowOf,
-  type Trip,
-  type TripMember,
-  type ViajeiDb,
-} from '../schema.ts';
+import { syncKeys, type RowOf, type Trip, type TripMember, type ViajeiDb } from '../schema.ts';
 
 /** O envelope do pull é validado; as linhas em si vêm do nosso banco, com os tipos gerados. */
 const rowSchema = z.looseObject({ id: z.string(), deleted_at: z.string().nullable().optional() });
@@ -30,12 +23,12 @@ export type PullRow = z.infer<typeof rowSchema>;
  * lápides que ele talvez nunca tenha visto). A resposta já é o retrato inteiro, e o que o aparelho
  * tem a mais e não está pendente sai (`dropGhosts`).
  */
+/** Os perfis do time vêm em `tables.profiles`, como qualquer tabela (com o que está pendente por cima). */
 export type TripPull = {
   server_time: string;
   revoked: boolean;
   resync: boolean;
   tables: Partial<Record<SyncTable, PullRow[]>>;
-  profiles: PullRow[];
 };
 export type UserPull = {
   server_time: string;
@@ -55,7 +48,6 @@ export function parseTripPull(json: unknown): TripPull {
     revoked: env.revoked === true,
     resync: env.resync === true,
     tables,
-    profiles: 'profiles' in env ? z.array(rowSchema).parse(env.profiles) : [],
   };
 }
 
@@ -63,7 +55,7 @@ export function parseUserPull(json: unknown): UserPull {
   const env = envelopeSchema.parse(json);
   const tables: Partial<Record<SyncTable, PullRow[]>> = {};
   for (const t of SYNC_TABLE_NAMES) {
-    if (scopeOf(t) === 'user' && t in env) tables[t] = z.array(rowSchema).parse(env[t]);
+    if (scopeOf(t) !== 'trip' && t in env) tables[t] = z.array(rowSchema).parse(env[t]);
   }
   return {
     server_time: env.server_time,
@@ -228,7 +220,8 @@ export async function wipeTrip(db: ViajeiDb, tripId: string): Promise<void> {
 }
 
 /**
- * Aplica o pull de uma viagem numa transação Dexie: tabelas em ordem de rank, perfis, cursor. No
+ * Aplica o pull de uma viagem numa transação Dexie: tabelas em ordem de rank (os perfis do time
+ * primeiro, rank 5, com o carro que a própria pessoa ainda não enviou por cima), cursor. No
  * `resync`, as linhas fantasmas saem na mesma transação, antes do retrato: a tela (`useLiveQuery`)
  * só vê o estado final, nunca a viagem vazia no meio do caminho.
  */
@@ -255,7 +248,6 @@ export async function applyTripPull(
         else stats.upserted++;
       }
     }
-    for (const p of pull.profiles) await db.profiles.put(p as unknown as Profile);
     await db.sync_state.put({ key: syncKeys.tripCursor(tripId), value: pull.server_time });
   });
   return stats;

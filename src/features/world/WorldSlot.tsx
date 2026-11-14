@@ -26,7 +26,8 @@ export type { ReviewPhoto } from './replay.ts';
 export const NOW_BAR_INSET = 136;
 
 export type WorldSlotProps = {
-  trip: Pick<Trip, 'id' | 'name' | 'car_model' | 'car_color' | 'car_accessories'>;
+  /** o carro é de quem olha, do perfil (fase 16); da viagem, só o id e o nome (a placa) */
+  trip: Pick<Trip, 'id' | 'name'>;
   day: { id: string; date: string };
   state: DayState;
   legs: Map<string, RouteLeg>;

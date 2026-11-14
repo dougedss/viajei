@@ -27,8 +27,9 @@ import { ensureTeamMember, log, sleep, type Session } from './session.ts';
  * Os cenários da fase 9 no navegador, na produção (D91, D125):
  *  - `app_progressao`: a progressão de A e B zerada e nenhuma parada concluída viva de A (conquista
  *    não se apaga e o laboratório roda todo dia); A conclui a primeira parada, o cartão do "Primeiro
- *    pé na estrada" aparece na visão geral, "Usar no carro" põe o rack, o servidor tem o XP de A e,
- *    depois que o navegador de B abre, o de B, e a garagem de B mostra o rack;
+ *    pé na estrada" aparece na visão geral, "Usar no carro" põe o rack no carro de A (o perfil dela,
+ *    fase 16), o servidor tem o XP de A e, depois que o navegador de B abre, o de B, e B vê o rack
+ *    no carro de A, em Membros (o carro de cada um chega pelo perfil);
  *  - `app_retrospectiva`: uma viagem fixa do lab-b que terminou ontem, com paradas concluídas, uma
  *    memória com foto e um gasto; o filme chega ao card final com os números certos, o card exportado
  *    tem 1080 × 1920 e o vídeo exportado tem 15 s e 1080 × 1920, conferido por um `<video>`. No canal
@@ -232,7 +233,26 @@ async function resetProgress(a: Session, b: Session): Promise<number> {
   await syncPush(a.client, done.map(tomb('stops')));
   ok(await a.client.rpc('lab_reset_progress'), 'zerar a progressão de A');
   ok(await b.client.rpc('lab_reset_progress'), 'zerar a progressão de B');
+  // o carro é da pessoa desde a fase 16 e não se apaga com a viagem: os dois voltam ao padrão
+  await syncPush(a.client, [plainCar(a.uid)]);
+  await syncPush(b.client, [plainCar(b.uid)]);
   return done.length;
+}
+
+/** O carro padrão no perfil (hatch Pôr do sol, liso, roda clássica, nada no teto), pela outbox. */
+function plainCar(uid: string): Op {
+  return {
+    table: 'profiles',
+    id: uid,
+    op: 'patch',
+    values: {
+      car_model: 'hatch',
+      car_color: 'sunset',
+      car_accessories: [],
+      car_finish: 'solid',
+      car_wheels: 'classic',
+    },
+  };
 }
 
 async function prepareProgress(a: Session, b: Session, today: string, now: Date) {
@@ -247,9 +267,6 @@ async function prepareProgress(a: Session, b: Session, today: string, now: Date)
         name: 'Laboratório · progressão',
         start_date: today,
         end_date: today,
-        car_model: 'hatch',
-        car_color: 'sunset',
-        car_accessories: [],
         deleted_at: null,
       },
     },
@@ -434,7 +451,7 @@ export async function appProgressao(
         },
       ],
       [
-        '"Usar no carro" põe o rack no carro da viagem',
+        '"Usar no carro" põe o rack no carro de A',
         async () => {
           const card = pa.getByRole('dialog', { name: 'Primeiro pé na estrada' });
           await card.getByRole('button', { name: 'Usar no carro' }).click();
@@ -463,8 +480,8 @@ export async function appProgressao(
             await until(
               async () =>
                 must(
-                  await a.client.from('trips').select('car_accessories').eq('id', trip),
-                  'carro da viagem',
+                  await a.client.from('profiles').select('car_accessories').eq('id', a.uid),
+                  'o carro de A',
                 )[0]?.car_accessories ?? [],
               (acc) => acc.includes('rack'),
               'o rack não chegou ao carro no servidor',
@@ -506,13 +523,13 @@ export async function appProgressao(
         },
       ],
       [
-        'a garagem de B mostra o rack',
+        'B vê o rack no carro de A, em Membros',
         async () => {
           if (!pageB) throw new Error('sem o navegador de B');
-          await pageB.goto(url('/garagem?render=list'));
+          await pageB.goto(url('/membros'));
           await pageB
+            .locator(`[data-member-car="${a.uid}"]`)
             .getByRole('img', { name: /com rack/ })
-            .first()
             .waitFor({ timeout: SLOW });
         },
       ],
@@ -522,7 +539,7 @@ export async function appProgressao(
       'app_progressao',
       opts.somenteRack
         ? 'A concluiu a primeira parada, o cartão apareceu e "Usar no carro" pôs o rack no servidor'
-        : 'A concluiu a primeira parada, o cartão apareceu, "Usar no carro" pôs o rack; o servidor tem o XP de A e de B, e a garagem de B mostra o rack',
+        : 'A concluiu a primeira parada, o cartão apareceu, "Usar no carro" pôs o rack no carro dela; o servidor tem o XP de A e de B, e B vê o rack no carro de A',
       () => [pageA, pageB],
       ctx.artifactsDir,
       opts.somenteRack ? steps.slice(0, rackIndex + 1) : steps,

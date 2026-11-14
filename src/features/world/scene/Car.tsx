@@ -15,7 +15,7 @@ import { heightAt, type HeightField } from './heightfield.ts';
 import type { WorldRuntime } from './runtime.ts';
 
 /**
- * O carro da viagem na estrada: posição pelo `s` do controlador de movimento, orientado pela
+ * O carro de quem olha na estrada (o da pessoa, fase 16): posição pelo `s` do controlador de movimento, orientado pela
  * tangente, rodas girando com o deslocamento, faróis pela noite. Fora da rota, sai do traçado na
  * perpendicular, com uma linha tracejada até a estrada. A escala é fixa de perto (a câmera segue o
  * carro, fase 14) e cresce um pouco quando ela recua, para o carro continuar legível de longe.

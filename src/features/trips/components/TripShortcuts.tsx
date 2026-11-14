@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router';
 import { CAR_MODELS } from '@shared/constants.ts';
-import { normalizeCar } from '@/features/garage/rules.ts';
+import { useMyCar } from '@/features/garage/my-car.ts';
 import type { Trip } from '@/lib/db/schema.ts';
 
 /**
@@ -46,7 +46,8 @@ export function TripShortcuts({
   diary,
   located,
 }: Props) {
-  const car = normalizeCar(trip);
+  // o carro é de quem olha (fase 16): o mesmo em toda viagem
+  const car = useMyCar(trip.name);
   const tiles: Tile[] = [
     {
       to: `/viagens/${trip.id}/roteiro`,
@@ -100,7 +101,7 @@ export function TripShortcuts({
     {
       to: `/viagens/${trip.id}/garagem`,
       label: 'Garagem',
-      value: CAR_MODELS[car.model].label.toLowerCase(),
+      value: car ? CAR_MODELS[car.model].label.toLowerCase() : '',
       icon: CarFront,
       color: '#5B6474',
     },

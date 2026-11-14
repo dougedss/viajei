@@ -25,7 +25,7 @@ import { sAt, type FilmPlan } from '../rules.ts';
 
 /**
  * O palco 3D do filme, num chunk próprio (o three já está em cache desde a maquete): o cenário da
- * maquete com a rota da viagem inteira, o carro da viagem e a câmera do filme, que segue o relógio.
+ * maquete com a rota da viagem inteira, o carro de quem olha (fase 16) e a câmera do filme, que segue o relógio.
  * Também desenha os quadros da exportação: no tamanho do vídeo, fora da tela (`setOutputRenderTarget`,
  * com o mesmo tone mapping e espaço de cor da tela), lidos de volta da GPU — igual em WebGPU e WebGL2.
  */

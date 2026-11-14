@@ -13,13 +13,15 @@ import {
 } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import { CarSide } from '@/art/cars/CarSide.tsx';
+import type { CarSpec } from '@/art/cars/types.ts';
 import { NotFound } from '@/app/NotFound.tsx';
 import { Splash } from '@/app/Splash.tsx';
 import { Button } from '@/components/ui/Button.tsx';
 import { ButtonLink } from '@/components/ui/ButtonLink.tsx';
 import { useTripChecklist } from '@/features/checklists/queries.ts';
 import { useTripExpenses } from '@/features/expenses/queries.ts';
-import { normalizeCar } from '@/features/garage/rules.ts';
+import { useMyProfile } from '@/features/garage/my-car.ts';
+import { carOf } from '@/features/garage/rules.ts';
 import { useTripDays, useTripStops } from '@/features/itinerary/queries.ts';
 import { activeStops } from '@/features/itinerary/rules.ts';
 import { useTripMemories } from '@/features/memories/queries.ts';
@@ -193,7 +195,7 @@ function useBitmaps(ids: readonly string[]): ReadonlyMap<string, Bitmap> {
 }
 
 /**
- * O carro da viagem de lado como imagem, para o fundo sem 3D e os cards: o próprio `CarSide`
+ * O carro de quem olha de lado como imagem (o da pessoa, fase 16), para o fundo sem 3D e os cards: o próprio `CarSide`
  * serializado do DOM (a mesma arte, sem reescrever em Path2D; o carro não tem texto, então não
  * depende de fonte, e não há `foreignObject`, que o Safari quebra).
  */
@@ -272,7 +274,9 @@ function Retro({ trip, days, stops }: { trip: Trip; days: TripDay[]; stops: Stop
   );
   useFillGaps(tripId, photosQ, dayData, routes, cachedIds);
 
-  const car = useMemo(() => normalizeCar(trip), [trip]);
+  // o carro é de quem olha (fase 16): cada um vê o próprio carro no filme da viagem
+  const myProfile = useMyProfile();
+  const car = useMemo(() => carOf(myProfile, trip.name), [myProfile, trip.name]);
   const carHost = useRef<HTMLDivElement>(null);
   const carImage = useCarImage(carHost, `${car.model}:${car.color}:${car.accessories.join(',')}`);
 
@@ -511,7 +515,7 @@ function FilmPlayer({
 }: {
   art: FilmArt;
   layout: WorldLayout;
-  car: ReturnType<typeof normalizeCar>;
+  car: CarSpec;
   forceWebGL: boolean;
   tripId: string;
   onFail: () => void;

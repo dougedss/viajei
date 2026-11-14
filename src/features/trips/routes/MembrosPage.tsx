@@ -4,6 +4,8 @@ import { useForm } from 'react-hook-form';
 import { useParams } from 'react-router';
 import { NotFound } from '@/app/NotFound.tsx';
 import { Splash } from '@/app/Splash.tsx';
+import { CarSide } from '@/art/cars/CarSide.tsx';
+import { describeCar } from '@/art/cars/describe.ts';
 import { Avatar } from '@/components/ui/Avatar.tsx';
 import { Button } from '@/components/ui/Button.tsx';
 import { Card } from '@/components/ui/Card.tsx';
@@ -11,6 +13,7 @@ import { Chip } from '@/components/ui/Chip.tsx';
 import { PageHeader } from '@/components/ui/PageHeader.tsx';
 import { TextField } from '@/components/ui/TextField.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
+import { carOf } from '@/features/garage/rules.ts';
 import { asPersonColor } from '@/features/profile/queries.ts';
 import { useSession } from '@/lib/supabase/session.ts';
 import { AlreadyInvitedError, inviteMember, removeMember, setSharePosition } from '../actions.ts';
@@ -136,6 +139,16 @@ export default function MembrosPage() {
                     {memberLabel(member)}
                   </Chip>
                 </div>
+                {/* o carro é de cada pessoa (fase 16): o dela chega com o perfil, sem sinal */}
+                {pending || !profile ? null : (
+                  <span className="shrink-0" data-member-car={profile.id}>
+                    <CarSide
+                      car={carOf(profile, null)}
+                      className="h-[30px] w-auto"
+                      label={`O carro de ${name}: ${describeCar(carOf(profile, null))}`}
+                    />
+                  </span>
+                )}
                 {removable ? (
                   <Button
                     variant="ghost"

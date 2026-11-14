@@ -35,7 +35,7 @@ update public.profiles set name = 'Hackeada', updated_at = now() where id = 'a22
 select is((select name from public.profiles where id = 'a2222222-2222-4222-8222-222222222222'), 'Companheira', 'não edita o perfil de outra pessoa');
 
 select throws_ok($$update public.profiles set created_at = now() where id = 'a1111111-1111-4111-8111-111111111111'$$,
-                 '42501', null, 'só name, color, updated_at e field_versions têm grant de update');
+                 '42501', null, 'created_at não tem grant de update (só nome, cor, o carro e os padrões dos avisos, fase 16)');
 
 select pg_temp.login('a3333333-3333-4333-8333-333333333333');
 select is((select count(*) from public.profiles), 1::bigint, 'o intruso só vê o próprio perfil');

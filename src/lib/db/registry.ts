@@ -3,7 +3,11 @@
  * de envio (rank: pais antes de filhos) e como os filhos se ligam ao pai, para a lápide de uma
  * linha remover os filhos locais. Cada fase acrescenta as suas tabelas aqui e no banco.
  */
-export type SyncScope = 'trip' | 'user';
+/**
+ * `trip`: linhas da viagem (têm `trip_id`); `user`: linhas da pessoa (têm `user_id`); `self`: a
+ * própria linha da pessoa, o perfil (a chave é o id; fase 16).
+ */
+export type SyncScope = 'trip' | 'user' | 'self';
 
 export type SyncTableInfo = {
   scope: SyncScope;
@@ -13,6 +17,12 @@ export type SyncTableInfo = {
 };
 
 export const SYNC_TABLES = {
+  /**
+   * O perfil (fase 16): o carro e os padrões dos avisos sobem pela outbox, offline. Pai de tudo (as
+   * viagens apontam para ele). O próprio chega pelo pull do usuário; os do time, pelo pull da viagem.
+   * Nome e cor continuam editados online, no Perfil.
+   */
+  profiles: { scope: 'self', rank: 5, children: [] },
   trips: {
     scope: 'trip',
     rank: 10,

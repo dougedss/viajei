@@ -6,6 +6,7 @@ import {
   makeContact,
   makeDay,
   makeMember,
+  makeProfile,
   makeStop,
   makeTrip,
   OTHER_UID,
@@ -15,6 +16,7 @@ import {
 import { mutate } from '../mutate.ts';
 import { db, syncKeys, type UploadJob } from '../schema.ts';
 import { applyTripPull, applyUserPull, parseTripPull, parseUserPull } from './apply-pull.ts';
+import { pullUser } from './pull.ts';
 
 const SERVER_TIME = '2026-11-04T12:00:00.000Z';
 
@@ -38,7 +40,8 @@ describe('parseTripPull', () => {
     });
     expect(p.revoked).toBe(false);
     expect(p.tables.trips).toHaveLength(1);
-    expect(p.profiles).toHaveLength(1);
+    // os perfis do time são uma tabela como as outras desde a fase 16
+    expect(p.tables.profiles).toHaveLength(1);
   });
 
   it('recusa envelope sem server_time', () => {
@@ -52,19 +55,22 @@ describe('applyTripPull', () => {
       server_time: SERVER_TIME,
       revoked: false,
       resync: false,
-      tables: { trips: [serverRow(makeTrip())], trip_members: [serverRow(makeMember())] },
-      profiles: [
-        {
-          id: UID,
-          name: 'Douglas',
-          color: 'sunset',
-          created_at: '',
-          updated_at: '',
-          synced_at: SERVER_TIME,
-        },
-      ],
+      tables: {
+        trips: [serverRow(makeTrip())],
+        trip_members: [serverRow(makeMember())],
+        profiles: [
+          {
+            id: UID,
+            name: 'Douglas',
+            color: 'sunset',
+            created_at: '',
+            updated_at: '',
+            synced_at: SERVER_TIME,
+          },
+        ],
+      },
     });
-    expect(stats).toEqual({ upserted: 2, removed: 0, dropped: 0, revoked: false });
+    expect(stats).toEqual({ upserted: 3, removed: 0, dropped: 0, revoked: false });
     expect((await db.trips.get(TRIP_ID))?.synced_at).toBe(SERVER_TIME);
     expect(await db.profiles.count()).toBe(1);
     expect((await db.sync_state.get(syncKeys.tripCursor(TRIP_ID)))?.value).toBe(SERVER_TIME);
@@ -78,7 +84,6 @@ describe('applyTripPull', () => {
       revoked: false,
       resync: false,
       tables: { trips: [serverRow(makeTrip({ deleted_at: SERVER_TIME }))] },
-      profiles: [],
     });
     expect(stats.removed).toBe(1);
     expect(await db.trips.count()).toBe(0);
@@ -91,7 +96,6 @@ describe('applyTripPull', () => {
       revoked: false,
       resync: false,
       tables: { trips: [serverRow(makeTrip())] },
-      profiles: [],
     });
     await mutate.patch('trips', TRIP_ID, { notes: 'edição local ainda não enviada' });
     await applyTripPull(db, TRIP_ID, {
@@ -99,7 +103,6 @@ describe('applyTripPull', () => {
       revoked: false,
       resync: false,
       tables: { trips: [serverRow(makeTrip({ notes: 'do servidor', origin: 'Curitiba' }))] },
-      profiles: [],
     });
     const row = await db.trips.get(TRIP_ID);
     expect(row?.notes).toBe('edição local ainda não enviada');
@@ -116,7 +119,6 @@ describe('applyTripPull', () => {
       revoked: true,
       resync: false,
       tables: {},
-      profiles: [],
     });
     expect(stats.revoked).toBe(true);
     expect(await db.trips.count()).toBe(0);
@@ -182,7 +184,6 @@ describe('resync: o cursor é anterior ao horizonte do expurgo', () => {
         trip_days: [serverRow(makeDay())],
         stops: [kept, { ...edited, notes: null }],
         attachments: [],
-        profiles: [],
       }),
     );
 
@@ -261,5 +262,61 @@ describe('applyUserPull', () => {
     expect(change).toEqual({ left: ['outra'] });
     expect((await db.trip_members.toArray()).map((m) => m.trip_id)).toEqual([TRIP_ID]);
     expect((await db.sync_state.get(syncKeys.userCursor))?.value).toBe(SERVER_TIME);
+  });
+});
+
+describe('o perfil no sync (fase 16)', () => {
+  it('o pull do usuário traz o próprio perfil, com o carro', async () => {
+    await applyUserPull(
+      db,
+      parseUserPull({
+        server_time: SERVER_TIME,
+        memberships: [],
+        profiles: [serverRow(makeProfile({ car_model: 'suv', car_color: 'sky' }))],
+      }),
+    );
+    expect(await db.profiles.get(UID)).toMatchObject({ car_model: 'suv', car_color: 'sky' });
+  });
+
+  it('o carro escolhido aqui e ainda não enviado fica por cima do perfil que o pull da viagem traz', async () => {
+    await db.profiles.put(makeProfile({ synced_at: SERVER_TIME }));
+    await mutate.patch('profiles', UID, { car_model: 'kombi' });
+    await applyTripPull(db, TRIP_ID, {
+      server_time: SERVER_TIME,
+      revoked: false,
+      resync: false,
+      tables: {
+        profiles: [
+          serverRow(makeProfile({ car_color: 'grape' })),
+          serverRow(makeProfile({ id: OTHER_UID, name: 'Ana', car_model: 'pickup' })),
+        ],
+      },
+    });
+    // o meu: a cor nova do servidor (outro aparelho) e o modelo que ainda está na fila
+    expect(await db.profiles.get(UID)).toMatchObject({ car_model: 'kombi', car_color: 'grape' });
+    // o do time: como veio
+    expect((await db.profiles.get(OTHER_UID))?.car_model).toBe('pickup');
+    const op = (await db.outbox.toArray()).at(-1);
+    expect(op).toMatchObject({ table: 'profiles', row_id: UID, op: 'patch', trip_id: null });
+  });
+
+  it('sem o próprio perfil no aparelho, o pull do usuário começa do zero uma vez', async () => {
+    await db.sync_state.bulkPut([
+      { key: syncKeys.uid, value: UID },
+      { key: syncKeys.userCursor, value: SERVER_TIME },
+    ]);
+    const asked: string[] = [];
+    const rpc = (since: string) => {
+      asked.push(since);
+      return Promise.resolve({
+        server_time: SERVER_TIME,
+        memberships: [],
+        profiles: [serverRow(makeProfile())],
+      });
+    };
+    await pullUser(db, rpc);
+    await pullUser(db, rpc);
+    // a primeira, do começo; a segunda, do cursor (com os 5 s de sobreposição)
+    expect(asked).toEqual(['1970-01-01T00:00:00.000Z', '2026-11-04T11:59:55.000Z']);
   });
 });

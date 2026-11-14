@@ -21,7 +21,7 @@ import type { Bounds, LastSeen, MapDay, MapLine, MapPin } from '../rules.ts';
  * O mapa da viagem com o Leaflet (pelo react-leaflet 5), num chunk só desta rota, com o CSS dele.
  * Tiles do OSM com CORS (o service worker só guarda o 200; D141), a rota real de cada dia, o traço
  * reto onde não há rota, os pinos com a arte do app (o `divIcon` recebe um elemento onde o React
- * desenha por portal: nenhum PNG) e o carro da viagem no último ponto da trilha. As props do
+ * desenha por portal: nenhum PNG) e o carro de quem olha no último ponto da trilha. As props do
  * `MapContainer` não mudam depois de montar: o enquadramento vai num filho com `useMap()`.
  */
 export type TrackLine = { user_id: string; color: string; points: LngLat[] };
@@ -191,7 +191,7 @@ function PinMarker(props: {
   );
 }
 
-/** O carro da viagem no último ponto da trilha: não é posição ao vivo, muda quando a trilha sincroniza. */
+/** O carro de quem olha no último ponto da trilha: não é posição ao vivo, muda quando a trilha sincroniza. */
 function CarMarker({ seen, car }: { seen: LastSeen & { label: string }; car: CarSpec }) {
   const [host] = useState(() => document.createElement('div'));
   const icon = useMemo(

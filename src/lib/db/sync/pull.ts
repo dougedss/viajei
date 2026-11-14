@@ -32,8 +32,15 @@ export async function pullTrip(
   return applyTripPull(db, tripId, payload);
 }
 
+/**
+ * O pull do usuário. Sem o próprio perfil no aparelho (o que já tinha passado do `synced_at` dele
+ * antes de o perfil entrar no sync, fase 16), começa do zero uma vez, como um aparelho novo: o carro
+ * da pessoa nunca fica de fora só porque o cursor já andou.
+ */
 export async function pullUser(db: ViajeiDb, rpc: PullUserRpc): Promise<MembershipChange> {
-  const since = await sinceFor(db, syncKeys.userCursor);
+  const uid = (await db.sync_state.get(syncKeys.uid))?.value;
+  const own = uid ? await db.profiles.get(uid) : undefined;
+  const since = own ? await sinceFor(db, syncKeys.userCursor) : EPOCH;
   const payload = parseUserPull(await rpc(since));
   return applyUserPull(db, payload);
 }

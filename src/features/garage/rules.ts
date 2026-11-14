@@ -19,14 +19,14 @@ import {
 import { PROFILES } from '@/art/cars/profiles/index.ts';
 import type { CarSpec } from '@/art/cars/types.ts';
 import { levelName, type TeamProgress } from '@/features/progression/team.ts';
-import type { Trip } from '@/lib/db/schema.ts';
+import type { Profile } from '@/lib/db/schema.ts';
 
 /**
- * As regras da garagem, puras. O que está liberado vem do progresso do time; o que a viagem já usa
- * e o progresso de agora não libera (um membro saiu, por exemplo) continua (`kept`), só não volta a
- * ser escolhido depois de trocado. Tocar em algo bloqueado nunca grava: o palco mostra a prévia com
- * a frase do que falta. A regra é uma só: o palco é o carro da viagem sempre que tudo nele está
- * liberado; se algo bloqueado entra, é prévia.
+ * As regras da garagem, puras. O carro é da pessoa (fase 16): mora no perfil e é o mesmo em
+ * qualquer viagem. O que está liberado vem do progresso; o que o carro já usa e o progresso de agora
+ * não libera continua (`kept`), só não volta a ser escolhido depois de trocado. Tocar em algo
+ * bloqueado nunca grava: o palco mostra a prévia com a frase do que falta. A regra é uma só: o palco
+ * é o carro gravado sempre que tudo nele está liberado; se algo bloqueado entra, é prévia.
  */
 export type Need = { level: number } | { achievement: AchievementKey };
 
@@ -82,30 +82,44 @@ export function accessoryState(
   return { status: 'locked', need: { achievement }, hint: accessoryHint(key) };
 }
 
-// ------------------------------------------------------------------ a leitura da viagem
-type TripCar = Pick<Trip, 'name' | 'car_model' | 'car_color' | 'car_accessories'>;
+// ------------------------------------------------------------------ a leitura do perfil
+/**
+ * De onde o carro é lido: as colunas do perfil (fase 16). Podem faltar num perfil puxado antes da
+ * 0014 ou num perfil que ainda não chegou ao aparelho: aí vale o padrão.
+ */
+export type CarSource = Partial<Pick<Profile, 'car_model' | 'car_color' | 'car_accessories'>>;
 
-function isModel(v: string): v is CarModel {
-  return Object.hasOwn(CAR_MODELS, v);
+/** As colunas que a garagem grava no perfil: só as que mudaram. */
+export type CarPatch = Partial<Pick<Profile, 'car_model' | 'car_color' | 'car_accessories'>>;
+
+function isModel(v: unknown): v is CarModel {
+  return typeof v === 'string' && Object.hasOwn(CAR_MODELS, v);
 }
-function isColor(v: string): v is CarColor {
-  return Object.hasOwn(CAR_COLORS, v);
+function isColor(v: unknown): v is CarColor {
+  return typeof v === 'string' && Object.hasOwn(CAR_COLORS, v);
 }
 
 /**
- * A viagem como carro desenhável, sem nunca quebrar a cena: modelo e cor inválidos voltam ao hatch
- * Pôr do sol; chaves desconhecidas saem; havendo item de teto, o rack aparece; o que passa das
+ * O perfil como carro desenhável, sem nunca quebrar a cena (D70): modelo e cor inválidos voltam ao
+ * hatch Pôr do sol; chaves desconhecidas saem; havendo item de teto, o rack aparece; o que passa das
  * faixas do teto ou dos 3 adesivos sai, pela ordem (dado velho, ou duas colunas gravadas por
- * aparelhos diferentes ao mesmo tempo). Só lê: a próxima escolha na garagem grava o que se vê.
+ * aparelhos diferentes ao mesmo tempo). Só lê: a próxima escolha na garagem grava o que se vê. A
+ * placa é de quem desenha: o nome da viagem na tela da viagem, o da pessoa fora dela.
  */
-export function normalizeCar(trip: TripCar): CarSpec {
-  const model = isModel(trip.car_model) ? trip.car_model : 'hatch';
-  const color = isColor(trip.car_color) ? trip.car_color : 'sunset';
-  let keys = knownKeys(Array.isArray(trip.car_accessories) ? trip.car_accessories : []);
+export function normalizeCar(source: CarSource | null | undefined, plate: string | null): CarSpec {
+  const model = isModel(source?.car_model) ? source.car_model : 'hatch';
+  const color = isColor(source?.car_color) ? source.car_color : 'sunset';
+  const raw: unknown = source?.car_accessories;
+  let keys = knownKeys(Array.isArray(raw) ? raw.filter((k) => typeof k === 'string') : []);
   if (keys.some(isLaneItem) && !keys.includes('rack')) keys = ['rack', ...keys];
   const { overflow } = placeAccessories(PROFILES[model], keys);
   keys = keys.filter((k) => !overflow.includes(k));
-  return { model, color, accessories: keys, plate: trip.name };
+  return { model, color, accessories: keys, plate };
+}
+
+/** O carro de uma pessoa: o do perfil dela, normalizado, com a placa de quem desenha. */
+export function carOf(profile: CarSource | null | undefined, plate: string | null): CarSpec {
+  return normalizeCar(profile, plate);
 }
 
 // ------------------------------------------------------------------ estrutura: teto e adesivos
@@ -188,10 +202,8 @@ export type Tap =
   | { kind: 'color'; color: CarColor }
   | { kind: 'accessory'; key: CarAccessoryKey };
 
-export type TripCarPatch = Partial<Pick<Trip, 'car_model' | 'car_color' | 'car_accessories'>>;
-
 export type Outcome =
-  | { kind: 'trip'; car: CarSpec; patch: TripCarPatch; dropped: CarAccessoryKey[] }
+  | { kind: 'save'; car: CarSpec; patch: CarPatch; dropped: CarAccessoryKey[] }
   | { kind: 'preview'; car: CarSpec; hints: string[]; dropped: CarAccessoryKey[] }
   | { kind: 'refuse'; reason: string };
 
@@ -210,8 +222,8 @@ export function lockedHints(car: CarSpec, trip: CarSpec, progress: TeamProgress)
 }
 
 /** Só as colunas que mudaram: a outbox funde toques seguidos na mesma coluna. */
-export function patchFor(trip: CarSpec, next: CarSpec): TripCarPatch {
-  const patch: TripCarPatch = {};
+export function patchFor(trip: CarSpec, next: CarSpec): CarPatch {
+  const patch: CarPatch = {};
   if (trip.model !== next.model) patch.car_model = next.model;
   if (trip.color !== next.color) patch.car_color = next.color;
   if (trip.accessories.join(',') !== next.accessories.join(',')) {
@@ -221,9 +233,9 @@ export function patchFor(trip: CarSpec, next: CarSpec): TripCarPatch {
 }
 
 /**
- * Um toque na garagem: aplica ao que está no palco (`shown`, que é o carro da viagem ou a prévia)
- * e diz o que acontece. Tudo liberado: é o carro da viagem, e grava só as colunas que mudaram.
- * Algo bloqueado: é prévia, com as frases do que falta, e nada se grava. Não cabe: recusa.
+ * Um toque na garagem: aplica ao que está no palco (`shown`, que é o carro gravado ou a prévia)
+ * e diz o que acontece. Tudo liberado: é o carro, e grava só as colunas que mudaram. Algo
+ * bloqueado: é prévia, com as frases do que falta, e nada se grava. Não cabe: recusa.
  */
 export function decide(trip: CarSpec, shown: CarSpec, tap: Tap, progress: TeamProgress): Outcome {
   let next: CarSpec;
@@ -239,7 +251,7 @@ export function decide(trip: CarSpec, shown: CarSpec, tap: Tap, progress: TeamPr
   }
   const hints = lockedHints(next, trip, progress);
   if (hints.length > 0) return { kind: 'preview', car: next, hints, dropped };
-  return { kind: 'trip', car: next, patch: patchFor(trip, next), dropped };
+  return { kind: 'save', car: next, patch: patchFor(trip, next), dropped };
 }
 
 /** Dois carros iguais: mesmo modelo, cor, placa e acessórios na mesma ordem. */

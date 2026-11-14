@@ -20,6 +20,7 @@ import {
 import {
   accessoryHint,
   accessoryState,
+  carOf,
   colorState,
   decide,
   droppedMessage,
@@ -159,9 +160,8 @@ describe('estrutura do carro', () => {
   });
 });
 
-describe('normalizeCar: dado velho nunca quebra a cena', () => {
-  const trip = (over: Record<string, unknown>) => ({
-    name: 'Serra',
+describe('normalizeCar: dado velho nunca quebra a cena (agora sobre o perfil)', () => {
+  const profile = (over: Record<string, unknown>) => ({
     car_model: 'hatch',
     car_color: 'sunset',
     car_accessories: [] as string[],
@@ -170,7 +170,8 @@ describe('normalizeCar: dado velho nunca quebra a cena', () => {
 
   it('modelo e cor inválidos voltam ao hatch Pôr do sol; chaves desconhecidas saem', () => {
     const n = normalizeCar(
-      trip({ car_model: 'limousine', car_color: 'pink', car_accessories: ['turbo', 'antenna'] }),
+      profile({ car_model: 'limousine', car_color: 'pink', car_accessories: ['turbo', 'antenna'] }),
+      'Serra',
     );
     expect(n).toEqual({
       model: 'hatch',
@@ -182,7 +183,7 @@ describe('normalizeCar: dado velho nunca quebra a cena', () => {
 
   it('item de teto sem rack ganha o rack; o que passa das faixas e dos 3 adesivos sai', () => {
     const n = normalizeCar(
-      trip({
+      profile({
         car_accessories: [
           'bike',
           'board',
@@ -194,6 +195,7 @@ describe('normalizeCar: dado velho nunca quebra a cena', () => {
           'sticker_grapes',
         ],
       }),
+      'Serra',
     );
     expect(n.accessories).toEqual([
       'rack',
@@ -204,6 +206,19 @@ describe('normalizeCar: dado velho nunca quebra a cena', () => {
       'sticker_map',
     ]);
   });
+
+  it('o perfil que ainda não chegou, ou puxado antes da 0014, vale o carro padrão', () => {
+    const padrao = { model: 'hatch', color: 'sunset', accessories: [], plate: 'Ana' };
+    expect(normalizeCar(undefined, 'Ana')).toEqual(padrao);
+    expect(normalizeCar(null, 'Ana')).toEqual(padrao);
+    expect(normalizeCar({}, 'Ana')).toEqual(padrao);
+    expect(carOf({ car_model: 'suv', car_color: 'sky' }, null)).toEqual({
+      model: 'suv',
+      color: 'sky',
+      accessories: [],
+      plate: null,
+    });
+  });
 });
 
 describe('a decisão de um toque', () => {
@@ -211,7 +226,7 @@ describe('a decisão de um toque', () => {
     const trip = car();
     const out = decide(trip, trip, { kind: 'color', color: 'sky' }, NO_PROGRESS);
     expect(out).toEqual({
-      kind: 'trip',
+      kind: 'save',
       car: { ...trip, color: 'sky' },
       patch: { car_color: 'sky' },
       dropped: [],
@@ -248,7 +263,7 @@ describe('a decisão de um toque', () => {
       NO_PROGRESS,
     );
     expect(back).toEqual({
-      kind: 'trip',
+      kind: 'save',
       car: { ...trip, color: 'leaf' },
       patch: { car_color: 'leaf' },
       dropped: [],
@@ -262,11 +277,11 @@ describe('a decisão de um toque', () => {
     expect(lockedHints(trip, trip, NO_PROGRESS)).toEqual([]);
     // mudar a cor de um carro mantido grava normalmente
     const color = decide(trip, trip, { kind: 'color', color: 'sky' }, NO_PROGRESS);
-    expect(color.kind).toBe('trip');
+    expect(color.kind).toBe('save');
     // trocado pelo hatch, o SUV deixa de estar na viagem e volta a ser bloqueado
     const hatch = decide(trip, trip, { kind: 'model', model: 'hatch' }, NO_PROGRESS);
-    expect(hatch.kind).toBe('trip');
-    const after = hatch.kind === 'trip' ? hatch.car : trip;
+    expect(hatch.kind).toBe('save');
+    const after = hatch.kind === 'save' ? hatch.car : trip;
     expect(modelState('suv', NO_PROGRESS, after).status).toBe('locked');
   });
 

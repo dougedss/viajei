@@ -19,7 +19,7 @@ export type FilmArt = {
   team: readonly { name: string; color: string }[];
   /** as fotos dos nós, por id do anexo */
   photos: ReadonlyMap<string, Bitmap>;
-  /** o carro da viagem de lado (o `CarSide` como imagem), para o fundo sem 3D e os cards */
+  /** o carro de quem olha de lado (o `CarSide` como imagem), para o fundo sem 3D e os cards */
   car: Bitmap | null;
 };
 

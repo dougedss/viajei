@@ -3,6 +3,7 @@ import type {
   ChecklistItem,
   Contact,
   Expense,
+  Profile,
   Reservation,
   Stop,
   StopMemory,
@@ -24,6 +25,28 @@ export function insertable<T extends { synced_at: unknown }>(row: T): Omit<T, 's
   >;
 }
 
+/** O perfil com o carro padrão (fase 16): hatch Pôr do sol, liso, roda clássica. */
+export function makeProfile(over: Partial<Profile> = {}): Profile {
+  return {
+    id: UID,
+    name: 'Douglas',
+    color: 'sunset',
+    xp_total: 0,
+    achievement_keys: [],
+    car_model: 'hatch',
+    car_color: 'sunset',
+    car_accessories: [],
+    car_finish: 'solid',
+    car_wheels: 'classic',
+    notify_lead_minutes: 15,
+    notify_morning_time: '07:00:00',
+    created_at: '2026-11-01T10:00:00.000Z',
+    updated_at: '2026-11-01T10:00:00.000Z',
+    synced_at: null,
+    ...over,
+  };
+}
+
 export function makeTrip(over: Partial<Trip> = {}): Trip {
   return {
     id: TRIP_ID,
@@ -34,9 +57,6 @@ export function makeTrip(over: Partial<Trip> = {}): Trip {
     origin: 'Papanduva/SC',
     budget: 3000,
     notes: null,
-    car_model: 'hatch',
-    car_color: 'sunset',
-    car_accessories: [],
     created_at: '2026-11-01T10:00:00.000Z',
     updated_at: '2026-11-01T10:00:00.000Z',
     synced_at: null,

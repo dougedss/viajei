@@ -7,7 +7,8 @@ import { ButtonLink } from '@/components/ui/ButtonLink.tsx';
 import { EmptyState } from '@/components/ui/EmptyState.tsx';
 import { PageHeader } from '@/components/ui/PageHeader.tsx';
 import { PERSON_COLORS } from '@shared/constants.ts';
-import { normalizeCar } from '@/features/garage/rules.ts';
+import { useMyProfile } from '@/features/garage/my-car.ts';
+import { carOf } from '@/features/garage/rules.ts';
 import { StopSheet } from '@/features/itinerary/components/StopSheet.tsx';
 import { useTripDays } from '@/features/itinerary/queries.ts';
 import { useMissingRoutes } from '@/features/itinerary/route.ts';
@@ -52,6 +53,8 @@ export default function MapaPage() {
   const stops = useMapStops(tripId);
   const routes = useTripRoutes(tripId);
   const members = useTripMembers(tripId);
+  // o carro no "visto às" é o de quem olha (fase 16)
+  const myProfile = useMyProfile();
   const { session } = useSession();
   const uid = session?.user.id ?? '';
   const weather = useTripWeather(trip);
@@ -183,7 +186,7 @@ export default function MapaPage() {
                   }
                 : null
             }
-            car={normalizeCar(trip)}
+            car={carOf(myProfile, trip.name)}
             bounds={bounds}
             selectionKey={selectionKey}
             topInset={online ? 0 : OFFLINE_INSET}

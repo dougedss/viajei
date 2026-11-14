@@ -2,7 +2,7 @@ import { MapPinOff, RotateCcw, SkipForward } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router';
 import { readPalette } from '@/art/palette.ts';
-import { normalizeCar } from '@/features/garage/rules.ts';
+import { carOf } from '@/features/garage/rules.ts';
 import { statusOf, type StopStatus } from '@/features/travel-mode/rules.ts';
 import { audio, useSoundPref, writeSoundPref } from '@/lib/audio/index.ts';
 import { db, type Stop } from '@/lib/db/schema.ts';
@@ -140,7 +140,12 @@ function WorldStage(p: StageProps) {
   const quality = useQuality(tierFor);
   const soundPref = useSoundPref();
   const palette = useMemo(() => readPalette(), []);
-  const car = useMemo(() => normalizeCar(p.trip), [p.trip]);
+  // o carro é de quem olha, e o de cada pessoa do comboio é o dela (fase 16): os perfis do time
+  // chegam pelo pull da viagem, e funcionam sem sinal (D113)
+  const me = p.profiles.get(uid);
+  const car = useMemo(() => carOf(me, p.trip.name), [me, p.trip.name]);
+  const profiles = p.profiles;
+  const carFor = useCallback((userId: string) => carOf(profiles.get(userId), null), [profiles]);
   const [motion] = useState(() => new MotionController(layout.nodes[0]?.s ?? 0, reducedMotion));
   const [runtime] = useState(() => new WorldRuntime(layout, motion, p.night));
   const [backend, setBackend] = useState<Backend | null>(null);
@@ -492,6 +497,7 @@ function WorldStage(p: StageProps) {
           onFirstFrame={onFirstFrame}
           onTapStop={p.onOpenStop}
           convoy={p.convoy}
+          carFor={carFor}
         />
       </WorldCanvas>
       {!firstFrame ? (

@@ -14,7 +14,14 @@ export type LocalRow<T extends { field_versions: unknown; synced_at: string }> =
   'field_versions' | 'synced_at'
 > & { synced_at: string | null };
 
-export type Trip = LocalRow<Tables['trips']['Row']>;
+/**
+ * A viagem no aparelho. As colunas `car_*` ainda existem no banco (um PWA antigo em cache pode
+ * gravá-las; uma migration depois as tira), mas o carro é da pessoa desde a fase 16: o client novo
+ * não as lê nem as escreve, e o tipo não as tem.
+ */
+export type Trip = LocalRow<
+  Omit<Tables['trips']['Row'], 'car_model' | 'car_color' | 'car_accessories'>
+>;
 export type TripMember = LocalRow<Tables['trip_members']['Row']>;
 export type Profile = LocalRow<Tables['profiles']['Row']>;
 export type TripDay = LocalRow<Tables['trip_days']['Row']>;
@@ -39,6 +46,7 @@ export type Achievement = AppendRow<Tables['achievements']['Row']>;
 export type XpEvent = AppendRow<Tables['xp_events']['Row']>;
 
 export type RowOf<T extends SyncTable> = {
+  profiles: Profile;
   trips: Trip;
   trip_members: TripMember;
   trip_days: TripDay;

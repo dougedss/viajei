@@ -97,11 +97,13 @@ test('concluir uma parada → cartão do primeiro pé na estrada → Usar no car
   await card.getByRole('button', { name: 'Usar no carro' }).click();
   await expect(card).toHaveCount(0);
 
-  // o rack está no carro da viagem, no servidor e na garagem
+  // o rack está no carro da pessoa (o perfil, fase 16), no servidor e na garagem
+  const owner = (await linhas('trips', `id=eq.${tripId}&select=owner_id`))[0]?.owner_id;
   await expect
     .poll(
       async () =>
-        (await linhas('trips', `id=eq.${tripId}&select=car_accessories`))[0]?.car_accessories,
+        (await linhas('profiles', `id=eq.${String(owner)}&select=car_accessories`))[0]
+          ?.car_accessories,
       { timeout: 15_000 },
     )
     .toEqual(['rack']);

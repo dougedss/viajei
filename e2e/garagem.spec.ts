@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { dateInSaoPaulo } from './helpers/dates.ts';
+import { criarUsuarioDescartavel } from './helpers/users.ts';
 
 const SENHA = 'viajei123';
 
@@ -36,7 +37,8 @@ test('a garagem abre em 3D, a cor persiste e aparece no card, e o SUV é só pr�
 }) => {
   // o SwiftShader compila os shaders do estúdio devagar
   test.setTimeout(150_000);
-  await entrar(page, 'dono@viajei.local');
+  // o carro é da pessoa (fase 16): uma pessoa nova por execução, para a cor de uma não valer na outra
+  await entrar(page, await criarUsuarioDescartavel('Garagem'));
   const { url, nome } = await novaViagem(page);
 
   // o topo da visão geral leva à garagem

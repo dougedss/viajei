@@ -123,7 +123,7 @@ export const LAB_SCENARIOS = {
   app_progressao: {
     label: 'App · progressão',
     description:
-      'A primeira parada dá o cartão; "Usar no carro" põe o rack; XP de A e de B no servidor; a garagem de B',
+      'A primeira parada dá o cartão; "Usar no carro" põe o rack no carro de A; XP de A e de B no servidor; B vê o carro de A',
   },
   app_importar: {
     label: 'App · importar',

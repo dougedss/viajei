@@ -1,10 +1,9 @@
 import { ChevronRight } from 'lucide-react';
-import { useMemo } from 'react';
 import { Link } from 'react-router';
 import { CarSide } from '@/art/cars/CarSide.tsx';
 import { describeCar } from '@/art/cars/describe.ts';
 import { Chip } from '@/components/ui/Chip.tsx';
-import { normalizeCar } from '@/features/garage/rules.ts';
+import { useMyCar } from '@/features/garage/my-car.ts';
 import type { Trip } from '@/lib/db/schema.ts';
 import {
   formatMoney,
@@ -17,13 +16,13 @@ import {
 
 /**
  * O topo da visão geral, como no style tile: o céu em degradê (os tokens do céu trocam com o tema),
- * o período, a origem e o orçamento, e embaixo a estrada com o carro da viagem de lado, desenhado
- * do mesmo perfil do 3D. O carro leva à garagem.
+ * o período, a origem e o orçamento, e embaixo a estrada com o carro de quem olha de lado (o da
+ * pessoa, fase 16), desenhado do mesmo perfil do 3D. O carro leva à garagem.
  */
 type Props = { trip: Trip; today: string };
 
 export function TripHero({ trip, today }: Props) {
-  const car = useMemo(() => normalizeCar(trip), [trip]);
+  const car = useMyCar(trip.name);
   const days = tripLength(trip);
   const meta = [
     trip.origin ? `Sai de ${trip.origin}` : 'Origem não informada',
@@ -65,20 +64,22 @@ export function TripHero({ trip, today }: Props) {
             strokeDasharray="12 12"
           />
         </svg>
-        <Link
-          to={`/viagens/${trip.id}/garagem`}
-          aria-label={`Garagem: ${describeCar(car)}. Trocar o carro`}
-          className="group absolute right-3 bottom-[10px] flex min-h-12 items-end gap-1 rounded-button"
-        >
-          <span className="mb-1 inline-flex items-center rounded-full bg-card/85 px-2 py-0.5 text-[13px] font-semibold text-ink backdrop-blur-sm">
-            Garagem
-            <ChevronRight className="size-4" aria-hidden="true" />
-          </span>
-          <CarSide
-            car={car}
-            className="h-[84px] w-auto drop-shadow-[0_6px_6px_rgb(0_0_0/.25)] transition group-active:scale-[.98]"
-          />
-        </Link>
+        {car ? (
+          <Link
+            to={`/viagens/${trip.id}/garagem`}
+            aria-label={`Garagem: ${describeCar(car)}. Trocar o carro`}
+            className="group absolute right-3 bottom-[10px] flex min-h-12 items-end gap-1 rounded-button"
+          >
+            <span className="mb-1 inline-flex items-center rounded-full bg-card/85 px-2 py-0.5 text-[13px] font-semibold text-ink backdrop-blur-sm">
+              Garagem
+              <ChevronRight className="size-4" aria-hidden="true" />
+            </span>
+            <CarSide
+              car={car}
+              className="h-[84px] w-auto drop-shadow-[0_6px_6px_rgb(0_0_0/.25)] transition group-active:scale-[.98]"
+            />
+          </Link>
+        ) : null}
       </div>
     </section>
   );

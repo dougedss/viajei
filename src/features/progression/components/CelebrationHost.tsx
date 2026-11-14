@@ -10,7 +10,8 @@ import { Sheet } from '@/components/ui/Sheet.tsx';
 import { useAnySheetOpen } from '@/components/ui/sheet-stack.ts';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { saveCar } from '@/features/garage/actions.ts';
-import { decide, normalizeCar, type Tap } from '@/features/garage/rules.ts';
+import { useMyProfile } from '@/features/garage/my-car.ts';
+import { carOf, decide, type Tap } from '@/features/garage/rules.ts';
 import { STUDIO_BACKGROUND } from '@/features/garage/scene/studio-colors.ts';
 import { useTrip, useTripMembers } from '@/features/trips/queries.ts';
 import { audio } from '@/lib/audio/index.ts';
@@ -182,7 +183,9 @@ function UnlockSheet({
   }, [reduced]);
 
   const tap = tapFor(celebration);
-  const car = trip ? normalizeCar(trip) : null;
+  // o carro é da pessoa (fase 16): o cartão mostra o dela, com o nome da viagem na placa quando há
+  const profile = useMyProfile();
+  const car = profile === undefined ? null : carOf(profile, trip?.name ?? profile?.name ?? null);
   const outcome = car && tap ? decide(car, car, tap, progress) : null;
   const already =
     car !== null &&
@@ -190,7 +193,7 @@ function UnlockSheet({
     (tap.kind === 'accessory'
       ? car.accessories.includes(tap.key)
       : tap.kind === 'model' && car.model === tap.model);
-  const after: CarSpec | null = outcome?.kind === 'trip' ? outcome.car : null;
+  const after: CarSpec | null = outcome?.kind === 'save' ? outcome.car : null;
 
   const close = useCallback(() => {
     setClosing(true);
@@ -198,9 +201,9 @@ function UnlockSheet({
   }, [id]);
 
   const use = () => {
-    if (!trip || outcome?.kind !== 'trip') return;
-    void saveCar(trip.id, outcome.patch)
-      .then(() => toast.show({ title: `${text.unlock} no carro da viagem`, kind: 'ok' }))
+    if (outcome?.kind !== 'save') return;
+    void saveCar(outcome.patch)
+      .then(() => toast.show({ title: `${text.unlock} no seu carro`, kind: 'ok' }))
       .catch(() => toast.show({ title: 'Não deu para pôr no carro', kind: 'late' }));
     close();
   };
@@ -251,7 +254,7 @@ function UnlockSheet({
 const CARD_STAGE = { level: 'leve', spinMs: 4_000 } as const;
 
 /**
- * O carro da viagem com o desbloqueio: em 3D, o acessório encaixa (ou o modelo novo entra) no palco
+ * O carro da pessoa com o desbloqueio: em 3D, o acessório encaixa (ou o modelo novo entra) no palco
  * da garagem, com as luzes que ele já tem; sem WebGL ou com reduzir movimento, a vista lateral já
  * com o acessório.
  */
@@ -303,7 +306,7 @@ function UnlockStage({ before, after }: { before: CarSpec; after: CarSpec }) {
           </Suspense>
         </ThreeBoundary>
       )}
-      <span className="sr-only">{CAR_MODELS[after.model].label} da viagem</span>
+      <span className="sr-only">O seu {CAR_MODELS[after.model].label}</span>
     </div>
   );
 }

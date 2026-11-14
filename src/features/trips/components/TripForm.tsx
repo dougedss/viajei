@@ -22,7 +22,7 @@ const EMPTY: TripFormInput = {
   notes: '',
 };
 
-/** Nome, datas, origem, orçamento e observações. O carro da viagem fica para a garagem (fase 6). */
+/** Nome, datas, origem, orçamento e observações. O carro é da pessoa, na garagem do perfil (fase 16). */
 export function TripForm({ defaultValues = EMPTY, submitLabel, onSubmit, alternate }: Props) {
   const form = useForm<TripFormInput, unknown, TripFormValues>({
     resolver: zodResolver(tripFormSchema),

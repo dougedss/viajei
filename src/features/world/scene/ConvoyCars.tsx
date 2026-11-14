@@ -9,28 +9,35 @@ import type { WorldRuntime } from './runtime.ts';
 /**
  * O comboio (fase 14, D179): quem do time está em outro carro aparece pequeno na estrada, na última
  * posição que mandou, numa cor apagada; nada de nomes nem rastros. Um carro por pessoa, construído
- * pelo mesmo `buildCar` (sem os feixes dos faróis), na faixa da direita, olhando para a frente. A
- * especificação do carro vem por membro (`carFor`): hoje é o carro da viagem em névoa; a fase 16
- * troca pelo carro de cada pessoa.
+ * pelo mesmo `buildCar` (sem os feixes dos faróis), na faixa da direita, olhando para a frente. O
+ * carro é o de cada pessoa (`carFor`, o perfil dela, fase 16): quem viaja junto reconhece o carro do
+ * outro pelo modelo, pela cor e pelo que vai nele.
  */
 type Props = {
   runtime: WorldRuntime;
   cars: readonly ConvoyCar[];
-  /** o carro de cada membro; por padrão, o carro da viagem em névoa */
+  /** o carro de cada membro, o do perfil dele */
   carFor: (userId: string) => CarSpec;
   group: Group;
 };
 
-/** menor que o carro da viagem, para a hierarquia ficar clara */
+/** O que muda o carro montado: um carro novo quando a pessoa troca qualquer coisa nele. */
+function specKey(c: CarSpec): string {
+  return `${c.model}|${c.color}|${c.accessories.join(',')}`;
+}
+
+/** menor que o carro de quem olha, para a hierarquia ficar clara */
 export const CONVOY_SCALE = 0.85;
-/** na faixa da direita (em unidades da cena), para não se sobrepor ao carro da viagem */
+/** na faixa da direita (em unidades da cena), para não se sobrepor ao carro de quem olha */
 const LANE_OFFSET = 0.9;
 
 type Placed = { userId: string; rig: CarRig; fraction: number };
 
 export function ConvoyCars({ runtime, cars, carFor, group }: Props) {
   const invalidate = useThree((s) => s.invalidate);
-  const key = cars.map((c) => `${c.user_id}:${c.fraction.toFixed(4)}`).join(',');
+  const key = cars
+    .map((c) => `${c.user_id}:${c.fraction.toFixed(4)}:${specKey(carFor(c.user_id))}`)
+    .join(',');
 
   const placed = useMemo<Placed[]>(
     () =>
@@ -39,7 +46,7 @@ export function ConvoyCars({ runtime, cars, carFor, group }: Props) {
         fraction: c.fraction,
         rig: buildCar(carFor(c.user_id), { beams: false }),
       })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- um carro por pessoa e posição; `carFor` é estável
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- um carro por pessoa, posição e carro (a chave)
     [key],
   );
 

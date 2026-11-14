@@ -42,6 +42,8 @@ export type WorldSceneProps = {
   onTapStop?: ((stopId: string) => void) | undefined;
   /** o comboio: quem do time está em outro carro (D179) */
   convoy?: readonly ConvoyCar[] | undefined;
+  /** o carro de cada pessoa do comboio, o do perfil dela (fase 16) */
+  carFor?: ((userId: string) => CarSpec) | undefined;
   /**
    * A câmera e o laço de outra cena sobre o mesmo cenário (o filme da retrospectiva, fase 9). Sem
    * isto, a câmera que segue o carro e o laço da maquete.
@@ -61,6 +63,7 @@ export function WorldScene({
   onFirstFrame,
   onTapStop,
   convoy,
+  carFor,
   controls,
 }: WorldSceneProps) {
   const gl = useThree((s) => s.gl) as unknown as WebGPURenderer;
@@ -135,7 +138,9 @@ export function WorldScene({
         <ConvoyCars
           runtime={runtime}
           cars={convoy}
-          carFor={() => ({ model: car.model, color: 'mist', accessories: [], plate: null })}
+          carFor={
+            carFor ?? (() => ({ model: car.model, color: 'mist', accessories: [], plate: null }))
+          }
           group={groups.objects}
         />
       ) : null}

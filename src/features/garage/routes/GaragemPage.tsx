@@ -24,7 +24,8 @@ import { useThemeOverride } from '@/lib/theme.ts';
 import { CAR_MODELS } from '@shared/constants.ts';
 import { saveCar } from '../actions.ts';
 import { OptionRows } from '../components/OptionRows.tsx';
-import { decide, droppedMessage, modelState, normalizeCar, type Tap } from '../rules.ts';
+import { useMyProfile } from '../my-car.ts';
+import { carOf, decide, droppedMessage, modelState, type Tap } from '../rules.ts';
 import { STUDIO_BACKGROUND } from '../scene/studio-colors.ts';
 
 const GarageStage = lazy(() => import('../components/GarageStage.tsx'));
@@ -61,7 +62,9 @@ function Garage({
   progress: TeamProgress;
   search: string;
 }) {
-  const tripCar = useMemo(() => normalizeCar(trip), [trip]);
+  // o carro é da pessoa (fase 16): o do perfil, com o nome da viagem na placa
+  const myProfile = useMyProfile();
+  const tripCar = useMemo(() => carOf(myProfile, trip.name), [myProfile, trip.name]);
   const [preview, setPreview] = useState<Preview | null>(null);
   const shown = preview?.car ?? tripCar;
   const toast = useToast();
@@ -99,7 +102,7 @@ function Garage({
       return;
     }
     setPreview(null);
-    void saveCar(trip.id, out.patch).catch(() =>
+    void saveCar(out.patch).catch(() =>
       toast.show({ title: 'Não deu para salvar a escolha', kind: 'late' }),
     );
   };

@@ -30,7 +30,8 @@ select throws_ok($$select public.sync_push('{"seq":1}'::jsonb)$$, '22023', 'lote
 
 -- whitelist
 select pg_temp.login('a1111111-1111-4111-8111-111111111111');
-select is(pg_temp.push1('{"seq":1,"table":"profiles","id":"a1111111-1111-4111-8111-111111111111","op":"patch","values":{"name":"x"},"versions":{"name":"2026-11-01T10:00:00-03:00"},"updated_at":"2026-11-01T10:00:00-03:00"}'),
+-- (o perfil entrou na whitelist na fase 16; as assinaturas push são do aparelho e nunca sincronizam)
+select is(pg_temp.push1('{"seq":1,"table":"push_subscriptions","id":"a1111111-1111-4111-8111-111111111111","op":"patch","values":{"endpoint":"https://x"},"versions":{"endpoint":"2026-11-01T10:00:00-03:00"},"updated_at":"2026-11-01T10:00:00-03:00"}'),
           'error|42501|[]', 'tabela fora da whitelist devolve error 42501');
 
 -- upsert cria a viagem como o usuário (RLS vale) e o dono entra em trip_members pelo trigger

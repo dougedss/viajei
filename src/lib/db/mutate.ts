@@ -109,8 +109,8 @@ async function putPatch(
 
 /**
  * A única porta de escrita nas tabelas sincronizadas. Atualiza a linha local e enfileira na
- * outbox na mesma transação Dexie, online ou offline: UI e fila nunca divergem. Perfil não passa
- * por aqui (é editado online, pelo TanStack Query).
+ * outbox na mesma transação Dexie, online ou offline: UI e fila nunca divergem. Do perfil, só o
+ * carro e os padrões dos avisos passam por aqui (fase 16); nome e cor são editados online.
  */
 export const mutate = {
   /** Linha nova, com id gerado no client. Vai como `upsert` com todas as colunas. */
