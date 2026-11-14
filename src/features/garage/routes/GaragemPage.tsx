@@ -1,7 +1,6 @@
 import { Award, Eye } from 'lucide-react';
 import { lazy, Suspense, useCallback, useMemo, useState } from 'react';
-import { useLocation, useParams } from 'react-router';
-import { NotFound } from '@/app/NotFound.tsx';
+import { useLocation } from 'react-router';
 import { Splash } from '@/app/Splash.tsx';
 import { CarSide } from '@/art/cars/CarSide.tsx';
 import type { CarSpec } from '@/art/cars/types.ts';
@@ -10,11 +9,10 @@ import { PageHeader } from '@/components/ui/PageHeader.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { FULL_PROGRESS, levelName, type TeamProgress } from '@/features/progression/team.ts';
 import { CelebrationHost } from '@/features/progression/components/CelebrationHost.tsx';
-import { useTeamProgress } from '@/features/progression/useTeamProgress.ts';
-import { useTrip } from '@/features/trips/queries.ts';
+import { useMyCarProgress } from '@/features/progression/useTeamProgress.ts';
 import { audio } from '@/lib/audio/index.ts';
 import { vibrate } from '@/lib/celebrate.ts';
-import type { Trip } from '@/lib/db/schema.ts';
+import type { Profile } from '@/lib/db/schema.ts';
 import { useReducedMotion } from '@/lib/reduced-motion.ts';
 import { readUrlFlags } from '@/lib/three/prefs.ts';
 import type { Backend } from '@/lib/three/renderer.ts';
@@ -24,6 +22,7 @@ import { useThemeOverride } from '@/lib/theme.ts';
 import { CAR_MODELS } from '@shared/constants.ts';
 import { saveCar } from '../actions.ts';
 import { OptionRows } from '../components/OptionRows.tsx';
+import { garageBack } from '../links.ts';
 import { useMyProfile } from '../my-car.ts';
 import { carOf, decide, droppedMessage, modelState, type Tap } from '../rules.ts';
 import { STUDIO_BACKGROUND } from '../scene/studio-colors.ts';
@@ -31,42 +30,45 @@ import { STUDIO_BACKGROUND } from '../scene/studio-colors.ts';
 const GarageStage = lazy(() => import('../components/GarageStage.tsx'));
 
 /**
- * A garagem da viagem (`/viagens/:tripId/garagem`): o showroom 3D com o carro da viagem no disco e
- * as linhas de Modelo, Pintura e Acessórios. O carro é da viagem e qualquer membro muda; o que está
- * liberado vem do progresso do time. Tocar em algo bloqueado mostra a prévia, que nunca grava. Sem
- * WebGL2, com `?render=list` ou se o 3D falhar, a mesma tela com a vista lateral grande.
+ * A garagem da pessoa (`/perfil/garagem`, fase 16): o showroom 3D com o carro dela no disco e as
+ * linhas de Modelo, Pintura e Acessórios. O carro é da pessoa, o mesmo em qualquer viagem, e o que
+ * está liberado vem do progresso dela. Tocar em algo bloqueado mostra a prévia, que nunca grava. Sem
+ * WebGL2, com `?render=list` ou se o 3D falhar, a mesma tela com a vista lateral grande. O "voltar"
+ * leva para onde a pessoa estava (`state.back`); sem isso, ao perfil.
  */
 export default function GaragemPage() {
-  const { tripId = '' } = useParams();
-  const trip = useTrip(tripId);
-  const team = useTeamProgress(tripId);
-  const { search } = useLocation();
+  const profile = useMyProfile();
+  const mine = useMyCarProgress();
+  const location = useLocation();
+  const search = location.search;
+  const state: unknown = location.state;
   // conferência visual em dev: tudo liberado; no build de produção esta linha nem existe
   const devAll = import.meta.env.DEV && new URLSearchParams(search).get('garagem') === 'tudo';
-  const progress = devAll ? FULL_PROGRESS : team;
+  const progress = devAll ? FULL_PROGRESS : mine;
   useThemeOverride('dark');
 
-  if (trip === undefined) return <Splash />;
-  if (trip === null) return <NotFound />;
-  return <Garage trip={trip} progress={progress} search={search} />;
+  if (profile === undefined) return <Splash />;
+  return <Garage profile={profile} progress={progress} search={search} back={garageBack(state)} />;
 }
 
 type Preview = { car: CarSpec; hints: string[] };
 
 function Garage({
-  trip,
+  profile,
   progress,
   search,
+  back,
 }: {
-  trip: Trip;
+  /** `null`: o perfil ainda não chegou a este aparelho (vale o carro padrão até o primeiro sync) */
+  profile: Profile | null;
   progress: TeamProgress;
   search: string;
+  back: string;
 }) {
-  // o carro é da pessoa (fase 16): o do perfil, com o nome da viagem na placa
-  const myProfile = useMyProfile();
-  const tripCar = useMemo(() => carOf(myProfile, trip.name), [myProfile, trip.name]);
+  // fora de uma viagem, a placa personalizada leva o nome da pessoa
+  const myCar = useMemo(() => carOf(profile, profile?.name ?? null), [profile]);
   const [preview, setPreview] = useState<Preview | null>(null);
-  const shown = preview?.car ?? tripCar;
+  const shown = preview?.car ?? myCar;
   const toast = useToast();
   const reducedMotion = useReducedMotion();
   const support = useSupport();
@@ -86,7 +88,7 @@ function Garage({
   };
 
   const onTap = (tap: Tap) => {
-    const out = decide(tripCar, shown, tap, progress);
+    const out = decide(myCar, shown, tap, progress);
     if (out.kind === 'refuse') {
       toast.show({ title: out.reason, kind: 'info' });
       return;
@@ -108,15 +110,15 @@ function Garage({
   };
 
   const model = CAR_MODELS[shown.model];
-  const state = modelState(shown.model, progress, tripCar);
+  const state = modelState(shown.model, progress, myCar);
   const status = preview ? 'prévia' : model.level === 1 ? 'livre' : `nv ${model.level}`;
 
   return (
     <div className="grid gap-5">
       <PageHeader
-        back={`/viagens/${trip.id}/detalhes`}
+        back={back}
         title="Garagem"
-        eyebrow={<span className="label-caps text-accent-ink">{trip.name}</span>}
+        eyebrow={<span className="label-caps text-accent-ink">O seu carro</span>}
         actions={
           <span className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-card px-3 font-num text-[15px] font-semibold text-accent-ink shadow-[inset_0_0_0_1px_var(--color-line)]">
             <Award className="size-4" aria-hidden="true" />
@@ -126,7 +128,7 @@ function Garage({
       />
 
       {/* abrir a garagem é um momento calmo: o resumo ou o cartão de desbloqueio sai aqui */}
-      <CelebrationHost active tripId={trip.id} />
+      <CelebrationHost active />
 
       <div
         className="relative isolate -mx-4 h-[clamp(320px,52svh,560px)] overflow-hidden sm:mx-0 sm:rounded-card"
@@ -180,17 +182,17 @@ function Garage({
             ))}
           </ul>
           <Button variant="secondary" onClick={() => setPreview(null)}>
-            Voltar ao carro da viagem
+            Voltar ao seu carro
           </Button>
         </section>
       ) : state.status === 'kept' ? (
         <p className="text-[14px] text-ink-2">
-          Este modelo continua na viagem. Se trocar, ele só volta no nível {model.level} (
+          Este modelo continua no seu carro. Se trocar, ele só volta no nível {model.level} (
           {levelName(model.level)}).
         </p>
       ) : null}
 
-      <OptionRows trip={tripCar} shown={shown} progress={progress} onTap={onTap} />
+      <OptionRows trip={myCar} shown={shown} progress={progress} onTap={onTap} />
     </div>
   );
 }

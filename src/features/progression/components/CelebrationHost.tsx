@@ -10,6 +10,7 @@ import { Sheet } from '@/components/ui/Sheet.tsx';
 import { useAnySheetOpen } from '@/components/ui/sheet-stack.ts';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { saveCar } from '@/features/garage/actions.ts';
+import { useGarageLink } from '@/features/garage/links.ts';
 import { useMyProfile } from '@/features/garage/my-car.ts';
 import { carOf, decide, type Tap } from '@/features/garage/rules.ts';
 import { STUDIO_BACKGROUND } from '@/features/garage/scene/studio-colors.ts';
@@ -101,6 +102,7 @@ async function dropFirst(id: string): Promise<void> {
 // ------------------------------------------------------------------ o resumo calmo
 function SummaryCard({ summary, tripId }: { summary: Summary; tripId: string | undefined }) {
   const members = useTripMembers(tripId ?? '');
+  const garage = useGarageLink();
   const solo = members.filter((m) => m.member.status === 'accepted').length <= 1;
   const close = useCallback(() => void db.sync_state.delete(progressKeys.summary), []);
   return (
@@ -134,11 +136,9 @@ function SummaryCard({ summary, tripId }: { summary: Summary; tripId: string | u
           ))}
         </ul>
       ) : null}
-      {tripId ? (
-        <ButtonLink to={`/viagens/${tripId}/garagem`} variant="secondary" size="md" onClick={close}>
-          Ver na garagem
-        </ButtonLink>
-      ) : null}
+      <ButtonLink to={garage.to} state={garage.state} variant="secondary" size="md" onClick={close}>
+        Ver na garagem
+      </ButtonLink>
     </section>
   );
 }
@@ -185,6 +185,7 @@ function UnlockSheet({
   const tap = tapFor(celebration);
   // o carro é da pessoa (fase 16): o cartão mostra o dela, com o nome da viagem na placa quando há
   const profile = useMyProfile();
+  const garage = useGarageLink();
   const car = profile === undefined ? null : carOf(profile, trip?.name ?? profile?.name ?? null);
   const outcome = car && tap ? decide(car, car, tap, progress) : null;
   const already =
@@ -231,16 +232,17 @@ function UnlockSheet({
             <Button size="lg" onClick={use}>
               Usar no carro
             </Button>
-          ) : trip ? (
+          ) : (
             <ButtonLink
-              to={`/viagens/${trip.id}/garagem`}
+              to={garage.to}
+              state={garage.state}
               variant="secondary"
               size="md"
               onClick={close}
             >
               Abrir a garagem
             </ButtonLink>
-          ) : null}
+          )}
           <Button variant="secondary" size="md" onClick={close}>
             {after && !already ? 'Agora não' : 'Fechar'}
           </Button>

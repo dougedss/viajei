@@ -123,8 +123,10 @@ export const router = createBrowserRouter([
                 lazy: page(() => import('@/features/memories/routes/DiarioPage.tsx')),
               },
               {
+                // a garagem antiga: o carro é da pessoa desde a fase 16 e a garagem mora no perfil;
+                // redireciona com a query, e o "voltar" de lá leva de volta à viagem
                 path: '/viagens/:tripId/garagem',
-                lazy: page(() => import('@/features/garage/routes/GaragemPage.tsx')),
+                lazy: page(() => import('@/features/garage/routes/GaragemRedirect.tsx')),
               },
               {
                 path: '/viagens/:tripId/retrospectiva',
@@ -145,6 +147,10 @@ export const router = createBrowserRouter([
               {
                 path: '/perfil',
                 lazy: page(() => import('@/features/profile/routes/PerfilPage.tsx')),
+              },
+              {
+                path: '/perfil/garagem',
+                lazy: page(() => import('@/features/garage/routes/GaragemPage.tsx')),
               },
             ],
           },

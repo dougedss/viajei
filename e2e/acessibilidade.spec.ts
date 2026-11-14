@@ -243,7 +243,7 @@ for (const tema of ['light', 'dark'] as const) {
       [`${t}/contatos`, 'Contatos'],
       [`${t}/gastos`, 'Gastos'],
       [`${t}/diario`, 'Diário'],
-      [`${t}/garagem?render=list`, 'Garagem'],
+      ['/perfil/garagem?render=list', 'Garagem'],
       [`${t}/avisos`, 'Avisos'],
       [`${t}/membros`, /^Time$/],
       [`${t}/mapa`, 'Mapa'],

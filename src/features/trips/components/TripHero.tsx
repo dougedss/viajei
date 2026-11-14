@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { CarSide } from '@/art/cars/CarSide.tsx';
 import { describeCar } from '@/art/cars/describe.ts';
 import { Chip } from '@/components/ui/Chip.tsx';
+import { useGarageLink } from '@/features/garage/links.ts';
 import { useMyCar } from '@/features/garage/my-car.ts';
 import type { Trip } from '@/lib/db/schema.ts';
 import {
@@ -23,6 +24,7 @@ type Props = { trip: Trip; today: string };
 
 export function TripHero({ trip, today }: Props) {
   const car = useMyCar(trip.name);
+  const garage = useGarageLink();
   const days = tripLength(trip);
   const meta = [
     trip.origin ? `Sai de ${trip.origin}` : 'Origem não informada',
@@ -66,7 +68,8 @@ export function TripHero({ trip, today }: Props) {
         </svg>
         {car ? (
           <Link
-            to={`/viagens/${trip.id}/garagem`}
+            to={garage.to}
+            state={garage.state}
             aria-label={`Garagem: ${describeCar(car)}. Trocar o carro`}
             className="group absolute right-3 bottom-[10px] flex min-h-12 items-end gap-1 rounded-button"
           >

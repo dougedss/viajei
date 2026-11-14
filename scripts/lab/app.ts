@@ -656,8 +656,10 @@ const TELAS_DA_VIAGEM = [
   'diario',
   'avisos',
   'membros',
-  'garagem?render=list',
 ] as const;
+
+/** As telas do perfil (fase 16): o perfil em seções e a garagem da pessoa. */
+const TELAS_DO_PERFIL = ['/perfil', '/perfil/garagem?render=list'] as const;
 
 export function appExtras(app: App): Promise<Check> {
   const { page, target } = app;
@@ -734,10 +736,12 @@ export function appExtras(app: App): Promise<Check> {
               achados.push(`/${path}: ${a}`);
             }
           }
-          await page.goto(`${target.appUrl}/viagens`);
-          await page.locator('h1').first().waitFor();
-          for (const a of await page.evaluate<string[]>(ROLAGEM_LATERAL))
-            achados.push(`/viagens: ${a}`);
+          for (const path of ['/viagens', ...TELAS_DO_PERFIL]) {
+            await page.goto(`${target.appUrl}${path}`);
+            await page.locator('h1').first().waitFor();
+            for (const a of await page.evaluate<string[]>(ROLAGEM_LATERAL))
+              achados.push(`${path}: ${a}`);
+          }
           if (achados.length > 0) throw new Error(achados.join(' || '));
         },
       ],

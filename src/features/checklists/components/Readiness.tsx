@@ -9,6 +9,7 @@ import { Ring } from '@/components/ui/Ring.tsx';
 import { Sheet } from '@/components/ui/Sheet.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { saveCar } from '@/features/garage/actions.ts';
+import { useGarageLink } from '@/features/garage/links.ts';
 import { useMyProfile } from '@/features/garage/my-car.ts';
 import { carOf, decide } from '@/features/garage/rules.ts';
 import { useTeamProgress } from '@/features/progression/useTeamProgress.ts';
@@ -139,6 +140,7 @@ export function ReadyCelebration({
   const when = days <= 1 ? 'na véspera da estrada' : `a ${days} dias da estrada`;
   // o carro é da pessoa (fase 16): a mala vai no carro dela, com o nome da viagem na placa
   const profile = useMyProfile();
+  const garage = useGarageLink();
   const car = carOf(profile, trip.name);
   const preview = carOf(
     { ...profile, car_accessories: [...car.accessories, 'rack', 'box'] },
@@ -177,7 +179,7 @@ export function ReadyCelebration({
               Usar no carro
             </Button>
           ) : null}
-          <ButtonLink to={`/viagens/${trip.id}/garagem`} variant="secondary" size="md">
+          <ButtonLink to={garage.to} state={garage.state} variant="secondary" size="md">
             Ver a garagem
           </ButtonLink>
           {/* "Fechar" sempre: a mala continua liberada na garagem */}

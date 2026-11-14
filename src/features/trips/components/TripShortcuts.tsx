@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router';
 import { CAR_MODELS } from '@shared/constants.ts';
+import { useGarageLink, type GarageState } from '@/features/garage/links.ts';
 import { useMyCar } from '@/features/garage/my-car.ts';
 import type { Trip } from '@/lib/db/schema.ts';
 
@@ -34,7 +35,15 @@ type Props = {
   located: number;
 };
 
-type Tile = { to: string; label: string; value: string; icon: LucideIcon; color: string };
+type Tile = {
+  to: string;
+  /** só a garagem: de onde a pessoa veio, para o "voltar" de lá */
+  state?: GarageState;
+  label: string;
+  value: string;
+  icon: LucideIcon;
+  color: string;
+};
 
 export function TripShortcuts({
   trip,
@@ -48,6 +57,7 @@ export function TripShortcuts({
 }: Props) {
   // o carro é de quem olha (fase 16): o mesmo em toda viagem
   const car = useMyCar(trip.name);
+  const garage = useGarageLink();
   const tiles: Tile[] = [
     {
       to: `/viagens/${trip.id}/roteiro`,
@@ -99,7 +109,8 @@ export function TripShortcuts({
       color: '#D6567C',
     },
     {
-      to: `/viagens/${trip.id}/garagem`,
+      to: garage.to,
+      state: garage.state,
       label: 'Garagem',
       value: car ? CAR_MODELS[car.model].label.toLowerCase() : '',
       icon: CarFront,
@@ -112,6 +123,7 @@ export function TripShortcuts({
         <Link
           key={t.label}
           to={t.to}
+          state={t.state}
           aria-label={`${t.label}: ${t.value}`}
           className="grid min-h-[88px] content-center justify-items-center gap-1 rounded-[16px] bg-card px-1 text-center shadow-[inset_0_0_0_1px_var(--color-line)]"
         >

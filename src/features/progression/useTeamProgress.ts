@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useMemo } from 'react';
+import { useMyProfile } from '@/features/garage/my-car.ts';
 import { useTripMembers } from '@/features/trips/queries.ts';
 import { db } from '@/lib/db/schema.ts';
 import { useSession } from '@/lib/supabase/session.ts';
@@ -75,5 +76,24 @@ export function useTeamLevel(tripId: string): { progress: LevelProgress; solo: b
   return useMemo(
     () => ({ progress: levelProgress(teamXp(standings)), solo: standings.length <= 1 }),
     [standings],
+  );
+}
+
+/**
+ * O progresso que libera o carro (fase 16): o carro é da pessoa, então quem libera é o progresso
+ * dela, não o maior nível do time. O nível sai do XP dela (as linhas do aparelho, ou o resumo do
+ * perfil quando ele está adiante, vindo de outro aparelho; D113) e as conquistas são as dela.
+ */
+export function useMyCarProgress(): TeamProgress {
+  const { session } = useSession();
+  const uid = session?.user.id ?? '';
+  const mine = useMyProgress();
+  const profile = useMyProfile();
+  return useMemo(
+    () =>
+      teamOf([
+        standingOf(uid, { uid, xp: mine.xp, achievements: mine.achievements }, profile ?? null),
+      ]),
+    [uid, mine, profile],
   );
 }

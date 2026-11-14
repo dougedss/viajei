@@ -29,8 +29,8 @@ const swatch = (page: Page, nome: string) =>
 
 /**
  * O Chromium do Playwright desenha WebGL2 pelo SwiftShader: a garagem tem de abrir nesse motor. A
- * cor escolhida grava pela outbox e volta depois de recarregar, no palco e no card da viagem. O
- * SUV (nível 3) só abre a prévia: a viagem continua com o hatch.
+ * cor escolhida grava no perfil pela outbox e volta depois de recarregar, no palco e no card da
+ * viagem. O SUV (nível 3) só abre a prévia: o carro continua o hatch.
  */
 test('a garagem abre em 3D, a cor persiste e aparece no card, e o SUV é só prévia', async ({
   page,
@@ -41,9 +41,9 @@ test('a garagem abre em 3D, a cor persiste e aparece no card, e o SUV é só pr�
   await entrar(page, await criarUsuarioDescartavel('Garagem'));
   const { url, nome } = await novaViagem(page);
 
-  // o topo da visão geral leva à garagem
+  // o topo da visão geral leva à garagem, que é do perfil (fase 16)
   await page.getByRole('link', { name: /^Garagem: Hatch Pôr do sol/ }).click();
-  await expect(page).toHaveURL(`${url}/garagem`);
+  await expect(page).toHaveURL(/\/perfil\/garagem$/);
   await expect(page.getByRole('heading', { name: 'Garagem' })).toBeVisible();
   await expect(page.locator('[data-garage="webgl2"], [data-garage="webgpu"]')).toBeVisible({
     timeout: 60_000,
@@ -69,10 +69,18 @@ test('a garagem abre em 3D, a cor persiste e aparece no card, e o SUV é só pr�
   const card = page.getByRole('link', { name: nome });
   await expect(card.locator('svg[data-car-model="hatch"][data-car-color="sky"]')).toBeVisible();
 
-  // a prévia de um modelo bloqueado: mostra, diz o que falta, não grava
+  // a garagem antiga redireciona, com a query, e o "voltar" leva de volta à viagem
+  await page.goto(`${url}/detalhes`);
   await page.goto(`${url}/garagem?render=list`);
+  await expect(page).toHaveURL(/\/perfil\/garagem\?render=list$/);
   const palco = page.locator('[data-garage="svg"]');
   await expect(palco).toBeVisible();
+  await page.getByRole('link', { name: 'Voltar' }).click();
+  await expect(page).toHaveURL(`${url}/detalhes`);
+  await page.goto(`${url}/garagem?render=list`);
+  await expect(palco).toBeVisible();
+
+  // a prévia de um modelo bloqueado: mostra, diz o que falta, não grava
   // o nome é o que está escrito no botão; o que falta para liberar vem na descrição
   const suv = page.getByRole('region', { name: 'Modelo' }).getByRole('button', { name: 'SUV' });
   await expect(suv).toHaveAccessibleDescription(
@@ -83,7 +91,7 @@ test('a garagem abre em 3D, a cor persiste e aparece no card, e o SUV é só pr�
     'SUV: no nível 3 (Explorador)',
   );
   await expect(palco.locator('svg[data-car-model="suv"]')).toBeVisible();
-  await page.getByRole('button', { name: 'Voltar ao carro da viagem' }).click();
+  await page.getByRole('button', { name: 'Voltar ao seu carro' }).click();
   await expect(palco.locator('svg[data-car-model="hatch"]')).toBeVisible();
 
   await suv.click();
