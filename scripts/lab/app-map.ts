@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { OPEN_METEO_URL } from '../../supabase/functions/_shared/weather.ts';
 import { uuidV5 } from '../../src/lib/ids/uuid.ts';
 import { DEVICE, enterPreview, QUIET, signInPage, TIMEOUT } from './app.ts';
 import { syncPush } from './client.ts';
@@ -16,7 +17,12 @@ import { kindsOnly, sleep, type Session } from './session.ts';
  *    política); confere os pinos, a rota real (`route-day`), a atribuição visível, pelo menos um tile
  *    no cache `osm-tiles` com status 200 e, sem rede, depois de recarregar, os tiles do cache e o aviso;
  *  - `app_clima`: a mesma viagem na visão geral, com o Open-Meteo de verdade pelo navegador: a faixa
- *    tem os números de hoje; sem rede, depois de recarregar, aparece o "atualizado às".
+ *    tem os números de hoje; sem rede, depois de recarregar, aparece o "atualizado às". O que o
+ *    Open-Meteo respondeu fica em `data.open_meteo`; se ele não respondeu (erro, cota, sem DNS) nem na
+ *    nova tentativa do app (30 s depois), o cenário pula com o motivo: o serviço é de fora, e um
+ *    vermelho por ele seria ruído (como a cota da importação). Se ele respondeu e a faixa não veio,
+ *    ou o app nem perguntou, é vermelho: aí é o app (a 3.0 da fase 16; o vermelho de 13/11 não
+ *    guardou o que o Open-Meteo disse).
  * A viagem segue a D53: id fixo, paradas novas a cada execução, avisos desligados.
  */
 export type MapContext = {
@@ -203,7 +209,13 @@ export async function appMapaClima(ctx: MapContext, today: string): Promise<Chec
     tiles_no_cache?: number;
     tiles_sem_rede?: number;
   } = {};
-  const climaData: { hoje?: { max: string; min: string }; atualizado?: string } = {};
+  const climaData: {
+    hoje?: { max: string; min: string };
+    atualizado?: string;
+    open_meteo?: { status: number | null; erro?: string; ms: number }[];
+  } = {};
+  // o serviço de fora não respondeu: o motivo do skip (numa caixa: é escrito dentro dos passos)
+  const fora: { motivo: string | null } = { motivo: null };
   const ENTER = 'A entra e o service worker assume';
   try {
     await map.run('preparo da viagem do mapa', async () => {
@@ -281,9 +293,40 @@ export async function appMapaClima(ctx: MapContext, today: string): Promise<Chec
     }
     await clima.run('a faixa da visão geral tem os números de hoje', async () => {
       await c.setOffline(false);
+      const meteo: { status: number | null; erro?: string; ms: number }[] = [];
+      climaData.open_meteo = meteo;
+      const t0 = Date.now();
+      p.on('response', (r) => {
+        if (r.url().startsWith(OPEN_METEO_URL))
+          meteo.push({ status: r.status(), ms: Date.now() - t0 });
+      });
+      p.on('requestfailed', (r) => {
+        if (!r.url().startsWith(OPEN_METEO_URL)) return;
+        meteo.push({ status: null, erro: r.failure()?.errorText ?? '?', ms: Date.now() - t0 });
+      });
       await p.goto(`${appUrl}/viagens/${trip}/detalhes`);
       const tile = p.locator(`[data-weather-strip] [data-weather-day="${today}"]`);
-      await tile.locator('[data-weather-max]').waitFor({ timeout: 30_000 });
+      const ok = (m: { status: number | null }) => m.status !== null && m.status < 400;
+      try {
+        await tile.locator('[data-weather-max]').waitFor({ timeout: 30_000 });
+      } catch (err) {
+        if (meteo.length === 0)
+          throw new Error('o app não pediu a previsão ao Open-Meteo', { cause: err });
+        if (meteo.some(ok)) {
+          throw new Error(`o Open-Meteo respondeu ${JSON.stringify(meteo)} e a faixa não veio`, {
+            cause: err,
+          });
+        }
+        // o Open-Meteo falhou: o app tenta de novo 30 s depois da falha (`useTripWeather`)
+        await tile
+          .locator('[data-weather-max]')
+          .waitFor({ timeout: 35_000 })
+          .catch(() => {
+            const last = meteo.at(-1);
+            fora.motivo = `o Open-Meteo não respondeu nas ${String(meteo.length)} tentativas do app (a última: ${last?.status === null ? (last.erro ?? '?') : `HTTP ${String(last?.status)}`})`;
+          });
+        if (fora.motivo) return;
+      }
       const max = (await tile.locator('[data-weather-max]').textContent()) ?? '';
       const min = (await tile.locator('[data-weather-min]').textContent()) ?? '';
       climaData.hoje = { max, min };
@@ -296,6 +339,8 @@ export async function appMapaClima(ctx: MapContext, today: string): Promise<Chec
       }
     });
     await clima.run('sem rede, recarrega: o "atualizado às"', async () => {
+      // sem a previsão de hoje no aparelho, não há "atualizado às" a conferir
+      if (fora.motivo) return;
       await c.setOffline(true);
       await p.reload();
       const updated = p.locator('[data-weather-strip] [data-weather-updated]');
@@ -318,11 +363,19 @@ export async function appMapaClima(ctx: MapContext, today: string): Promise<Chec
       `Pinos, rota real e atribuição; ${String(mapData.tiles_no_cache ?? '?')} tiles no cache (200) e ${String(mapData.tiles_sem_rede ?? '?')} na tela sem rede`,
       mapData,
     ),
-    check(
-      'app_clima',
-      clima,
-      `Hoje ${climaData.hoje?.max ?? '?'} / ${climaData.hoje?.min ?? '?'} pelo Open-Meteo; sem rede, "${climaData.atualizado ?? ''}"`,
-      climaData,
-    ),
+    fora.motivo !== null && !clima.failed
+      ? {
+          scenario: 'app_clima',
+          status: 'skip',
+          latency_ms: clima.startedAt === null ? null : Date.now() - clima.startedAt,
+          detail: `O serviço de fora, não o app: ${fora.motivo}`,
+          data: { ...climaData, passos: clima.list },
+        }
+      : check(
+          'app_clima',
+          clima,
+          `Hoje ${climaData.hoje?.max ?? '?'} / ${climaData.hoje?.min ?? '?'} pelo Open-Meteo; sem rede, "${climaData.atualizado ?? ''}"`,
+          climaData,
+        ),
   ];
 }

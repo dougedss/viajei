@@ -88,10 +88,13 @@ jobs:
       - name: Segredos no dist
         run: node scripts/security/scan-dist.ts dist
 
+      # com novas tentativas: a máquina do GitHub às vezes fica sem DNS para o apt (fase 16, 3.0)
+      - name: Navegadores do Playwright
+        timeout-minutes: 32
+        run: scripts/ci/navegadores.sh chromium webkit
+
       - name: Playwright
-        run: |
-          pnpm exec playwright install --with-deps chromium webkit
-          pnpm test:e2e
+        run: pnpm test:e2e
 
       - name: Tipos do banco batem com o commit
         if: steps.tipos-banco.outputs.mudou == 'true'

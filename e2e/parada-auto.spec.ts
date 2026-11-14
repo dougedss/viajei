@@ -17,6 +17,7 @@ import { LARGURA_ESTREITA, ROLAGEM_LATERAL } from '../src/features/lab/guards.ts
 import { dateInSaoPaulo } from './helpers/dates.ts';
 import { inserir, linhas } from './helpers/db.ts';
 import { uuidV4, uuidV5 } from './helpers/ids.ts';
+import { andar, posicionar, redeDa, type Rede } from './helpers/relogio.ts';
 import { criarUsuario, SENHA } from './helpers/users.ts';
 
 /**
@@ -24,7 +25,9 @@ import { criarUsuario, SENHA } from './helpers/users.ts';
  * leitura única, que é como o laboratório monta o navegador: o Chromium inteiro (canal `chromium`),
  * a posição posta ao abrir e sem permissão, a permissão dada só antes do toque em "Usar posição". O
  * detector lê as posições do `watchPosition`; o relógio é o de mentira do Playwright, andando por
- * `runFor` (o `fastForward` pausaria o relógio e o Dexie reexecuta as leituras vivas por timer).
+ * `runFor` (o `fastForward` pausaria o relógio e o Dexie reexecuta as leituras vivas por timer), em
+ * passos com a rede quieta e cada posição lida antes de o relógio andar (`helpers/relogio.ts`, a 3.0
+ * da fase 16).
  * A estrada, o posto e a resposta do Nominatim são os forjados de `src/features/lab/forged-stop.ts`:
  * a `route-day` e o `/reverse` respondidos aqui, nada vai à rede de fora.
  */
@@ -107,10 +110,19 @@ async function mundoForjado(context: BrowserContext): Promise<{ reverse: () => n
   return { reverse: () => calls };
 }
 
-type Aberto = { browser: Browser; context: BrowserContext; page: Page; reverse: () => number };
+type Aberto = {
+  browser: Browser;
+  context: BrowserContext;
+  page: Page;
+  rede: Rede;
+  reverse: () => number;
+};
 
 /** O navegador como o do laboratório, já na tela da viagem, com a posição permitida e acompanhada. */
-async function abrir(email: string): Promise<Aberto> {
+async function abrir(
+  email: string,
+  preparar?: (context: BrowserContext) => Promise<void>,
+): Promise<Aberto> {
   const use = test.info().project.use;
   const browser = await chromium.launch({ ...use.launchOptions, channel: 'chromium' });
   const context = await browser.newContext({
@@ -119,7 +131,9 @@ async function abrir(email: string): Promise<Aberto> {
     permissions: [],
   });
   const { reverse } = await mundoForjado(context);
+  await preparar?.(context);
   const page = await context.newPage();
+  const rede = redeDa(page);
   // a lista no lugar da maquete: o detector é da tela, não da maquete
   await page.addInitScript(() => localStorage.setItem('viajei:world:render', 'list'));
   await page.clock.install();
@@ -132,7 +146,7 @@ async function abrir(email: string): Promise<Aberto> {
   await context.grantPermissions(['geolocation'], { origin: new URL(page.url()).origin });
   await page.getByRole('button', { name: 'Usar posição' }).click();
   await expect(page.locator('[data-gps][data-fix-at]')).toBeAttached({ timeout: 15_000 });
-  return { browser, context, page, reverse };
+  return { browser, context, page, rede, reverse };
 }
 
 /**
@@ -141,14 +155,22 @@ async function abrir(email: string): Promise<Aberto> {
  * teste para aí, com o relógio andando sozinho, para o registro (o Dexie e o `/reverse`, com o prazo
  * de 6 s) não ser atropelado por um `runFor` de um minuto.
  */
-async function pararNoPosto({ context, page }: Aberto): Promise<void> {
+async function pararNoPosto({ context, page, rede }: Aberto): Promise<void> {
   for (const x of [6_500, 7_000, 7_500, 7_900]) {
-    await context.setGeolocation(forgedPoint(x));
-    await page.clock.runFor(5_000);
+    await posicionar(context, page, forgedPoint(x));
+    await andar(page, rede, 5_000);
   }
   for (let i = 0; i <= 8; i++) {
-    await context.setGeolocation(postoFix(i));
-    if (i < 8) await page.clock.runFor('01:00');
+    await posicionar(context, page, postoFix(i));
+    if (i < 8) await andar(page, rede, 60_000);
+  }
+}
+
+/** O carro volta à estrada, uma leitura a cada 5 s. */
+async function voltarAEstrada({ context, page, rede }: Aberto): Promise<void> {
+  for (const x of [8_200, 8_600, 9_000, 9_500]) {
+    await posicionar(context, page, forgedPoint(x));
+    await andar(page, rede, 5_000);
   }
 }
 
@@ -204,12 +226,12 @@ test('9 min parado a 80 m da estrada: a parada se registra sozinha como Posto, n
 
   await test.step('desfeita, não volta: o carro sai, volta ao mesmo posto e nada se registra em 2 h', async () => {
     for (const x of [8_300, 8_800, 8_300]) {
-      await aberto.context.setGeolocation(forgedPoint(x));
-      await page.clock.runFor(5_000);
+      await posicionar(aberto.context, page, forgedPoint(x));
+      await andar(page, aberto.rede, 5_000);
     }
     for (let i = 20; i <= 29; i++) {
-      await aberto.context.setGeolocation(postoFix(i));
-      await page.clock.runFor('01:00');
+      await posicionar(aberto.context, page, postoFix(i));
+      await andar(page, aberto.rede, 60_000);
     }
     // nenhuma parada nova: nem na lista, nem no servidor, nem outra chamada ao OSM (o toast de antes
     // pode continuar no DOM: com o relógio de mentira, a animação de saída dele não termina)
@@ -217,6 +239,48 @@ test('9 min parado a 80 m da estrada: a parada se registra sozinha como Posto, n
     expect((await autoNoServidor(tripId)).map((s) => s.deleted_at !== null)).toEqual([true]);
     expect(aberto.reverse()).toBe(1);
   });
+
+  await aberto.context.close();
+  await aberto.browser.close();
+});
+
+/**
+ * A rede da produção vista do GitHub: 150 a 300 ms por chamada, às vezes mais. Aqui, 1,5 s em cada
+ * RPC, para o vermelho do laboratório de 10 e 13/11 aparecer sempre que a causa voltar: com o relógio
+ * de mentira andando um minuto em poucos ms, o prazo de 45 s do sync vencia antes da resposta, o app
+ * se marcava sem conexão e a parada nascia "Parada às …", sem perguntar ao OSM (fase 16, 3.0).
+ */
+const LATENCIA_DA_PRODUCAO_MS = 1_500;
+
+type Rastro = { t: number; e: string }[];
+
+test('com a rede lenta da produção: o relógio não derruba o sync, e a parada nasce com o nome do OSM', async () => {
+  test.setTimeout(240_000);
+  const user = await criarUsuario('Posto');
+  await viagemDeHoje(user.id);
+  const aberto = await abrir(user.email, async (context) => {
+    await context.route('**/rest/v1/rpc/**', async (route) => {
+      await new Promise((r) => setTimeout(r, LATENCIA_DA_PRODUCAO_MS));
+      // a página pode ter desistido do pedido nesse meio tempo
+      await route.continue().catch(() => undefined);
+    });
+  });
+  const { page } = aberto;
+  const desde = await page.evaluate(() => Date.now());
+
+  await pararNoPosto(aberto);
+  await expect(
+    page.getByText(`Parada registrada: ${FORGED.postoName}`, { exact: true }),
+  ).toBeVisible({ timeout: 20_000 });
+  expect(aberto.reverse()).toBe(1);
+  // o motor de sync nunca ficou "sem rede" no caminho: nenhuma chamada passou do prazo pelo relógio
+  const semRede = await page.evaluate((t0) => {
+    const diag = (globalThis as { viajeiDiag?: { sync?: () => { rastro: Rastro } } }).viajeiDiag;
+    return (diag?.sync?.().rastro ?? [])
+      .filter((x) => x.t >= t0 && x.e.includes('sem rede'))
+      .map((x) => x.e);
+  }, desde);
+  expect(semRede).toEqual([]);
 
   await aberto.context.close();
   await aberto.browser.close();
@@ -277,10 +341,7 @@ test('sem rede no posto: "Parada às …" com as coordenadas, e o nome do OSM qu
   });
 
   await test.step('o carro volta à estrada: a saída medida fecha a parada', async () => {
-    for (const x of [8_200, 8_600, 9_000, 9_500]) {
-      await context.setGeolocation(forgedPoint(x));
-      await page.clock.runFor(5_000);
-    }
+    await voltarAEstrada(aberto);
     await expect
       .poll(async () => (await autoNoServidor(tripId)).map((s) => s.departed_at !== null), {
         timeout: 20_000,

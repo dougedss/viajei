@@ -42,9 +42,13 @@ export type Lookup = (center: Place) => Promise<{ place: AutoPlace | null; answe
 /**
  * O lugar pelo OSM, com prazo. `answered` diz se o OSM respondeu (mesmo sem nada ali): sem rede, com
  * erro ou devagar demais, a parada nasce com o nome pela hora e entra na fila do nome.
+ *
+ * Só o "sem rede" do navegador impede a tentativa (`canTry`, D111), não a última falha do sync: o
+ * OSM é outro servidor, e uma chamada ao Supabase que caiu há um minuto (o sinal fraco na estrada)
+ * não diz que o OSM está fora agora. O prazo de 6 s limita o custo de tentar (fase 16, 3.0).
  */
 export const lookupPlace: Lookup = async (center) => {
-  if (!connectivity.isOnline()) return { place: null, answered: false };
+  if (!connectivity.canTry()) return { place: null, answered: false };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), LOOKUP_TIMEOUT_MS);
   try {

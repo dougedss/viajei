@@ -3,7 +3,11 @@ name: Laboratório
 # O agente de testes da tela apagada: roda os cenários na produção, como dois aparelhos de mentira,
 # nas máquinas do GitHub (nada depende deste Mac), e grava o resultado em lab_runs (painel /lab do
 # app). Se algo falhar, o job fica vermelho e o GitHub avisa por e-mail. Todo dia às 3h07 de
-# Brasília (06:07 UTC; fora do minuto cheio, que o GitHub atrasa) e quando alguém pedir:
+# Brasília (06:07 UTC; fora do minuto cheio, que o GitHub atrasa) e quando alguém pedir.
+# O GitHub entrega o agendado quando pode: de 09 a 14/11/2026 o evento "schedule" nasceu entre 13h24 e
+# 16h04 UTC (10h a 13h de Brasília), 7 a 10 h depois do cron, todos os dias; o horário de verdade
+# está em lab_runs.started_at. Nenhum cenário depende do horário a não ser pela meia-noite (pulam
+# até 0h30). Sob demanda:
 # Actions → Laboratório → Run workflow, ou `pnpm lab:remote`.
 # O GitHub registra o cron quando este arquivo chega na main. O push que o criou (05/11, 23:48 UTC)
 # caiu num incidente do Actions e o agendamento nunca rodou; se o histórico voltar a ficar sem
@@ -46,8 +50,9 @@ jobs:
   laboratorio:
     name: os cenários de ponta a ponta
     runs-on: ubuntu-latest
-    # a exportação do vídeo da retrospectiva leva até ~25 min numa máquina lenta (D151)
-    timeout-minutes: 45
+    # a exportação do vídeo da retrospectiva leva até ~25 min numa máquina lenta (D151), e a
+    # instalação do Chromium pode tentar de novo (fase 16)
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
 
@@ -61,8 +66,10 @@ jobs:
       - name: Instalar dependências
         run: pnpm install --frozen-lockfile
 
+      # com novas tentativas: em 11/11 a máquina ficou sem DNS para o apt e nada rodou (fase 16, 3.0)
       - name: Chromium (o navegador que faz o roteiro manual)
-        run: pnpm exec playwright install --with-deps chromium
+        timeout-minutes: 32
+        run: scripts/ci/navegadores.sh chromium
 
       - name: Laboratório
         run: pnpm lab --target production ${{ inputs.tarefa != 'laboratorio' && inputs.tarefa && format('--{0}', inputs.tarefa) || '' }}

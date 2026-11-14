@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { connectivity } from '@/lib/db/connectivity.ts';
 import { db } from '@/lib/db/schema.ts';
 import type { ReverseRow } from '@/lib/geocode/nominatim.ts';
 import { comparePosition } from '@/lib/ids/position.ts';
@@ -7,6 +8,7 @@ import { metersAt } from './__fixtures__/tracks.ts';
 import {
   autoKeys,
   endAutoStop,
+  lookupPlace,
   nameAutoStop,
   parseUndone,
   pendingNames,
@@ -134,6 +136,46 @@ describe('registrar a parada automática', () => {
     const now = Date.now();
     expect(parseUndone(undone, now)).toHaveLength(1);
     expect(parseUndone(undone, now + 2 * 60 * 60_000 + 1)).toHaveLength(0);
+  });
+});
+
+describe('o lugar pelo OSM: quando se tenta', () => {
+  const postoRow: ReverseRow = {
+    category: 'amenity',
+    type: 'fuel',
+    name: 'Posto da Serra',
+    display_name: 'Posto da Serra, Serra Alta',
+    lat: String(lat),
+    lon: String(lng),
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    connectivity.markOnline();
+  });
+
+  // o vermelho do laboratório de 10 e 13/11 (fase 16, 3.0): uma chamada do sync que caiu marcava o
+  // app "sem conexão", e a parada seguinte nem perguntava ao OSM, outro servidor
+  it('uma falha do sync não impede: com o navegador na rede, pergunta ao OSM', async () => {
+    reverse.row = postoRow;
+    connectivity.markOffline();
+    expect(connectivity.isOnline()).toBe(false);
+    expect(await lookupPlace(start.center)).toEqual({
+      place: { name: 'Posto da Serra', kind: 'fuel', address: 'Posto da Serra, Serra Alta' },
+      answered: true,
+    });
+  });
+
+  it('sem rede no navegador (modo avião), nem tenta: o nome pela hora e a fila', async () => {
+    reverse.row = postoRow;
+    // o módulo da conectividade só lê `navigator.onLine`
+    vi.stubGlobal('navigator', { onLine: false });
+    expect(await lookupPlace(start.center)).toEqual({ place: null, answered: false });
+  });
+
+  it('o OSM fora (erro): não respondeu, a parada vai para a fila do nome', async () => {
+    reverse.fail = true;
+    expect(await lookupPlace(start.center)).toEqual({ place: null, answered: false });
   });
 });
 

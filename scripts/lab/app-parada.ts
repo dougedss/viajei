@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { andar, posicionar, redeDa, type Rede } from '../../e2e/helpers/relogio.ts';
 import {
   FORGED,
   forgedPoint,
@@ -23,8 +24,11 @@ import { ensureTeamMember, kindsOnly, sleep, type Session } from './session.ts';
  * dela e 9 min a 80 m, no posto. A `route-day` e o `/reverse` do Nominatim são respondidos aqui (o
  * Nominatim não entra no teste diário). O relógio de cada aparelho é o do Playwright, posto 15 min
  * antes do de verdade e andando por `runFor`: os 9 min passam em segundos, e nenhuma hora gravada
- * fica no futuro do servidor. Confere a parada no lab-a, uma só no servidor (o id determinístico e
- * o sync), a mesma no lab-b, e a saída medida.
+ * fica no futuro do servidor. O relógio anda em passos de 5 s com a rede do aparelho quieta, e cada
+ * posição é lida antes de ele andar (`e2e/helpers/relogio.ts`): sem isso, uma chamada à produção em
+ * voo passava do prazo do sync no relógio de mentira, o aparelho se marcava sem conexão e a parada
+ * nascia sem o nome do OSM (os vermelhos de 10 e 13/11, a 3.0 da fase 16). Confere a parada no lab-a,
+ * uma só no servidor (o id determinístico e o sync), a mesma no lab-b, e a saída medida.
  */
 export type ParadaContext = Pick<
   ProgressContext,
@@ -137,7 +141,7 @@ async function device(
   ctx: ParadaContext,
   who: 'a' | 'b',
   tripUrl: string,
-): Promise<{ context: BrowserContext; page: Page; reverse: () => number }> {
+): Promise<{ context: BrowserContext; page: Page; rede: Rede; reverse: () => number }> {
   const context = await browser.newContext({
     ...DEVICE,
     geolocation: forgedPoint(6_000),
@@ -161,6 +165,7 @@ async function device(
     await route.fulfill({ json: forgedReverse(), headers: { 'access-control-allow-origin': '*' } });
   });
   const page = await context.newPage();
+  const rede = redeDa(page);
   page.setDefaultTimeout(TIMEOUT);
   await page.clock.install({ time: new Date(Date.now() - CLOCK_BEHIND_MS) });
   await enterPreview(page, ctx.appUrl, ctx.bypass);
@@ -170,7 +175,7 @@ async function device(
   await context.grantPermissions(['geolocation'], { origin: new URL(ctx.appUrl).origin });
   await page.getByRole('button', { name: 'Usar posição' }).click();
   await page.locator('[data-gps][data-fix-at]').waitFor({ state: 'attached', timeout: 30_000 });
-  return { context, page, reverse: () => calls };
+  return { context, page, rede, reverse: () => calls };
 }
 
 type Device = Awaited<ReturnType<typeof device>>;
@@ -280,14 +285,14 @@ export async function appParadaAuto(ctx: ParadaContext, today: string): Promise<
     await step('os dois saem da estrada e ficam 8 min no posto: A registra a parada', async () => {
       for (const x of [6_500, 7_000, 7_500, 7_900]) {
         await both(async (d) => {
-          await d.context.setGeolocation(forgedPoint(x));
-          await d.page.clock.runFor(5_000);
+          await posicionar(d.context, d.page, forgedPoint(x));
+          await andar(d.page, d.rede, 5_000);
         });
       }
       for (let i = 0; i <= 8; i++) {
         await both(async (d) => {
-          await d.context.setGeolocation(postoFix(i));
-          if (i < 8) await d.page.clock.runFor('01:00');
+          await posicionar(d.context, d.page, postoFix(i));
+          if (i < 8) await andar(d.page, d.rede, 60_000);
         });
       }
       const t0 = Date.now();
@@ -337,8 +342,8 @@ export async function appParadaAuto(ctx: ParadaContext, today: string): Promise<
     await step('o carro volta à estrada: a saída medida fecha a parada', async () => {
       for (const x of [8_200, 8_600, 9_000, 9_500]) {
         await both(async (d) => {
-          await d.context.setGeolocation(forgedPoint(x));
-          await d.page.clock.runFor(5_000);
+          await posicionar(d.context, d.page, forgedPoint(x));
+          await andar(d.page, d.rede, 5_000);
         });
       }
       await until(
