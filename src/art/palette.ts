@@ -14,6 +14,8 @@ export type Palette = {
   skyDayBottom: string;
   skyNightTop: string;
   skyNightBottom: string;
+  /** o fundo do palco (a "mesa" da maquete, fase 22), pelo tema */
+  stage: string;
 };
 
 const FALLBACK: Palette = {
@@ -33,6 +35,7 @@ const FALLBACK: Palette = {
   skyDayBottom: '#f2eee6',
   skyNightTop: '#0f1627',
   skyNightBottom: '#26304a',
+  stage: '#151c2a',
 };
 
 function token(style: CSSStyleDeclaration | null, name: string, fallback: string): string {
@@ -60,5 +63,6 @@ export function readPalette(): Palette {
     skyDayBottom: FALLBACK.skyDayBottom,
     skyNightTop: FALLBACK.skyNightTop,
     skyNightBottom: FALLBACK.skyNightBottom,
+    stage: token(style, '--color-stage', FALLBACK.stage),
   };
 }

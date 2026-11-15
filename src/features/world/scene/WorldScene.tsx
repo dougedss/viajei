@@ -24,9 +24,9 @@ import { Water } from './Water.tsx';
 import type { WorldRuntime } from './runtime.ts';
 
 /**
- * A cena montada: luz, terreno (com a água e a decoração no mesmo grupo, para subirem juntos na
- * abertura), estrada, anéis, carro e câmera, mais o laço único. Texturas e ambiente nascem uma vez
- * por Canvas e morrem com ele.
+ * A cena montada: luz, terreno (com a saia, a base, a água e a decoração no mesmo grupo, para subirem
+ * juntos na abertura), estrada, anéis, carro (com o toque que liga o modo de perto, fase 22), as
+ * peças e a câmera, mais o laço único. Texturas e ambiente nascem uma vez por Canvas e morrem com ele.
  */
 export type WorldSceneProps = {
   runtime: WorldRuntime;
@@ -46,7 +46,7 @@ export type WorldSceneProps = {
   carFor?: ((userId: string) => CarSpec) | undefined;
   /**
    * A câmera e o laço de outra cena sobre o mesmo cenário (o filme da retrospectiva, fase 9). Sem
-   * isto, a câmera que segue o carro e o laço da maquete.
+   * isto, a câmera da maquete (o repouso, o modo de perto, o mergulho) e o laço dela.
    */
   controls?: ReactNode;
 };
@@ -133,7 +133,13 @@ export function WorldScene({
         pops={pops}
         group={groups.objects}
       />
-      <Car runtime={runtime} field={field} car={car} group={groups.objects} />
+      <Car
+        runtime={runtime}
+        field={field}
+        car={car}
+        group={groups.objects}
+        onTap={() => runtime.enterClose(performance.now())}
+      />
       {convoy && convoy.length > 0 ? (
         <ConvoyCars
           runtime={runtime}

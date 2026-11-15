@@ -7,8 +7,10 @@ import {
   DodecahedronGeometry,
   IcosahedronGeometry,
   InstancedMesh,
+  LatheGeometry,
   MeshStandardMaterial,
   Object3D,
+  Vector2,
   type BufferGeometry,
   type Matrix4,
   type Texture,
@@ -20,12 +22,13 @@ import { heightAt, PATCH, sampleField, type HeightField } from './heightfield.ts
 
 /**
  * A decoração instanciada por cenário, portada do protótipo: torres e quadras na cidade (densidade
- * pela população), casas e árvores no interior, talhões, silos e lavouras na plantação, pinheiros e
- * rochas na serra, coqueiros, guarda-sóis e casas claras na praia; mais os toques do roteiro:
- * parreirais em fileiras ao redor da vinícola (as miniaturas das paradas são de `art/stops`). Cada instância é gravada em
- * ordem embaralhada: o nível Leve reduz o `count` e afina o cenário por igual. Fase 14: o relevo
- * quieto, sem enfeite longe da estrada (`PROP_REACH`), e prédios só em volta das paradas de cidade,
- * hotel e comida (os acidentes `blocks` do layout).
+ * pela população), casas e árvores no interior, talhões, silos e lavouras na plantação, pinheiros,
+ * araucárias e rochas na serra, com hortênsias na beira da estrada (fase 22: a vegetação da região),
+ * coqueiros, guarda-sóis e casas claras na praia; mais os toques do roteiro: parreirais em fileiras
+ * atrás da vinícola (as peças das paradas são de `art/stops`). Cada instância é gravada em ordem
+ * embaralhada: o nível Leve reduz o `count` e afina o cenário por igual. Fase 14: o relevo quieto,
+ * sem enfeite longe da estrada (`PROP_REACH`), e prédios só em volta das paradas de cidade, hotel e
+ * comida (os acidentes `blocks` do layout). Fase 22: nada entra no piso de uma peça (`pads`).
  */
 type Placed = { m: Matrix4; c: Color | null };
 type Bucket = { mesh: InstancedMesh; items: Placed[]; total: number; shadows: boolean };
@@ -43,8 +46,11 @@ export type BuiltProps = {
 const GRID = 1.5;
 /** até onde da estrada a decoração vai, em unidades da cena */
 export const PROP_REACH = 45;
+/** a faixa da beira da estrada em que as hortênsias ficam (da borda do asfalto), em unidades */
+const HEDGE_FROM = 0.6;
+const HEDGE_TO = 2.4;
 
-const TREES = new Set(['cone', 'round', 'trunk', 'palmTrunk', 'fronds']);
+const TREES = new Set(['cone', 'round', 'trunk', 'palmTrunk', 'fronds', 'arauTrunk', 'arauCrown']);
 
 function up(g: BufferGeometry, y: number): BufferGeometry {
   g.translate(0, y, 0);
@@ -55,6 +61,30 @@ function boxUV(g: BufferGeometry): BufferGeometry {
   const a = g.getAttribute('uv');
   for (let i = 8; i <= 15; i++) a.setXY(i, 0.95, 0.97);
   return g;
+}
+/** a copa da araucária: um guarda-chuva de galhos virados para cima, em três andares que encolhem */
+function araucariaCrown(): BufferGeometry {
+  const profile = [
+    [0.1, 0],
+    [1.1, 0.1],
+    [2.0, 0.45],
+    [2.4, 0.85],
+    [2.2, 0.95],
+    [1.3, 0.6],
+    [0.15, 0.5],
+  ].map(([x, y]) => new Vector2(x ?? 0, y ?? 0));
+  return mergeGeometries(
+    [
+      [3.3, 1],
+      [4.1, 0.74],
+      [4.75, 0.42],
+    ].map(([y, sc]) => {
+      const g = new LatheGeometry(profile, 14);
+      g.scale(sc ?? 1, sc ?? 1, sc ?? 1);
+      g.translate(0, y ?? 0, 0);
+      return g;
+    }),
+  );
 }
 const colors = (hexes: string[]) => hexes.map((h) => new Color(h));
 function pick<T>(arr: T[], r: number): T | undefined {
@@ -111,6 +141,8 @@ export function buildProps(
     emissiveIntensity: 0,
     roughness: 0.7,
   });
+  // um material chapado só para o que leva cor por instância: um shader a menos por balde
+  const flatMat = new MeshStandardMaterial({ roughness: 0.9, flatShading: true });
   make('tower', boxUV(up(new BoxGeometry(1, 1, 1), 0.5)), towerMat, 2600);
   make(
     'wall',
@@ -121,25 +153,15 @@ export function buildProps(
   const roofGeo = new ConeGeometry(1.2, 0.55, 4);
   roofGeo.rotateY(Math.PI / 4);
   roofGeo.translate(0, 1.27, 0);
-  make('roof', roofGeo, new MeshStandardMaterial({ roughness: 0.9, flatShading: true }), 1800);
+  make('roof', roofGeo, flatMat, 1800);
   make(
     'trunk',
     up(new CylinderGeometry(0.11, 0.16, 0.9, 6), 0.45),
     new MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.9 }),
     9000,
   );
-  make(
-    'cone',
-    up(new ConeGeometry(0.75, 2.2, 7), 1.9),
-    new MeshStandardMaterial({ roughness: 0.9, flatShading: true }),
-    6000,
-  );
-  make(
-    'round',
-    up(new IcosahedronGeometry(0.9, 1), 1.55),
-    new MeshStandardMaterial({ roughness: 0.9, flatShading: true }),
-    3200,
-  );
+  make('cone', up(new ConeGeometry(0.75, 2.2, 7), 1.9), flatMat, 6000);
+  make('round', up(new IcosahedronGeometry(0.9, 1), 1.55), flatMat, 3200);
   make(
     'palmTrunk',
     up(new CylinderGeometry(0.09, 0.16, 3, 6), 1.5),
@@ -156,14 +178,18 @@ export function buildProps(
       return g;
     }),
   );
-  make('fronds', frondGeo, new MeshStandardMaterial({ roughness: 0.85, flatShading: true }), 700);
+  make('fronds', frondGeo, flatMat, 700);
+  // a araucária (fase 22): o tronco alto e fino, e a copa em guarda-chuva
   make(
-    'crop',
-    up(new BoxGeometry(0.5, 0.35, 0.5), 0.17),
-    new MeshStandardMaterial({ roughness: 0.95, flatShading: true }),
-    9000,
-    false,
+    'arauTrunk',
+    up(new CylinderGeometry(0.1, 0.18, 4.8, 6), 2.4),
+    new MeshStandardMaterial({ color: 0x4f3d2f, roughness: 0.9 }),
+    1600,
   );
+  make('arauCrown', araucariaCrown(), flatMat, 1600);
+  // as hortênsias (fase 22): bolas de flor na beira da estrada, sem sombra
+  make('hydrangea', up(new IcosahedronGeometry(0.34, 1), 0.3), flatMat, 2400, false);
+  make('crop', up(new BoxGeometry(0.5, 0.35, 0.5), 0.17), flatMat, 9000, false);
   make(
     'vine',
     up(new BoxGeometry(0.42, 0.7, 0.42), 0.35),
@@ -206,12 +232,17 @@ export function buildProps(
   const coneCols = colors(['#3f7a3a', '#2f6a35', '#4a8a3c', '#35703b']);
   const roundCols = colors(['#5f9e45', '#6fae4c', '#4f8f3f', '#7cb050']);
   const frondCols = colors(['#3f8f45', '#4a9c4a', '#357f3f']);
+  const arauCols = colors(['#2c5a34', '#2f6338', '#28522f']);
+  const hydrangeaCols = colors(['#6f8fe0', '#8f7fe0', '#d58ac6', '#7fb0ea', '#b58fd8']);
   const cropCols = colors(['#3f7a2d', '#4c8a33']);
   const caneCols = colors(['#8fb43f', '#a3bf4a']);
   const umbCols = colors(['#e84c3d', '#f2b134', '#2f8fcf', '#f5f0e6', '#3cb371']);
   const beachCols = colors(['#f6f1e4', '#f0d9a8', '#cfe7e8', '#f2c7b3']);
 
   const ground = (x: number, z: number) => heightAt(field, x, z);
+  /** dentro do piso de alguma peça (com uma folga): nada se planta ali */
+  const inPad = (x: number, z: number): boolean =>
+    layout.pads.some((pad) => Math.hypot(x - pad.x, z - pad.z) < pad.r + 1);
   const placeTree = (kind: 'cone' | 'round', x: number, y: number, z: number, sc: number) => {
     const r = rng();
     place('trunk', x, y - 0.15, z, r * 6.28, sc, sc, sc);
@@ -226,6 +257,11 @@ export function buildProps(
       sc * (0.9 + rng() * 0.2),
       pick(kind === 'cone' ? coneCols : roundCols, rng()),
     );
+  };
+  const placeAraucaria = (x: number, y: number, z: number, sc: number) => {
+    const r = rng();
+    place('arauTrunk', x, y - 0.15, z, r * 6.28, sc, sc, sc);
+    place('arauCrown', x, y - 0.15, z, r * 6.28, sc, sc, sc, pick(arauCols, rng()));
   };
   const placeHouse = (x: number, y: number, z: number, ry: number, cols = wallCols) => {
     const s = 0.8 + rng() * 0.5;
@@ -255,9 +291,28 @@ export function buildProps(
       const x = gx + (rng() - 0.5) * 1.1;
       const z = gz + (rng() - 0.5) * 1.1;
       const t = sampleField(field, x, z);
-      if (t.water !== 'none' || t.dist < roadClear || t.dist > PROP_REACH) continue;
+      if (t.water !== 'none' || t.dist > PROP_REACH || inPad(x, z)) continue;
       const w = t.weights;
       const y = ground(x, z);
+      // a beira da estrada na serra: as hortênsias (fase 22), e só elas tão perto do asfalto
+      if (t.dist < roadClear) {
+        const edge = t.dist - layout.roadHalfWidth;
+        if (edge >= HEDGE_FROM && edge <= HEDGE_TO && w.serra > 0.45 && rng() < 0.55 * w.serra) {
+          const s = 0.8 + rng() * 0.5;
+          place(
+            'hydrangea',
+            x,
+            y - 0.05,
+            z,
+            rng() * 6.28,
+            s,
+            s * 0.85,
+            s,
+            pick(hydrangeaCols, rng()),
+          );
+        }
+        continue;
+      }
       const r = rng();
       const ix = Math.round(gx / GRID);
       const iz = Math.round(gz / GRID);
@@ -330,7 +385,9 @@ export function buildProps(
       const forest = Math.min(1, w.serra + 0.25 * (w.interior + w.field));
       if (forest > 0.15) {
         if (rng() < 0.75 * forest * (1 - 0.85 * w.field)) {
-          placeTree('cone', x, y - 0.2, z, 0.75 + rng() * 0.7);
+          // na serra, uma em cada três árvores é araucária
+          if (w.serra > 0.4 && rng() < 0.34) placeAraucaria(x, y - 0.2, z, 0.75 + rng() * 0.5);
+          else placeTree('cone', x, y - 0.2, z, 0.75 + rng() * 0.7);
           continue;
         }
         if (rng() < 0.06 * w.serra) {
@@ -384,8 +441,11 @@ export function buildProps(
         for (let u = -half; u <= half; u += step) {
           const x = cx + u * ca - v * sa;
           const z = cz + u * sa + v * ca;
+          if (x < bounds.x0 + 1 || x > bounds.x1 - 1 || z < bounds.z0 + 1 || z > bounds.z1 - 1)
+            continue;
           const t = sampleField(field, x, z);
-          if (t.water !== 'none' || t.dist < roadClear || t.dist > PROP_REACH) continue;
+          if (t.water !== 'none' || t.dist < roadClear || t.dist > PROP_REACH || inPad(x, z))
+            continue;
           if (t.weights.field < 0.2) continue;
           const y = ground(x, z);
           if (kind === 2) placeTree('round', x, y, z, 0.5 + rng() * 0.12);
@@ -406,13 +466,13 @@ export function buildProps(
           const x = f.x + u * ca - v * sa;
           const z = f.z + u * sa + v * ca;
           const t = sampleField(field, x, z);
-          if (t.water !== 'none' || t.dist < roadClear) continue;
+          if (t.water !== 'none' || t.dist < roadClear || inPad(x, z)) continue;
           place('vine', x, ground(x, z) - 0.05, z, f.angle, 1, 0.8 + rng() * 0.4, 1);
         }
         for (const u of [-f.half, f.half]) {
           const x = f.x + u * ca - v * sa;
           const z = f.z + u * sa + v * ca;
-          if (sampleField(field, x, z).dist >= roadClear)
+          if (sampleField(field, x, z).dist >= roadClear && !inPad(x, z))
             place('post', x, ground(x, z) - 0.05, z, f.angle, 1, 1, 1);
         }
       }
@@ -443,6 +503,8 @@ export function buildProps(
     b.items = [];
     total += it.length;
   }
+  const materials = new Set<MeshStandardMaterial>();
+  for (const b of buckets.values()) materials.add(b.mesh.material as MeshStandardMaterial);
   return {
     meshes: [...buckets.values()].map((b) => b.mesh),
     towerMat,
@@ -456,9 +518,9 @@ export function buildProps(
     dispose() {
       for (const b of buckets.values()) {
         b.mesh.geometry.dispose();
-        (b.mesh.material as MeshStandardMaterial).dispose();
         b.mesh.dispose();
       }
+      for (const m of materials) m.dispose();
     },
   };
 }

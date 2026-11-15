@@ -11,13 +11,17 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu';
 import type { Palette } from '@/art/palette.ts';
-import { lerp, smooth } from '../noise.ts';
+import { clamp, lerp, smooth } from '../noise.ts';
 import type { WorldRuntime } from './runtime.ts';
 
 /**
- * Luz, céu e névoa com dois presets, DIA e NOITE, interpolados em 1,5 s. O sol segue o alvo da
- * câmera para a sombra cobrir o que se vê; à noite os faróis e as janelas acendem em quem lê
- * `runtime.night.t` (carro, torres). Portado do protótipo com as cores dos tokens.
+ * Luz, fundo e névoa com dois presets, DIA e NOITE, interpolados em 1,5 s. A maquete é uma maquete
+ * de mesa (fase 22): o fundo é o palco (o token do tema), não um céu, e a névoa começa além da base,
+ * só tingindo a mesa ao longe; de perto, o fim da maquete ganha um pouco de profundidade. O sol tem
+ * sombra suave (o PCF do three/webgpu com `radius`, nos dois backends) numa caixa que cobre a maquete
+ * inteira no repouso e encolhe em volta do alvo da câmera de perto. À noite os faróis, as janelas e
+ * as poças de luz acendem em quem lê `runtime.night.t` (carro, torres, peças): nenhuma luz entra ou
+ * sai da cena (a armadilha da fase 6).
  */
 type Preset = {
   bg: Color;
@@ -34,6 +38,11 @@ type Presets = { DAY: Preset; NIGHT: Preset };
 
 export const NIGHT_FADE_PER_S = 1 / 1.5;
 const SUN_OFF = new Vector3(-70, 130, -44);
+/** a suavidade da sombra, em texels do mapa */
+const SHADOW_RADIUS = 2.5;
+/** a caixa do sol de perto, e a folga em volta da maquete no repouso */
+const SHADOW_NEAR = 45;
+const SHADOW_PAD = 12;
 
 export type LightingHandle = {
   sun: DirectionalLight;
@@ -55,7 +64,7 @@ type Props = {
 function makePresets(palette: Palette): Presets {
   return {
     DAY: {
-      bg: new Color(palette.skyDayTop).lerp(new Color(palette.skyDayBottom), 0.5),
+      bg: new Color(palette.stage),
       sun: 2.8,
       sunCol: new Color(0xffe2b8),
       hemi: 0.9,
@@ -66,7 +75,7 @@ function makePresets(palette: Palette): Presets {
       water: new Color(0x1e6d92),
     },
     NIGHT: {
-      bg: new Color(palette.skyNightTop).lerp(new Color(palette.skyNightBottom), 0.35),
+      bg: new Color(palette.skyNightTop).lerp(new Color(palette.skyNightBottom), 0.25),
       sun: 0.4,
       sunCol: new Color(0x9bb4ff),
       hemi: 0.75,
@@ -84,6 +93,8 @@ function makeHandle(presets: Presets): LightingHandle {
   sun.castShadow = true;
   sun.shadow.bias = -0.0006;
   sun.shadow.normalBias = 0.6;
+  sun.shadow.radius = SHADOW_RADIUS;
+  sun.shadow.intensity = 0.9;
   Object.assign(sun.shadow.camera, {
     left: -70,
     right: 70,
@@ -97,7 +108,7 @@ function makeHandle(presets: Presets): LightingHandle {
   return {
     sun,
     hemi,
-    fog: new Fog(presets.DAY.bg.clone(), 95, 240),
+    fog: new Fog(presets.DAY.bg.clone(), 300, 700),
     background: presets.DAY.bg.clone(),
     waterColor: presets.DAY.water.clone(),
   };
@@ -127,7 +138,11 @@ function applyNight(
   scene.userData.windowGlow = 1.4 * smooth(0.3, 0.9, t);
 }
 
-/** O sol acompanha o alvo da câmera (a que segue o carro, fase 14); a névoa, a distância dela. */
+/**
+ * O sol acompanha o alvo da câmera, preso à caixa da maquete: no repouso a sombra cobre o dia
+ * inteiro; de perto a caixa encolhe em volta do que se vê, para a resolução por unidade subir. A
+ * névoa fica além da base no repouso e dá profundidade ao fim da maquete de perto.
+ */
 function followCamera(
   handle: LightingHandle,
   runtime: WorldRuntime,
@@ -135,22 +150,31 @@ function followCamera(
   target: Vector3,
 ): void {
   const cam = runtime.view;
-  target.set(cam.target[0], runtime.layout.yMid, cam.target[2]);
+  const { bounds, yMid } = runtime.layout;
+  const halfW = (bounds.x1 - bounds.x0) / 2;
+  const halfL = (bounds.z1 - bounds.z0) / 2;
+  const baseExt = Math.max(halfW, halfL) + SHADOW_PAD;
+  const ext = clamp(cam.distance * 0.42, SHADOW_NEAR, baseExt);
+  const cx = (bounds.x0 + bounds.x1) / 2;
+  const cz = (bounds.z0 + bounds.z1) / 2;
+  // o centro da caixa: o alvo da câmera, sem sair da maquete
+  const tx = ext >= baseExt ? cx : clamp(cam.target[0], bounds.x0 + ext, bounds.x1 - ext);
+  const tz = ext >= baseExt ? cz : clamp(cam.target[2], bounds.z0 + ext, bounds.z1 - ext);
+  target.set(tx, yMid, tz);
   handle.sun.position.copy(target).add(SUN_OFF);
   handle.sun.target.position.copy(target);
-  const ext = Math.max(45, Math.min(150, cam.distance * 0.42));
   if (Math.abs(handle.sun.shadow.camera.right - ext) > 2) {
     Object.assign(handle.sun.shadow.camera, {
       left: -ext,
       right: ext,
       top: ext,
       bottom: -ext,
-      far: ext * 2 + 120,
+      far: ext * 2 + 160,
     });
     handle.sun.shadow.camera.updateProjectionMatrix();
   }
-  handle.fog.near = cam.distance * lerp(0.85, 0.75, nightT);
-  handle.fog.far = cam.distance * lerp(2.1, 1.6, nightT);
+  handle.fog.near = cam.distance * lerp(1.3, 1.15, nightT);
+  handle.fog.far = cam.distance * lerp(2.6, 2.2, nightT);
 }
 
 function setShadowSize(handle: LightingHandle, size: number): void {

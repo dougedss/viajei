@@ -1,11 +1,14 @@
 import { useEffect, useMemo } from 'react';
 import { useThree } from '@react-three/fiber';
 import {
+  BoxGeometry,
   BufferAttribute,
   BufferGeometry,
   Color,
   Mesh,
   MeshStandardMaterial,
+  PlaneGeometry,
+  ShadowMaterial,
   type Group,
 } from 'three/webgpu';
 import type { Palette } from '@/art/palette.ts';
@@ -18,9 +21,23 @@ import type { WorldRuntime } from './runtime.ts';
 /**
  * O terreno: um heightfield amostrado do layout, com cores por vértice misturadas pelos pesos dos
  * cenários (os tokens --color-zone-*), rocha nas encostas, areia na praia, água escura no mar e no
- * lago. Uma geometria por layout e por paleta; na abertura do dia o grupo sobe (escala em y).
+ * lago. A maquete é de mesa (fase 22): na borda do heightfield o chão termina num corte de terra (a
+ * saia, com a grama em cima e a terra escurecendo para baixo), sobre uma base escura, e a base faz
+ * sombra na mesa (um plano que só recebe sombra). Uma geometria por layout e por paleta; na abertura
+ * do dia o grupo sobe (escala em y), a mesa fica onde está.
  */
 type Props = { runtime: WorldRuntime; palette: Palette; field: HeightField; group: Group };
+
+/** quanto a saia desce abaixo do chão mais baixo */
+export const SKIRT_DEPTH = 3.4;
+/** a base escura: a altura e quanto passa da saia de cada lado */
+export const BASE_HEIGHT = 1.3;
+export const BASE_LIP = 1.1;
+/** a faixa de grama no alto da saia, antes da terra */
+const SOD = 0.45;
+const EARTH = new Color('#7a5d43');
+const EARTH_DARK = new Color('#5a4332');
+const BASE_COLOR = 0x2c2622;
 
 function buildGeometry(layout: WorldLayout, field: HeightField, palette: Palette): BufferGeometry {
   const { nx, nz, cell, x0, z0, heights } = field;
@@ -112,6 +129,50 @@ function buildGeometry(layout: WorldLayout, field: HeightField, palette: Palette
   return geo;
 }
 
+/** O chão mais baixo do heightfield: a saia e a base ficam abaixo dele. */
+function floorOf(field: HeightField): number {
+  let min = Number.POSITIVE_INFINITY;
+  for (const h of field.heights) if (h < min) min = h;
+  return Number.isFinite(min) ? min : 0;
+}
+
+/**
+ * A saia: o corte de terra em volta do heightfield, do chão até `baseY`, com a cor da grama do
+ * próprio terreno na faixa de cima e a terra escurecendo para baixo. Percorre a borda no sentido
+ * horário visto de cima, para as faces olharem para fora.
+ */
+function buildSkirt(terrain: BufferGeometry, field: HeightField, baseY: number): BufferGeometry {
+  const { nx, nz } = field;
+  const tpos = terrain.getAttribute('position');
+  const tcol = terrain.getAttribute('color');
+  const ring: number[] = [];
+  for (let i = 0; i < nx; i++) ring.push(i); // z0, x crescendo
+  for (let j = 1; j < nz; j++) ring.push(j * nx + nx - 1); // x1, z crescendo
+  for (let i = nx - 2; i >= 0; i--) ring.push((nz - 1) * nx + i); // z1, x decrescendo
+  for (let j = nz - 2; j >= 1; j--) ring.push(j * nx); // x0, z decrescendo
+  const pos: number[] = [];
+  const col: number[] = [];
+  const idx: number[] = [];
+  const n = ring.length;
+  ring.forEach((k, r) => {
+    const x = tpos.getX(k);
+    const h = tpos.getY(k);
+    const z = tpos.getZ(k);
+    const gr = [tcol.getX(k), tcol.getY(k), tcol.getZ(k)];
+    pos.push(x, h, z, x, h - SOD, z, x, baseY, z);
+    col.push(...gr, EARTH.r, EARTH.g, EARTH.b, EARTH_DARK.r, EARTH_DARK.g, EARTH_DARK.b);
+    const a = r * 3;
+    const b = ((r + 1) % n) * 3;
+    idx.push(a, a + 1, b, b, a + 1, b + 1, a + 1, a + 2, b + 1, b + 1, a + 2, b + 2);
+  });
+  const geo = new BufferGeometry();
+  geo.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
+  geo.setAttribute('color', new BufferAttribute(new Float32Array(col), 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
+}
+
 /** A abertura: o relevo sobe de quase zero à altura cheia, com desaceleração. */
 function rise(group: Group, progress: number): void {
   const e = 1 - (1 - progress) * (1 - progress);
@@ -123,27 +184,61 @@ export function Terrain({ runtime, palette, field, group }: Props) {
   const invalidate = useThree((s) => s.invalidate);
   const layout = runtime.layout;
 
-  const mesh = useMemo(() => {
+  const built = useMemo(() => {
     const geo = buildGeometry(layout, field, palette);
-    const m = new Mesh(
-      geo,
-      new MeshStandardMaterial({ vertexColors: true, roughness: 0.96, metalness: 0 }),
+    const material = new MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.96,
+      metalness: 0,
+    });
+    const terrain = new Mesh(geo, material);
+    terrain.receiveShadow = true;
+    const baseY = floorOf(field) - SKIRT_DEPTH;
+    const skirt = new Mesh(buildSkirt(geo, field, baseY), material);
+    skirt.receiveShadow = true;
+    skirt.castShadow = true;
+    const { bounds } = layout;
+    const w = bounds.x1 - bounds.x0 + 2 * BASE_LIP;
+    const l = bounds.z1 - bounds.z0 + 2 * BASE_LIP;
+    const base = new Mesh(
+      new BoxGeometry(w, BASE_HEIGHT, l),
+      new MeshStandardMaterial({ color: BASE_COLOR, roughness: 0.55, metalness: 0 }),
     );
-    m.receiveShadow = true;
-    return m;
+    base.position.set(
+      (bounds.x0 + bounds.x1) / 2,
+      baseY - BASE_HEIGHT / 2,
+      (bounds.z0 + bounds.z1) / 2,
+    );
+    base.castShadow = true;
+    base.receiveShadow = true;
+    // a mesa: só a sombra da maquete sobre o fundo do palco
+    const table = new Mesh(
+      new PlaneGeometry(w * 4, l * 3),
+      new ShadowMaterial({ opacity: 0.42, depthWrite: false }),
+    );
+    table.rotation.x = -Math.PI / 2;
+    table.position.set(base.position.x, baseY - BASE_HEIGHT - 0.02, base.position.z);
+    table.receiveShadow = true;
+    return { terrain, skirt, base, table, material, baseY };
   }, [layout, field, palette]);
 
   useEffect(() => {
-    group.add(mesh);
-    scene.add(group);
+    const { terrain, skirt, base, table, material } = built;
+    group.add(terrain, skirt, base);
+    scene.add(group, table);
     invalidate();
     return () => {
-      group.remove(mesh);
-      scene.remove(group);
-      mesh.geometry.dispose();
-      mesh.material.dispose();
+      group.remove(terrain, skirt, base);
+      scene.remove(group, table);
+      terrain.geometry.dispose();
+      skirt.geometry.dispose();
+      base.geometry.dispose();
+      base.material.dispose();
+      table.geometry.dispose();
+      table.material.dispose();
+      material.dispose();
     };
-  }, [scene, group, mesh, invalidate]);
+  }, [scene, group, built, invalidate]);
 
   useEffect(
     () =>

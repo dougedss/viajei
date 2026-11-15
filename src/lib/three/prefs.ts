@@ -9,7 +9,8 @@ import {
 /**
  * Preferências das cenas 3D por aparelho e as chaves de URL que valem para as duas: o nível de
  * qualidade (um só, a maquete e a garagem leem o mesmo), `?render=list` (força a versão sem 3D sem
- * gravar nada; serve ao e2e) e `?diag=1` (o chip de diagnóstico em produção).
+ * gravar nada; serve ao e2e), `?diag=1` (o chip de diagnóstico em produção) e `?noite=1` (a maquete
+ * à noite a qualquer hora, sem gravar nada: o e2e e o laboratório, que roda de manhã, veem a noite).
  */
 export function readQualityPrefs(): QualityPrefs {
   return parseQualityPrefs(readLocal(QUALITY_STORAGE_KEY));
@@ -21,8 +22,16 @@ export function useQualityPrefs(): QualityPrefs {
   return useLocalValue(QUALITY_STORAGE_KEY, parseQualityPrefs);
 }
 
-/** As chaves da URL que mudam as cenas: `render=list` e `diag=1`. */
-export function readUrlFlags(search: string): { forceList: boolean; diag: boolean } {
+/** As chaves da URL que mudam as cenas: `render=list`, `diag=1` e `noite=1`. */
+export function readUrlFlags(search: string): {
+  forceList: boolean;
+  diag: boolean;
+  night: boolean;
+} {
   const params = new URLSearchParams(search);
-  return { forceList: params.get('render') === 'list', diag: params.get('diag') === '1' };
+  return {
+    forceList: params.get('render') === 'list',
+    diag: params.get('diag') === '1',
+    night: params.get('noite') === '1',
+  };
 }
