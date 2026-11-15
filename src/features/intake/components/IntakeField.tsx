@@ -28,16 +28,20 @@ const MAX_HEIGHT_VH = 45;
 function useIntakeDraft() {
   const [text, setText] = useState<string | null>(null);
   const latest = useRef('');
+  const loaded = useRef(false);
   useEffect(() => {
     let alive = true;
     void loadDraft(NEW_TRIP_KEY).then((draft) => {
       if (!alive) return;
+      loaded.current = true;
       latest.current = draft;
       setText(draft);
     });
     return () => {
       alive = false;
-      void saveDraft(NEW_TRIP_KEY, latest.current);
+      // antes de carregar não há o que guardar: a desmontagem que o StrictMode simula apagaria o
+      // rascunho com o texto vazio do começo
+      if (loaded.current) void saveDraft(NEW_TRIP_KEY, latest.current);
     };
   }, []);
   useEffect(() => {

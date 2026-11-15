@@ -23,7 +23,7 @@ import {
 } from './plan-ai.ts';
 import {
   PLAN_ASK_DAILY_LIMIT,
-  PLAN_ASK_FN,
+  PLAN_ASK_QUOTA,
   PLAN_DAILY_LIMIT,
   PLAN_FN,
   PLAN_MAX_CHARS,
@@ -81,7 +81,7 @@ export async function handlePlan(req: Request, deps: ImportDeps): Promise<Respon
 
   const ask = input.step === 'ask';
   const claim = await deps.store.claim(
-    ask ? PLAN_ASK_FN : PLAN_FN,
+    ask ? PLAN_ASK_QUOTA : PLAN_FN,
     ask ? PLAN_ASK_DAILY_LIMIT : PLAN_DAILY_LIMIT,
   );
   if (!claim.ok) {
@@ -115,6 +115,6 @@ export async function handlePlan(req: Request, deps: ImportDeps): Promise<Respon
     startedAt,
     textChars: chars,
     parse: ask ? parseQuestions : parseImport,
-    label: ask ? PLAN_ASK_FN : PLAN_FN,
+    label: ask ? PLAN_ASK_QUOTA : PLAN_FN,
   });
 }

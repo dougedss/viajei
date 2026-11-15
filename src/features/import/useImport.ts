@@ -99,11 +99,13 @@ export function useImport(target: ImportTarget | null, uid: string | null) {
   const importId = useRef<string | null>(null);
 
   // o rascunho e a revisão guardados, ao abrir
+  const draftLoaded = useRef(false);
   useEffect(() => {
     if (!key) return;
     let alive = true;
     void Promise.all([loadDraft(key), loadReview(key)]).then(([draft, review]) => {
       if (!alive) return;
+      draftLoaded.current = true;
       latestText.current = draft;
       setTextState(draft);
       setStored(review);
@@ -128,7 +130,9 @@ export function useImport(target: ImportTarget | null, uid: string | null) {
     mounted.current = true;
     return () => {
       mounted.current = false;
-      void saveDraft(key, latestText.current);
+      // só depois de o rascunho carregar: a desmontagem que o StrictMode simula na montagem, antes
+      // disso, gravaria o texto vazio por cima do que o campo da lista acabou de guardar (fase 17)
+      if (draftLoaded.current) void saveDraft(key, latestText.current);
       setTimeout(() => {
         if (mounted.current) return;
         abort.current?.abort();

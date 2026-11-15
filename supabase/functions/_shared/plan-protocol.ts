@@ -14,8 +14,12 @@ import { IMPORT_VARIANT_KEYS } from './import-protocol.ts';
 export const PLAN_FN = 'plan-trip';
 /** A leitura da conversa (o `plan`): uma conversa inteira é uma leitura, a saída de hoje outra. */
 export const PLAN_DAILY_LIMIT = 10;
-/** As perguntas têm a trava própria e não contam como leitura (uma pessoa pode recomeçar). */
-export const PLAN_ASK_FN = 'plan-trip-ask';
+/**
+ * A chave da cota das perguntas na `edge_call`: elas têm a trava própria e não contam como leitura
+ * (uma pessoa pode recomeçar). **Não é uma função**: as perguntas vão para a mesma `plan-trip`, com
+ * `step: 'ask'` (a medição e o app chamaram `/functions/v1/plan-trip-ask`, que não existe).
+ */
+export const PLAN_ASK_QUOTA = 'plan-trip-ask';
 export const PLAN_ASK_DAILY_LIMIT = 20;
 /** O pedido, as perguntas e as respostas juntos: uma conversa, não um roteiro colado. */
 export const PLAN_MAX_CHARS = 4_000;

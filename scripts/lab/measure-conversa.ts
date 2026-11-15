@@ -1,7 +1,6 @@
 import { appendFile } from 'node:fs/promises';
 import { validateImport, type ImportData } from '../../supabase/functions/_shared/import-schema.ts';
 import {
-  PLAN_ASK_FN,
   PLAN_FN,
   planQuestionsSchema,
   type PlanContext,
@@ -50,7 +49,8 @@ async function confirmed(data: ImportData, center: { lat: number; lng: number },
   const query = overpassQuery(places, center, radiusKm);
   if (!query) return `0/${String(places.length)} (sem nome que distinga)`;
   try {
-    const elements = await overpass(query);
+    // no Node, o cliente se identifica (sem isso o Overpass responde 406): um nome genérico
+    const elements = await overpass(query, { userAgent: 'viajei-laboratorio/1.0 (medicao)' });
     const ok = places.filter((p) => matchElement(p, elements, center) !== null).length;
     return `${String(ok)}/${String(places.length)} no Overpass`;
   } catch (err) {
@@ -67,7 +67,7 @@ export async function measureConversa(cfg: LabConfig, a: Session): Promise<numbe
   log('medição: a conversa, as perguntas');
   const text = 'Serra Gaúcha em dezembro, 4 dias, saindo de Papanduva';
   const ask: PlanRequest = { step: 'ask', kind: 'plan', text, context: context(today) };
-  const asked = await timedImport(cfg, a, ask, PLAN_ASK_FN);
+  const asked = await timedImport(cfg, a, ask, PLAN_FN);
   const questions = planQuestionsSchema.safeParse(asked.data);
   const qs = questions.success ? questions.data.questions : [];
   rows.push({

@@ -25,13 +25,23 @@ type Row = {
   tags?: Record<string, string>;
 };
 
-/** Os elementos com nome e posição (o centro, nas vias e relações). Erro de rede ou HTTP sobe. */
-export async function overpass(query: string, signal?: AbortSignal): Promise<OsmElement[]> {
+/**
+ * Os elementos com nome e posição (o centro, nas vias e relações). Erro de rede ou HTTP sobe.
+ * `userAgent`: fora do navegador (a medição do laboratório, no Node), o cliente se identifica, como
+ * a política do serviço pede; sem isso ele responde 406. No navegador, vale o do próprio navegador.
+ */
+export async function overpass(
+  query: string,
+  options: { signal?: AbortSignal; userAgent?: string } = {},
+): Promise<OsmElement[]> {
   const res = await fetch(OVERPASS_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      ...(options.userAgent ? { 'User-Agent': options.userAgent } : {}),
+    },
     body: `data=${encodeURIComponent(query)}`,
-    signal: signal ?? AbortSignal.timeout(DEADLINE_MS),
+    signal: options.signal ?? AbortSignal.timeout(DEADLINE_MS),
   });
   if (!res.ok) throw new Error(`Overpass ${String(res.status)}`);
   const json = (await res.json()) as { elements?: Row[] };

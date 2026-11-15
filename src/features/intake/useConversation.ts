@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import type { ImportEvent } from '@shared/import-protocol.ts';
 import { importTripHeaderSchema, validateImport } from '@shared/import-schema.ts';
-import { PLAN_ASK_FN, PLAN_FN, planQuestionsSchema } from '@shared/plan-protocol.ts';
+import { PLAN_FN, planQuestionsSchema } from '@shared/plan-protocol.ts';
 import { ImportFailure, streamEvents } from '@/features/import/client.ts';
 import { NEW_TRIP_KEY, saveReview } from '@/features/import/draft.ts';
 import { newTripReview } from '@/features/import/new-review.ts';
@@ -223,7 +223,8 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
         return;
       }
       setStage({ kind: 'asking' });
-      const done = await stream(PLAN_ASK_FN, askRequestOf(base), 'ask');
+      // as perguntas vão para a mesma função, com `step: 'ask'`
+      const done = await stream(PLAN_FN, askRequestOf(base), 'ask');
       if (!done) return;
       const parsed = planQuestionsSchema.safeParse(done.data);
       const questions = parsed.success ? parsed.data.questions : [];

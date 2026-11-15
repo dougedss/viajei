@@ -234,8 +234,12 @@ test('um roteiro em texto livre: a importação cria a viagem e pergunta as data
   await expect(page.getByRole('heading', { name: 'Revisar a viagem' })).toBeVisible({
     timeout: 20_000,
   });
-  // a viagem ainda não existe: a leitura foi sem viagem
-  expect(pedido).toMatchObject({ trip_id: null, trip: null });
+  // a viagem ainda não existe: a leitura foi sem viagem, com o texto do campo
+  expect(pedido).toMatchObject({
+    trip_id: null,
+    trip: null,
+    text: expect.stringContaining('*Fim de semana na serra*'),
+  });
 
   const viagem = page.getByRole('region', { name: 'A viagem' });
   await expect(viagem.locator('[data-asked]')).toContainText('Falta 1 coisa');
@@ -351,6 +355,11 @@ test('a conversa: as perguntas ditas antes, o roteiro conferido no mapa, um luga
     timeout: 30_000,
   });
   expect(pedidos.map((p) => p.step)).toEqual(['ask', 'plan']);
+  // o pedido é o texto do campo, nas duas
+  expect(pedidos.map((p) => (p as { text?: string }).text)).toEqual([
+    'Serra Gaúcha em dezembro, saindo de Papanduva',
+    'Serra Gaúcha em dezembro, saindo de Papanduva',
+  ]);
   expect(pedidos[1]).toMatchObject({ kind: 'plan', answers: ['2 dias', 'cachoeiras e vinícolas'] });
   // uma consulta ao Overpass na conversa inteira
   expect(overpass.count()).toBe(1);
@@ -364,6 +373,8 @@ test('a conversa: as perguntas ditas antes, o roteiro conferido no mapa, um luga
   await expect(page.getByText('Conferido no mapa (OpenStreetMap)').first()).toBeVisible();
   await semRolagem(page, 'a revisão da conversa');
   await axe(page, 'a revisão da conversa');
+  // a saída e a chegada (que não são lugares propostos) a busca de lugar da revisão localiza
+  await expect(page.getByText(/^Lugares localizados/)).toBeVisible({ timeout: 15_000 });
 
   await page.getByRole('button', { name: 'Criar a viagem' }).click();
   await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
@@ -384,9 +395,12 @@ test('a conversa: as perguntas ditas antes, o roteiro conferido no mapa, um luga
     ]);
   // a missão do lugar que saiu saiu junto
   expect(
-    (await linhas('checklist_items', `trip_id=eq.${tripId}&kind=eq.quest&select=text`)).map(
-      (q) => q.text,
-    ),
+    (
+      await linhas(
+        'checklist_items',
+        `trip_id=eq.${tripId}&kind=eq.quest&status=eq.active&select=text`,
+      )
+    ).map((q) => q.text),
   ).toEqual(['Foto do time com a cascata ao fundo']);
 });
 
@@ -425,8 +439,8 @@ test('quero sair hoje: a pergunta de alcance, a posição e o tempo na conta, e 
   );
   await page.route('**/functions/v1/plan-trip', (route) =>
     respondSse(route, hojeSse, (body) => {
-      const b = body as { kind?: string; context: Record<string, unknown> };
-      contexto = { ...b.context, kind: b.kind };
+      const b = body as { kind?: string; text?: string; context: Record<string, unknown> };
+      contexto = { ...b.context, kind: b.kind, text: b.text };
     }),
   );
   const user = await criarUsuario('Hoje');
@@ -462,6 +476,7 @@ test('quero sair hoje: a pergunta de alcance, a posição e o tempo na conta, e 
   // o que entrou na conta: a posição arredondada (uns 1 km), a cidade, o tempo e o alcance
   expect(contexto).toMatchObject({
     kind: 'today',
+    text: 'quero sair hoje',
     position: { lat: -29.37, lng: -50.88 },
     place: 'Canela, RS',
     reach: 'day',
