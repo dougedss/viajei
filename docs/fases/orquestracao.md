@@ -334,5 +334,88 @@ Ubuntu, nenhum cenário rodou) e 13/11 (`app_parada_auto` e `app_clima`). É a 3
   fase, junto com este relatório.
 
 ### Sessão
-_(aberta pelo Douglas num chat novo; a preencher no próximo passo)_
+- **Aberta pelo Douglas às 08h19 de 15/11** (11h19 UTC) num chat novo, no **Opus 5.5**, pela autorização
+  antecipada da seção 2; ele não interveio até o resumo final. Uma sessão só, com um resumo automático
+  de contexto no meio (10h41). A conta pela transcrição: 1.109 respostas, 1,63 M tokens de saída,
+  525 M de cache lido, 2,68 M de cache criado.
+- **Os commits:** 12 entre 08h35 e 12h49 (3.0 → 3.2 → 3.1 → 3.4 → 3.3 → 3.5 → `fase 17: criar a viagem
+  conversando` em `56d055d` às 10h04; depois cinco de CI, laboratório e documentação). **Os pushes:** 4,
+  pela regra do push em lote: o primeiro com tudo (CI 43717119821 vermelha no Vitest: o teste dos gostos
+  carregava o client do Supabase, que exige `VITE_SUPABASE_URL`; no Mac o Vitest lê o `.env.local`, na CI
+  não); o segundo (CI 43718292273 vermelha no Playwright, 59 de 61: a conversa mandava as perguntas a
+  uma rota `plan-trip-ask` que não existe, e o StrictMode do desenvolvimento apagava o rascunho do campo);
+  o terceiro (`5af8241`, CI 43722286623 verde: 1.115 Vitest, 493 pgTAP, 62 Playwright, 15 min); o quarto
+  (`6894c7c`, a conferência com o Overpass ao lado da fila e os docs, CI 43731998697 verde).
+- **No hospedado**, pela autorização: a `0015_conversa` por `db push` com o `--dry-run` lido e a
+  conferência por leitura; a `import-itinerary` v4 e a `plan-trip` v1 (depois v2, a constante
+  `PLAN_ASK_QUOTA`) publicadas pelo CLI do projeto, com `verify_jwt`. Nenhum secret novo.
+- **As leituras reais da IA**, contadas (seção 2, item 4): a tarefa `medir-conversa` do `lab.yml` duas
+  vezes (run 43718519057, vermelha: a rota `plan-trip-ask` e o Overpass 406 ao Node sem identificação;
+  run 43731264589, verde), cinco leituras que somaram US$ 0,153. Uma conversa inteira custa de US$ 0,035
+  a 0,057 (as perguntas US$ 0,004); uma saída de hoje de US$ 0,029 a 0,035.
+- **O laboratório do preview, uma vez** (run 43718568623, em `23ab69b`, 10h21): todos os cenários
+  verdes; ao ler os dados, dois achados corrigidos sem outro laboratório (o Lago Negro saía da viagem
+  como "não encontrado", porque o Nominatim classifica lagos como `water`; e os 6 "pedidos travados" eram
+  os três pedidos de logo depois de entrar, contados no documento errado pelo condutor do relógio).
+- **O merge** por fast-forward às 13h06 (`git push origin 6894c7c:main`; CI da `main` 43733632964 verde;
+  Vercel `success` às 13h07). **O laboratório da produção, uma vez** (run 43734636122, 13h17 a 13h47):
+  38 cenários, 35 verdes, 3 pulados por horário (véspera, prazo, retrospectiva), **nenhum vermelho**;
+  `pedidos_travados` vazio; a Cascata e o Lago Negro confirmados em 2,8 s pelo Nominatim, o Overpass
+  público sem resposta de novo; Lighthouse do app instalado: perfil 91 (era 76), garagem 95 (era 79),
+  viagem nova 93. O agendado das 10h51 (run 43721163525, ainda em `9945f35`) ficou vermelho só no
+  Lighthouse do perfil e da garagem: o que a 3.0 desta fase corrigiu.
+- **O resumo final** às 13h48; a sessão deixou esta seção em branco (preenchida pelo orquestrador às 14h50,
+  pelos registros do GitHub e pela transcrição) e deixou de fora dos commits, por prudência, o
+  `docs/fases/plano-melhorias.md` que o orquestrador editou às 10h50 (abaixo).
+- **15/11, 10h50, com a sessão em andamento:** o Douglas trouxe do balcão de ideias
+  `docs/ideias/2026-11-15-mapa-do-dia-inteiro.md` e pediu ao orquestrador para encaixá-la no plano sem
+  abrir fase nem sessão. O plano ganhou as **fases 22 (O dia inteiro na tela) e 23 (Os cartões-postais)**
+  e a ordem nova (17 → 22 → 18 → 23 → 19 → 20 → 21), com as oito decisões dele de 15/11 e o que elas
+  mudam na D175, na D177, na D178 e na 6.1 do prompt mestre. O plano e a ideia ficaram fora do git até o
+  commit de fechamento da fase 22.
+
+### Portão de saída (conferido às 14h50 de 15/11 pelo orquestrador, a pedido do Douglas)
+- ponta da `main`: `6894c7c`, com o commit `fase 17:` (`56d055d`) e os cinco seguintes; fast-forward de
+  `9945f35`; 12 commits, nenhum trailer de coautoria.
+- CI verde no sha (branch 43731998697; `main` 43733632964). Laboratório do preview uma vez, verde
+  (43718568623); da produção uma vez, verde (43734636122). Dentro dos dois da regra.
+- `decisoes.md`: D201 a D213, sequenciais, na seção da fase 17. `fase-17.md` e `orquestracao.md`
+  commitados em `56d055d`. Memória do projeto atualizada pela sessão (o parágrafo "Estado em 15/11
+  (tarde)" e as armadilhas da fase 17). Resumo final entregue ao Douglas.
+- **O que o Douglas disse que vê depois** ("a 17 tem umas pendências que vou ver depois"): o nome do
+  app (Roteirei recomendado); a CLI da Vercel deste Mac na conta de cliente; o `progressao.spec`
+  instável (D167); a migration que tira `trips.car_*`; quem subiu um Supabase local no Mac em 15/11
+  (parou ~12h39); o Overpass público, que não respondeu nenhuma vez em 15/11 (o app não depende dele);
+  o `.claude/commands/ideia.md` fora do git (se entra no repositório público é decisão dele). Nenhuma
+  trava a fase seguinte.
+- a `fase-17` remota ainda existe: a fase 22 apaga.
+
+---
+
+## Fase 22 · O dia inteiro na tela
+
+### Portão de entrada (aberto às 14h50 de 15/11, a pedido do Douglas: "vamos para o próximo")
+- fase 17 na `main`: sim, `6894c7c`, a ponta.
+- CI da `main` em `6894c7c`: verde. Laboratório da produção: verde no sha (run 43734636122).
+- `docs/decisoes.md` com a seção da fase 17: sim, D201 a D213. **As D da fase 22 começam na D214.**
+  Nenhuma migration nesta fase (a próxima continua sendo a `0016`, de quem precisar dela).
+- memória do projeto atualizada depois da fase 17: sim (pela sessão), completada pelo orquestrador
+  (o parágrafo da fase 22).
+- dependência (14 → 22): satisfeita (a 14 está na `main` desde 08/11). A 22 vem antes da 18 pela ordem
+  do plano de 15/11: conserta a tela principal, que o dono do app não reconheceu.
+- `docs/fases/fase-22.md` escrito às 14h50 de 15/11 pelo orquestrador, a partir do plano (a fase 22 e
+  as decisões de 15/11), da ideia e dos esboços (o artifact), das D174 a D180 e D57 a D64, e de um
+  levantamento do código em `6894c7c` (o layout e o `fitCamera`, a câmera e o rig, a abertura, o HUD e
+  a altura medida, as miniaturas e as caixas, o cenário e a luz, a qualidade, as cidades da leitura do
+  lugar, a retrospectiva, os testes e o `app_maquete`). Com a 3.0 (quase nada: a `fase-17` remota e os
+  quatro arquivos de documentação fora do git), a câmera A pela altura medida e fora do layout, o carro
+  maior andando com a câmera parada, o modo de perto ao toque com a volta sozinha, o traçado em retrato,
+  a maquete de mesa (base cortada, sombra suave, desfoque de CSS, noite por emissão, vegetação da
+  região), as miniaturas na escala nova com a porta para a 23, até três cidades de passagem por dia, os
+  testes e o laboratório (`pilulas_em_cena` = paradas do dia, as capturas de dia, de noite e de perto),
+  nenhuma leitura de IA e nada no hospedado. Fora do git até o commit de fechamento da fase, junto com
+  este relatório, o plano modificado e `docs/ideias/`.
+
+### Sessão
+_(a abrir pelo Douglas num chat novo; a preencher no próximo passo)_
 

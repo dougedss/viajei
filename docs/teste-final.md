@@ -30,6 +30,7 @@ ficam na pasta como registro; tudo o que eles pedem está aqui.
 | iPhone E (fase 15) | no carro, com o mapa aberto, uma parada de verdade num posto | 1.25 | 30 min |
 | iPhone F (fase 16) | em casa, com outra pessoa do time no aparelho dela | 1.26 | 25 min |
 | iPhone G (fase 17) | em casa, com a conversa do WhatsApp da viagem; a saída de hoje na rua | 1.27 | 35 min |
+| iPhone H (fase 22) | em casa e no carro, no Safari sem instalar e no app instalado, de dia e depois das 18:30 | 1.28 | 25 min |
 
 **Total: umas 8 h no iPhone e 3 h 15 no Android**, perto de 11 h em três dias seguidos, mais os
 toques com hora marcada. A sentada C pode ficar para depois do Android.
@@ -805,6 +806,37 @@ verdade); o que falta é a mão, a voz e o colar de um aparelho.
 
 Anotações:
 
+### 1.28 O dia inteiro na tela · 25 min (fase 22) · sem prova até a viagem
+
+Como o 1.24 a 1.27, fica como documentação até a viagem (D214 a D223). O enquadramento, o modo de
+perto, as peças, a noite e as cidades estão provados na CI (Vitest e e2e no WebGL por software) e no
+laboratório (o Chromium de verdade, com as capturas); o que falta é um aparelho de verdade: o Safari
+sem instalar com o palco de 563 px, o dedo no carro, o fps e o desfoque num celular.
+
+- [ ] **O dia inteiro, no Safari sem instalar.** Abra a viagem no Safari (não o app instalado): a
+  maquete inteira, inclinada, da saída à chegada, com todas as pílulas em cena, acima do "Agora" e do
+  botão Detalhes; com um cartão da vez na tela (o pedido de posição, o "Como foi?"), a maquete fica
+  menor e **nenhuma pílula fica atrás do cartão**. Anote quanto do palco a maquete ocupa.
+- [ ] **No app instalado**, a mesma tela: maior, porque o palco tem mais altura. Compare com
+  `img/A.jpg` dos esboços: a base cortada, o corte de terra, a sombra na mesa, as peças grandes.
+- [ ] **O carro.** Ele é o que o olho acha primeiro? O anel claro no chão aparece no dia inteiro e
+  some de perto. Ande de carro com o mapa aberto: o carro anda sobre a maquete e a câmera fica parada.
+- [ ] **O toque no carro, com o dedo.** Toque no carro (ou no anel): a câmera desce até ele, olhando a
+  próxima parada; sem outro toque, volta sozinha em uns 6 s; toque fora e ela volta na hora. Toque
+  numa peça: abre a folha da parada. Com "Reduzir movimento" ligado no iPhone, os cortes são secos.
+- [ ] **O fps com a maquete de mesa.** Com `?diag=1` no endereço, "Rever o dia": leia o chip durante o
+  movimento, em Alta e em Leve, no Safari e no app instalado. Anote também se o desfoque das bordas
+  (só em Alta) faz o movimento engasgar; se fizer, anote o modelo do iPhone.
+- [ ] **A noite.** Depois das 18:30 (ou com `?noite=1`): o fundo escuro, as janelas das peças e as
+  poças de luz quente, os faróis do carro. Compare com `img/N.jpg`.
+- [ ] **As cidades de passagem.** Num dia com rota real por uma cidade grande sem parada (o dia 1 da
+  viagem passa por Lages, Vacaria e Caxias do Sul): os nomes pequenos na beira da estrada, sem pílula;
+  o VoiceOver não os lê e nada neles recebe foco.
+- [ ] **A retrospectiva** de uma viagem passada: o filme abre com a viagem inteira na maquete de mesa
+  e desce até o carro, como antes.
+
+Anotações:
+
 ## Parte 2 · Android
 
 O mesmo percurso, mais curto: aqui está só o que muda no Android, e no fim o resto, item a item,
@@ -1001,6 +1033,9 @@ Anotações:
   teclado do Google, colar do WhatsApp, o formato do Viajei sem rede, "quero sair hoje" com a posição,
   "Copiar roteiro como texto" e o pedido para outras IAs pela área de transferência do Chrome, e o
   TalkBack nas perguntas.
+- [ ] **O dia inteiro na tela (fase 22), o mesmo do 1.28** no Android: a maquete inteira no Chrome sem
+  instalar e no app instalado, o toque no carro e a volta, o fps do "Rever o dia" em Alta e em Leve com
+  o desfoque das bordas, a noite e as cidades de passagem sem foco no TalkBack.
 
 Anotações:
 

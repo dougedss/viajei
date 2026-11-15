@@ -1,4 +1,4 @@
-# Melhorias depois da fase 12: as fases 13 a 20
+# Melhorias depois da fase 12: as fases 13 a 23
 
 As anotações do Douglas de 08/11/2026 (o caderno com o desenho do mapa e o print da tela do mapa),
 organizadas em fases. Cada fase ganha o próprio `docs/fases/fase-N.md` quando chegar a vez dela,
@@ -24,8 +24,14 @@ deixa a pendência no resumo final.
 
 ## A ordem
 
-Sem datas e sem trava (decisão do Douglas, 08/11): cada fase entra quando estiver pronta, e a ordem
-é só a das dependências. A 13 vai primeiro por corrigir defeitos.
+Sem datas e sem trava (decisão do Douglas, 08/11, reafirmada em 15/11: a viagem real não é critério
+de nada): cada fase entra quando estiver pronta, e a ordem é só a das dependências e do valor. A 13
+vai primeiro por corrigir defeitos. O número é o nome da fase (o `fase-N.md`), não a posição: a 22 e
+a 23 chegaram pelo balcão de ideias em 15/11 (`docs/ideias/2026-11-15-mapa-do-dia-inteiro.md`) e
+entram onde a dependência e o valor mandam. A 22 vem logo depois da 17 porque conserta a tela
+principal, que o dono do app não reconheceu; a 18 fecha o trio do "sem digitar" (15, 17, 18) antes
+do bloco dos geradores; a 23 vem antes da 19 porque constrói a maquinaria que a 19 e a 20 reaproveitam
+(busca de referência, visão, segunda olhada, cache), e a maquete é o que a pessoa vê todo dia.
 
 | Fase | Entrega | Depende de | Tamanho |
 |---|---|---|---|
@@ -34,7 +40,9 @@ Sem datas e sem trava (decisão do Douglas, 08/11): cada fase entra quando estiv
 | 15 | Paradas que se registram sozinhas (com o mapa aberto) | 14 | média |
 | 16 | A garagem é da pessoa, e o perfil organizado | 13 | média |
 | 17 | Criar a viagem conversando: um campo só, a saída de hoje, o pedido para outras IAs | 16 | grande |
+| 22 | O dia inteiro na tela: a câmera A (a maquete do dia inteiro, inclinada; de perto ao tocar no carro), o traçado em retrato, a maquete de mesa | 14 | grande |
 | 18 | Reservas e gastos sem digitar: ler a confirmação (colada, anexada ou encaminhada por e-mail) e a nota | 17 | média |
+| 23 | Os cartões-postais: a parada é o lugar, a cidade de passagem na beira da estrada; o catálogo que cresce por viagem | 22, 17 | grande |
 | 19 | O gerador de carros: o perfil paramétrico capaz de descrever carros de verdade | 16 | grande |
 | 20 | O seu carro: marca, modelo e ano viram o carro da maquete, com cache e aviso | 19 | grande |
 | 21 | O banco conectado (opcional): os gastos pelo Open Finance, por um agregador, com contrato | 18 | média |
@@ -282,6 +290,86 @@ os limites.
 
 ---
 
+## Fase 22 · O dia inteiro na tela
+
+A pessoa abre a viagem e vê **a maquete do dia inteiro**, da saída à chegada, inclinada, como uma
+maquete de mesa: a estrada serpenteia de baixo para cima, o carro anda sobre ela e continua sendo o
+maior objeto da estrada, e cada parada é uma peça grande, reconhecível de longe. Viagem de um dia: o
+dia é a viagem, e é a viagem inteira que aparece. A fase 14 leu o desenho do caderno como "câmera
+atrás do carro" (D177); o Douglas abriu o app depois dela e não reconheceu o que tinha desenhado. O
+dia inteiro hoje só aparece por 1,8 s na primeira abertura do dia em cada aparelho; depois disso, e
+no "Rever o dia", a tela mostra um trecho de estrada e uma parada. Ideia fechada no balcão em
+15/11/2026 (`docs/ideias/2026-11-15-mapa-do-dia-inteiro.md`, com os esboços que ele aprovou).
+
+**O que entra**
+
+- **A câmera do dia inteiro (a A dos esboços).** O quadro de repouso é o dia inteiro, inclinado,
+  entre a barra do dia e a caixa de baixo (o cartão da vez, "Detalhes", o "Agora"): todas as paradas
+  do dia em cena, cada uma com a sua pílula; a pílula presa ao topo com seta (D177) deixa de ser
+  necessária. Nos esboços, 52° de inclinação e FOV 26 numa tela de 393 × 800; o `fitCamera` do app é
+  64° e FOV 30: a fase afina, e a referência é a imagem A, não o 64° de antes da 14. O enquadramento
+  desconta a **altura medida** do que está sobre o pé do palco (`useOverlayInset`, D175), não os
+  136 px fixos de hoje: é o limite que a própria D177 registrou. No Safari sem instalar o palco tem
+  cerca de 563 px e a caixa de baixo cobre de 170 a 250 px (estimativa pelas classes; a fase mede).
+- **O carro anda sobre a maquete, com a câmera parada:** por GPS, por botão, no replay ao abrir e no
+  "Rever o dia" (a seção 6.4 do prompt mestre já dizia "câmera parada" para o replay). Desenhado
+  maior que a escala (nos esboços 2,55×, com um anel claro no chão) para continuar sendo o que o
+  olho acha primeiro; a fase mede o tamanho mínimo dele na tela.
+- **De perto, ao tocar no carro.** A câmera da fase 14 (D177) não se joga fora: vira este modo.
+  Desce até o carro, olha a próxima parada e volta sozinha ao dia inteiro. Com reduzir movimento,
+  corta. A volta: a recomendação é alguns segundos parado, ou um toque fora do carro; a fase decide
+  o número e registra.
+- **A abertura do dia** constrói a maquete no próprio quadro do dia inteiro e termina nele, sem
+  descer. As curiosidades continuam mergulhando e voltando.
+- **O traçado em retrato.** O S de hoje chega a cerca de 61 × 190 unidades mais os tocos (`Z_MAX`,
+  `xHalf` em `layout.ts`): enquadrado inteiro num celular, sobra margem dos lados e tudo fica
+  pequeno. Nos esboços o dia ocupa 64 × 132, com mais idas e vindas de um lado ao outro. É uma
+  mudança de `layout.ts`, não só de câmera; a retrospectiva parte do mesmo layout e muda junto.
+- **A maquete de mesa.** A base cortada, como maquete de verdade: o terreno termina num corte de
+  terra sobre uma base escura, com sombra embaixo (hoje o chão vai até a névoa). Sombra suave, foco
+  mais nítido no meio e levemente desfocado nas bordas de cima e de baixo (nos esboços, um desfoque
+  de CSS sobre o canvas, sem pós-processamento); à noite, as janelas acesas e uma poça de luz quente
+  em cada lugar do dia (o modo noite já existe). A vegetação e os detalhes da região, não só
+  monumentos: araucárias no planalto, hortênsias na beira da estrada na Serra, parreirais (o app já
+  classifica o bioma e o cenário de cada trecho, seção 6.2).
+- **As miniaturas por tipo, na escala nova.** Com o dia inteiro na tela, as miniaturas de hoje
+  (0,8 a 4,4 unidades de frente, D178) quase somem e todo dia fica igual: mudar só a câmera não
+  basta. Elas continuam existindo, refeitas para a escala das peças grandes (nos esboços, 10 a 23
+  unidades de frente), e são o que aparece quando o lugar não tem peça própria (a fase 23 traz a
+  peça do lugar). Tocar nelas continua abrindo a folha da parada (D178).
+- **A cidade de passagem** por onde a rota passa, sem parada: o nome pequeno na beira da estrada,
+  sem pílula e sem horário; no máximo três por dia, as maiores (`samplePlaces` em
+  `src/lib/geo/segments.ts` já dá o município mais populoso a cada 2 km da rota). O cartão-postal
+  dela é da fase 23.
+- **Por que cabe:** parado, a cena não redesenha (`frameloop="demand"`), e com a câmera de repouso
+  parada isso vale quase o tempo todo. O orçamento de qualidade pode ir para o quadro parado; o fps
+  se mede quando o carro anda e no mergulho. É raciocínio do balcão: a fase mede, nas máquinas do
+  laboratório e com o índice de CPU (D170), e registra.
+
+**O que muda nas decisões e nos documentos.** A **D177** passa a descrever o modo de perto (a câmera
+que segue o carro ao toque, com os números dela), não o quadro de repouso; a pílula presa ao topo com
+seta sai; o limite dos 136 px fixos se resolve pela altura medida. A **D178** ganha a escala nova das
+miniaturas por tipo (as caixas mudam) e a regra de que elas são o que aparece sem peça própria. A
+**D175** não muda o que fica sobre a maquete, mas o enquadramento passa a descontar a altura medida.
+A **seção 6.1 do prompt mestre** deixa de dizer "a câmera segue o carro" e volta a dizer o que a
+decisão 1 de 04/11 (`docs/atualizacao-prompt-3d.md`) dizia: o dia inteiro na tela, com o carro
+andando sobre a maquete e o modo de perto ao toque; a 6.4 continua ("câmera parada" no replay).
+
+Sem IA, sem servidor e sem migration: código do mundo 3D e testes. **Decidido em 15/11:** a câmera é
+a A, com o toque no carro para ver de perto; a câmera B (de cima) foi descartada porque as peças
+perdem o volume; mudar só a câmera foi descartado. Testes: Vitest da câmera e do traçado (todas as
+paradas do dia dentro da faixa útil em três proporções de palco, incluindo 393 × 563 e 360 de
+largura, com a altura medida do que está sobre o pé; o tamanho mínimo do carro; o toque no carro e a
+volta; o corte com reduzir movimento; o traçado para dias de 2, 4 e 8 paradas, curtos e longos);
+`camera.test`, `layout.test`, `tela.spec` e `maquete.spec` com o dia inteiro (uma pílula por parada,
+nenhuma sob a caixa de baixo; o `maquete.spec` hoje assume que o Parque sai de cena depois da
+abertura); o `retrospectiva.spec` continua tocando o filme; o laboratório cobra `pilulas_em_cena`
+igual ao número de paradas do dia e guarda `maquete.png` de dia e de noite. Decisões: a câmera e os
+números, o traçado, a maquete de mesa, as miniaturas na escala nova, a cidade de passagem, o que
+mudou na D175, na D177 e na D178.
+
+---
+
 ## Fase 18 · Reservas e gastos sem digitar
 
 **Reservas.** O que a pessoa recebe ao reservar é a fonte (ver "O que não dá"). "Ler a
@@ -319,6 +407,96 @@ Os dois usam a mesma família de funções da importação: `edge_call`, nada em
 Testes: Vitest dos leitores e da escolha da viagem pelas datas; teste das funções com entradas fixas
 (um PDF, um print, uma nota, um e-mail bruto); e2e; laboratório (um e-mail de verdade encaminhado,
 de ponta a ponta até o push). Decisões: a leitura, o `share_target`, o e-mail, a NFC-e.
+
+---
+
+## Fase 23 · Os cartões-postais
+
+A maquete deixa de ser genérica. Uma parada que é um lugar conhecido aparece como **o lugar** (a
+Cascata do Caracol é a cascata, não um grupo de árvores), e uma cidade por onde a rota passa aparece
+com o seu **cartão-postal** na beira da estrada (passando por Curitiba, o Jardim Botânico). As peças
+são fiéis ao lugar de verdade. É o mesmo desenho das fases 19 e 20 aplicado a lugares, com uma
+diferença: lugar é fiel, carro é "como o GTA faz". Depende da 22 (a escala e os lugares na maquete)
+e da 17 (a conferência de lugares no OSM e a fila do Nominatim e do Overpass).
+
+**O que entra**
+
+- **Dois gatilhos.** (a) A parada **é** o lugar: a peça toma o lugar da miniatura do tipo, e o toque
+  nela continua abrindo a folha da parada (D178). (b) A rota **passa** pela cidade, sem parada: o
+  cartão-postal fica na beira da estrada, com o nome (a cidade de passagem da fase 22).
+- **A peça é um dado, nunca código.** O servidor entrega uma **receita declarativa** (formas,
+  repetições, materiais de uma paleta fechada), validada por schema e com teto de tamanho, e o mesmo
+  construtor das miniaturas a monta. Nada que a IA escreva é executado no aparelho. O vocabulário
+  dessa receita é a parte que pede carinho, como o perfil dos carros na fase 19: contorno em planta,
+  vãos repetidos, arcos, abóbada varrida, cúpulas com nervuras, vidro, canteiros, flores
+  instanciadas. **A régua visual é a estufa do Jardim Botânico** escrita nessa receita, ao lado da
+  peça fiel dos esboços (`img/m-jardim.jpg` do artifact citado na ideia): se a receita não consegue
+  dizer a estufa, o vocabulário está curto. É o corte natural se a fase precisar ser quebrada em
+  duas: primeiro o vocabulário e o construtor, com a estufa escrita à mão e sem IA; depois o gerador.
+- **Um catálogo de todos, que cresce por viagem.** Quando o roteiro de uma viagem fica pronto
+  (paradas com coordenada, rota calculada), o app lista os lugares dela e procura cada um no
+  catálogo. O que existe, baixa (poucos KB) e guarda com a viagem, para funcionar sem internet. O
+  que falta entra numa fila no servidor: identificar o lugar (OpenStreetMap, Wikidata), buscar fotos
+  de referência e medidas, a IA escreve a peça, uma **conferência automática** compara a peça com as
+  fotos, e ela entra no catálogo sozinha, sem ninguém aprovar uma a uma. A segunda viagem que passar
+  pelo mesmo lugar recebe na hora, sem IA.
+- **Fiel, feita olhando as fotos.** No balcão a estufa foi feita duas vezes: de memória saiu com a
+  estrutura errada; olhando três fotos da Wikipédia saiu certa (a base larga com 24 vãos em arco, os
+  três tambores com as cúpulas, o terraço com a fonte e as duas escadas, os canteiros em
+  zigue-zague). A foto de referência e a conferência contra ela são obrigatórias. **As fotos são só
+  entrada** (Wikimedia Commons, licenças livres com autoria): a IA olha e escreve a peça; nenhum
+  pixel delas vai para o app, nunca se guardam nem se mostram (a regra da fase 20). Medidas reais
+  quando o OpenStreetMap ou o Wikidata as têm.
+- **Enquanto a peça não chega, e quando não há referência:** a miniatura do tipo. Lugar sem foto
+  pública (o hotel, o restaurante) fica com a miniatura do tipo para sempre. O app nunca inventa um
+  cartão-postal nem escolhe um por palpite: o lugar precisa existir numa fonte conferível.
+- **Refazer, com limite.** Quem planejou a viagem tem um botão "refazer" na peça: um toque gera mais
+  duas opções e a pessoa **precisa escolher** entre elas. A leitura do balcão, que a fase confirma e
+  registra: refazer vale uma vez por lugar; a escolha é entre as três (a atual e as duas novas), para
+  ninguém ser obrigado a trocar por uma pior; a escolhida passa a ser a peça do catálogo para todos.
+  Um lugar custa no máximo três gerações na vida do app.
+- **Teto por viagem:** 12 lugares novos gerados por viagem; o que passar disso fica com a miniatura
+  do tipo. É do Douglas e pode mudar.
+- **O que pede de fora.** Uma migration: o catálogo (o lugar com a sua chave em fonte pública, a
+  receita, a versão, o estado, e um jeito de **tirar uma peça do ar**), a fila e o registro do
+  refazer; todo mundo lê, só o servidor escreve. Uma função nova: a fila que identifica, busca, gera
+  e confere, com a contagem pela `edge_call` e pelo `ai_imports` (o `kind` da fase 17), consultas ao
+  Nominatim e ao Overpass (a fila da fase 17), ao Wikidata e às APIs da Wikipédia e do Commons (pedem
+  um `User-Agent` identificado e têm limite de taxa). Função do servidor não desenha 3D: a
+  conferência da peça contra as fotos usa o caminho da fase 20, o laboratório desenha no Chromium e
+  o Claude compara. Nada novo do lado do PWA; chave e conta já existem.
+- **O custo, estimado pelo balcão e medido pela fase (D140):** uma chamada de visão por lugar novo
+  mais uma rodada de conferência, perto de 30 mil tokens de entrada e 25 mil de saída (a contagem
+  das fotos não foi conferida): cerca de **US$ 0,30 por lugar** no Sonnet 5.5, US$ 0,60 no Opus 5.5,
+  US$ 1,25 no Fable 5.2 (preços de 03/11/2026). Uma vez na vida do app por lugar, até três com o
+  refazer; com o teto de 12, uma viagem custa no pior caso de US$ 4 a US$ 7 sem refazer. Qual modelo
+  escreve peças fiéis o bastante, a fase descobre testando contra a estufa.
+- **Um limite de fora, registrado para quando houver cobrança ou loja:** o art. 48 da Lei 9.610/98
+  libera representar obra em logradouro público por pintura, desenho, fotografia e audiovisual, e
+  não fala em três dimensões; o STJ lê o artigo de forma restritiva quando há fim lucrativo, e o
+  Cristo Redentor tem titular que já foi à Justiça. O Douglas decidiu seguir com peças fiéis ("são
+  lugares públicos"); o catálogo precisa conseguir tirar uma peça do ar, e vale uma consulta no dia
+  em que o app virar produto.
+
+**Decidido em 15/11:** as peças são fiéis ao lugar real (não vale o "como o GTA faz" dos carros);
+licença não é impedimento; o nível de fidelidade da estufa refeita basta; o catálogo cresce por
+viagem planejada (não um catálogo feito à mão); a peça nova entra sozinha pela conferência
+automática; ao refazer, mais duas opções e a escolha obrigatória; 12 lugares novos por viagem. O que
+foi descartado: modelo 3D pronto da internet ou malha gerada por IA a partir de foto (pesa megabytes,
+pede GLTF, traz a luz da foto na textura, foge do estilo, copia pixels com autor: o item 4 de "O que
+não dá", agora para lugares); o Douglas aprovar cada peça. Sugestão do balcão para depois, não
+decidida: as fotos que a própria pessoa tira na parada servirem de referência para a peça dela, na
+retrospectiva.
+
+Testes: Vitest das peças (a receita passa no schema, cabe na caixa, assenta no chão e respeita o teto
+de formas, como a D66 e a D178; a receita inválida vira a miniatura do tipo; a regra dos lugares: a
+parada casa com o lugar pela coordenada, no máximo três cidades de passagem, sem referência sem
+peça; o teto de 12; o refazer uma vez com a escolha obrigatória); pgTAP do catálogo (todo mundo lê,
+só o `service_role` escreve), da fila, da cota e do refazer; teste da função com um lugar fixo; e2e
+da peça na maquete e da folha; laboratório com o gerador simulado (custo zero) e uma geração de
+verdade, medida uma vez, até a peça aparecer na maquete, com a segunda olhada no Chromium. Decisões:
+a receita e o construtor, o catálogo, a fila e as fontes, a conferência, o refazer, o teto, o custo
+medido, o registro do limite legal.
 
 ---
 
@@ -424,6 +602,12 @@ consentimento, o mínimo de dado, o casamento.
 - Cada fase gera o seu `docs/fases/fase-N.md` na vez dela, com o levantamento feito no código daquele
   momento. Este arquivo é o mapa; não substitui o prompt de cada fase.
 - O teste final nos aparelhos (`docs/teste-final.md`) ganha um bloco por fase que mexe na tela.
+- **Com as fases 22 e 23 (15/11):** a seção 12 do prompt mestre ganha as duas na vez da primeira
+  delas; a 6.1 volta a dizer "o dia inteiro na tela" (a decisão 1 de 04/11 em
+  `docs/atualizacao-prompt-3d.md`, que a D177 tinha revertido), com o modo de perto ao toque; a D175,
+  a D177 e a D178 recebem o que a fase 22 registra (acima); as peças por lugar e o catálogo entram na
+  6.1 e no modelo de dados (seção 5) pela fase 23. Nenhum desses documentos muda antes da fase que o
+  toca: o plano é o mapa.
 
 ## O que o Douglas decidiu em 08/11/2026
 
@@ -441,3 +625,37 @@ consentimento, o mínimo de dado, o casamento.
 10. O desenho do caderno vale como está; sugestões são bem-vindas desde que **não poluam a tela**.
 11. **Todos os chats de fase recebem a autorização antecipada**, com os limites de segurança: ele não
     vai estar presente para autorizar nada.
+
+
+## O que o Douglas decidiu em 15/11/2026
+
+No balcão de ideias, sobre o mapa do dia inteiro (`docs/ideias/2026-11-15-mapa-do-dia-inteiro.md`):
+
+1. **A câmera é a A:** o dia inteiro, inclinado, com o toque no carro para ver de perto. "Deve
+   aparecer o mapa inteiro do dia da viagem. Se a viagem tem um dia apenas, aparece o mapa da
+   viagem." Porque é o que ele desenhou e não achou ao abrir o app.
+2. **As peças são fiéis ao lugar real**, e quanto mais próximas da realidade, melhor ("isso dá uma
+   imersão ainda maior"). Para lugares não vale o "como o GTA faz" dos carros (decisão 9 de 08/11):
+   não se estiliza para fugir da semelhança.
+3. **Licença não é impedimento:** "são lugares públicos que não tem problema ser fielmente
+   parecidos". O limite de fora fica registrado na fase 23, e o catálogo precisa conseguir tirar uma
+   peça do ar.
+4. **O nível de fidelidade da estufa refeita basta.** É a régua.
+5. **O catálogo cresce por viagem planejada:** "para cada viagem planejada, monta as maquetes que
+   ainda não tem e vai salvando". Substitui um catálogo feito à mão.
+6. **A peça nova entra sozinha**, pela conferência automática contra as fotos; ninguém aprova uma a
+   uma. **Ao refazer, o app gera mais duas opções e a pessoa precisa escolher entre elas**, para
+   limitar o consumo.
+7. **A viagem real não é critério de nada:** "nunca mais, em qualquer lugar, deve levar nossa viagem
+   em consideração para nada, apenas vamos fazer". Reafirma a decisão 1 de 08/11: a ordem sai só da
+   dependência e do valor.
+8. **Valeu por omissão** (o balcão avisou que seguiria assim e ele não disse outra coisa): 12 lugares
+   novos por viagem; no máximo três cidades de passagem por dia; cidade de passagem com o nome
+   pequeno, sem pílula e sem horário.
+
+O que essas decisões mudam: a **D177** (a câmera atrás do carro vira o modo de perto; o quadro de
+repouso é o dia inteiro), a **D178** (as miniaturas por tipo na escala nova; a peça por lugar toma o
+lugar delas quando existe) e a **D175** (o enquadramento desconta a altura medida), na fase 22; a
+**seção 6.1 do prompt mestre** na fase 22 e na 23. O orquestrador encaixou a ideia como as fases 22
+e 23 (a tabela "A ordem") em 15/11, com a fase 17 em andamento; nenhuma das duas começa antes do
+Douglas pedir.
