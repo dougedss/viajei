@@ -30,7 +30,7 @@ import { isAchievementKey } from '@/features/progression/team.ts';
 import { useTrip, useTripMembers } from '@/features/trips/queries.ts';
 import { todayISO } from '@/features/trips/rules.ts';
 import { useElementSize } from '@/features/world/hooks/useElementSize.ts';
-import { buildLayout, type WorldLayout } from '@/features/world/layout.ts';
+import { buildLayout, Z_MAX, type WorldLayout } from '@/features/world/layout.ts';
 import { audio } from '@/lib/audio/index.ts';
 import { connectivity } from '@/lib/db/connectivity.ts';
 import {
@@ -150,15 +150,21 @@ function useTripPlace(route: ReturnType<typeof spliceTrip>['route']): PlaceReadi
   useEffect(() => {
     if (!route) return;
     let alive = true;
-    void import('@/lib/geo/index.ts').then(({ classifySegments, curiosities, samplePlaces }) => {
-      const samples = samplePlaces(route);
-      const segments = classifySegments(route, { maxParts: 12 });
-      if (alive)
-        setPlace({
-          key,
-          reading: { segments, curiosities: curiosities(route.elevation, samples, segments) },
-        });
-    });
+    void import('@/lib/geo/index.ts').then(
+      ({ classifySegments, curiosities, passingPlaces, samplePlaces }) => {
+        const samples = samplePlaces(route);
+        const segments = classifySegments(route, { maxParts: 12 });
+        if (alive)
+          setPlace({
+            key,
+            reading: {
+              segments,
+              curiosities: curiosities(route.elevation, samples, segments),
+              places: passingPlaces(samples),
+            },
+          });
+      },
+    );
     return () => {
       alive = false;
     };
@@ -309,8 +315,8 @@ function Retro({ trip, days, stops }: { trip: Trip; days: TripDay[]; stops: Stop
             stops: spliced.stops,
             route: spliced.route,
             place,
-            viewport: { width: size.width, height: size.height, hudTop: 90, hudBottom: 150 },
-            zMax: Math.min(720, 170 * Math.max(1, dayData.length)),
+            // a viagem inteira comprimida: até um dia de maquete (Z_MAX) por dia de viagem
+            zMax: Math.min(560, Z_MAX * Math.max(1, dayData.length)),
           })
         : null,
     [tripId, spliced, place, size.width, size.height, dayData.length],
@@ -408,6 +414,7 @@ function Retro({ trip, days, stops }: { trip: Trip; days: TripDay[]; stops: Stop
             key={`${layout.pathLength.toFixed(1)}:${layout.nodes.length}:${size.width}x${size.height}`}
             art={art}
             layout={layout}
+            size={size}
             car={car}
             forceWebGL={support !== 'webgpu'}
             tripId={tripId}
@@ -509,6 +516,7 @@ class OverlayLoop {
 function FilmPlayer({
   art,
   layout,
+  size,
   car,
   forceWebGL,
   tripId,
@@ -518,6 +526,7 @@ function FilmPlayer({
 }: {
   art: FilmArt;
   layout: WorldLayout;
+  size: { width: number; height: number };
   car: CarSpec;
   forceWebGL: boolean;
   tripId: string;
@@ -589,6 +598,7 @@ function FilmPlayer({
         <Suspense fallback={null}>
           <FilmStage
             layout={layout}
+            size={size}
             car={car}
             plan={art.plan}
             clock={clock}

@@ -387,15 +387,21 @@ describe('o relógio e a câmera do filme', () => {
       photos: [],
       quests: [],
     });
-    const layout = {
-      camera: { target: [0, 0, 50] as [number, number, number], distance: 300, tilt: 1.1, fov: 30 },
-      pathAt: (s: number) => ({ x: 0, y: 0, z: s }),
+    const layout = { pathAt: (s: number) => ({ x: 0, y: 0, z: s }) };
+    const wide = {
+      target: [0, 0, 50] as [number, number, number],
+      distance: 300,
+      tilt: 1.1,
+      yaw: Math.PI,
+      fov: 26,
     };
-    expect(filmCamera(layout, plan, 0).distance).toBe(300);
-    const mid = filmCamera(layout, plan, OPENING_MS + FLIGHT_MS / 2);
+    expect(filmCamera(layout, wide, plan, 0).distance).toBe(300);
+    expect(filmCamera(layout, wide, plan, 0).fov).toBe(26);
+    const mid = filmCamera(layout, wide, plan, OPENING_MS + FLIGHT_MS / 2);
     expect(mid.distance).toBeLessThan(150);
-    expect(filmCamera(layout, plan, 7000)).toEqual(filmCamera(layout, plan, 7000));
-    expect(filmCamera(layout, plan, FILM_MS).distance).toBeGreaterThan(mid.distance);
+    expect(mid.fov).toBe(30);
+    expect(filmCamera(layout, wide, plan, 7000)).toEqual(filmCamera(layout, wide, plan, 7000));
+    expect(filmCamera(layout, wide, plan, FILM_MS).distance).toBeGreaterThan(mid.distance);
   });
 });
 

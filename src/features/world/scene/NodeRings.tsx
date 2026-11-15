@@ -11,7 +11,8 @@ import type { WorldRuntime } from './runtime.ts';
 /**
  * Os anéis no chão de cada nó, com cor e emissão pelo estado: concluída (verde), próxima (acento,
  * mais forte, pulsando enquanto a cena se move), pendente (clara, apagada) e pulada (apagada e
- * menor). Na abertura caem em sequência; quando o carro passa por um nó no replay, o anel salta.
+ * menor). Na abertura caem em sequência; quando o carro passa por um nó no replay, o anel salta. No
+ * repouso do dia inteiro (fase 22) crescem com a mesma fração que o carro, para continuarem legíveis.
  */
 type Props = {
   runtime: WorldRuntime;
@@ -27,6 +28,8 @@ type Ring = { mesh: Mesh<TorusGeometry, MeshStandardMaterial>; stopId: string };
 type RingColors = Record<StopStatus, Color>;
 
 const POP_MS = 450;
+/** o anel no repouso é um pouco mais que o dobro do de perto */
+const RING_FAR_SCALE = 2.2;
 
 function paint(ring: Ring, status: StopStatus, colors: RingColors): void {
   const mat = ring.mesh.material;
@@ -45,8 +48,8 @@ function animate(
 ): void {
   const op = runtime.opening;
   const elapsed = runtime.openingElapsed(now);
-  // de perto, o anel no tamanho natural; quando a câmera recua, cresce para continuar legível
-  let scale = lerp(1, 1.9, farness(runtime.cameraDistance));
+  // de perto, o anel no tamanho natural; no repouso, maior, pela mesma fração do carro
+  let scale = lerp(1, RING_FAR_SCALE, farness(runtime.view));
   let visible = true;
   if (op) {
     const pin = op.plan.pins.find((p) => p.stop_id === ring.stopId);

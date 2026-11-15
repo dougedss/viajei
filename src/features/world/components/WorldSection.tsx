@@ -14,6 +14,7 @@ import type { Backend } from '@/lib/three/renderer.ts';
 import { useQuality } from '@/lib/three/useQuality.ts';
 import { useSupport } from '@/lib/three/useSupport.ts';
 import { formatStamp } from '@/lib/time/index.ts';
+import { restCamera, type CameraMode } from '../camera.ts';
 import { placeCar } from '../car-position.ts';
 import { convoyCarFor } from '../convoy.ts';
 import { useElementSize } from '../hooks/useElementSize.ts';
@@ -21,6 +22,7 @@ import { usePlace } from '../hooks/usePlace.ts';
 import { buildLayout, type WorldLayout } from '../layout.ts';
 import { MotionController, type MotionEvent } from '../motion.ts';
 import { OPENING_TIMELINE, OPENING_TOTAL_MS, openedKey, planOpening } from '../opening.ts';
+import { HUD_TOP } from '../project.ts';
 import { tierFor } from '../quality.ts';
 import { PHOTO_CARD_MS, planLiveAdvance, planReplay, planReview } from '../replay.ts';
 import { WorldRuntime, type Opening } from '../scene/runtime.ts';
@@ -30,13 +32,14 @@ import { ListView, NOW_BAR_INSET, type WorldSlotProps } from '../WorldSlot.tsx';
 import { RAIN_LIKELY } from '@shared/weather.ts';
 import { WeatherChip } from './WeatherChip.tsx';
 import { useWorldAnchor } from './anchor.ts';
-import { HUD_BOTTOM, HUD_TOP, WorldHud, type PhotoCard, type TeamChip } from './WorldHud.tsx';
+import { WorldHud, type PhotoCard, type TeamChip } from './WorldHud.tsx';
 
 /**
  * A maquete do dia na tela da viagem. Esta casca decide se há como desenhar (WebGPU, WebGL2 ou
  * nada), mede o espaço, lê o lugar da rota e constrói o layout; o palco (`WorldStage`) desenha,
  * anima e reage ao que acontece. Preenche a caixa inteira (fase 14); a "Lista do dia" entra no
- * lugar dela pela barra do topo e é o fallback de tudo.
+ * lugar dela pela barra do topo e é o fallback de tudo. O layout não depende do palco (fase 22): a
+ * câmera de repouso é quem enquadra o dia inteiro no espaço que há, pela altura medida.
  */
 export default function WorldSection(props: WorldSlotProps) {
   const support = useSupport();
@@ -45,8 +48,10 @@ export default function WorldSection(props: WorldSlotProps) {
   const [observe, size] = useElementSize();
   const [failed, setFailed] = useState<string | null>(null);
   const [backend, setBackend] = useState<Backend | null>(null);
+  const [cameraMode, setCameraMode] = useState<CameraMode>('repouso');
   const { search } = useLocation();
-  const diag = import.meta.env.DEV || readUrlFlags(search).diag;
+  const flags = readUrlFlags(search);
+  const diag = import.meta.env.DEV || flags.diag;
   const { onEventsOwner, state, route, day } = props;
 
   const unavailable = support === 'none' || failed !== null;
@@ -58,24 +63,10 @@ export default function WorldSection(props: WorldSlotProps) {
   const stopsKey = state.stops
     .map((s) => [s.id, s.kind, s.name, s.lat, s.lng, s.travel_minutes_to_next].join('|'))
     .join(';');
-  const layout = useMemo<WorldLayout | null>(
-    () =>
-      size.width > 0 && size.height > 0
-        ? buildLayout({
-            dayId: day.id,
-            stops: state.stops,
-            route,
-            place,
-            viewport: {
-              width: size.width,
-              height: size.height,
-              hudTop: HUD_TOP,
-              hudBottom: Math.max(HUD_BOTTOM, NOW_BAR_INSET),
-            },
-          })
-        : null,
+  const layout = useMemo<WorldLayout>(
+    () => buildLayout({ dayId: day.id, stops: state.stops, route, place }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- as paradas entram pela chave estável; a rota pelo hash
-    [day.id, stopsKey, route?.hash, place, size.width, size.height],
+    [day.id, stopsKey, route?.hash, place],
   );
 
   if (unavailable) {
@@ -90,8 +81,9 @@ export default function WorldSection(props: WorldSlotProps) {
       className="absolute inset-0 overflow-hidden bg-stage"
       data-world={backend ?? undefined}
       data-world-car={`${shownCar.model}:${shownCar.color}:${shownCar.finish}:${shownCar.wheels}`}
+      data-world-camera={cameraMode}
     >
-      {layout && support !== 'pending' ? (
+      {size.width > 0 && size.height > 0 && support !== 'pending' ? (
         <WorldStage
           {...props}
           layout={layout}
@@ -100,8 +92,10 @@ export default function WorldSection(props: WorldSlotProps) {
           reducedMotion={reducedMotion}
           support={support}
           diag={diag}
+          nightByUrl={flags.night}
           onBackend={setBackend}
           onFail={setFailed}
+          onCameraMode={setCameraMode}
         />
       ) : (
         <p className="grid h-full place-items-center mv-text-14 text-ink-2" role="status">
@@ -122,12 +116,18 @@ type StageProps = WorldSlotProps & {
   reducedMotion: boolean;
   support: Backend;
   diag: boolean;
+  /** `?noite=1`: a noite a qualquer hora, sem gravar nada (o e2e e o laboratório) */
+  nightByUrl: boolean;
   onBackend: (backend: Backend) => void;
   onFail: (reason: string) => void;
+  onCameraMode: (mode: CameraMode) => void;
 };
 
 /** Quanto o chip do clima fica grande depois de o carro estacionar, antes de subir para a faixa. */
 const WEATHER_HOLD_MS = 1_200;
+/** o desfoque das bordas (a maquete de mesa, fase 22): a faixa de cima e a de baixo, em px */
+const BLUR_TOP = { height: 96, px: 1.6 } as const;
+const BLUR_BOTTOM = { height: 150, px: 3.2 } as const;
 
 function formatDistance(m: number): string {
   if (m >= 10_000) return `${Math.round(m / 1000)} km`;
@@ -149,11 +149,25 @@ function WorldStage(p: StageProps) {
   const me = p.profiles.get(uid);
   const car = useMemo(() => carOf(me, p.trip.name), [me, p.trip.name]);
   const carFor = useMemo(() => convoyCarFor(p.profiles), [p.profiles]);
+  // o quadro de repouso: o dia inteiro entre a faixa de cima e o que está sobre o pé do palco, pela
+  // altura medida (a barra do "Agora" quando ela ainda não foi medida)
+  const rest = useMemo(
+    () =>
+      restCamera(layout, {
+        width: p.size.width,
+        height: p.size.height,
+        hudTop: HUD_TOP,
+        hudBottom: Math.max(NOW_BAR_INSET, p.bottomInset),
+      }),
+    [layout, p.size.width, p.size.height, p.bottomInset],
+  );
   const [motion] = useState(() => new MotionController(layout.nodes[0]?.s ?? 0, reducedMotion));
-  const [runtime] = useState(() => new WorldRuntime(layout, motion, p.night));
+  const [runtime] = useState(() => new WorldRuntime(layout, motion, p.night, rest));
   const [backend, setBackend] = useState<Backend | null>(null);
   const [forceWebGL, setForceWebGL] = useState(p.support === 'webgl2');
-  const [nightOverride, setNightOverride] = useState<boolean | null>(null);
+  const [nightOverride, setNightOverride] = useState<boolean | null>(() =>
+    p.nightByUrl ? true : null,
+  );
   const [phase, setPhase] = useState<Phase>('idle');
   const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
   const [pops, setPops] = useState<Record<string, number>>({});
@@ -174,10 +188,18 @@ function WorldStage(p: StageProps) {
   const night = nightOverride ?? p.night;
   const placement = placeCar({ state, position: catchup.position, layout });
   const stops = new Map<string, Stop>(state.stops.map((s) => [s.id, s]));
-  // o palco em px, para o HUD projetar pelo enquadramento atual (a câmera segue o carro)
+  // o palco em px, para o HUD projetar pelo enquadramento atual
   useEffect(() => {
     runtime.setViewport(p.size);
   }, [runtime, p.size]);
+  // o repouso novo (o palco ou a altura medida mudaram): só a câmera se move, o layout fica
+  useLayoutEffect(() => {
+    runtime.setRest(rest);
+    runtime.invalidate();
+  }, [runtime, rest]);
+  // o modo da câmera para o palco (`data-world-camera`): um evento discreto do runtime
+  const { onCameraMode } = p;
+  useEffect(() => runtime.onCameraMode(onCameraMode), [runtime, onCameraMode]);
   // o chip do clima grande, preso à origem na abertura
   const firstNode = layout.nodes[0]?.position ?? null;
   const weatherAnchor = useWorldAnchor(runtime, firstNode, 3);
@@ -477,6 +499,12 @@ function WorldStage(p: StageProps) {
     },
     [reportBackend],
   );
+  const leaveClose = useCallback(() => runtime.leaveClose(), [runtime]);
+
+  // o desfoque das bordas de cima e de baixo (a maquete de mesa): só em Alta, por CSS, sem
+  // pós-processamento; fica entre o canvas e o HUD, então as pílulas continuam nítidas
+  const blur = quality.tier.level === 'alta';
+  const bottomInset = Math.max(NOW_BAR_INSET, p.bottomInset);
 
   return (
     <>
@@ -487,6 +515,7 @@ function WorldStage(p: StageProps) {
         forceWebGL={forceWebGL}
         onBackend={onBackend}
         onFail={p.onFail}
+        onPointerMissed={leaveClose}
       >
         <WorldScene
           runtime={runtime}
@@ -503,6 +532,44 @@ function WorldStage(p: StageProps) {
           carFor={carFor}
         />
       </WorldCanvas>
+      {blur && firstFrame ? (
+        <>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0"
+            data-world-blur="top"
+            style={{
+              top: HUD_TOP,
+              height: BLUR_TOP.height,
+              backdropFilter: `blur(${String(BLUR_TOP.px)}px)`,
+              WebkitBackdropFilter: `blur(${String(BLUR_TOP.px)}px)`,
+              maskImage: 'linear-gradient(#000 0%, #000 25%, transparent 100%)',
+              WebkitMaskImage: 'linear-gradient(#000 0%, #000 25%, transparent 100%)',
+            }}
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0"
+            data-world-blur="bottom"
+            style={{
+              bottom: bottomInset,
+              height: BLUR_BOTTOM.height,
+              backdropFilter: `blur(${String(BLUR_BOTTOM.px)}px)`,
+              WebkitBackdropFilter: `blur(${String(BLUR_BOTTOM.px)}px)`,
+              maskImage: 'linear-gradient(transparent 0%, #000 55%, #000 100%)',
+              WebkitMaskImage: 'linear-gradient(transparent 0%, #000 55%, #000 100%)',
+            }}
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                'radial-gradient(120% 90% at 50% 45%, transparent 55%, rgb(6 9 16 / 0.45) 100%)',
+            }}
+          />
+        </>
+      ) : null}
       {!firstFrame ? (
         <p
           className="pointer-events-none absolute inset-0 grid place-items-center bg-stage mv-text-14 text-ink-2"
@@ -514,6 +581,7 @@ function WorldStage(p: StageProps) {
       <WorldHud
         runtime={runtime}
         nodes={layout.nodes}
+        places={layout.places}
         stops={stops}
         statuses={statuses}
         pops={pops}

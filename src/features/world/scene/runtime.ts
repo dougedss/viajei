@@ -2,15 +2,16 @@ import type { OpeningPlan } from '../opening.ts';
 import type { MotionController } from '../motion.ts';
 import type { WorldLayout } from '../layout.ts';
 import type { CarPlacement } from '../car-position.ts';
+import { tapCar, type CameraMode, type CloseMode } from '../camera.ts';
 import type { CameraFrame } from '../math.ts';
 import { projectWorld } from '../project.ts';
 
 /**
  * O estado compartilhado entre a cena e o HUD, mutável e fora do React: o que muda a cada quadro
- * (posição do carro, noite, abertura, mergulho) vive aqui e é lido pelo laço da cena, que redesenha
- * só enquanto algo se move. O React só recebe os eventos discretos (deixas, fim de movimento).
- * Toda escrita passa por um método: o React Compiler trata props e valores de hooks como imutáveis,
- * e esta é a única caixa mutável da maquete.
+ * (posição do carro, noite, abertura, mergulho, o modo de perto, o enquadramento) vive aqui e é lido
+ * pelo laço da cena, que redesenha só enquanto algo se move. O React só recebe os eventos discretos
+ * (deixas, fim de movimento, o modo da câmera). Toda escrita passa por um método: o React Compiler
+ * trata props e valores de hooks como imutáveis, e esta é a única caixa mutável da maquete.
  */
 export type Updater = (ctx: { now: number; dt: number }) => void;
 
@@ -24,23 +25,28 @@ export class WorldRuntime {
   opening: Opening | null = null;
   /** o carro está fora da rota: deslocamento perpendicular e a distância */
   offRoute: CarPlacement['offRoute'] = null;
-  /** distância atual da câmera ao alvo */
-  cameraDistance: number;
-  /** o enquadramento atual, já suavizado (a câmera segue o carro, fase 14): o HUD projeta por ele */
+  /** o quadro de repouso: o dia inteiro, pelo palco e pela altura medida (fase 22) */
+  rest: CameraFrame;
+  /** o modo de perto em curso, ligado pelo toque no carro */
+  close: CloseMode = null;
+  /** o modo visual da câmera, como o rig o decidiu no último quadro */
+  cameraMode: CameraMode = 'repouso';
+  /** o enquadramento atual, já suavizado: o HUD projeta por ele; o carro e os anéis escalam por ele */
   view: CameraFrame;
   /** o tamanho do palco em px, para projetar */
   viewport: { width: number; height: number } = { width: 1, height: 1 };
   /** algum objeto ainda está em transição e quer mais um quadro; o laço zera antes de cada quadro */
   needsFrame = false;
   private readonly updaters = new Set<Updater>();
+  private readonly modeListeners = new Set<(mode: CameraMode) => void>();
   private invalidateFn: () => void = () => undefined;
 
-  constructor(layout: WorldLayout, motion: MotionController, night: boolean) {
+  constructor(layout: WorldLayout, motion: MotionController, night: boolean, rest: CameraFrame) {
     this.layout = layout;
     this.motion = motion;
     this.night = { t: night ? 1 : 0, target: night ? 1 : 0 };
-    this.cameraDistance = layout.camera.distance;
-    this.view = { ...layout.camera, target: [...layout.camera.target] };
+    this.rest = rest;
+    this.view = { ...rest, target: [...rest.target] };
   }
 
   /** O R3F entrega o `invalidate` quando o Canvas nasce. */
@@ -55,7 +61,11 @@ export class WorldRuntime {
 
   setLayout(layout: WorldLayout): void {
     this.layout = layout;
-    this.cameraDistance = layout.camera.distance;
+  }
+
+  /** O palco ou a altura medida mudaram: o repouso é outro, sem refazer o layout. */
+  setRest(rest: CameraFrame): void {
+    this.rest = rest;
   }
 
   setNight(night: boolean): void {
@@ -78,14 +88,36 @@ export class WorldRuntime {
     this.offRoute = offRoute;
   }
 
-  setCameraDistance(distance: number): void {
-    this.cameraDistance = distance;
+  /** O toque no carro: o modo de perto por alguns segundos (um toque de novo estende). */
+  enterClose(now: number): void {
+    this.close = tapCar(now);
+    this.invalidate();
+  }
+
+  /** Um toque fora do carro, ou o tempo que acabou: volta ao repouso. */
+  leaveClose(): void {
+    if (this.close === null) return;
+    this.close = null;
+    this.invalidate();
+  }
+
+  /** O rig decidiu o modo deste quadro; quem ouve (o React) só é avisado quando muda. */
+  setCameraMode(mode: CameraMode): void {
+    if (mode === this.cameraMode) return;
+    this.cameraMode = mode;
+    for (const l of this.modeListeners) l(mode);
+  }
+
+  onCameraMode(listener: (mode: CameraMode) => void): () => void {
+    this.modeListeners.add(listener);
+    return () => {
+      this.modeListeners.delete(listener);
+    };
   }
 
   /** A câmera gravou o enquadramento deste quadro. */
   setView(view: CameraFrame): void {
     this.view = view;
-    this.cameraDistance = view.distance;
   }
 
   setViewport(viewport: { width: number; height: number }): void {
@@ -123,6 +155,8 @@ export class WorldRuntime {
   busy(now: number): boolean {
     if (this.motion.busy || this.needsFrame) return true;
     if (Math.abs(this.night.t - this.night.target) > 0.002) return true;
+    // o modo de perto conta o tempo pelo laço: enquanto dura, a cena fica viva
+    if (this.close !== null && now < this.close.until + 100) return true;
     return this.opening !== null && now - this.opening.startedAt < this.opening.plan.total_ms + 100;
   }
 

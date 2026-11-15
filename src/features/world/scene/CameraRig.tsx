@@ -1,30 +1,18 @@
 import { useEffect } from 'react';
 import { useThree } from '@react-three/fiber';
 import { PerspectiveCamera, Vector3, type Camera } from 'three/webgpu';
-import { approachFrame, atNode, diveCamera, followCamera, nextNodeS } from '../camera.ts';
+import { approachFrame, atNode, closeActive, nextNodeS, wantedFrame } from '../camera.ts';
 import { cameraPosition, type CameraFrame } from '../math.ts';
-import { OPENING_TIMELINE } from '../opening.ts';
 import type { WorldRuntime } from './runtime.ts';
 
 /**
- * A câmera que segue o carro (fase 14): o enquadramento desejado sai de `camera.ts` (atrás e a três
- * quartos; perto parado, recuando em movimento; a curiosidade mais perto e mais baixa; a abertura
- * do dia larga até o carro entrar), e aqui só se suaviza o atual para o desejado, avisando o laço
- * enquanto ainda não chegou. Com reduzir movimento, corta. Parada, não pede quadro nenhum.
+ * Quem move a câmera (fase 22): o enquadramento desejado sai de `camera.ts` (o repouso com o dia
+ * inteiro, o modo de perto enquanto dura, o mergulho da curiosidade), e aqui só se suaviza o atual
+ * para o desejado, avisando o laço enquanto ainda não chegou. O modo decidido vai ao runtime, que
+ * avisa o React só quando muda (o atributo `data-world-camera`). Com reduzir movimento, corta.
+ * Parada, não pede quadro nenhum; a abertura do dia inteira acontece no repouso.
  */
 type Rig = { view: CameraFrame; pos: Vector3; look: Vector3; first: boolean };
-
-function wanted(runtime: WorldRuntime, now: number): CameraFrame {
-  const { layout, motion } = runtime;
-  // a abertura começa larga, com o dia inteiro; quando o carro entra, a câmera desce até ele
-  if (runtime.opening && runtime.openingElapsed(now) < OPENING_TIMELINE.car[0]) {
-    return layout.camera;
-  }
-  const nextS = nextNodeS(layout.nodes, motion.s);
-  if (motion.dive && !motion.reducedMotion) return diveCamera(layout, motion.s, nextS);
-  const parked = !motion.busy && atNode(layout.nodes, motion.s);
-  return followCamera({ layout, s: motion.s, nextS, parked });
-}
 
 function apply(camera: Camera, rig: Rig): void {
   const eye = cameraPosition(rig.view);
@@ -51,8 +39,23 @@ export function CameraRig({ runtime }: { runtime: WorldRuntime }) {
       first: true,
     };
     const update = ({ now, dt }: { now: number; dt: number }) => {
-      const want = wanted(runtime, now);
-      const k = rig.first || runtime.motion.reducedMotion ? 1 : Math.min(1, dt * 2.6);
+      const { layout, motion } = runtime;
+      // o tempo do modo de perto acabou: volta ao repouso (um toque fora já teria tirado)
+      if (runtime.close !== null && !closeActive(runtime.close, now)) runtime.leaveClose();
+      const nextS = nextNodeS(layout.nodes, motion.s);
+      const { frame: want, mode } = wantedFrame({
+        rest: runtime.rest,
+        layout,
+        s: motion.s,
+        nextS,
+        parked: !motion.busy && atNode(layout.nodes, motion.s),
+        diving: motion.dive !== null,
+        close: runtime.close,
+        now,
+        reducedMotion: motion.reducedMotion,
+      });
+      runtime.setCameraMode(mode);
+      const k = rig.first || motion.reducedMotion ? 1 : Math.min(1, dt * 2.6);
       rig.first = false;
       const next = approachFrame(rig.view, want, k);
       rig.view = next.view;

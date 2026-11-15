@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { useThree } from '@react-three/fiber';
 import { Vector3, type Group } from 'three/webgpu';
 import { buildCar, type CarRig, type CarSpec } from '@/art/cars/index.ts';
-import { carScale } from '../camera.ts';
+import { carScaleFor } from '../camera.ts';
 import type { ConvoyCar } from '../convoy.ts';
 import type { WorldRuntime } from './runtime.ts';
 
@@ -11,7 +11,8 @@ import type { WorldRuntime } from './runtime.ts';
  * posição que mandou, numa cor apagada; nada de nomes nem rastros. Um carro por pessoa, construído
  * pelo mesmo `buildCar` (sem os feixes dos faróis), na faixa da direita, olhando para a frente. O
  * carro é o de cada pessoa (`carFor`, o perfil dela, fase 16): quem viaja junto reconhece o carro do
- * outro pelo modelo, pela cor e pelo que vai nele.
+ * outro pelo modelo, pela cor e pelo que vai nele. A escala acompanha a do carro de quem olha, pelo
+ * enquadramento (fase 22).
  */
 type Props = {
   runtime: WorldRuntime;
@@ -65,6 +66,7 @@ export function ConvoyCars({ runtime, cars, carFor, group }: Props) {
     const ahead = new Vector3();
     return runtime.register(() => {
       const { layout } = runtime;
+      const scale = carScaleFor(runtime.view) * CONVOY_SCALE;
       for (const p of placed) {
         const s = layout.fractionToS(p.fraction);
         const q = layout.pathAt(s);
@@ -74,7 +76,7 @@ export function ConvoyCars({ runtime, cars, carFor, group }: Props) {
         p.rig.group.position.set(q.x + nx * LANE_OFFSET, q.y + 0.12, q.z + nz * LANE_OFFSET);
         ahead.set(q.x + nx * LANE_OFFSET + q.tx, q.y + 0.12 + q.ty, q.z + nz * LANE_OFFSET + q.tz);
         p.rig.group.lookAt(ahead);
-        p.rig.group.scale.setScalar(carScale(runtime.cameraDistance) * CONVOY_SCALE);
+        p.rig.group.scale.setScalar(scale);
         p.rig.setNight(runtime.night.t);
       }
     });

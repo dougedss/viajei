@@ -72,24 +72,35 @@ function mix(a: CameraFrame, b: CameraFrame, k: number): CameraFrame {
 }
 
 type PathLike = {
-  camera: CameraFrame;
   pathAt: (s: number) => { x: number; y: number; z: number };
 };
 
-/** O enquadramento do filme num instante: a viagem inteira, depois o carro, depois o carro parado. */
-export function filmCamera(layout: PathLike, plan: FilmPlan, t: number): CameraFrame {
+/** o campo de visão do sobrevoo (o mesmo do modo de perto da maquete) */
+export const FILM_FOV = 30;
+
+/**
+ * O enquadramento do filme num instante: a viagem inteira (`wide`, o quadro de repouso da maquete
+ * para o palco do filme), depois o carro, depois o carro parado.
+ */
+export function filmCamera(
+  layout: PathLike,
+  wide: CameraFrame,
+  plan: FilmPlan,
+  t: number,
+): CameraFrame {
   const s = sAt(plan, t);
   const p = layout.pathAt(s);
   const follow: CameraFrame = {
     target: [p.x, p.y, p.z],
     distance: FOLLOW.distance,
     tilt: FOLLOW.tilt,
-    fov: layout.camera.fov,
+    yaw: Math.PI,
+    fov: FILM_FOV,
   };
   if (t < plan.opening.t1) {
     // a viagem inteira de cima, descendo até o carro no começo do caminho
     const k = easeInOut(t / plan.opening.t1);
-    return mix(layout.camera, follow, k);
+    return mix(wide, follow, k);
   }
   if (t > plan.final.t0) {
     // o carro estaciona e a câmera sobe, com o alvo puxado para perto: o carro sobe na tela
@@ -97,7 +108,8 @@ export function filmCamera(layout: PathLike, plan: FilmPlan, t: number): CameraF
       target: [p.x, p.y, p.z + PARKED.lift],
       distance: PARKED.distance,
       tilt: PARKED.tilt,
-      fov: layout.camera.fov,
+      yaw: Math.PI,
+      fov: FILM_FOV,
     };
     return mix(follow, parked, easeInOut((t - plan.final.t0) / 900));
   }

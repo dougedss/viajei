@@ -1,4 +1,4 @@
-import { ArrowUp, Check, CloudRain } from 'lucide-react';
+import { Check, CloudRain } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useEffect, useRef } from 'react';
 import { PERSON_COLORS } from '@shared/constants.ts';
@@ -9,21 +9,23 @@ import type { StopStatus } from '@/features/travel-mode/rules.ts';
 import type { Stop } from '@/lib/db/schema.ts';
 import { cx } from '@/lib/cx.ts';
 import { hhmm } from '@/lib/time/index.ts';
-import type { LayoutNode } from '../layout.ts';
+import type { LayoutNode, LayoutPlace } from '../layout.ts';
 import type { OpeningPlan } from '../opening.ts';
-import { PILL_LIFT } from '../project.ts';
+import { HUD_TOP, PILL_LIFT, pillInView } from '../project.ts';
 import type { WorldRuntime } from '../scene/runtime.ts';
 
 /**
  * O HTML por cima da cena: pílulas das paradas (ícone, nome, horário, estado), o chip "Ana · 14:02"
- * nas marcações do time e a legenda da curiosidade. Nítidos no sol, nada de texto em textura. Com a
- * câmera que segue o carro (fase 14) a posição de cada pílula é posta pelo laço da cena, a cada
- * quadro em movimento, direto no DOM (`data-pill`): o React só redesenha o que muda de verdade
- * (estado, chips). Só os nós em cena têm pílula; a da próxima parada fica presa à borda de cima
- * quando está fora da cena, para a pessoa saber para onde vai. "Fora da rota", "+N paradas" e o
- * "Pular" do replay moram na faixa de cima do palco. O canvas por baixo é `aria-hidden`; o conteúdo
- * acessível é a lista do dia.
+ * nas marcações do time, os nomes das cidades de passagem e a legenda da curiosidade. Nítidos no sol,
+ * nada de texto em textura. A posição de cada pílula é posta pelo laço da cena, a cada quadro em
+ * movimento, direto no DOM (`data-pill`): o React só redesenha o que muda de verdade (estado, chips).
+ * No repouso (fase 22) todas as pílulas estão em cena, porque a câmera de repouso enquadra o dia
+ * inteiro com as mesmas folgas; no modo de perto e no mergulho só as em cena aparecem, e nenhuma fica
+ * presa à borda. "Fora da rota", "+N paradas" e o "Pular" do replay moram na faixa de cima do palco.
+ * O canvas por baixo é `aria-hidden`; o conteúdo acessível é a lista do dia.
  */
+export { HUD_BOTTOM, HUD_TOP } from '../project.ts';
+
 export type TeamChip = { name: string; time: string | null };
 /** O cartão de foto do "Rever o dia": a primeira foto do nó, na cor de quem tirou, e "+N". */
 export type PhotoCard = { attachment_id: string; color: string; extra: number; at: number };
@@ -31,6 +33,8 @@ export type PhotoCard = { attachment_id: string; color: string; extra: number; a
 type Props = {
   runtime: WorldRuntime;
   nodes: readonly LayoutNode[];
+  /** as cidades de passagem: o nome pequeno na beira da estrada, sem pílula e sem toque */
+  places: readonly LayoutPlace[];
   stops: Map<string, Stop>;
   statuses: Record<string, StopStatus>;
   pops: Record<string, number>;
@@ -49,32 +53,21 @@ type Props = {
   bottomInset: number;
 };
 
-export const HUD_TOP = 44;
-export const HUD_BOTTOM = 72;
-/**
- * A pílula presa ao topo: a âncora é a base dela (a pílula sobe a partir daí, uns 70 px com a haste),
- * então fica inteira abaixo da faixa de cima do palco (o clima, "Rever o dia", até ~56 px)
- */
-const PINNED_TOP = 136;
-const PINNED_MARGIN_X = 56;
-/** a pílula inteira cabe na tela: a base do nó abaixo da faixa de cima e acima do que cobre o pé, com folga lateral */
-const IN_VIEW = { top: PINNED_TOP, bottom: 24, side: 24 };
-/** folga entre a base da pílula e o que está sobre o pé do palco */
-const BOTTOM_GAP = 8;
+/** o nome da cidade fica um pouco acima do chão */
+const PLACE_LIFT = 1.2;
+/** a âncora do carro, para quem lê a tela por fora (o e2e e o laboratório tocam nela) */
+const CAR_LIFT = 0.8;
 
 /**
- * Põe cada pílula onde o nó dela está na tela, pelo enquadramento atual: só as em cena; a da próxima
- * parada presa ao topo quando está fora. Roda a cada quadro em movimento e uma vez ao montar.
+ * Põe cada pílula onde o nó dela está na tela, pelo enquadramento atual: só as em cena. Roda a cada
+ * quadro em movimento e uma vez ao montar.
  */
 function placePills(
   root: HTMLElement,
   runtime: WorldRuntime,
   nodes: readonly LayoutNode[],
-  nextId: string | null,
   bottomInset: number,
 ): void {
-  const { width, height } = runtime.viewport;
-  const bottom = Math.max(IN_VIEW.bottom, bottomInset + BOTTOM_GAP);
   for (const node of nodes) {
     const el = root.querySelector<HTMLElement>(`[data-pill="${node.stop_id}"]`);
     if (!el) continue;
@@ -82,24 +75,10 @@ function placePills(
     const p = runtime.project([x, y + PILL_LIFT, z]);
     // em cena de verdade: a pílula inteira dentro do palco (a projeção tolera uma margem fora dele,
     // que aqui viraria uma pílula cortada pela borda)
-    const inView =
-      p.depth > 0 &&
-      p.x >= IN_VIEW.side &&
-      p.x <= width - IN_VIEW.side &&
-      p.y >= IN_VIEW.top &&
-      p.y <= height - bottom;
-    const pinned = !inView && p.depth > 0 && node.stop_id === nextId;
-    if (inView) {
+    if (pillInView(p, runtime.viewport, bottomInset, HUD_TOP)) {
       el.style.left = `${String(Math.round(p.x))}px`;
       el.style.top = `${String(Math.round(p.y))}px`;
       el.hidden = false;
-      el.dataset.pinned = 'false';
-    } else if (pinned) {
-      const px = Math.min(width - PINNED_MARGIN_X, Math.max(PINNED_MARGIN_X, p.x));
-      el.style.left = `${String(Math.round(px))}px`;
-      el.style.top = `${String(PINNED_TOP)}px`;
-      el.hidden = false;
-      el.dataset.pinned = 'true';
     } else {
       el.hidden = true;
     }
@@ -107,10 +86,41 @@ function placePills(
   }
 }
 
+/** Os nomes das cidades de passagem e a âncora do carro, pelo mesmo laço. */
+function placeLabels(
+  root: HTMLElement,
+  runtime: WorldRuntime,
+  places: readonly LayoutPlace[],
+): void {
+  const { width, height } = runtime.viewport;
+  places.forEach((place, i) => {
+    const el = root.querySelector<HTMLElement>(`[data-passing-place="${String(i)}"]`);
+    if (!el) return;
+    const [x, y, z] = place.position;
+    const p = runtime.project([x, y + PLACE_LIFT, z]);
+    const inView =
+      p.depth > 0 && p.x > 8 && p.x < width - 8 && p.y > HUD_TOP + 16 && p.y < height - 8;
+    el.hidden = !inView;
+    if (inView) {
+      el.style.left = `${String(Math.round(p.x))}px`;
+      el.style.top = `${String(Math.round(p.y))}px`;
+    }
+  });
+  const car = root.querySelector<HTMLElement>('[data-world-car-anchor]');
+  if (car) {
+    const q = runtime.layout.pathAt(runtime.motion.s);
+    const p = runtime.project([q.x, q.y + CAR_LIFT, q.z]);
+    car.style.left = `${String(Math.round(p.x))}px`;
+    car.style.top = `${String(Math.round(p.y))}px`;
+    car.dataset.visible = String(p.visible);
+  }
+}
+
 export function WorldHud(props: Props) {
   const {
     runtime,
     nodes,
+    places,
     stops,
     statuses,
     pops,
@@ -121,19 +131,36 @@ export function WorldHud(props: Props) {
     bottomInset,
   } = props;
   const root = useRef<HTMLDivElement>(null);
-  const nextId = Object.entries(statuses).find(([, s]) => s === 'next')?.[0] ?? null;
 
-  // a posição das pílulas pelo laço da cena: um atualizador por quadro, e uma vez ao montar ou
-  // quando os nós ou a próxima mudam
+  // a posição das pílulas e dos nomes pelo laço da cena: um atualizador por quadro, e uma vez ao
+  // montar ou quando os nós, as cidades ou a altura medida mudam
   useEffect(() => {
     const el = root.current;
     if (!el) return;
-    placePills(el, runtime, nodes, nextId, bottomInset);
-    return runtime.register(() => placePills(el, runtime, nodes, nextId, bottomInset));
-  }, [runtime, nodes, nextId, bottomInset]);
+    const place = () => {
+      placePills(el, runtime, nodes, bottomInset);
+      placeLabels(el, runtime, places);
+    };
+    place();
+    return runtime.register(place);
+  }, [runtime, nodes, places, bottomInset]);
 
   return (
     <div ref={root} className="pointer-events-none absolute inset-0 overflow-hidden" data-world-hud>
+      {/* as cidades de passagem (fase 22): só nome, fora da árvore de acessibilidade, sem toque */}
+      {places.map((place, i) => (
+        <span
+          key={`${place.name}-${place.uf}`}
+          className="absolute -translate-x-1/2 -translate-y-1/2 mv-text-12 font-semibold tracking-[0.18em] whitespace-nowrap text-white/85 uppercase [text-shadow:0_1px_2px_rgb(0_0_0/0.7)]"
+          data-passing-place={i}
+          aria-hidden="true"
+          hidden
+        >
+          {place.name}
+        </span>
+      ))}
+      {/* onde o carro está na tela, para quem testa por fora tocar nele */}
+      <span className="absolute size-0" data-world-car-anchor aria-hidden="true" />
       {nodes.map((node, i) => {
         const stop = stops.get(node.stop_id);
         if (!stop) return null;
@@ -184,9 +211,6 @@ export function WorldHud(props: Props) {
                   )}
                   data-status={status}
                 >
-                  <span className="hidden group-data-[pinned=true]:inline" aria-hidden="true">
-                    <ArrowUp className="size-3.5 text-sunset" />
-                  </span>
                   {status === 'done' ? (
                     <Check className="size-3.5 text-on-time" aria-hidden="true" />
                   ) : (
@@ -228,7 +252,7 @@ export function WorldHud(props: Props) {
               ) : null}
               <span
                 className={cx(
-                  'h-2.5 w-0.5 rounded-sm bg-white/60 group-data-[pinned=true]:hidden',
+                  'h-2.5 w-0.5 rounded-sm bg-white/60',
                   status === 'next' && 'bg-sunset',
                 )}
                 aria-hidden="true"

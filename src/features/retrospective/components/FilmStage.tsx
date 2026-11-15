@@ -10,8 +10,9 @@ import {
 import { readPalette } from '@/art/palette.ts';
 import type { CarSpec } from '@/art/cars/types.ts';
 import type { StopStatus } from '@/features/travel-mode/rules.ts';
+import { restCamera } from '@/features/world/camera.ts';
 import type { WorldLayout } from '@/features/world/layout.ts';
-import { cameraPosition } from '@/features/world/math.ts';
+import { cameraPosition, type CameraFrame } from '@/features/world/math.ts';
 import { MotionController } from '@/features/world/motion.ts';
 import { tierFor } from '@/features/world/quality.ts';
 import { WorldCanvas } from '@/features/world/scene/WorldCanvas.tsx';
@@ -39,6 +40,8 @@ export type FilmHandle = {
 
 export type FilmStageProps = {
   layout: WorldLayout;
+  /** o palco do filme em px: o quadro largo da abertura enquadra a viagem inteira nele */
+  size: { width: number; height: number };
   car: CarSpec;
   plan: FilmPlan;
   clock: FilmClock;
@@ -50,17 +53,22 @@ export type FilmStageProps = {
   onFail: (reason: string) => void;
 };
 
+/** as faixas do HUD do filme, em px: o nome do dia em cima e a legenda embaixo */
+const FILM_HUD = { top: 90, bottom: 150 } as const;
+
 /** Põe o carro e a câmera no instante `t` do filme (função de módulo: o three é mutado aqui, fora do React). */
 function poseFilm(
   camera: PerspectiveCamera,
   runtime: WorldRuntime,
+  wide: CameraFrame,
   plan: FilmPlan,
   t: number,
   aspect?: number,
 ): void {
   runtime.motion.jumpTo(sAt(plan, t));
-  const frame = filmCamera(runtime.layout, plan, t);
-  runtime.setCameraDistance(frame.distance);
+  const frame = filmCamera(runtime.layout, wide, plan, t);
+  // o carro e os anéis escalam pelo enquadramento, como na maquete
+  runtime.setView(frame);
   const eye = cameraPosition(frame);
   camera.position.set(eye[0], eye[1], eye[2]);
   camera.lookAt(frame.target[0], frame.target[1], frame.target[2]);
@@ -73,7 +81,17 @@ export default function FilmStage(p: FilmStageProps) {
   const quality = useQuality(tierFor);
   const palette = useMemo(() => readPalette(), []);
   const [motion] = useState(() => new MotionController(p.plan.flight.from_s, false));
-  const [runtime] = useState(() => new WorldRuntime(p.layout, motion, false));
+  const wide = useMemo(
+    () =>
+      restCamera(p.layout, {
+        width: p.size.width,
+        height: p.size.height,
+        hudTop: FILM_HUD.top,
+        hudBottom: FILM_HUD.bottom,
+      }),
+    [p.layout, p.size.width, p.size.height],
+  );
+  const [runtime] = useState(() => new WorldRuntime(p.layout, motion, false, wide));
   const statuses = useMemo(
     () => Object.fromEntries(p.layout.nodes.map((n): [string, StopStatus] => [n.stop_id, 'done'])),
     [p.layout],
@@ -101,6 +119,7 @@ export default function FilmStage(p: FilmStageProps) {
         controls={
           <FilmControls
             runtime={runtime}
+            wide={wide}
             plan={p.plan}
             clock={p.clock}
             video={p.video}
@@ -117,6 +136,7 @@ export default function FilmStage(p: FilmStageProps) {
 
 function FilmControls({
   runtime,
+  wide,
   plan,
   clock,
   video,
@@ -126,6 +146,7 @@ function FilmControls({
   onEnd,
 }: {
   runtime: WorldRuntime;
+  wide: CameraFrame;
   plan: FilmPlan;
   clock: FilmClock;
   video: { width: number; height: number };
@@ -139,8 +160,8 @@ function FilmControls({
   const camera = useThree((s) => s.camera) as PerspectiveCamera;
 
   const pose = useCallback(
-    (t: number, aspect?: number) => poseFilm(camera, runtime, plan, t, aspect),
-    [runtime, plan, camera],
+    (t: number, aspect?: number) => poseFilm(camera, runtime, wide, plan, t, aspect),
+    [runtime, wide, plan, camera],
   );
 
   const step = useCallback(
