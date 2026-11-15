@@ -108,10 +108,18 @@ export const NAME_MATCH = 0.6;
 
 // ---------------------------------------------------------------------- as classes do OSM
 type TagRule = { key: string; values?: readonly string[] };
-/** As classes do OSM em que cada tipo de parada se procura (e se confere). */
+/**
+ * As classes do OSM em que cada tipo de parada se procura (e se confere). A mesma regra vale para os
+ * elementos do Overpass (as tags) e para os resultados do Nominatim (a `category`, que é a chave
+ * principal do objeto, e o `type`, o valor dela). As duas leituras nem sempre usam a mesma chave: o
+ * Lago Negro de Gramado, no Overpass `natural=water` com `water=lake`, volta do Nominatim como
+ * `water`/`lake`, e saía da viagem como "não encontrado" (o laboratório do preview da fase 17).
+ */
 export const KIND_TAGS: Readonly<Record<StopKind, readonly TagRule[]>> = {
   nature: [
     { key: 'natural' },
+    // lagos, lagoas, represas: no Nominatim, a classe é a `water`
+    { key: 'water' },
     { key: 'waterway', values: ['waterfall'] },
     { key: 'leisure', values: ['park', 'nature_reserve', 'garden'] },
     { key: 'tourism', values: ['viewpoint', 'attraction', 'picnic_site'] },

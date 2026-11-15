@@ -15,8 +15,8 @@ import { PendingRequests, requestPath } from '../../src/features/lab/pending-req
  * cada passo, espera os pedidos do próprio app voltarem (`pedidoDoApp`; um pedido de fora que nunca
  * fecha não segura nada, e um do app aberto há mais de 30 s conta como travado e também não). Os
  * pedidos de um documento que a página deixou (o `goto` logo depois de entrar corta o primeiro sync)
- * saem da conta quando o documento novo carrega: o navegador os corta sem que o Playwright avise o fim
- * deles (fase 17, 3.0; `PendingRequests`). E a posição só conta quando o app a leu: depois de
+ * saem da conta quando o documento novo se firma: o navegador os corta sem que o Playwright avise o
+ * fim deles (fase 17, 3.0; `PendingRequests`). E a posição só conta quando o app a leu: depois de
  * `setGeolocation`, espera o `data-fix-at` mudar, para a leitura ter a hora certa (entregue no meio de
  * um `runFor`, ela levaria uma hora qualquer do minuto).
  */
@@ -54,17 +54,19 @@ export type Rede = {
 const pausa = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /**
- * Conta os pedidos do app que ainda não voltaram, com a hora em que saíram e o documento que os fez
- * (o Realtime não entra: é um WebSocket).
+ * Conta os pedidos do app que ainda não voltaram, com a hora em que saíram (o Realtime não entra: é
+ * um WebSocket), e esquece os do documento que acabou.
  */
 export function redeDa(page: Page): Rede {
   const pedidos = new PendingRequests<Request>();
   page.on('request', (r) => {
-    // uma navegação do quadro principal: o que sair daqui em diante é do documento novo
+    // o documento de agora continua pedindo até o novo se firmar, no `framenavigated`
     if (r.isNavigationRequest() && r.frame() === page.mainFrame()) pedidos.navigating();
     if (pedidoDoApp(r.url())) pedidos.started(r, requestPath(r.method(), r.url()), Date.now());
   });
-  page.on('domcontentloaded', () => pedidos.documentLoaded());
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) pedidos.committed();
+  });
   page.on('requestfinished', (r) => pedidos.ended(r));
   page.on('requestfailed', (r) => pedidos.ended(r));
   return {

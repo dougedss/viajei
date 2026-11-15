@@ -98,6 +98,8 @@ export async function appConversa(ctx: ImportContext, today: string): Promise<Ch
   let page: Page | null = null;
   let trip = '';
   const outage: { reason: string | null } = { reason: null };
+  // como o Overpass respondeu: no preview da fase 17 ele não ajudou, e só a contagem não dizia por quê
+  const overpassHttp: { status: number | 'sem resposta' | null } = { status: null };
   const step = async (name: string, run: () => Promise<void>) => {
     if (steps.some((s) => !s.ok) || outage.reason) return;
     try {
@@ -149,6 +151,12 @@ export async function appConversa(ctx: ImportContext, today: string): Promise<Ch
       if (r.url().startsWith('https://overpass-api.de/')) counts.overpass += 1;
       if (r.url().startsWith('https://nominatim.openstreetmap.org/')) counts.nominatim += 1;
     });
+    p.on('response', (r) => {
+      if (r.url().startsWith('https://overpass-api.de/')) overpassHttp.status = r.status();
+    });
+    p.on('requestfailed', (r) => {
+      if (r.url().startsWith('https://overpass-api.de/')) overpassHttp.status = 'sem resposta';
+    });
     await enterPreview(p, appUrl, ctx.bypass);
 
     await step('A entra, com a posição permitida no mapa', async () => {
@@ -176,6 +184,7 @@ export async function appConversa(ctx: ImportContext, today: string): Promise<Ch
         .waitFor({ timeout: CHECK_TIMEOUT });
       data.conferencia_ms = Date.now() - t0;
       data.overpass_consultas = counts.overpass;
+      data.overpass_http = overpassHttp.status;
       const notice = (await p.locator('[data-checked]').first().textContent()) ?? '';
       data.aviso = notice.slice(0, 300);
       const confirmados: string[] = [];
@@ -194,7 +203,9 @@ export async function appConversa(ctx: ImportContext, today: string): Promise<Ch
         throw new Error('o lugar inventado passou pela conferência');
       }
       if (!notice.includes(INVENTADO)) throw new Error('a revisão não disse que o inventado saiu');
-      if (!confirmados.includes(REAIS[0])) throw new Error(`${REAIS[0]} não se confirmou no mapa`);
+      // os dois existem: o Lago Negro saía como "não encontrado" (a classe `water` do Nominatim)
+      const faltam = REAIS.filter((name) => !confirmados.includes(name));
+      if (faltam.length > 0) throw new Error(`${faltam.join(' e ')}: não se confirmou no mapa`);
     });
     await step('a viagem de hoje nasce e abre no mapa', async () => {
       await p.getByRole('button', { name: 'Criar a viagem' }).click();
@@ -202,31 +213,37 @@ export async function appConversa(ctx: ImportContext, today: string): Promise<Ch
       trip = new URL(p.url()).pathname.split('/')[2] ?? '';
       await p.getByRole('region', { name: 'Agora' }).waitFor({ timeout: 30_000 });
     });
-    await step('no servidor: a viagem de hoje, as paradas da IA, com o lugar do mapa', async () => {
-      const end = Date.now() + 60_000;
-      let stops: { name: string; lat: number | null; source: string }[] = [];
-      while (Date.now() < end) {
-        stops = must(
-          await a.client.from('stops').select('name, lat, source').eq('trip_id', trip),
-          'as paradas da saída de hoje',
+    await step(
+      'no servidor: a viagem de hoje, as paradas da IA, com os lugares do mapa',
+      async () => {
+        const end = Date.now() + 60_000;
+        let stops: { name: string; lat: number | null; source: string }[] = [];
+        while (Date.now() < end) {
+          stops = must(
+            await a.client.from('stops').select('name, lat, source').eq('trip_id', trip),
+            'as paradas da saída de hoje',
+          );
+          // a saída e os dois lugares reais
+          if (stops.length >= 1 + REAIS.length) break;
+          await sleep(2_000);
+        }
+        const [row] = must(
+          await a.client.from('trips').select('start_date, end_date').eq('id', trip),
+          'a viagem de hoje',
         );
-        if (stops.length >= 2) break;
-        await sleep(2_000);
-      }
-      const [row] = must(
-        await a.client.from('trips').select('start_date, end_date').eq('id', trip),
-        'a viagem de hoje',
-      );
-      if (row?.start_date !== today || row.end_date !== today) {
-        throw new Error(`a viagem não é de hoje: ${String(row?.start_date)}`);
-      }
-      data.paradas = stops.length;
-      if (stops.some((s) => s.name === INVENTADO))
-        throw new Error('o inventado chegou ao servidor');
-      const caracol = stops.find((s) => s.name === REAIS[0]);
-      if (caracol?.lat == null) throw new Error('a cascata chegou sem o lugar do mapa');
-      if (!stops.every((s) => s.source === 'ai')) throw new Error('parada sem a origem ai');
-    });
+        if (row?.start_date !== today || row.end_date !== today) {
+          throw new Error(`a viagem não é de hoje: ${String(row?.start_date)}`);
+        }
+        data.paradas = stops.length;
+        if (stops.some((s) => s.name === INVENTADO))
+          throw new Error('o inventado chegou ao servidor');
+        for (const name of REAIS) {
+          if (stops.find((s) => s.name === name)?.lat == null)
+            throw new Error(`${name} chegou sem o lugar do mapa`);
+        }
+        if (!stops.every((s) => s.source === 'ai')) throw new Error('parada sem a origem ai');
+      },
+    );
   } finally {
     await browser?.close().catch(() => undefined);
     if (trip) await dropLabTrip(a, trip).catch(() => undefined);
@@ -248,7 +265,7 @@ export async function appConversa(ctx: ImportContext, today: string): Promise<Ch
     latency_ms: Date.now() - startedAt,
     detail: failed
       ? `${failed.step}: ${failed.detail ?? 'não aconteceu'}`
-      : `Saída de hoje montada e conferida no mapa em ${typeof data.conferencia_ms === 'number' ? `${(data.conferencia_ms / 1000).toFixed(1)} s` : '?'}: ${(data.confirmados as string[]).join(' e ')} confirmados, o inventado saiu`,
+      : `Saída de hoje montada e conferida no mapa em ${typeof data.conferencia_ms === 'number' ? `${(data.conferencia_ms / 1000).toFixed(1)} s` : '?'}: ${(data.confirmados as string[]).join(' e ')} confirmados, o inventado saiu (Overpass ${String(overpassHttp.status ?? '?')})`,
     data: { ...data, passos: steps },
   };
 }

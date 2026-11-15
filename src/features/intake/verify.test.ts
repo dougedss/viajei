@@ -6,6 +6,7 @@ import {
   checkPlaces,
   distinctive,
   matchElement,
+  matchResult,
   nameScore,
   overpassQuery,
   regionCity,
@@ -168,6 +169,26 @@ describe('os nomes e a consulta', () => {
     const els = [el(2, { name: 'Restaurante Caracol', amenity: 'restaurant' })];
     expect(matchElement(stop('nature', 'Cascata do Caracol'), els, CANELA)).toBeNull();
     expect(matchElement(stop('food', 'Restaurante Caracol'), els, CANELA)?.id).toBe(2);
+  });
+
+  it('o lago: no Overpass é natural=water, no Nominatim a classe é water (o Lago Negro)', () => {
+    const lago = stop('nature', 'Lago Negro', 'Gramado, RS');
+    // a resposta do `/search` de verdade, em 15/11/2026, para "lago negro, gramado, rs"
+    const nominatim = {
+      name: 'Lago Negro',
+      address: 'Lago Negro, Ipê Amarelo, Gramado, Rio Grande do Sul',
+      lat: -29.395,
+      lng: -50.876,
+      category: 'water',
+      type: 'lake',
+    };
+    expect(matchResult(lago, [nominatim])?.lat).toBe(-29.395);
+    const els = [el(3, { name: 'Lago Negro', natural: 'water', water: 'lake' })];
+    expect(matchElement(lago, els, CANELA)?.id).toBe(3);
+    // o tipo continua conferindo: o restaurante do lago não é o lago
+    expect(
+      matchResult(lago, [{ ...nominatim, category: 'amenity', type: 'restaurant' }]),
+    ).toBeNull();
   });
 
   it('a consulta: uma expressão sem acento, as classes dos tipos, em volta do centro', () => {
