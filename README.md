@@ -40,6 +40,7 @@ iPhone primeiro, Android em seguida, os dois igualmente bem; no desktop, só nã
 | -------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `route-day`          | o app                                                          | JWT da pessoa (RLS vale)                                       | rota real e altitude pela OpenRouteService (HeiGIT); sem chave ou sem cota, o OSRM público com altitude do Open-Meteo |
 | `import-itinerary`   | o app                                                          | JWT da pessoa (RLS vale)                                       | lê o roteiro colado com a IA e devolve o JSON aos poucos (SSE)                                                        |
+| `plan-trip`          | o app                                                          | JWT da pessoa (RLS vale)                                       | a conversa da viagem nova: as perguntas e o roteiro, em SSE (fase 17)                                                 |
 | `send-notifications` | o `pg_cron`, a cada minuto, só quando algo vence               | chave secreta do projeto, lida do Vault                        | escreve o texto e envia o aviso por Web Push                                                                          |
 | `purge`              | o `pg_cron`, às 4h de São Paulo; o laboratório, só o `dry_run` | chave secreta do Vault, ou o JWT de um executor do laboratório | o expurgo diário                                                                                                      |
 | `push-receiver`      | a `send-notifications`, para as assinaturas do laboratório     | o próprio VAPID                                                | um push service de mentira, que só o laboratório usa                                                                  |
@@ -73,7 +74,7 @@ scripts/          lab/ (laboratório), geo/ (dados embutidos), security/ (varred
 docs/             o prompt, as decisões, os roteiros de teste, as fontes dos dados geográficos
 ```
 
-**Rotas.** `/entrar`, `/criar-conta`, `/recuperar-senha`, `/nova-senha` · `/` é a abertura do app (durante uma viagem, cai na tela da viagem do dia) · `/viagens` é a lista, que nunca redireciona · `/viagens/nova` · `/viagens/:tripId` é **a viagem: o mapa** (a maquete inteira na tela, fase 14) · `/viagens/:tripId/detalhes` é **Detalhes** (a visão geral: progresso, atalhos, clima) e as outras telas da viagem, em `/viagens/:tripId/...`: `roteiro`, `roteiro/:dayId`, `reservas`, `checklists`, `contatos`, `gastos`, `mapa`, `diario`, `garagem`, `retrospectiva`, `avisos`, `membros`, `importar`, `editar` (todas voltam para Detalhes) · `/viagens/:tripId/viagem` é a rota antiga do Modo Viagem e redireciona para a viagem, com a query (os avisos push de antes da fase 15 a usam; desde ela, abrem `/viagens/:tripId`) · `/perfil` · `/lab` (o painel do laboratório).
+**Rotas.** `/entrar`, `/criar-conta`, `/recuperar-senha`, `/nova-senha` · `/` é a abertura do app (durante uma viagem, cai na tela da viagem do dia) · `/viagens` é a lista, com o campo da viagem nova, e nunca redireciona · `/viagens/nova` é o que vem depois do campo (a leitura, as perguntas, a conferência no mapa e a revisão; sem nada a fazer, volta à lista) · `/viagens/:tripId` é **a viagem: o mapa** (a maquete inteira na tela, fase 14) · `/viagens/:tripId/detalhes` é **Detalhes** (a visão geral: progresso, atalhos, clima) e as outras telas da viagem, em `/viagens/:tripId/...`: `roteiro`, `roteiro/:dayId`, `reservas`, `checklists`, `contatos`, `gastos`, `mapa`, `diario`, `garagem`, `retrospectiva`, `avisos`, `membros`, `importar`, `editar` (todas voltam para Detalhes) · `/viagens/:tripId/viagem` é a rota antiga do Modo Viagem e redireciona para a viagem, com a query (os avisos push de antes da fase 15 a usam; desde ela, abrem `/viagens/:tripId`) · `/perfil` · `/lab` (o painel do laboratório).
 
 ## Rodar e testar
 
@@ -92,7 +93,7 @@ Na ordem: lint e formatação; o Supabase local da própria CI (Postgres, Auth, 
 - **Tipos do banco (D104):** quando uma migration muda o schema, a CI gera o `src/lib/supabase/database.types.ts`, guarda como artefato `tipos-do-banco`, roda o resto com ele e falha no fim. Baixe e commite: `gh run download <id> -n tipos-do-banco -D src/lib/supabase`.
 - **Segredos no `dist/`:** `scripts/security/scan-dist.ts` reprova o build se o client levar uma chave secreta do Supabase, uma chave da Anthropic ou do OpenRouteService, um JWT com `service_role` ou uma chave privada. Diz o arquivo e o tipo, nunca o valor.
 - **Contraste:** `src/styles/contrast.test.ts` (Vitest) confere o AA de cada token de cor sobre cada superfície, nos dois temas, lido do `app.css`.
-- **Sem o mundo de fora:** nenhuma chamada real à Anthropic, ao OSM ou ao Open-Meteo. A `import-itinerary` é testada com respostas gravadas; no Playwright, os tiles e o clima nem resolvem, e os testes do mapa e do clima fingem os dois (`e2e/helpers/world.ts`).
+- **Sem o mundo de fora:** nenhuma chamada real à Anthropic, ao OSM, ao Overpass ou ao Open-Meteo. A `import-itinerary` e a `plan-trip` são testadas com respostas gravadas; no Playwright, os tiles, o clima e o Overpass nem resolvem, e os testes do mapa, do clima e da conversa fingem os três (`e2e/helpers/world.ts`).
 
 Os projetos do Playwright (`playwright.config.ts`), todos com o perfil do iPhone 15, contra o Supabase local:
 
@@ -142,24 +143,24 @@ Sem navegador: `curl -X POST http://127.0.0.1:54321/functions/v1/send-notificati
 
 ### Scripts
 
-| Comando                                                              | O que faz                                                                                                                    |
-| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm dev` / `pnpm build` / `pnpm preview`                           | Vite (o build roda `tsc -b`, gera os ícones do PWA e o service worker)                                                       |
-| `pnpm lint` / `pnpm format` / `pnpm format:check` / `pnpm typecheck` | ESLint, Prettier, `tsc -b`                                                                                                   |
-| `pnpm test` / `pnpm test:watch`                                      | Vitest (lógica pura e Dexie com `fake-indexeddb`)                                                                            |
-| `pnpm test:e2e`                                                      | Playwright contra o Supabase local (`pnpm build` antes)                                                                      |
-| `pnpm db:start` / `db:stop` / `db:reset`                             | Supabase local (migrations e `seed.sql`; o `db:reset` também grava o Vault local)                                            |
-| `pnpm db:test`                                                       | pgTAP (`supabase/tests`)                                                                                                     |
-| `pnpm db:types`                                                      | regenera `src/lib/supabase/database.types.ts` (commitado; a CI confere)                                                      |
-| `pnpm db:vault-local`                                                | grava a URL e a chave secreta locais no Vault, para o `pg_cron` (o `db:reset` já chama)                                      |
-| `pnpm functions:serve`                                               | Edge Functions no stack local (`-- --env-file ./.env.local` para as chaves delas)                                            |
-| `pnpm remote:db-push`                                                | aplica as migrations no projeto hospedado                                                                                    |
-| `pnpm remote:config-diff` / `remote:config-push`                     | mostra e aplica a configuração do Auth (`[remotes.production]` do `config.toml`) no hospedado                                |
-| `pnpm remote:functions-deploy`                                       | publica `route-day`, `send-notifications`, `push-receiver`, `import-itinerary` e `purge`, empacotando no servidor (D108)     |
-| `pnpm remote:secrets-push`                                           | grava `ORS_API_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` e `ANTHROPIC_API_KEY` (só elas) nos secrets; recusa variável vazia |
-| `pnpm geo:build`                                                     | regenera os dados geográficos embutidos (`docs/dados-geo.md`)                                                                |
-| `pnpm vapid:generate`                                                | gera o par VAPID, uma vez (`VITE_VAPID_PUBLIC_KEY` raw, `VAPID_PRIVATE_KEY` PKCS#8)                                          |
-| `pnpm lab` / `lab:remote` / `lab:setup` / `lab:local`                | o laboratório (abaixo)                                                                                                       |
+| Comando                                                              | O que faz                                                                                                                             |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev` / `pnpm build` / `pnpm preview`                           | Vite (o build roda `tsc -b`, gera os ícones do PWA e o service worker)                                                                |
+| `pnpm lint` / `pnpm format` / `pnpm format:check` / `pnpm typecheck` | ESLint, Prettier, `tsc -b`                                                                                                            |
+| `pnpm test` / `pnpm test:watch`                                      | Vitest (lógica pura e Dexie com `fake-indexeddb`)                                                                                     |
+| `pnpm test:e2e`                                                      | Playwright contra o Supabase local (`pnpm build` antes)                                                                               |
+| `pnpm db:start` / `db:stop` / `db:reset`                             | Supabase local (migrations e `seed.sql`; o `db:reset` também grava o Vault local)                                                     |
+| `pnpm db:test`                                                       | pgTAP (`supabase/tests`)                                                                                                              |
+| `pnpm db:types`                                                      | regenera `src/lib/supabase/database.types.ts` (commitado; a CI confere)                                                               |
+| `pnpm db:vault-local`                                                | grava a URL e a chave secreta locais no Vault, para o `pg_cron` (o `db:reset` já chama)                                               |
+| `pnpm functions:serve`                                               | Edge Functions no stack local (`-- --env-file ./.env.local` para as chaves delas)                                                     |
+| `pnpm remote:db-push`                                                | aplica as migrations no projeto hospedado                                                                                             |
+| `pnpm remote:config-diff` / `remote:config-push`                     | mostra e aplica a configuração do Auth (`[remotes.production]` do `config.toml`) no hospedado                                         |
+| `pnpm remote:functions-deploy`                                       | publica `route-day`, `send-notifications`, `push-receiver`, `import-itinerary`, `plan-trip` e `purge`, empacotando no servidor (D108) |
+| `pnpm remote:secrets-push`                                           | grava `ORS_API_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` e `ANTHROPIC_API_KEY` (só elas) nos secrets; recusa variável vazia          |
+| `pnpm geo:build`                                                     | regenera os dados geográficos embutidos (`docs/dados-geo.md`)                                                                         |
+| `pnpm vapid:generate`                                                | gera o par VAPID, uma vez (`VITE_VAPID_PUBLIC_KEY` raw, `VAPID_PRIVATE_KEY` PKCS#8)                                                   |
+| `pnpm lab` / `lab:remote` / `lab:setup` / `lab:local`                | o laboratório (abaixo)                                                                                                                |
 
 Os scripts `remote:*` e o `lab:setup` carregam o `.env.local` antes de chamar a CLI: é de lá que saem o token, a senha do banco e a chave do Resend que o `config push` usa.
 
@@ -201,6 +202,7 @@ Um agente que exercita o app de ponta a ponta, na produção, sem ninguém pegar
 | Polimento (fase 12)          | `expurgo`, `app_resync`, `lighthouse` (desde a fase 16, também o perfil e a garagem)                                                         |
 | Na estrada (fase 15)         | `app_parada_auto`: o lab-a e o lab-b no mesmo carro, a mesma trilha forjada, uma parada só                                                   |
 | O carro da pessoa (fase 16)  | `app_garagem`: A troca o carro na garagem do perfil, e Membros de B mostra o carro novo sem recarregar                                       |
+| Criar a viagem (fase 17)     | `app_conversa`: "quero sair hoje" com a posição, a IA respondida no navegador e o OSM de verdade; o `app_importar` entra pelo campo          |
 
 Os três da fase 12:
 
@@ -216,7 +218,7 @@ Os três da fase 12:
 | `pnpm lab:setup --target production --viewer <e-mail> --github`                 | uma vez: cria os usuários de laboratório, dá acesso ao painel e grava `LAB_SECRET` nos secrets do GitHub             |
 | `pnpm lab:local`                                                                | o mesmo contra o Supabase local (precisa de `functions:serve` com VAPID; afrouxa o check de https só no banco local) |
 
-A tarefa `medir-importacao` (Run workflow → tarefa) roda só a medição do pensamento da IA (D133), sem os cenários; ela faz várias leituras reais, então só quando for preciso medir de novo. A tarefa `medir-desempenho` roda só o Lighthouse, com os relatórios inteiros nos artefatos, em uns 8 minutos e sem custo de IA; ela usa a viagem do lab-a preparada pelo laboratório do dia. A tarefa `medir-sync` roda só a progressão de A até o rack chegar ao servidor, três vezes seguidas, com o índice de CPU da máquina, o tempo de cada passo, o rastro do motor de sync, os Web Locks e as tarefas longas da thread principal no detalhe (fase 13): é como se mede o envio do rack em minutos. No aparelho, o mesmo rastro sai no console com `viajeiDiag.sync()` e `viajeiDiag.locks()`. O laboratório tem um grupo de concorrência só: uma execução nova espera a que está rodando, mas o GitHub cancela a que estava na fila quando chega outra.
+A tarefa `medir-importacao` (Run workflow → tarefa) roda só a medição do pensamento da IA (D133), sem os cenários; ela faz várias leituras reais, então só quando for preciso medir de novo. A tarefa `medir-conversa` mede uma conversa (as perguntas e o roteiro) e uma saída de hoje pela `plan-trip` publicada, com três leituras reais e uma consulta ao Overpass por roteiro (D213). A tarefa `medir-desempenho` roda só o Lighthouse, com os relatórios inteiros nos artefatos, em uns 8 minutos e sem custo de IA; ela usa a viagem do lab-a preparada pelo laboratório do dia. A tarefa `medir-sync` roda só a progressão de A até o rack chegar ao servidor, três vezes seguidas, com o índice de CPU da máquina, o tempo de cada passo, o rastro do motor de sync, os Web Locks e as tarefas longas da thread principal no detalhe (fase 13): é como se mede o envio do rack em minutos. No aparelho, o mesmo rastro sai no console com `viajeiDiag.sync()` e `viajeiDiag.locks()`. O laboratório tem um grupo de concorrência só: uma execução nova espera a que está rodando, mas o GitHub cancela a que estava na fila quando chega outra.
 
 ## Contas e segredos
 
@@ -243,6 +245,7 @@ Mais quatro coisas que vale saber:
 ## Custos
 
 - **IA (`import-itinerary`):** `claude-sonnet-5-5`, com pensamento adaptativo e `effort: 'medium'` (D133). A US$ 2 por milhão de tokens de entrada e US$ 10 por milhão de saída, uma importação do tamanho do roteiro de exemplo (2.617 caracteres) custa **US$ 0,042**; um texto de 30.000 caracteres, o limite, **US$ 0,23** (D140). Sem cache de prompt, porque a repetição em 5 minutos é rara (D131). O limite é de 20 leituras por pessoa em 24 h.
+- **IA (`plan-trip`, fase 17):** o mesmo modelo e as mesmas variantes. Uma conversa são duas leituras (as perguntas, curtas, e o roteiro); a saída de hoje, uma. O custo medido de cada uma está na D213. O limite é de 10 viagens montadas e 20 conversas começadas por pessoa em 24 h.
 - **Quem paga a IA:** o crédito de API do plano Ultra do Douglas, US$ 200 por ciclo, sem acumular e sem recarga automática. Cabem umas 4.700 importações do tamanho do exemplo por ciclo (D140). Se o crédito acabar, a API para e nada é cobrado.
 - **Laboratório:** uma leitura real da IA por execução (`app_importar`, um texto curto), estimada em ~US$ 0,02; a diária dá ~US$ 0,60 por mês. Cada execução sob demanda, no preview ou na produção, gasta mais uma. O custo medido de cada execução fica no `data` do cenário, no painel `/lab`.
 - **O resto é gratuito no uso atual:** Supabase Free, Vercel na conta pessoal, Open-Meteo, os tiles do OSM e o Nominatim. A rota usa o plano Standard da HeiGIT, com 2.000 rotas por dia e 40 por minuto (D25); sem chave ou sem cota, cai no OSRM público.
@@ -264,7 +267,7 @@ Mais quatro coisas que vale saber:
 
 ### Viagens e membros
 
-`/viagens` é a lista, com os convites pendentes. `/` é a abertura do app: durante uma viagem, cai no Modo Viagem do dia, uma vez por abertura (D33). Os links "Início" e "Voltar" levam a `/viagens`, que nunca redireciona. O convite é por e-mail: fica em `trip_members` e só um e-mail confirmado o reivindica, ao entrar (D5). Excluir uma viagem é só do dono, e é uma lápide: depois de 30 dias, o expurgo a leva de vez.
+`/viagens` é a lista, com os convites pendentes e o campo da viagem nova (fase 17): "Conte a viagem, cole o roteiro ou diga 'quero sair hoje'". Não há formulário de criar: a viagem nasce do texto, só ao salvar a revisão (veja "Criar a viagem conversando"); a edição continua em Detalhes → Editar. `/` é a abertura do app: durante uma viagem, cai no Modo Viagem do dia, uma vez por abertura (D33). Os links "Início" e "Voltar" levam a `/viagens`, que nunca redireciona. O convite é por e-mail: fica em `trip_members` e só um e-mail confirmado o reivindica, ao entrar (D5). Excluir uma viagem é só do dono, e é uma lápide: depois de 30 dias, o expurgo a leva de vez.
 
 ### Avisos com a tela apagada
 
@@ -319,7 +322,7 @@ A maquete (`src/features/world`) desenha o dia: o traçado em S entre as paradas
 
 ### Perfil
 
-`/perfil`, em seções: Você (nome, cor, e-mail), O seu carro, Progresso, Avisos neste aparelho (a permissão, os sons, os cartões de conquista e os padrões das viagens novas), Aparência (o tema do sistema, claro ou escuro, por aparelho), Dados (sair) e, para quem tem, o Laboratório.
+`/perfil`, em seções: Você (nome, cor, e-mail), O seu carro, Progresso, O que você gosta (os chips opcionais, pista para a IA, e o que o app aprende pelas notas 4 e 5 do "Como foi?"), Avisos neste aparelho (a permissão, os sons, os cartões de conquista e os padrões das viagens novas), Aparência (o tema do sistema, claro ou escuro, por aparelho), Dados (sair) e, para quem tem, o Laboratório.
 
 ### Reservas, fotos e anexos
 
@@ -360,6 +363,16 @@ XP, níveis e as 15 conquistas (`src/features/progression`), sem ranking. As reg
 - **Vídeo vertical, 1080 × 1920, sem som:** quadro a quadro, codificado pelo WebCodecs (H.264 em MP4; VP9 em WebM onde não há H.264) e montado pela `mediabunny`, num chunk carregado só ao exportar (D122).
 - **Cards como imagem**, em feed (4:5) e stories (9:16), desenhados em Canvas 2D pelo mesmo código do filme. Compartilhar pela folha do aparelho, ou download. Tudo funciona sem sinal.
 
+### Criar a viagem conversando
+
+O campo da lista (`src/features/intake`) decide o caminho pelo que a pessoa escreve (D202):
+
+- **O formato do Viajei** (`viajei/1`): lido no aparelho, na hora, sem IA e sem internet. Um texto legível com marcação leve: `# nome`, `datas:`, `origem:`, um dia por bloco (`## 11/12/2026 · título`), uma parada por linha (`- 09:00 tipo Nome · endereço · link`) e as seções Reservas, Contatos, Antes de ir, Mala e Missões (o exemplo inteiro é `supabase/seed/viagem-rs.viajei`). O JSON do `importSchema` também vale. "Copiar roteiro como texto", em Detalhes, exporta qualquer viagem nele; "Montou a viagem com outra IA? Copie este pedido", junto do campo, pede a resposta nele (D204).
+- **Um roteiro em texto livre** (a conversa do WhatsApp, as notas): a importação com IA (abaixo), que cria a viagem.
+- **Uma descrição ou vontade** ("Serra Gaúcha em dezembro, 4 dias"): a conversa com a função `plan-trip`, até 3 perguntas ditas antes, cada uma com opções e as palavras da pessoa. **"Quero sair hoje"**: a pergunta de alcance (a manhã, o dia, até amanhã), e os gostos, as notas, onde já foi, o tempo de hoje e a posição (só se o mapa já tinha permissão) como pista; a viagem de hoje abre no mapa (D206 a D208).
+- **Só lugares reais:** o que a IA propõe é conferido no OpenStreetMap antes da revisão, com uma consulta ao Overpass por conversa e o Nominatim pela fila; o que não se confirma sai, e a revisão diz quais (D207).
+- **A viagem nasce no fim:** em `/viagens/nova`, a revisão da importação com "A viagem" no topo; o que o texto não disse (as datas, a origem, o nome) é pergunta com proposta, e a viagem, o dono, os avisos e o roteiro entram numa transação só ao tocar "Criar a viagem" (D203). Sem rede, só o formato segue.
+
 ### Importar com IA
 
 `/viagens/<id>/importar` (`src/features/import`): a pessoa cola o roteiro (a conversa do WhatsApp, as notas, os e-mails de reserva), a IA lê e o roteiro aparece aos poucos. Nada entra na viagem sem a revisão, e a importação acrescenta, nunca apaga.
@@ -368,7 +381,8 @@ XP, níveis e as 15 conquistas (`src/features/progression`), sem ranking. As reg
 - **Limites:** 30.000 caracteres por leitura e 20 leituras por pessoa em 24 h; a recusa diz a hora em que a cota volta.
 - **Revisão:** cada parada, reserva, contato, item e missão entra ou não; campo vazio fica vazio; cada "não classificado" vai para onde a pessoa mandar. O lugar vem de um link do Maps no texto ou da busca do Nominatim. O rascunho e a revisão ficam no aparelho até salvar.
 - **Salvar** é uma transação da `mutate` (`mutate.batch`), pela outbox, com `source: 'ai'` nas paradas e nos itens.
-- **Custo e chave:** veja Custos e Contas e segredos. Decisões: D127 a D140.
+- **A viagem nova (fase 17):** a mesma leitura, sem viagem ainda: o bloco `trip` do schema traz o nome, as datas e a origem, e a revisão cria a viagem (D205). O formato do Viajei colado aqui também é lido no aparelho.
+- **Custo e chave:** veja Custos e Contas e segredos. Decisões: D127 a D140 e D205.
 
 ### Mapa e clima
 

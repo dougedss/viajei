@@ -283,4 +283,56 @@ Ubuntu, nenhum cenário rodou) e 13/11 (`app_parada_auto` e `app_clima`). É a 3
   fechamento da fase, junto com este relatório.
 
 ### Sessão
-_(aberta pelo Douglas num chat novo; a preencher pela sessão ou pelo orquestrador no próximo passo)_
+- **Abertura:** 14/11/2026 às 15h, pelo Douglas, num chat novo, no Opus 5.5, com o `fase-16.md`.
+- **Regra permanente nova do Douglas, no meio da fase (14/11):** no Mac só os testes rápidos sem
+  Docker (prettier, `tsc -b`, eslint, Vitest); pgTAP e Playwright só na CI; e **push em lote**, uma
+  vez com tudo pronto, nunca a cada mudança (a fase 16 deu oito pushes, cada um com 13 a 16 min de
+  CI). Está na memória (`feedback-push-em-lote.md`) e nos prompts a partir da fase 17.
+- **Fechamento pela própria sessão:** merge às 18h40 de Brasília, fast-forward de `2dde90d` para
+  **`9945f35`** (`0fbc011` `fase 16: a garagem é da pessoa, e o perfil`, mais a correção do
+  laboratório do preview), sem coautoria. Decisões D190 a D200. A `0014_carro_e_perfil` no
+  hospedado (3 perfis, nenhum mudado pela cópia). `fase-14` e `fase-15` apagadas no remoto.
+- **O que a fase 16 fez:** a 3.0 (o `app_parada_auto` vermelho era o relógio de mentira
+  atropelando o prazo do sync: o condutor `e2e/helpers/relogio.ts`; o `app_clima` guarda o
+  Open-Meteo e pula com motivo; o apt com três tentativas; o agendado chega 7 a 10 h depois do
+  cron); o carro no perfil e `useMyCar`; `/perfil/garagem`; os modelos livres e a escada por nível
+  (acabamentos e rodas; "o seu carro" trancado até a fase 20); quem libera é o progresso da pessoa;
+  o perfil em seções, os avisos do aparelho, o tema; 1.034 Vitest, 471 pgTAP, 55 Playwright.
+- **Laboratórios:** o do preview (run 43635863918, em `0fbc011`) **cortado no limite de 60 min**
+  com dois vermelhos (o condutor do relógio esperava todos os pedidos da página e um de fora nunca
+  fechava; a retrospectiva lida no instante de uma remontagem), corrigidos sem outro laboratório;
+  o da produção (run 43643182699, 18h45 a 19h00) **verde**: 33 cenários, `app_garagem` novo verde,
+  Lighthouse "medido, não cobrado" com índice 2.324 (perfil 76 e garagem 79: fica para a 17).
+
+### Portão de saída (conferido às 19h20 de 14/11 pelo orquestrador)
+- ponta da `fase-16` na `origin/main`: sim, `9945f35`, com o commit `fase 16: …` (`0fbc011`).
+- CI da `main` em `9945f35`: verde.
+- laboratório da produção: verde no sha (run 43643182699).
+- `docs/decisoes.md` com a seção da fase 16: sim, D190 a D200, sequenciais.
+- `fase-16.md` e este relatório no commit de fechamento: sim. Memória atualizada pela sessão.
+- **Para a fase 17 (3.0):** o Lighthouse do perfil e da garagem (TBT 267 e 246 ms) e os 8 pedidos
+  do app que o condutor vê abertos há mais de 30 s também na produção (a hipótese da barra da
+  Vercel na D200 enfraqueceu). Fica a `fase-16` no remoto (a 17 apaga).
+
+## Fase 17 · Criar a viagem conversando
+
+### Portão de entrada (aberto às 19h30 de 14/11, a pedido do Douglas: "proxima")
+- fase 16 na `main`: sim, `9945f35`, a ponta.
+- CI da `main` em `9945f35`: verde. Laboratório da produção: verde no sha (run 43643182699).
+- `docs/decisoes.md` com a seção da fase 16: sim, D190 a D200. **As D da fase 17 começam na D201.**
+- memória do projeto atualizada depois da fase 16: sim (pela sessão), completada pelo orquestrador.
+- dependência (16 → 17): satisfeita.
+- `docs/fases/fase-17.md` escrito às 19h30 de 14/11 pelo orquestrador, a partir do plano (a fase 17
+  e as decisões 6 e 10 do Douglas), das D124 a D140 (a importação da fase 10) e D190 a D200, e de
+  um levantamento do código em `9945f35` (a porta de entrada de hoje, a importação e a função, o
+  schema, a cota, o clima, as memórias, o perfil, os testes e o laboratório). Com a 3.0 (o perfil e
+  a garagem lentos; os pedidos abertos), o campo e os três caminhos, a viagem que nasce no fim, o
+  formato `viajei/1` com leitor e escritor, a função da conversa (dois passos, até 3 perguntas,
+  `ai_imports.kind` na `0015`), a conferência no OSM (Nominatim pela fila; Overpass uma vez por
+  conversa), a saída de hoje, "O que você gosta" (`profiles.interests`), a regra do push em lote e
+  o laboratório uma vez no preview e uma na produção. Fora do git até o commit de fechamento da
+  fase, junto com este relatório.
+
+### Sessão
+_(aberta pelo Douglas num chat novo; a preencher no próximo passo)_
+
