@@ -8,7 +8,7 @@ import { arrivalAt, hasArrived, hasDeparted } from './geofence.ts';
 import { readPlace } from './index.ts';
 import { largestMunicipalityWithin, nearestMunicipality } from './municipalities.ts';
 import { indexRoute, isOffRoute, projectOntoRoute } from './project.ts';
-import { classifySegments, samplePlaces, type RouteShape } from './segments.ts';
+import { classifySegments, passingPlaces, samplePlaces, type RouteShape } from './segments.ts';
 
 type Fixture = { geometry: number[][]; elevation: number[][] };
 const SP = { lng: -46.6339, lat: -23.5505 };
@@ -144,6 +144,38 @@ describe('leitura do lugar', () => {
     const b = readPlace(route(seedDay1));
     expect(a).toEqual(b);
     expect(a.segments.length).toBeGreaterThan(0);
+    expect(a.places.length).toBeGreaterThan(0);
+  });
+
+  it('os municípios da rota (fase 22): contíguos, em ordem, com o ponto mais perto do centro', () => {
+    const r = route(seedDay1);
+    const samples = samplePlaces(r);
+    const places = passingPlaces(samples);
+    expect(places.length).toBeGreaterThan(3);
+    expect(places[0]?.name).toBe('Papanduva');
+    // o dia 1 do seed passa por Caxias do Sul (a maior do caminho) e termina em Bom Princípio
+    const names = places.map((p) => p.name);
+    expect(names).toContain('Caxias do Sul');
+    // o dia termina em Bom Princípio; a cidade da amostra é a mais populosa a 12 km (São Sebastião do Caí)
+    expect(['Bom Princípio', 'São Sebastião do Caí']).toContain(names.at(-1));
+    const biggest = [...places].sort((a, b) => b.pop - a.pop)[0];
+    expect(biggest?.name).toBe('Caxias do Sul');
+    let last = -1;
+    for (const p of places) {
+      expect(p.from_m).toBeGreaterThanOrEqual(last);
+      expect(p.to_m).toBeGreaterThan(p.from_m);
+      expect(p.at_m).toBeGreaterThanOrEqual(p.from_m);
+      expect(p.at_m).toBeLessThanOrEqual(p.to_m);
+      expect(p.pop).toBeGreaterThan(0);
+      expect(p.uf).toMatch(/^[A-Z]{2}$/);
+      last = p.to_m;
+    }
+    // dois vizinhos nunca são o mesmo município
+    for (let i = 1; i < places.length; i++) {
+      expect(`${places[i]!.name}|${places[i]!.uf}`).not.toBe(
+        `${places[i - 1]!.name}|${places[i - 1]!.uf}`,
+      );
+    }
   });
 });
 

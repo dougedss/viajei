@@ -2,20 +2,34 @@ import type { StopKind } from '@shared/constants.ts';
 import { isAutoStop, isLocated, isWaypoint } from '@/features/itinerary/rules.ts';
 import { asStopKind } from '@/features/itinerary/stop-kinds.ts';
 import type { DayRoute, Stop } from '@/lib/db/schema.ts';
-import type { CuriosityKind, PlaceReading, SceneryKind, Segment } from '@/lib/geo/index.ts';
+import type {
+  CuriosityKind,
+  PassingPlace,
+  PlaceReading,
+  SceneryKind,
+  Segment,
+} from '@/lib/geo/index.ts';
 import { indexRoute, projectOntoRoute } from '@/lib/geo/project.ts';
-import { cameraPosition, groundHit, projectPoint, type CameraFrame, type Vec3 } from './math.ts';
+import { cameraPosition, projectPoint, type Vec3 } from './math.ts';
 import { MINIATURE_BOX, MINIATURE_ROAD_GAP } from '@/art/stops/types.ts';
 import { clamp, fbm, lerp, smooth } from './noise.ts';
 import { hashSeed, mulberry32 } from './seed.ts';
 
 /**
  * O layout da maquete, puro: das paradas, da rota real e da leitura do lugar saem os nós, o
- * traçado em S, o relevo, as faixas de cenário, os acidentes (lago, costa, parreirais, hotel,
- * quadras), o enquadramento da câmera e a função que amostra o terreno em qualquer ponto. A cena
- * só desenha o que está aqui; os testes conferem aqui. Unidades da cena: 1 unidade ≈ "um quarteirão
- * de maquete"; a quilometragem real vive em `km` e a conversão é `kmToS`. A estrada começa um toco
- * antes do primeiro nó e segue um toco depois do último: o dia não nasce nem termina no vazio.
+ * traçado em S, o relevo, as faixas de cenário, os acidentes (lago, costa, parreirais, quadras), as
+ * peças das paradas e os seus pisos, as cidades de passagem, a caixa da maquete e a função que
+ * amostra o terreno em qualquer ponto. A cena só desenha o que está aqui; os testes conferem aqui.
+ * Unidades da cena: 1 unidade ≈ "um quarteirão de maquete"; a quilometragem real vive em `km` e a
+ * conversão é `kmToS`. A estrada começa um toco antes do primeiro nó e segue um toco depois do
+ * último: o dia não nasce nem termina no vazio.
+ *
+ * Fase 22: a maquete é uma maquete de mesa, inteira na tela em retrato. O dia ocupa entre 72 e 124
+ * unidades de comprimento (esticado quando curto, comprimido quando longo) por cerca de 76 a 84 de
+ * largura (a estrada serpenteia entre ±14 e ±18, e cada lado tem 24 unidades para as peças): a
+ * proporção dos esboços (64 × 132). Um trecho longo entre duas paradas ganha mais idas e vindas. O
+ * layout não depende do tamanho do palco: a câmera de repouso (`camera.ts`) é quem enquadra esta
+ * caixa no espaço que há.
  */
 export type { CameraFrame, Vec3 } from './math.ts';
 
@@ -69,10 +83,25 @@ export type LayoutFeature =
   | { kind: 'lake'; x: number; z: number; rx: number; rz: number; level: number }
   | { kind: 'coast'; side: -1 | 1; from_s: number; to_s: number; offset: number }
   | { kind: 'vineyard'; x: number; z: number; angle: number; half: number; rowStep: number }
-  /** a miniatura 3D da parada, ao lado da estrada, virada para ela (fase 14) */
+  /** a peça 3D da parada (a miniatura do tipo), ao lado da estrada, virada para ela (fases 14 e 22) */
   | { kind: 'miniature'; stop_id: string; stop: StopKind; x: number; z: number; angle: number }
   /** quadras de cidade em volta de uma parada de cidade, hotel ou comida (fase 14) */
   | { kind: 'blocks'; x: number; z: number; radius: number; density: number };
+
+/** O piso plano de uma peça: o terreno fica na altura do nó dentro de `r`, e a decoração não entra. */
+export type LayoutPad = { x: number; z: number; r: number; y: number };
+
+/** Uma cidade de passagem (fase 22): o nome na beira da estrada, sem pílula e sem toque. */
+export type LayoutPlace = {
+  name: string;
+  uf: string;
+  pop: number;
+  km: number;
+  s: number;
+  side: -1 | 1;
+  /** onde o nome fica ancorado, ao lado da estrada */
+  position: Vec3;
+};
 
 export type LayoutCuriosity = {
   kind: CuriosityKind;
@@ -92,14 +121,6 @@ export type TerrainSample = {
   s: number;
 };
 
-export type LayoutViewport = {
-  width: number;
-  height: number;
-  /** faixas do HUD, em px, que o dia não pode cobrir */
-  hudTop: number;
-  hudBottom: number;
-};
-
 export type LayoutInput = {
   /** semente determinística */
   dayId: string;
@@ -107,7 +128,6 @@ export type LayoutInput = {
   stops: readonly Stop[];
   route: Pick<DayRoute, 'geometry' | 'elevation' | 'legs'> | null;
   place: PlaceReading | null;
-  viewport: LayoutViewport;
   /**
    * Até onde o z do caminho vai antes de comprimir (padrão `Z_MAX`, o dia inteiro na tela). O filme
    * da retrospectiva usa mais, porque a câmera sobrevoa a viagem em vez de mostrá-la de uma vez.
@@ -120,7 +140,7 @@ export type WorldLayout = {
   hasRoute: boolean;
   /** meia largura do S deste dia */
   xHalf: number;
-  /** meia largura da estrada na cena, maior quando a câmera está longe */
+  /** meia largura da estrada na cena */
   roadHalfWidth: number;
   /** quilometragem total do eixo do layout */
   totalKm: number;
@@ -132,13 +152,17 @@ export type WorldLayout = {
   path: PathSample[];
   bands: SceneryBand[];
   features: LayoutFeature[];
+  pads: LayoutPad[];
+  places: LayoutPlace[];
   curiosities: LayoutCuriosity[];
+  /** a caixa da maquete no chão: é até onde o terreno vai, e o corte da base */
   bounds: { x0: number; x1: number; z0: number; z1: number };
+  /** de quanto abaixo do chão mais baixo a quanto acima do mais alto a maquete vai (a câmera enquadra isto) */
+  yRange: { y0: number; y1: number };
   /** altura da água do mar na cena, quando há praia */
   seaLevel: number | null;
   /** altura média do caminho: para onde a câmera olha */
   yMid: number;
-  camera: CameraFrame;
   kmToS(km: number): number;
   sToKm(s: number): number;
   /** fração do comprimento real da rota (o `fraction` do catch-up) */
@@ -149,36 +173,51 @@ export type WorldLayout = {
 };
 
 // ------------------------------------------------------------------ constantes da cena
-/** meia largura mínima do S: os nós alternam entre -xHalf e +xHalf, que abre em dias longos */
-export const X_HALF = 17;
-export const X_HALF_MAX = 40;
-/** acima disto o dia é comprimido em z: a câmera nunca precisa se afastar demais */
-export const Z_MAX = 190;
-export const NODE_GAP = 18;
+/** meia largura mínima do S: os nós alternam entre -xHalf e +xHalf, que abre um pouco em dias longos */
+export const X_HALF = 14;
+export const X_HALF_MAX = 18;
+/** o dia (do primeiro ao último nó, em z) fica entre estes dois: esticado quando curto, comprimido quando longo */
+export const Z_MIN = 80;
+export const Z_MAX = 124;
+/** o mínimo de z entre dois nós: cabe uma peça de cada lado sem se cobrirem */
+export const NODE_GAP = 24;
 /** o toco de estrada antes do primeiro nó e depois do último */
-export const STUB = NODE_GAP;
+export const STUB = 10;
+/** um dia de uma parada só: a reta de um lado ao outro */
+export const STUB_SINGLE = Z_MIN / 2;
+/** a faixa de cada lado da estrada para as peças, o lago e os parreirais (a peça mais funda tem 16) */
+export const SIDE_REACH = 22;
+/** a base continua um pouco depois dos tocos */
+export const END_MARGIN = 8;
+/** um trecho entre dois nós com 3 vezes isto em z (o dia mais curto, `Z_MIN`) ganha 3 curvas em vez de 1 */
+export const BEND_MIN_Z = 24;
 export const Z_PER_KM = 0.22;
 export const Z_PER_CLIMB_M = 0.012;
 export const Y_PER_M = 0.024;
 export const ROAD_HALF_WIDTH = 1.9;
 export const COAST_OFFSET = 22;
-export const LAKE_RX = 12;
-export const LAKE_RZ = 9;
+export const LAKE_RX = 9;
+export const LAKE_RZ = 7.5;
 /** transição entre dois cenários vizinhos, em km (metade para cada lado da borda) */
 export const BLEND_KM = 2;
 /** sem rota, um deslocamento vira quilômetros a esta velocidade */
 export const VIRTUAL_KMH = 60;
 export const MIN_VIRTUAL_KM = 15;
 export const DEFAULT_TRAVEL_MINUTES = 30;
-export const OVER_TILT = (64 * Math.PI) / 180;
-export const FOV = 30;
-/** espaço horizontal fora dos nós para as pílulas, em unidades da cena */
-export const PILL_MARGIN = 14;
 /** até onde as quadras de cidade vão em volta de uma parada de cidade, hotel ou comida */
-export const BLOCKS_RADIUS = 16;
+export const BLOCKS_RADIUS = 26;
 /** os tipos de parada que trazem prédios (fase 14: poucas cidades, mais detalhadas) */
 export const BLOCK_KINDS: readonly StopKind[] = ['city', 'hotel', 'food'];
 export const LAKE_RE = /represa|lago|lagoa|barragem|açude/i;
+/** no máximo tantas cidades de passagem por dia, as maiores (decisão 8 de 15/11) */
+export const MAX_PLACES = 3;
+/** o nome da cidade fica a isto do eixo da estrada */
+export const PLACE_OFFSET = 7;
+/** quanto a maquete desce abaixo do chão mais baixo e sobe acima do mais alto (as peças) */
+export const BASE_DEPTH = 6;
+export const TOP_ROOM = 18;
+/** o relevo em volta da estrada sobe no máximo isto acima dela: a câmera conta com essa folga */
+export const RELIEF_ROOM = 5;
 
 const SAMPLES_PER_UNIT = 5;
 const COARSE_EVERY = 8;
@@ -379,6 +418,34 @@ function bezierPoints(a: XZ, b: XZ, count: number): XZ[] {
   return out;
 }
 
+/** Quantas curvas (ímpar) um trecho de `L` unidades em z ganha: 1, 3 ou 5, cada uma com pelo menos `BEND_MIN_Z`. */
+export function bendsFor(L: number): 1 | 3 | 5 {
+  if (L >= 5 * BEND_MIN_Z) return 5;
+  if (L >= 3 * BEND_MIN_Z) return 3;
+  return 1;
+}
+
+/**
+ * O trecho entre dois nós, sem o primeiro ponto: um S só, ou três (ou cinco) emendados com a
+ * tangente vertical nas juntas, alternando os lados, para a estrada ir e voltar como no esboço.
+ */
+function segmentPoints(a: XZ, b: XZ): XZ[] {
+  const L = b[1] - a[1];
+  const bends = bendsFor(L);
+  const joints: XZ[] = [a];
+  for (let k = 1; k < bends; k++) joints.push([k % 2 === 1 ? b[0] : a[0], a[1] + (L * k) / bends]);
+  joints.push(b);
+  const out: XZ[] = [];
+  for (let k = 0; k < joints.length - 1; k++) {
+    const p = joints[k] ?? a;
+    const q = joints[k + 1] ?? b;
+    const count = Math.max(4, Math.ceil(Math.max(1e-3, q[1] - p[1]) * SAMPLES_PER_UNIT));
+    const pts = bezierPoints(p, q, count);
+    for (let i = 1; i < pts.length; i++) out.push(pts[i] ?? q);
+  }
+  return out;
+}
+
 // ------------------------------------------------------------------ o layout
 type NodeXZ = { x: number; z: number; km: number };
 
@@ -401,12 +468,12 @@ export function buildLayout(input: LayoutInput): WorldLayout {
     }
     nodeXZ.push({ x: 0, z: zAcc, km });
   }
-  // dias longos: comprime o z para o dia inteiro caber a uma distância legível, e abre o S
+  // o dia inteiro na tela: o comprido comprime, o curto estica, e o S abre um pouco com o comprimento
   const rawEnd = nodeXZ.at(-1)?.z ?? 0;
   const zMax = input.zMax ?? Z_MAX;
-  const zScale = rawEnd > zMax ? zMax / rawEnd : 1;
+  const zScale = rawEnd > zMax ? zMax / rawEnd : rawEnd > 0 && rawEnd < Z_MIN ? Z_MIN / rawEnd : 1;
   const zEnd = rawEnd * zScale;
-  const xHalf = clamp(zEnd * 0.16, X_HALF, X_HALF_MAX);
+  const xHalf = clamp(10 + zEnd * 0.06, X_HALF, X_HALF_MAX);
   nodeXZ.forEach((nd, i) => {
     nd.z *= zScale;
     nd.x = i % 2 === 0 ? -xHalf : xHalf;
@@ -423,29 +490,25 @@ export function buildLayout(input: LayoutInput): WorldLayout {
     const count = Math.max(2, Math.ceil(Math.abs(z1 - z0) * SAMPLES_PER_UNIT));
     for (let k = skipFirst ? 1 : 0; k <= count; k++) pushSample(x, lerp(z0, z1, k / count), km);
   };
+  const stub = n <= 1 ? STUB_SINGLE : STUB;
   if (n <= 1) {
     const node = nodeAt(0);
-    straight(node.x, node.z - STUB, node.z + STUB, node.km, false);
+    straight(node.x, node.z - stub, node.z + stub, node.km, false);
     nodeIndex.push(Math.floor((path.length - 1) / 2));
   } else {
     const first = nodeAt(0);
-    straight(first.x, first.z - STUB, first.z, first.km, false);
+    straight(first.x, first.z - stub, first.z, first.km, false);
     nodeIndex.push(path.length - 1);
     for (let i = 0; i < n - 1; i++) {
       const A = nodeAt(i);
       const B = nodeAt(i + 1);
-      const L = Math.max(1e-3, B.z - A.z);
       const kmOf = segmentKmMap(altAt, A.km, B.km);
-      const count = Math.max(4, Math.ceil(L * SAMPLES_PER_UNIT));
-      const pts = bezierPoints([A.x, A.z], [B.x, B.z], count);
-      for (let k = 1; k <= count; k++) {
-        const p = pts[k] ?? [B.x, B.z];
-        pushSample(p[0], p[1], kmOf(k / count));
-      }
+      const pts = segmentPoints([A.x, A.z], [B.x, B.z]);
+      pts.forEach((p, k) => pushSample(p[0], p[1], kmOf((k + 1) / pts.length)));
       nodeIndex.push(path.length - 1);
     }
     const last = nodeAt(n - 1);
-    straight(last.x, last.z, last.z + STUB, last.km, true);
+    straight(last.x, last.z, last.z + stub, last.km, true);
   }
   const sample = (i: number): PathSample => path[i] ?? EMPTY_SAMPLE;
   // suaviza o perfil para a estrada não serrilhar
@@ -561,44 +624,50 @@ export function buildLayout(input: LayoutInput): WorldLayout {
   // faixas de cenário
   const bands = buildBands(input.place?.segments ?? null, axis, totalKm, kmToS);
 
-  // a estrada: de perto (a câmera segue o carro, fase 14) a largura natural
   const roadHalfWidth = ROAD_HALF_WIDTH;
 
-  // acidentes
+  // acidentes e peças
   const features: LayoutFeature[] = [];
+  const pads: LayoutPad[] = [];
   for (const node of nodes) {
     const side = node.side;
     const [x, y, z] = node.position;
+    const box = MINIATURE_BOX[node.kind];
+    // a peça do tipo, do lado de fora do S, com a caixa inteira fora da estrada, centrada no nó e com a
+    // frente virada para a estrada (um giro pequeno pela semente, para não ficarem todas iguais); numa
+    // parada com lago a peça recua em z para a água ficar à frente dela
+    const zOff = node.touch === 'lake' ? -(box.w / 2 + 1.5) : 0;
+    const px = x + side * (roadHalfWidth + MINIATURE_ROAD_GAP + box.d / 2);
+    const pz = z + zOff;
+    features.push({
+      kind: 'miniature',
+      stop_id: node.stop_id,
+      stop: node.kind,
+      x: px,
+      z: pz,
+      angle: -side * (Math.PI / 2) + (rng() - 0.5) * 0.2,
+    });
+    pads.push({ x: px, z: pz, r: Math.hypot(box.w, box.d) / 2 + 1.5, y });
     if (node.touch === 'lake') {
       features.push({
         kind: 'lake',
-        x: x + side * 20,
-        z: z + 1,
+        x: x + side * (roadHalfWidth + MINIATURE_ROAD_GAP + 6),
+        z: z + LAKE_RZ + 2,
         rx: LAKE_RX,
         rz: LAKE_RZ,
         level: y - 0.45,
       });
     } else if (node.touch === 'vineyard') {
+      // os parreirais atrás da peça (a peça da vinícola já tem os seus)
       features.push({
         kind: 'vineyard',
         x: x + side * 11,
-        z,
+        z: z + box.w / 2 + 9,
         angle: (rng() - 0.5) * 0.6,
         half: 7,
         rowStep: 1.3,
       });
     }
-    // a miniatura do tipo, do lado de fora do S, com a caixa inteira fora da estrada e a frente
-    // virada para ela (um pequeno giro pela semente, para não ficarem todas iguais)
-    const box = MINIATURE_BOX[node.kind];
-    features.push({
-      kind: 'miniature',
-      stop_id: node.stop_id,
-      stop: node.kind,
-      x: x + side * (roadHalfWidth + MINIATURE_ROAD_GAP + box.d / 2),
-      z: z + 1.5,
-      angle: -side * (Math.PI / 2) + (rng() - 0.5) * 0.3,
-    });
     if (BLOCK_KINDS.includes(node.kind)) {
       // a densidade pela cidade do lugar (a faixa de cenário em que o nó cai), quando a leitura a dá
       const band = bands.find((b) => node.km >= b.from_km && node.km <= b.to_km);
@@ -649,11 +718,30 @@ export function buildLayout(input: LayoutInput): WorldLayout {
     .filter((c) => axis.hasRoute && c.km >= 0 && c.km <= totalKm)
     .sort((a, b) => a.s - b.s);
 
-  // câmera: o quadro largo do dia inteiro entre as faixas do HUD (a abertura; a câmera que segue o
-  // carro sai de `camera.ts`)
-  const yMid = path.reduce((acc, p) => acc + p.y, 0) / Math.max(1, path.length);
-  const camera = fitCamera(input.viewport, zEnd, yMid, xHalf);
-  const bounds = terrainBounds(camera, input.viewport, zEnd, yMid, xHalf);
+  // a caixa da maquete: o traçado com a faixa das peças de cada lado e as pontas
+  const bounds = {
+    x0: -(xHalf + SIDE_REACH),
+    x1: xHalf + SIDE_REACH,
+    z0: -(stub + END_MARGIN),
+    z1: zEnd + stub + END_MARGIN,
+  };
+  const ys = path.map((p) => p.y);
+  const yMid = ys.reduce((acc, y) => acc + y, 0) / Math.max(1, ys.length);
+  const yRange = { y0: Math.min(...ys) - BASE_DEPTH, y1: Math.max(...ys) + TOP_ROOM };
+
+  // as cidades de passagem: as maiores por onde a rota passa, fora dos trechos das paradas
+  const places = pickPlaces({
+    reading: input.place,
+    axis,
+    stops,
+    totalKm,
+    kmToS,
+    pathAt,
+    pads,
+    roadHalfWidth,
+    firstNodeS,
+    lastNodeS,
+  });
 
   // terreno: amostras grossas da trilha com o cenário de cada uma
   const coarse = path
@@ -743,6 +831,11 @@ export function buildLayout(input: LayoutInput): WorldLayout {
       lerp(best.y, yBlend, mixv) +
       (fbm(x * 0.045 + 7 + seedOff, z * 0.045 + 3 + seedOff, 3) - 0.46) * amp * fade +
       (fbm(x * 0.25 + seedOff, z * 0.25, 2) - 0.5) * 0.22 * fade;
+    // o piso de cada peça: plano na altura do nó, com uma rampa curta em volta
+    for (const pad of pads) {
+      const d = Math.hypot(x - pad.x, z - pad.z);
+      if (d < pad.r + 5) h = lerp(pad.y, h, smooth(pad.r, pad.r + 5, d));
+    }
     let water: TerrainSample['water'] = 'none';
 
     for (const lake of lakes) {
@@ -786,11 +879,13 @@ export function buildLayout(input: LayoutInput): WorldLayout {
     path,
     bands,
     features,
+    pads,
+    places,
     curiosities,
     bounds,
+    yRange,
     seaLevel,
     yMid,
-    camera,
     kmToS,
     sToKm,
     fractionToS,
@@ -844,74 +939,78 @@ function buildBands(
   return out;
 }
 
-/**
- * A câmera parada que mostra o dia inteiro entre as faixas do HUD: inclinação fixa, distância pela
- * altura útil e pela largura, e o alvo deslocado para o centro do dia cair no centro da área útil.
- */
-export function fitCamera(
-  viewport: LayoutViewport,
-  zEnd: number,
-  yMid: number,
-  xHalf = X_HALF,
-): CameraFrame {
-  const width = Math.max(1, viewport.width);
-  const height = Math.max(1, viewport.height);
-  const aspect = width / height;
-  const usable = Math.max(0.4, (height - viewport.hudTop - viewport.hudBottom) / height);
-  const tanHalf = Math.tan(((FOV / 2) * Math.PI) / 180);
-  const span = zEnd + 2 * STUB + 10;
-  const distH = ((span * Math.sin(OVER_TILT)) / (2 * tanHalf * usable)) * 1.08;
-  const xSpan = 2 * xHalf + 2 * PILL_MARGIN;
-  const distW = (xSpan / (2 * tanHalf * aspect)) * 1.08;
-  const frame: CameraFrame = {
-    target: [0, yMid, zEnd / 2],
-    distance: Math.max(60, distH, distW),
-    tilt: OVER_TILT,
-    fov: FOV,
-  };
-  // o centro da área útil, em coordenadas normalizadas (y para cima)
-  const yCenter = (viewport.hudBottom - viewport.hudTop) / height;
-  const hit = groundHit(frame, aspect, 0, yCenter, yMid);
-  if (hit) frame.target = [0, yMid, frame.target[2] + (frame.target[2] - hit[2])];
-  return frame;
-}
+// ------------------------------------------------------------------ as cidades de passagem
+type PlacesInput = {
+  reading: PlaceReading | null;
+  axis: KmAxis;
+  stops: readonly Stop[];
+  totalKm: number;
+  kmToS: (km: number) => number;
+  pathAt: (s: number) => PathSample;
+  pads: readonly LayoutPad[];
+  roadHalfWidth: number;
+  firstNodeS: number;
+  lastNodeS: number;
+};
 
-/** A caixa de terreno que a câmera enxerga, com folga; nunca menor que o caminho e suas margens. */
-function terrainBounds(
-  camera: CameraFrame,
-  viewport: LayoutViewport,
-  zEnd: number,
-  yMid: number,
-  xHalf: number,
-): WorldLayout['bounds'] {
-  const aspect = Math.max(0.3, viewport.width / Math.max(1, viewport.height));
-  // a câmera que segue o carro (fase 14) olha para a frente a partir de cada nó: folga para o
-  // horizonte depois do último e para a posição dela antes do primeiro
-  let x0 = -(xHalf + 30);
-  let x1 = xHalf + 30;
-  let z0 = -(STUB + 30);
-  let z1 = zEnd + STUB + 70;
-  for (const [sx, sy] of [
-    [-1, -1],
-    [1, -1],
-    [-1, 1],
-    [1, 1],
-  ] as const) {
-    const hit = groundHit(camera, aspect, sx, sy, yMid) ?? groundHit(camera, aspect, sx, 0.6, yMid);
-    if (!hit) continue;
-    x0 = Math.min(x0, hit[0]);
-    x1 = Math.max(x1, hit[0]);
-    z0 = Math.min(z0, hit[2]);
-    z1 = Math.max(z1, hit[2]);
+/**
+ * Até três cidades de passagem, as mais populosas, nunca no trecho da rota onde há uma parada com
+ * coordenada (a pílula dela já diz o lugar). O nome fica no `s` do ponto mais perto do centro do
+ * município, do lado de fora da curva, longe dos pisos das peças; quando ali não dá, anda um pouco
+ * ao longo do trecho dela.
+ */
+function pickPlaces(input: PlacesInput): LayoutPlace[] {
+  const { reading, axis, stops, totalKm, kmToS, pathAt, pads, roadHalfWidth } = input;
+  if (!reading || !axis.hasRoute || reading.places.length === 0) return [];
+  const stopM = stops.flatMap((s, i) =>
+    isLocated(s) ? [((axis.kmAt[i] ?? 0) - axis.kmOffset) * 1000] : [],
+  );
+  const candidates: PassingPlace[] = reading.places.filter(
+    (p) => !stopM.some((m) => m >= p.from_m - 1 && m <= p.to_m + 1),
+  );
+  const chosen = [...candidates]
+    .sort((a, b) => b.pop - a.pop || a.at_m - b.at_m)
+    .slice(0, MAX_PLACES)
+    .sort((a, b) => a.at_m - b.at_m);
+  const clear = (x: number, z: number) =>
+    pads.every((pad) => Math.hypot(x - pad.x, z - pad.z) > pad.r + 4);
+  const out: LayoutPlace[] = [];
+  for (const p of chosen) {
+    const km = clamp(axis.kmOffset + p.at_m / 1000, 0, totalKm);
+    const s0 = kmToS(km);
+    const sFrom = Math.max(
+      input.firstNodeS,
+      kmToS(clamp(axis.kmOffset + p.from_m / 1000, 0, totalKm)),
+    );
+    const sTo = Math.min(input.lastNodeS, kmToS(clamp(axis.kmOffset + p.to_m / 1000, 0, totalKm)));
+    let best: { s: number; score: number } | null = null;
+    for (let d = 0; d <= 40; d += 2) {
+      for (const s of d === 0 ? [s0] : [s0 - d, s0 + d]) {
+        if (s < sFrom - 1e-6 || s > sTo + 1e-6) continue;
+        const q = pathAt(s);
+        const side: -1 | 1 = q.x < 0 ? -1 : 1;
+        const x = q.x + side * (roadHalfWidth + PLACE_OFFSET);
+        // fora do piso de toda peça e fora do meio do S (onde a estrada cruza)
+        const score = (clear(x, q.z) ? 2 : 0) + (Math.abs(q.x) > 5 ? 1 : 0);
+        if (!best || score > best.score) best = { s, score };
+        if (score === 3) break;
+      }
+      if (best?.score === 3) break;
+    }
+    const s = best?.s ?? s0;
+    const q = pathAt(s);
+    const side: -1 | 1 = q.x < 0 ? -1 : 1;
+    out.push({
+      name: p.name,
+      uf: p.uf,
+      pop: p.pop,
+      km,
+      s,
+      side,
+      position: [q.x + side * (roadHalfWidth + PLACE_OFFSET), q.y, q.z],
+    });
   }
-  const padX = (x1 - x0) * 0.08;
-  const padZ = (z1 - z0) * 0.08;
-  return {
-    x0: Math.max(-300, Math.floor(x0 - padX)),
-    x1: Math.min(300, Math.ceil(x1 + padX)),
-    z0: Math.max(-90, Math.floor(z0 - padZ)),
-    z1: Math.min(zEnd + 180, Math.ceil(z1 + padZ)),
-  };
+  return out;
 }
 
 /** Onde a câmera do frame fica, para a cena copiar. */

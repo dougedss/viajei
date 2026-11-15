@@ -14,7 +14,6 @@ const layout = buildLayout({
   stops: [makeStop(), makeStop(), makeStop(), makeStop()],
   route: null,
   place: null,
-  viewport: { width: 390, height: 520, hudTop: 36, hudBottom: 64 },
 });
 
 describe('planOpening', () => {

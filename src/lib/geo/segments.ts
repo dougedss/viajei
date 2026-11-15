@@ -116,6 +116,51 @@ export type Segment = {
   pop?: number;
 };
 
+/**
+ * Um município por onde a rota passa (fase 22): o mais populoso a até 12 km de cada amostra (senão o
+ * mais próximo), com o trecho da rota em que ele é esse município e o ponto mais perto do centro
+ * dele. A maquete escreve o nome das maiores cidades de passagem na beira da estrada; quem decide
+ * quais (e exclui as das paradas) é o layout.
+ */
+export type PassingPlace = {
+  name: string;
+  uf: string;
+  pop: number;
+  from_m: number;
+  to_m: number;
+  /** a amostra do trecho mais perto do centro do município */
+  at_m: number;
+};
+
+function placeOf(
+  s: PlaceSample,
+): { name: string; uf: string; pop: number; distance_m: number } | null {
+  return s.city ?? s.town;
+}
+
+/** Os municípios da rota, em ordem, um por trecho contíguo de amostras com o mesmo município. */
+export function passingPlaces(samples: readonly PlaceSample[]): PassingPlace[] {
+  const out: PassingPlace[] = [];
+  let nearest = Number.POSITIVE_INFINITY;
+  samples.forEach((s, i) => {
+    const m = placeOf(s);
+    if (!m) return;
+    const to = samples[i + 1]?.dist_m ?? s.dist_m;
+    const last = out.at(-1);
+    if (last?.name === m.name && last.uf === m.uf && last.to_m >= s.dist_m) {
+      last.to_m = to;
+      if (m.distance_m < nearest) {
+        nearest = m.distance_m;
+        last.at_m = s.dist_m;
+      }
+      return;
+    }
+    nearest = m.distance_m;
+    out.push({ name: m.name, uf: m.uf, pop: m.pop, from_m: s.dist_m, to_m: to, at_m: s.dist_m });
+  });
+  return out;
+}
+
 function cityPop(s: PlaceSample): number {
   return Math.max(s.city?.pop ?? 0, s.town?.pop ?? 0);
 }

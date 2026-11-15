@@ -12,6 +12,8 @@ import {
  * da rota interpolam aqui em vez de chamar `terrainAt` de novo.
  */
 export const TERRAIN_MAX_VERTICES = 70_000;
+/** a célula nunca fica menor que isto: a maquete de mesa (fase 22) é pequena, e o relevo não precisa de mais */
+export const TERRAIN_MIN_CELL = 0.6;
 /** lado do talhão de lavoura, em unidades da cena */
 export const PATCH = 9;
 
@@ -36,7 +38,7 @@ export type HeightField = {
 /** Tamanho da célula que mantém o terreno dentro do orçamento de vértices. */
 export function cellSize(bounds: WorldLayout['bounds']): number {
   const area = (bounds.x1 - bounds.x0) * (bounds.z1 - bounds.z0);
-  return Math.max(1, Math.sqrt(area / TERRAIN_MAX_VERTICES));
+  return Math.max(TERRAIN_MIN_CELL, Math.sqrt(area / TERRAIN_MAX_VERTICES));
 }
 
 export function buildHeightField(layout: WorldLayout): HeightField {

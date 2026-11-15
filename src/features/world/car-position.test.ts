@@ -15,7 +15,6 @@ const layout = buildLayout({
   stops,
   route: null,
   place: null,
-  viewport: { width: 390, height: 520, hudTop: 36, hudBottom: 64 },
 });
 const node = (id: string) => layout.nodes.find((n) => n.stop_id === id)!;
 const pos = (over: Partial<CatchupPosition> = {}): CatchupPosition => ({

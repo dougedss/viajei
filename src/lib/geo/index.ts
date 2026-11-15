@@ -4,7 +4,14 @@
  * nas telas, para o chunk com os dados só baixar quando a leitura é pedida.
  */
 import { curiosities, type Curiosity } from './curiosities.ts';
-import { classifySegments, samplePlaces, type RouteShape, type Segment } from './segments.ts';
+import {
+  classifySegments,
+  passingPlaces,
+  samplePlaces,
+  type PassingPlace,
+  type RouteShape,
+  type Segment,
+} from './segments.ts';
 
 export { biomeAt } from './biomes.ts';
 export { distanceToCoast } from './coast.ts';
@@ -30,19 +37,30 @@ export {
 export {
   classifySample,
   classifySegments,
+  passingPlaces,
   samplePlaces,
   SCENERY_LABELS,
+  type PassingPlace,
   type PlaceSample,
   type RouteShape,
   type SceneryKind,
   type Segment,
 } from './segments.ts';
 
-export type PlaceReading = { segments: Segment[]; curiosities: Curiosity[] };
+export type PlaceReading = {
+  segments: Segment[];
+  curiosities: Curiosity[];
+  /** os municípios por onde a rota passa, em ordem (fase 22: as cidades de passagem) */
+  places: PassingPlace[];
+};
 
-/** A leitura completa de um dia: as partes do cenário e as curiosidades do caminho. */
+/** A leitura completa de um dia: as partes do cenário, as curiosidades do caminho e os municípios. */
 export function readPlace(route: RouteShape): PlaceReading {
   const samples = samplePlaces(route);
   const segments = classifySegments(route);
-  return { segments, curiosities: curiosities(route.elevation, samples, segments) };
+  return {
+    segments,
+    curiosities: curiosities(route.elevation, samples, segments),
+    places: passingPlaces(samples),
+  };
 }

@@ -4,18 +4,27 @@ import { readPlace, type PlaceReading } from '@/lib/geo/index.ts';
 import type { DayRoute } from '@/lib/db/schema.ts';
 import { makeStop } from '@/test/factories.ts';
 import { gemeoStops } from '@/test/fixtures/dia-gemeo.ts';
-import { MINIATURE_BOX } from '@/art/stops/types.ts';
+import { MINIATURE_BOX, MINIATURE_ROAD_GAP } from '@/art/stops/types.ts';
 import { indexRoute, projectOntoRoute } from '@/lib/geo/project.ts';
 import {
+  BASE_DEPTH,
+  bendsFor,
+  BLOCKS_RADIUS,
   buildLayout,
-  fitCamera,
+  LAKE_RX,
+  MAX_PLACES,
   MIN_VIRTUAL_KM,
   NODE_GAP,
+  SIDE_REACH,
+  STUB,
+  STUB_SINGLE,
   X_HALF,
+  X_HALF_MAX,
+  Z_MAX,
+  Z_MIN,
   type LayoutInput,
-  type LayoutViewport,
+  type WorldLayout,
 } from './layout.ts';
-import { projectNodes } from './project.ts';
 
 const route: Pick<DayRoute, 'geometry' | 'elevation' | 'legs'> = {
   geometry: seedDay1.geometry as [number, number][],
@@ -25,12 +34,33 @@ const route: Pick<DayRoute, 'geometry' | 'elevation' | 'legs'> = {
 let placeCache: PlaceReading | null = null;
 const place = (): PlaceReading => (placeCache ??= readPlace(route));
 
-const PHONE: LayoutViewport = { width: 390, height: 520, hudTop: 36, hudBottom: 64 };
-const TALL: LayoutViewport = { width: 390, height: 845, hudTop: 36, hudBottom: 64 };
-const SQUARE: LayoutViewport = { width: 600, height: 800, hudTop: 36, hudBottom: 64 };
-
 function dayOne(over: Partial<LayoutInput> = {}): LayoutInput {
-  return { dayId: 'dia-1', stops: gemeoStops(), route, place: place(), viewport: PHONE, ...over };
+  return { dayId: 'dia-1', stops: gemeoStops(), route, place: place(), ...over };
+}
+
+/** A proporção da caixa da maquete (largura / comprimento), a do esboço é 64 / 132 ≈ 0,49. */
+const aspectOf = (l: WorldLayout) => (l.bounds.x1 - l.bounds.x0) / (l.bounds.z1 - l.bounds.z0);
+
+/** O retângulo (no chão) de uma peça: a frente ao longo de z (a peça vira para a estrada), o fundo em x. */
+function footprint(l: WorldLayout, stopId: string) {
+  const m = l.features.find((f) => f.kind === 'miniature' && f.stop_id === stopId);
+  if (m?.kind !== 'miniature') throw new Error('sem peça');
+  const box = MINIATURE_BOX[m.stop];
+  return { x0: m.x - box.d / 2, x1: m.x + box.d / 2, z0: m.z - box.w / 2, z1: m.z + box.w / 2 };
+}
+
+/** Quantas vezes o caminho cruza o eixo x = 0 entre dois `s`. */
+function crossings(l: WorldLayout, s0: number, s1: number): number {
+  let n = 0;
+  let last = Math.sign(l.pathAt(s0).x);
+  for (let s = s0 + 0.5; s <= s1; s += 0.5) {
+    const sign = Math.sign(l.pathAt(s).x);
+    if (sign !== 0 && sign !== last) {
+      n++;
+      last = sign;
+    }
+  }
+  return n;
 }
 
 describe('layout com rota real (dia 1 do seed)', () => {
@@ -47,6 +77,7 @@ describe('layout com rota real (dia 1 do seed)', () => {
     for (const node of layout.nodes) {
       expect(Math.abs(node.position[0])).toBeCloseTo(layout.xHalf, 5);
       expect(layout.xHalf).toBeGreaterThanOrEqual(X_HALF);
+      expect(layout.xHalf).toBeLessThanOrEqual(X_HALF_MAX);
       // o nó está no caminho, e o caminho ali tem a quilometragem do nó
       const p = layout.pathAt(node.s);
       expect(p.x).toBeCloseTo(node.position[0], 3);
@@ -101,7 +132,6 @@ describe('layout com rota real (dia 1 do seed)', () => {
     }
     const kinds = new Set(layout.bands.map((b) => b.kind));
     expect(kinds.has('serra')).toBe(true);
-    // os pesos somam 1 em qualquer km, e no meio de uma faixa ela domina
     for (const km of [0, 50, 250, 470]) {
       const w = layout.weightsAtKm(km);
       const sum = Object.values(w).reduce((a, b) => a + b, 0);
@@ -122,21 +152,41 @@ describe('layout com rota real (dia 1 do seed)', () => {
     }
   });
 
-  it('cada parada vira uma miniatura do tipo, fora da estrada e do lado de fora do S', () => {
+  it('cada parada vira uma peça do tipo, fora da estrada, do lado de fora do S e com um piso plano', () => {
     const minis = layout.features.filter((f) => f.kind === 'miniature');
     expect(minis.map((m) => m.stop)).toEqual(['origin', 'nature', 'hotel', 'food']);
     for (const node of layout.nodes) {
       const m = minis.find((f) => f.stop_id === node.stop_id)!;
-      // do lado de fora do S, com a caixa inteira fora da estrada
+      // do lado de fora do S, com a caixa inteira fora da estrada e a folga nova
       expect(Math.sign(m.x - node.position[0])).toBe(node.side);
       const box = MINIATURE_BOX[m.stop];
-      expect(Math.abs(m.x - node.position[0]) - box.d / 2).toBeGreaterThan(layout.roadHalfWidth);
+      expect(Math.abs(m.x - node.position[0]) - box.d / 2).toBeCloseTo(
+        layout.roadHalfWidth + MINIATURE_ROAD_GAP,
+        6,
+      );
+      // centrada no nó, dentro da faixa das peças e da base
+      expect(m.z).toBeCloseTo(node.position[2], 6);
+      expect(Math.abs(m.x) + box.d / 2).toBeLessThanOrEqual(layout.xHalf + SIDE_REACH);
       // virada para a estrada: a frente (+z local) aponta para o lado oposto ao de fora
       expect(Math.sign(Math.sin(m.angle))).toBe(-node.side);
+      // o piso: o terreno fica na altura do nó em volta da peça
+      const pad = layout.pads.find((p) => Math.abs(p.x - m.x) < 1e-6 && Math.abs(p.z - m.z) < 1e-6);
+      expect(pad).toBeDefined();
+      expect(pad!.y).toBeCloseTo(node.position[1], 6);
+      for (const [dx, dz] of [
+        [pad!.r * 0.6, 0],
+        [0, pad!.r * 0.6],
+        [-pad!.r * 0.5, pad!.r * 0.5],
+      ]) {
+        expect(Math.abs(layout.terrainAt(m.x + dx!, m.z + dz!).h - node.position[1])).toBeLessThan(
+          0.05,
+        );
+      }
     }
-    // as quadras só em volta do hotel e do restaurante (cidade, hotel e comida)
+    // as quadras só em volta do hotel e do restaurante (cidade, hotel e comida), no raio novo
     const blocks = layout.features.filter((f) => f.kind === 'blocks');
     expect(blocks).toHaveLength(2);
+    expect(blocks[0]?.radius).toBe(BLOCKS_RADIUS);
     expect(layout.features.some((f) => f.kind === 'lake')).toBe(false);
   });
 
@@ -145,54 +195,183 @@ describe('layout com rota real (dia 1 do seed)', () => {
     const near = layout.terrainAt(node.position[0] + 1, node.position[2]);
     expect(Math.abs(near.h - node.position[1])).toBeLessThan(0.6);
     expect(near.water).toBe('none');
-    const far = layout.terrainAt(node.position[0] + 40, node.position[2]);
+    const far = layout.terrainAt(node.position[0] - 24, node.position[2]);
     expect(Number.isFinite(far.h)).toBe(true);
     expect(Object.values(far.weights).reduce((a, b) => a + b, 0)).toBeCloseTo(1, 6);
     expect(layout.seaLevel).toBeNull();
+    // a caixa da maquete cobre o relevo com folga embaixo e em cima
+    const ys = layout.path.map((p) => p.y);
+    expect(layout.yRange.y0).toBeLessThan(Math.min(...ys) - BASE_DEPTH + 1e-6);
+    expect(layout.yRange.y1).toBeGreaterThan(Math.max(...ys));
   });
 
   it('é determinístico pela semente do dia e muda com outro dia', () => {
     const again = buildLayout(dayOne());
     expect(again.seed).toBe(layout.seed);
-    expect(again.terrainAt(33, 70).h).toBe(layout.terrainAt(33, 70).h);
+    expect(again.terrainAt(20, 70).h).toBe(layout.terrainAt(20, 70).h);
     const other = buildLayout(dayOne({ dayId: 'dia-2' }));
     expect(other.seed).not.toBe(layout.seed);
     expect(other.path.map((p) => [p.x, p.z])).toEqual(layout.path.map((p) => [p.x, p.z]));
-    expect(other.terrainAt(33, 70).h).not.toBe(layout.terrainAt(33, 70).h);
+    expect(other.terrainAt(20, 70).h).not.toBe(layout.terrainAt(20, 70).h);
+  });
+
+  it('as cidades de passagem: até três, as maiores, nunca no trecho de uma parada, do lado de fora', () => {
+    const reading = place();
+    expect(reading.places.length).toBeGreaterThan(3);
+    expect(layout.places.length).toBeLessThanOrEqual(MAX_PLACES);
+    expect(layout.places.length).toBeGreaterThan(0);
+    const stopKms = layout.nodes.map((n) => n.km);
+    // nenhuma cidade no trecho em que há uma parada com coordenada
+    for (const p of layout.places) {
+      const src = reading.places.find((q) => q.name === p.name && q.uf === p.uf)!;
+      expect(src).toBeDefined();
+      for (const km of stopKms) {
+        const m = (km - layout.kmOffset) * 1000;
+        expect(m < src.from_m - 1 || m > src.to_m + 1).toBe(true);
+      }
+      // no s do km dela (ou perto, se precisou desviar de uma peça), do lado de fora da curva
+      expect(Math.abs(p.s - layout.kmToS(p.km))).toBeLessThanOrEqual(40);
+      const q = layout.pathAt(p.s);
+      expect(Math.sign(p.position[0] - q.x)).toBe(p.side);
+      expect(p.side).toBe(q.x < 0 ? -1 : 1);
+      for (const pad of layout.pads) {
+        expect(Math.hypot(p.position[0] - pad.x, p.position[2] - pad.z)).toBeGreaterThan(pad.r);
+      }
+    }
+    // as maiores: toda cidade que ficou de fora e não é de parada tem população menor ou igual
+    const chosen = new Set(layout.places.map((p) => `${p.name}|${p.uf}`));
+    const minPop = Math.min(...layout.places.map((p) => p.pop));
+    for (const q of reading.places) {
+      if (chosen.has(`${q.name}|${q.uf}`)) continue;
+      const hasStop = stopKms.some((km) => {
+        const m = (km - layout.kmOffset) * 1000;
+        return m >= q.from_m - 1 && m <= q.to_m + 1;
+      });
+      if (!hasStop) expect(q.pop).toBeLessThanOrEqual(minPop);
+    }
+    // em ordem ao longo do dia
+    for (let i = 1; i < layout.places.length; i++)
+      expect(layout.places[i]!.s).toBeGreaterThan(layout.places[i - 1]!.s);
+  });
+});
+
+describe('o traçado em retrato (fase 22)', () => {
+  const day = (n: number, minutes: number, dayId = `t${String(n)}-${String(minutes)}`) =>
+    buildLayout({
+      dayId,
+      stops: Array.from({ length: n }, (_, i) =>
+        makeStop({
+          kind: i === 0 ? 'origin' : i === n - 1 ? 'hotel' : i % 2 ? 'nature' : 'food',
+          travel_minutes_to_next: minutes,
+        }),
+      ),
+      route: null,
+      place: null,
+    });
+
+  it.each([
+    [2, 20],
+    [2, 240],
+    [4, 30],
+    [4, 180],
+    [8, 20],
+    [8, 120],
+  ])(
+    'um dia de %i paradas com %i min entre elas cabe na proporção da maquete de mesa',
+    (n, min) => {
+      const l = day(n, min);
+      const zEnd = (l.nodes.at(-1)?.position[2] ?? 0) - (l.nodes[0]?.position[2] ?? 0);
+      expect(zEnd).toBeGreaterThanOrEqual(Z_MIN - 1e-6);
+      expect(zEnd).toBeLessThanOrEqual(Z_MAX + 1e-6);
+      expect(aspectOf(l)).toBeGreaterThan(0.45);
+      expect(aspectOf(l)).toBeLessThan(0.8);
+      expect(l.bounds.x1).toBeCloseTo(l.xHalf + SIDE_REACH, 6);
+      expect(l.bounds.z0).toBeCloseTo(-(STUB + 8), 6);
+      // a estrada e as peças inteiras dentro da base
+      for (const p of l.path) {
+        expect(p.x).toBeGreaterThan(l.bounds.x0);
+        expect(p.x).toBeLessThan(l.bounds.x1);
+        expect(p.z).toBeGreaterThanOrEqual(l.bounds.z0);
+        expect(p.z).toBeLessThanOrEqual(l.bounds.z1);
+      }
+      for (const node of l.nodes) {
+        const f = footprint(l, node.stop_id);
+        expect(f.x0).toBeGreaterThanOrEqual(l.bounds.x0 - 1e-6);
+        expect(f.x1).toBeLessThanOrEqual(l.bounds.x1 + 1e-6);
+        expect(f.z0).toBeGreaterThanOrEqual(l.bounds.z0 - 1e-6);
+        expect(f.z1).toBeLessThanOrEqual(l.bounds.z1 + 1e-6);
+      }
+    },
+  );
+
+  it('as peças não se cobrem nem cobrem a estrada', () => {
+    for (const l of [day(4, 30), day(8, 20), day(8, 120), buildLayout(dayOne())]) {
+      const boxes = l.nodes.map((n) => footprint(l, n.stop_id));
+      for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          const a = boxes[i]!;
+          const b = boxes[j]!;
+          const apart = a.x1 <= b.x0 || b.x1 <= a.x0 || a.z1 <= b.z0 || b.z1 <= a.z0;
+          expect(apart, `peças ${String(i)} e ${String(j)}`).toBe(true);
+        }
+        // nenhum ponto da estrada (com a largura dela) dentro da peça
+        const a = boxes[i]!;
+        for (const p of l.path) {
+          const inside =
+            p.x + l.roadHalfWidth > a.x0 &&
+            p.x - l.roadHalfWidth < a.x1 &&
+            p.z > a.z0 &&
+            p.z < a.z1;
+          expect(inside, `a estrada em s=${p.s.toFixed(1)} na peça ${String(i)}`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('um trecho longo entre duas paradas ganha três curvas; um curto, uma', () => {
+    expect(bendsFor(20)).toBe(1);
+    expect(bendsFor(71)).toBe(1);
+    expect(bendsFor(72)).toBe(3);
+    expect(bendsFor(119)).toBe(3);
+    expect(bendsFor(120)).toBe(5);
+    // um dia de duas paradas, mesmo curto, estica até Z_MIN e por isso vai e volta três vezes
+    for (const long of [day(2, 20), day(2, 240)]) {
+      const a = long.nodes[0]!;
+      const b = long.nodes[1]!;
+      expect(b.position[2] - a.position[2]).toBeGreaterThanOrEqual(Z_MIN - 1e-6);
+      expect(crossings(long, a.s, b.s)).toBe(3);
+    }
+    // com várias paradas o trecho é curto: um S por trecho (os cruzamentos do dia são os dos trechos)
+    const short = day(8, 20);
+    expect(crossings(short, short.nodes[0]!.s, short.nodes[1]!.s)).toBe(1);
+    const four = day(4, 60);
+    expect(crossings(four, four.nodes[0]!.s, four.nodes.at(-1)!.s)).toBe(3);
+    const long = day(2, 240);
+    // a estrada continua suave nas juntas: a tangente nunca vira para trás
+    for (const p of long.path) expect(p.tz).toBeGreaterThan(0);
+  });
+
+  it('o dia curto estica e o longo comprime, e o km continua indo e voltando', () => {
+    const short = day(2, 20);
+    const nat = NODE_GAP + 0.22 * MIN_VIRTUAL_KM;
+    expect(short.nodes[1]!.position[2]).toBeCloseTo(Z_MIN, 6);
+    expect(short.nodes[1]!.position[2]).toBeGreaterThan(nat);
+    const long = day(8, 120);
+    expect(long.nodes.at(-1)!.position[2]).toBeCloseTo(Z_MAX, 6);
+    for (const l of [short, long]) {
+      for (const km of [0, l.totalKm * 0.3, l.totalKm * 0.77, l.totalKm]) {
+        expect(l.sToKm(l.kmToS(km))).toBeCloseTo(km, 1);
+      }
+    }
   });
 });
 
 describe('enquadramento', () => {
-  it.each([
-    ['9:19,5', TALL],
-    ['3:4', SQUARE],
-    ['canvas baixo', PHONE],
-  ])('o dia inteiro cabe acima do HUD em %s', (_name, viewport) => {
-    const layout = buildLayout(dayOne({ viewport }));
-    const pins = projectNodes(layout, viewport);
-    for (const pin of pins) {
-      expect(pin.visible).toBe(true);
-      expect(pin.x).toBeGreaterThan(0);
-      expect(pin.x).toBeLessThan(viewport.width);
-      expect(pin.y).toBeGreaterThan(viewport.hudTop - 8);
-      expect(pin.y).toBeLessThan(viewport.height - viewport.hudBottom);
-    }
-    // a estrada inteira também: nenhum ponto do caminho fora do canvas
-    const aspect = viewport.width / viewport.height;
-    for (const p of layout.path.filter((_, i) => i % 50 === 0)) {
-      const proj = projectNodes(
-        { ...layout, nodes: [{ ...layout.nodes[0]!, position: [p.x, p.y, p.z] }] },
-        viewport,
-        0,
-      )[0];
-      expect(proj?.visible).toBe(true);
-      expect(aspect).toBeGreaterThan(0);
-    }
-  });
-
-  it('um dia curto não aproxima demais a câmera', () => {
-    const frame = fitCamera(PHONE, 20, 0);
-    expect(frame.distance).toBeGreaterThanOrEqual(60);
+  it('a caixa da maquete não depende do palco: o mesmo layout para qualquer tela', () => {
+    const a = buildLayout(dayOne());
+    const b = buildLayout(dayOne());
+    expect(a.bounds).toEqual(b.bounds);
+    expect(a.yRange).toEqual(b.yRange);
   });
 });
 
@@ -203,7 +382,7 @@ describe('layout sem rota', () => {
     makeStop({ kind: 'winery', name: 'Vinícola', travel_minutes_to_next: 120 }),
     makeStop({ kind: 'hotel', name: 'Pousada' }),
   ];
-  const layout = buildLayout({ dayId: 'x', stops, route: null, place: null, viewport: PHONE });
+  const layout = buildLayout({ dayId: 'x', stops, route: null, place: null });
 
   it('espaça os nós pelos deslocamentos, plano, tudo interior', () => {
     expect(layout.hasRoute).toBe(false);
@@ -213,31 +392,35 @@ describe('layout sem rota', () => {
     expect(layout.bands[0]?.kind).toBe('interior');
     for (const p of layout.path) expect(p.y).toBe(0);
     expect(layout.curiosities).toEqual([]);
+    expect(layout.places).toEqual([]);
     expect(layout.fractionToS(1)).toBeCloseTo(layout.nodes[3]?.s ?? -1, 6);
   });
 
-  it('planta o lago e os parreirais ao lado dos nós', () => {
+  it('planta o lago à frente da peça e os parreirais atrás dela, na escala nova', () => {
     expect(layout.nodes.map((n) => n.touch)).toEqual([null, 'lake', 'vineyard', null]);
-    const lake = layout.features.find((f) => f.kind === 'lake');
-    expect(lake && layout.terrainAt(lake.x, lake.z).water).toBe('lake');
-    // o lago fica do lado de fora do S, longe da estrada
+    const lake = layout.features.find((f) => f.kind === 'lake')!;
+    expect(layout.terrainAt(lake.x, lake.z).water).toBe('lake');
     const node = layout.nodes[1]!;
-    expect(lake && Math.sign(lake.x - node.position[0])).toBe(node.side);
+    // o lago fica do lado de fora do S, dentro da base, e a peça do lago recua para a água ficar à frente
+    expect(Math.sign(lake.x - node.position[0])).toBe(node.side);
+    expect(Math.abs(lake.x) + LAKE_RX).toBeLessThanOrEqual(layout.bounds.x1);
+    const piece = footprint(layout, node.stop_id);
+    expect(piece.z1).toBeLessThanOrEqual(lake.z - lake.rz + 1e-6);
     expect(layout.terrainAt(node.position[0], node.position[2]).water).toBe('none');
+    const vineyard = layout.features.find((f) => f.kind === 'vineyard')!;
+    const winery = layout.nodes[2]!;
+    const wbox = footprint(layout, winery.stop_id);
+    expect(vineyard.z - vineyard.half).toBeGreaterThanOrEqual(wbox.z1 - 1e-6);
+    expect(Math.abs(vineyard.x) + vineyard.half).toBeLessThanOrEqual(layout.bounds.x1);
   });
 
   it('uma parada só vira um trecho reto com o nó no meio', () => {
-    const one = buildLayout({
-      dayId: 'y',
-      stops: [stops[0]!],
-      route: null,
-      place: null,
-      viewport: PHONE,
-    });
+    const one = buildLayout({ dayId: 'y', stops: [stops[0]!], route: null, place: null });
     expect(one.nodes).toHaveLength(1);
-    expect(one.pathLength).toBeCloseTo(2 * NODE_GAP, 3);
-    expect(one.nodes[0]?.s).toBeCloseTo(NODE_GAP, 0);
+    expect(one.pathLength).toBeCloseTo(2 * STUB_SINGLE, 3);
+    expect(one.nodes[0]?.s).toBeCloseTo(STUB_SINGLE, 0);
     expect(one.kmToS(0)).toBe(one.nodes[0]?.s);
+    expect(aspectOf(one)).toBeLessThan(1);
   });
 
   it('deslocamento curto nunca encolhe abaixo do mínimo', () => {
@@ -246,7 +429,6 @@ describe('layout sem rota', () => {
       stops: [makeStop({ travel_minutes_to_next: 2 }), makeStop()],
       route: null,
       place: null,
-      viewport: PHONE,
     });
     expect(tiny.nodes[1]?.km).toBe(MIN_VIRTUAL_KM);
   });
@@ -268,7 +450,7 @@ describe('layout misto: parada sem coordenada entre duas com rota', () => {
       travel_minutes_to_next: 60,
     });
     const stops = [origin, { ...park, travel_minutes_to_next: 60 }, prova, hotel, restaurant];
-    const layout = buildLayout({ dayId: 'm', stops, route, place: place(), viewport: PHONE });
+    const layout = buildLayout({ dayId: 'm', stops, route, place: place() });
     expect(layout.hasRoute).toBe(true);
     expect(layout.nodes).toHaveLength(5);
     const kms = layout.nodes.map((n) => n.km);
@@ -287,7 +469,7 @@ describe('layout misto: parada sem coordenada entre duas com rota', () => {
       travel_minutes_to_next: 30,
     });
     const stops = [casa, ...gemeoStops()];
-    const layout = buildLayout({ dayId: 'v', stops, route, place: place(), viewport: PHONE });
+    const layout = buildLayout({ dayId: 'v', stops, route, place: place() });
     expect(layout.kmOffset).toBe(30);
     expect(layout.nodes[1]?.km).toBe(30);
     expect(layout.fractionToS(0)).toBeCloseTo(layout.nodes[1]?.s ?? -1, 6);
@@ -316,16 +498,15 @@ describe('layout com uma parada que se registrou sozinha (fase 15)', () => {
   const stops = [origin, posto, park, hotel, restaurant];
 
   it('não é ponto de passagem: a rota real continua valendo, sem pedir outra', () => {
-    const layout = buildLayout({ dayId: 'auto', stops, route, place: place(), viewport: PHONE });
+    const layout = buildLayout({ dayId: 'auto', stops, route, place: place() });
     expect(layout.hasRoute).toBe(true);
     expect(layout.nodes).toHaveLength(5);
-    // os outros nós ficam na quilometragem dos trechos, como sem ela
     expect(layout.nodes[2]?.km).toBeCloseTo(448.063, 2);
     expect(layout.realTotalKm).toBeCloseTo(layout.totalKm, 6);
   });
 
   it('fica onde a posição dela cai na estrada, entre os vizinhos', () => {
-    const layout = buildLayout({ dayId: 'auto', stops, route, place: place(), viewport: PHONE });
+    const layout = buildLayout({ dayId: 'auto', stops, route, place: place() });
     const index = indexRoute(route.geometry);
     const expected =
       projectOntoRoute(index, [posto.lng ?? 0, posto.lat ?? 0]).fraction *
@@ -342,7 +523,6 @@ describe('layout com uma parada que se registrou sozinha (fase 15)', () => {
       stops: [origin, park, hotel, restaurant, late],
       route,
       place: place(),
-      viewport: PHONE,
     });
     expect(layout.hasRoute).toBe(true);
     expect(layout.nodes[4]?.km).toBeCloseTo(layout.nodes[3]?.km ?? -1, 6);

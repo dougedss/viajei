@@ -54,6 +54,7 @@ const place: PlaceReading = {
       scenery: 'city',
     },
   ],
+  places: [],
 };
 const stops = gemeoStops();
 const layout = buildLayout({
@@ -61,7 +62,6 @@ const layout = buildLayout({
   stops,
   route,
   place,
-  viewport: { width: 390, height: 520, hudTop: 36, hudBottom: 64 },
 });
 const node = (i: number) => layout.nodes[i]!;
 const prev = (over: Partial<TravelState> = {}): TravelState => ({
