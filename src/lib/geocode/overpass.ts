@@ -25,15 +25,31 @@ type Row = {
   tags?: Record<string, string>;
 };
 
+/** O primeiro dos dois que cortar corta o pedido (sem o `AbortSignal.any`, que o Safari só tem no 17.4). */
+function either(a: AbortSignal, b: AbortSignal): AbortSignal {
+  const both = new AbortController();
+  for (const s of [a, b]) {
+    if (s.aborted) {
+      both.abort(s.reason);
+      break;
+    }
+    s.addEventListener('abort', () => both.abort(s.reason), { once: true });
+  }
+  return both.signal;
+}
+
 /**
  * Os elementos com nome e posição (o centro, nas vias e relações). Erro de rede ou HTTP sobe.
- * `userAgent`: fora do navegador (a medição do laboratório, no Node), o cliente se identifica, como
- * a política do serviço pede; sem isso ele responde 406. No navegador, vale o do próprio navegador.
+ * `signal`: quem chama corta (a conferência, quando o Nominatim já confirmou tudo); o prazo vale de
+ * qualquer jeito. `userAgent`: fora do navegador (a medição do laboratório, no Node), o cliente se
+ * identifica, como a política do serviço pede; sem isso ele responde 406. No navegador, vale o do
+ * próprio navegador.
  */
 export async function overpass(
   query: string,
   options: { signal?: AbortSignal; userAgent?: string } = {},
 ): Promise<OsmElement[]> {
+  const deadline = AbortSignal.timeout(DEADLINE_MS);
   const res = await fetch(OVERPASS_URL, {
     method: 'POST',
     headers: {
@@ -41,7 +57,7 @@ export async function overpass(
       ...(options.userAgent ? { 'User-Agent': options.userAgent } : {}),
     },
     body: `data=${encodeURIComponent(query)}`,
-    signal: options.signal ?? AbortSignal.timeout(DEADLINE_MS),
+    signal: options.signal ? either(options.signal, deadline) : deadline,
   });
   if (!res.ok) throw new Error(`Overpass ${String(res.status)}`);
   const json = (await res.json()) as { elements?: Row[] };

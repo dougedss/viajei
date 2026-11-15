@@ -153,7 +153,7 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
     const { data, trip, importId } = c.proposal;
     const region = await regionOf(c, data);
     const result = await checkPlaces(data, region, {
-      overpass: (q) => overpass(q),
+      overpass: (q, signal) => overpass(q, { signal }),
       search: (q, r) => (r.center ? searchNear(q, r.center, r.radiusKm) : geocode(q)),
       onProgress: (done, total) => setStage({ kind: 'checking', done, total }),
     });

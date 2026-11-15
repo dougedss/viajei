@@ -8,8 +8,13 @@ import type { OsmElement } from '../../lib/geocode/overpass.ts';
 /**
  * Só lugares reais (fase 17): o que a IA da conversa propõe é conferido no OpenStreetMap antes de a
  * pessoa ver. Uma consulta ao Overpass por conversa (pelos nomes propostos, nas classes dos tipos, em
- * volta da região), e o `/search` do Nominatim, pela fila de uma por vez, só para o que o Overpass não
- * achou. O que se confirma ganha a coordenada; o que não se confirma sai. Quando o mapa não responde,
+ * volta da região) e o `/search` do Nominatim, pela fila de uma por vez, **ao mesmo tempo**: o
+ * Overpass acelera, nunca segura. Quando ele responde, o que achou não vai mais ao Nominatim; quando
+ * o Nominatim confirma tudo antes, a consulta dele é cortada; e ele só é esperado se ainda falta
+ * lugar. O servidor público dele vive cheio: no laboratório e nas medições de 15/11 ele não respondeu
+ * nenhuma vez (o prazo de 25 s, 502), e a primeira versão, que esperava o Overpass antes da fila,
+ * fazia a pessoa esperar o prazo inteiro antes da primeira busca. O que se confirma ganha a
+ * coordenada; o que não se confirma sai. Quando o mapa não responde,
  * o lugar não se confirma também (nunca inventar), mas sai como "não deu para conferir", que a tela
  * pode tentar de novo. A saída e o deslocamento ("Saída de Canela") não são lugares propostos: ficam,
  * e a busca de lugar da revisão os localiza. Puro: a rede entra por `CheckDeps`.
@@ -39,7 +44,8 @@ export type SearchResult = {
 };
 
 export type CheckDeps = {
-  overpass: (query: string) => Promise<OsmElement[]>;
+  /** a consulta da conversa; o `signal` a corta quando o Nominatim já confirmou tudo */
+  overpass: (query: string, signal: AbortSignal) => Promise<OsmElement[]>;
   search: (query: string, region: Region) => Promise<SearchResult[]>;
   onProgress?: (done: number, total: number) => void;
 };
@@ -258,13 +264,18 @@ export async function checkPlaces(
     ),
   );
   const found = new Map<Target, LatLng>();
+  /** os que já se conferiram, por um ou pelo outro (o progresso) */
+  const settled = new Set<Target>();
   const unchecked = new Set<Target>();
-  let overpassState: PlaceCheck['overpass'] = 'skipped';
-  let done = 0;
-  const progress = () => deps.onProgress?.(done, targets.length);
+  const progress = () => deps.onProgress?.(settled.size, targets.length);
+  const confirm = (t: Target, at: LatLng) => {
+    if (!found.has(t)) found.set(t, at);
+    settled.add(t);
+  };
   progress();
 
-  // 1. uma consulta ao Overpass por conversa
+  // 1. uma consulta ao Overpass por conversa, que sai já e corre ao lado da fila do Nominatim
+  const cut = new AbortController();
   const query = region.center
     ? overpassQuery(
         targets.map((t) => t.stop),
@@ -272,24 +283,23 @@ export async function checkPlaces(
         region.radiusKm,
       )
     : null;
-  if (query) {
-    try {
-      const elements = await deps.overpass(query);
-      overpassState = 'ok';
-      for (const t of targets) {
-        const el = matchElement(t.stop, elements, region.center);
-        if (el) {
-          found.set(t, { lat: el.lat, lng: el.lng });
-          done += 1;
-        }
-      }
-      progress();
-    } catch {
-      overpassState = 'failed';
-    }
-  }
+  const overpassRun: Promise<PlaceCheck['overpass']> = query
+    ? deps.overpass(query, cut.signal).then(
+        (elements) => {
+          for (const t of targets) {
+            const el = found.has(t) ? null : matchElement(t.stop, elements, region.center);
+            if (el) confirm(t, { lat: el.lat, lng: el.lng });
+          }
+          progress();
+          return 'ok';
+        },
+        // cortado porque o Nominatim confirmou tudo: não fez falta
+        () => (cut.signal.aborted ? 'skipped' : 'failed'),
+      )
+    : Promise.resolve('skipped');
 
-  // 2. o Nominatim, um por vez, para o que o Overpass não achou; sem rede, o resto fica sem conferir
+  // 2. o Nominatim, um por vez, para o que nenhum dos dois achou ainda; sem rede, o resto fica sem
+  // conferir (o Overpass ainda pode achar)
   let mapDown = false;
   for (const t of targets) {
     if (found.has(t)) continue;
@@ -300,16 +310,20 @@ export async function checkPlaces(
     try {
       const query2 = t.stop.address ? `${t.stop.name}, ${t.stop.address}` : t.stop.name;
       const result = matchResult(t.stop, await deps.search(query2, region));
-      if (result) found.set(t, { lat: result.lat, lng: result.lng });
+      if (result) confirm(t, { lat: result.lat, lng: result.lng });
     } catch {
       mapDown = true;
       unchecked.add(t);
     }
-    done += 1;
+    settled.add(t);
     progress();
   }
 
-  // 3. o roteiro só com o que existe; a missão de um lugar que saiu sai junto
+  // 3. com tudo confirmado, o Overpass não faz falta; faltando lugar, ele é esperado (até o prazo)
+  if (targets.every((t) => found.has(t))) cut.abort();
+  const overpassState = await overpassRun;
+
+  // 4. o roteiro só com o que existe; a missão de um lugar que saiu sai junto
   const gone = new Set(targets.filter((t) => !found.has(t)).map((t) => t.stop));
   const goneNames = new Set([...gone].map((s) => plain(s.name)));
   const days = data.days.map((day, d) => ({
@@ -332,7 +346,7 @@ export async function checkPlaces(
     },
     confirmed: found.size,
     removed: targets.filter((t) => !found.has(t) && !unchecked.has(t)).map((t) => t.stop.name),
-    unchecked: targets.filter((t) => unchecked.has(t)).map((t) => t.stop.name),
+    unchecked: targets.filter((t) => unchecked.has(t) && !found.has(t)).map((t) => t.stop.name),
     overpass: overpassState,
   };
 }

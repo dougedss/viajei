@@ -54,84 +54,136 @@ const region = { center: CANELA, radiusKm: 60 };
 const PROPOSTA = data([
   stop('origin', 'Saída de Canela', 'Canela, RS'),
   stop('nature', 'Cascata do Caracol', 'Canela, RS'),
+  stop('nature', 'Lago Negro', 'Gramado, RS'),
   stop('winery', 'Vinícola Inventada', 'Canela, RS'),
   stop('food', 'Restaurante Garibaldi', 'Gramado, RS'),
 ]);
 
-function deps(over: Partial<CheckDeps> & { found?: Record<string, number> } = {}) {
+const MAPA = [
+  el(1, { name: 'Parque Estadual do Caracol', tourism: 'attraction' }, -29.312, -50.852),
+  // o mesmo nome num restaurante: não é a cascata
+  el(2, { name: 'Restaurante Caracol', amenity: 'restaurant' }, -29.35, -50.8),
+  el(3, { name: 'Lago Negro', natural: 'water', water: 'lake' }, -29.395, -50.876),
+];
+const GARIBALDI = {
+  name: 'Garibaldi',
+  address: 'Restaurante Garibaldi, Gramado, RS',
+  lat: -29.38,
+  lng: -50.87,
+  category: 'amenity',
+  type: 'restaurant',
+};
+
+function deps(over: Partial<CheckDeps> = {}) {
   const asked: string[] = [];
   const queries: string[] = [];
   const d: CheckDeps = {
     overpass: (q) => {
       queries.push(q);
-      return Promise.resolve([
-        el(1, { name: 'Parque Estadual do Caracol', tourism: 'attraction' }, -29.312, -50.852),
-        // o mesmo nome num restaurante: não é a cascata
-        el(2, { name: 'Restaurante Caracol', amenity: 'restaurant' }, -29.35, -50.8),
-      ]);
+      return Promise.resolve(MAPA);
     },
     search: (q) => {
       asked.push(q);
-      if (/garibaldi/i.test(q)) {
-        return Promise.resolve([
-          {
-            name: 'Garibaldi',
-            address: 'Restaurante Garibaldi, Gramado, RS',
-            lat: -29.38,
-            lng: -50.87,
-            category: 'amenity',
-            type: 'restaurant',
-          },
-        ]);
-      }
-      return Promise.resolve([]);
+      return Promise.resolve(/garibaldi/i.test(q) ? [GARIBALDI] : []);
     },
     ...over,
   };
   return { d, asked, queries };
 }
 
+/** Um Overpass que só responde quando o teste manda, e que o corte da conferência rejeita. */
+function heldOverpass() {
+  const held: { answer: (els: OsmElement[]) => void; signal: AbortSignal | null } = {
+    answer: () => undefined,
+    signal: null,
+  };
+  const overpass: CheckDeps['overpass'] = (_q, signal) =>
+    new Promise((resolve, reject) => {
+      held.answer = resolve;
+      held.signal = signal;
+      signal.addEventListener('abort', () => reject(new DOMException('cortado', 'AbortError')));
+    });
+  return { held, overpass };
+}
+
 describe('a conferência dos lugares no OSM', () => {
-  it('confirmado pelo Overpass, pelo Nominatim, e o que não existe sai; a saída fica', async () => {
+  it('o Overpass responde com a fila andando: o que ele achou não vai ao Nominatim; o que não existe sai', async () => {
     const { d, asked, queries } = deps();
     const check = await checkPlaces(PROPOSTA, region, d);
     const stops = check.data.days[0]?.stops ?? [];
     expect(stops.map((s) => [s.name, s.lat])).toEqual([
       ['Saída de Canela', null],
       ['Cascata do Caracol', -29.312],
+      ['Lago Negro', -29.395],
       ['Restaurante Garibaldi', -29.38],
     ]);
     expect(check).toMatchObject({
-      confirmed: 2,
+      confirmed: 3,
       removed: ['Vinícola Inventada'],
       unchecked: [],
       overpass: 'ok',
     });
-    // uma consulta ao Overpass na conversa inteira; o Nominatim só para o que ele não achou
+    // uma consulta ao Overpass na conversa inteira; a primeira busca sai antes de ele responder, e
+    // o lago, que ele achou, não vai ao Nominatim
     expect(queries).toHaveLength(1);
-    expect(asked).toEqual(['Vinícola Inventada, Canela, RS', 'Restaurante Garibaldi, Gramado, RS']);
+    expect(asked).toEqual([
+      'Cascata do Caracol, Canela, RS',
+      'Vinícola Inventada, Canela, RS',
+      'Restaurante Garibaldi, Gramado, RS',
+    ]);
     // a missão do lugar que saiu sai junto
     expect(check.data.quests.map((q) => q.stop_ref)).toEqual(['Cascata do Caracol']);
   });
 
+  it('o Overpass pendurado não segura nada: com tudo confirmado pelo Nominatim, a consulta é cortada', async () => {
+    const { held, overpass } = heldOverpass();
+    const tudo = data([stop('food', 'Restaurante Garibaldi', 'Gramado, RS')]);
+    const check = await checkPlaces(tudo, region, deps({ overpass }).d);
+    expect(held.signal?.aborted).toBe(true);
+    expect(check).toMatchObject({ confirmed: 1, removed: [], overpass: 'skipped' });
+  });
+
+  it('faltando lugar, o Overpass é esperado, e o que ele acha depois da fila ainda se confirma', async () => {
+    const { held, overpass } = heldOverpass();
+    const asked: string[] = [];
+    const search: CheckDeps['search'] = (q) => {
+      asked.push(q);
+      return Promise.resolve([]);
+    };
+    const running = checkPlaces(PROPOSTA, region, deps({ overpass, search }).d);
+    // a fila do Nominatim acaba sem achar nada; só então o Overpass responde
+    await new Promise((r) => setTimeout(r, 0));
+    expect(asked).toHaveLength(4);
+    held.answer(MAPA);
+    const check = await running;
+    expect(held.signal?.aborted).toBe(false);
+    expect(check).toMatchObject({
+      confirmed: 2,
+      removed: ['Vinícola Inventada', 'Restaurante Garibaldi'],
+      overpass: 'ok',
+    });
+  });
+
   it('com o Overpass fora, o Nominatim confere cada um', async () => {
-    const { d, asked } = deps({ overpass: () => Promise.reject(new Error('Overpass 504')) });
+    const { d, asked } = deps({ overpass: () => Promise.reject(new Error('Overpass 502')) });
     const check = await checkPlaces(PROPOSTA, region, d);
     expect(check.overpass).toBe('failed');
-    expect(asked).toHaveLength(3);
-    expect(check.removed).toEqual(['Cascata do Caracol', 'Vinícola Inventada']);
+    expect(asked).toHaveLength(4);
+    expect(check.removed).toEqual(['Cascata do Caracol', 'Lago Negro', 'Vinícola Inventada']);
     expect(check.confirmed).toBe(1);
   });
 
   it('com o Nominatim fora, o que faltava fica sem conferir (e sai: nunca inventar)', async () => {
     const { d } = deps({ search: () => Promise.reject(new TypeError('Failed to fetch')) });
     const check = await checkPlaces(PROPOSTA, region, d);
-    expect(check.confirmed).toBe(1);
+    // o que o Overpass achou se confirma, mesmo que a busca dele no Nominatim tenha falhado
+    expect(check.confirmed).toBe(2);
     expect(check.unchecked).toEqual(['Vinícola Inventada', 'Restaurante Garibaldi']);
     expect(check.removed).toEqual([]);
     expect(check.data.days[0]?.stops.map((s) => s.name)).toEqual([
       'Saída de Canela',
       'Cascata do Caracol',
+      'Lago Negro',
     ]);
   });
 
@@ -142,12 +194,14 @@ describe('a conferência dos lugares no OSM', () => {
     expect(check.overpass).toBe('skipped');
   });
 
-  it('o progresso conta cada lugar proposto', async () => {
+  it('o progresso conta cada lugar proposto, achado por um ou pelo outro', async () => {
     const seen: [number, number][] = [];
     const { d } = deps();
     await checkPlaces(PROPOSTA, region, { ...d, onProgress: (a, b) => seen.push([a, b]) });
-    expect(seen.at(0)).toEqual([0, 3]);
-    expect(seen.at(-1)).toEqual([3, 3]);
+    expect(seen.at(0)).toEqual([0, 4]);
+    expect(seen.at(-1)).toEqual([4, 4]);
+    // nunca volta nem passa do total
+    expect(seen.every(([a], i) => a <= 4 && (i === 0 || a >= (seen[i - 1]?.[0] ?? 0)))).toBe(true);
   });
 });
 
