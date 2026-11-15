@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium, type BrowserContext, type Page } from '@playwright/test';
 import lighthouse from 'lighthouse';
+import { INTAKE_LABEL } from '../../src/features/intake/start.ts';
 import { uuidV5 } from '../../src/lib/ids/uuid.ts';
 import { enterPreview, QUIET, signInPage, TIMEOUT } from './app.ts';
 import type { Check } from './evaluate.ts';
@@ -189,6 +190,9 @@ export async function labLighthouse(ctx: LighthouseContext, today: string): Prom
     // fase 16: o perfil em seções e a garagem da pessoa (pela vista lateral: o 3D não mede o celular)
     { key: 'perfil', path: '/perfil', session: true },
     { key: 'garagem', path: '/perfil/garagem?render=list', session: true },
+    // fase 17: a lista já é a do campo (`viagens`); e a tela da viagem nova, nas perguntas da saída
+    // de hoje (a conversa fica no aparelho, e a tela abre nela)
+    { key: 'nova_viagem', path: '/viagens/nova', session: true },
   ];
   const dir = await mkdtemp(join(tmpdir(), 'viajei-lighthouse-'));
   let context: BrowserContext | null = null;
@@ -220,6 +224,12 @@ export async function labLighthouse(ctx: LighthouseContext, today: string): Prom
     await page.goto(`${ctx.appUrl}/viagens/${trip}/detalhes`);
     await page.getByRole('heading', { name: 'Laboratório · estrada' }).waitFor({ timeout: 30_000 });
     install = await installability(context, page);
+    // a saída de hoje até a pergunta de alcance (sem IA: as perguntas dela são do app), para a tela
+    // da viagem nova ter o que mostrar quando o Lighthouse a abrir
+    await page.goto(`${ctx.appUrl}/viagens`);
+    await page.getByRole('textbox', { name: INTAKE_LABEL }).fill('quero sair hoje');
+    await page.getByRole('button', { name: 'Montar a viagem' }).click();
+    await page.getByText(/^Tenho \d perguntas? antes de montar\.$/).waitFor({ timeout: 30_000 });
     // as telas de quem entrou: com o service worker e o precache, que é como elas abrem de verdade
     // (só se chega a elas depois de entrar, e entrar já instalou o app); a meta vale aqui
     const session = routes.filter((x) => x.session);

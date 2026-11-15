@@ -1,8 +1,9 @@
-import type { StopKind } from '@shared/constants.ts';
-import { haversineM } from '@shared/geo.ts';
-import type { ImportData, ImportStop } from '@shared/import-schema.ts';
-import type { GeocodeResult } from '@/lib/db/schema.ts';
-import type { OsmElement } from '@/lib/geocode/overpass.ts';
+// caminhos relativos: a medição do laboratório (`scripts/lab`) roda e compila este módulo sem os
+// atalhos `@` e `@shared`
+import type { StopKind } from '../../../supabase/functions/_shared/constants.ts';
+import { haversineM } from '../../../supabase/functions/_shared/geo.ts';
+import type { ImportData, ImportStop } from '../../../supabase/functions/_shared/import-schema.ts';
+import type { OsmElement } from '../../lib/geocode/overpass.ts';
 
 /**
  * Só lugares reais (fase 17): o que a IA da conversa propõe é conferido no OpenStreetMap antes de a
@@ -27,9 +28,19 @@ export type PlaceCheck = {
   overpass: 'ok' | 'failed' | 'skipped';
 };
 
+/** Um resultado do `/search` do Nominatim, como `lib/geocode/nominatim.ts` devolve. */
+export type SearchResult = {
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+  category?: string;
+  type?: string;
+};
+
 export type CheckDeps = {
   overpass: (query: string) => Promise<OsmElement[]>;
-  search: (query: string, region: Region) => Promise<GeocodeResult[]>;
+  search: (query: string, region: Region) => Promise<SearchResult[]>;
   onProgress?: (done: number, total: number) => void;
 };
 
@@ -216,8 +227,8 @@ export function matchElement(
 /** O resultado do Nominatim que é o lugar proposto: o nome que cobre e, quando vem, a classe certa. */
 export function matchResult(
   stop: Pick<ImportStop, 'name' | 'kind'>,
-  results: readonly GeocodeResult[],
-): GeocodeResult | null {
+  results: readonly SearchResult[],
+): SearchResult | null {
   return (
     results.find((r) => {
       if (nameScore(stop.name, r.name) < NAME_MATCH && nameScore(stop.name, r.address) < NAME_MATCH)

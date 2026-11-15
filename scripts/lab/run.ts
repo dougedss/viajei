@@ -60,11 +60,13 @@ import { appProgressao, appRetrospectiva, type ProgressContext } from './app-pro
 import { appGaragem } from './app-garagem.ts';
 import { appParadaAuto } from './app-parada.ts';
 import { roadScenarios, ROAD_SCENARIOS } from './app-road.ts';
+import { appConversa } from './app-conversa.ts';
 import { appImportar } from './app-import.ts';
 import { appMapaClima } from './app-map.ts';
 import { appResync } from './app-resync.ts';
 import { labLighthouse } from './lighthouse.ts';
 import { expurgo } from './purge.ts';
+import { measureConversa } from './measure-conversa.ts';
 import { measureImport } from './measure-import.ts';
 import { NOT_ARMED, runArmed } from './armed.ts';
 import { prepareRoad, resetRoad } from './road.ts';
@@ -562,6 +564,11 @@ async function main(): Promise<number> {
   if (argv.includes('--medir-importacao')) {
     return measureImport(cfg, await signIn(cfg, LAB_USERS.a));
   }
+  // a medição da conversa (fase 17): três leituras reais, contadas, e uma consulta ao Overpass por
+  // roteiro
+  if (argv.includes('--medir-conversa')) {
+    return measureConversa(cfg, await signIn(cfg, LAB_USERS.a));
+  }
   // o Lighthouse sozinho (fase 12): a viagem do lab-a preparada pelo laboratório do dia, sem os
   // outros cenários; os relatórios inteiros vão para os artefatos
   if (argv.includes('--medir-desempenho')) {
@@ -683,8 +690,25 @@ async function main(): Promise<number> {
       );
       checks.push(importar);
       log(`app: app_importar ${importar.status} · ${importar.detail}`);
+      // a saída de hoje (fase 17): sem leitura real, com o mapa de verdade
+      const conversa = await appConversa(
+        {
+          appUrl: cfg.appOrigin,
+          bypass: cfg.bypass,
+          a,
+          email: LAB_USERS.a.email,
+          password: progress.passwords.a,
+          artifactsDir: progress.artifactsDir,
+        },
+        planned.today,
+      );
+      checks.push(conversa);
+      log(`app: app_conversa ${conversa.status} · ${conversa.detail}`);
     } else {
-      checks.push(skipped('app_importar', 'Sem navegador nesta execução.'));
+      checks.push(
+        skipped('app_importar', 'Sem navegador nesta execução.'),
+        skipped('app_conversa', 'Sem navegador nesta execução.'),
+      );
     }
     // o mapa e o clima (fase 11): os tiles do OSM e o Open-Meteo de verdade, numa viagem só deles
     if (withApp) {

@@ -144,11 +144,15 @@ export type TimedImport = {
   data: unknown;
 };
 
-/** Chama a função publicada como a pessoa de laboratório e mede o stream, evento por evento. */
+/**
+ * Chama a função publicada como a pessoa de laboratório e mede o stream, evento por evento. A
+ * importação, e a conversa (fase 17, `fn` = `plan-trip`), que responde no mesmo protocolo.
+ */
 export async function timedImport(
   cfg: Pick<LabConfig, 'url' | 'publishableKey'>,
   session: Session,
-  body: ImportRequest & { variant?: ImportVariant },
+  body: (ImportRequest & { variant?: ImportVariant }) | object,
+  fn: string = IMPORT_FN,
 ): Promise<TimedImport> {
   const token = (await session.client.auth.getSession()).data.session?.access_token ?? '';
   const t0 = Date.now();
@@ -166,7 +170,7 @@ export async function timedImport(
     id: null,
     data: null,
   };
-  const res = await fetch(`${cfg.url}/functions/v1/${IMPORT_FN}`, {
+  const res = await fetch(`${cfg.url}/functions/v1/${fn}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,

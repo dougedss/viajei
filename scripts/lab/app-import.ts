@@ -1,21 +1,22 @@
 import { join } from 'node:path';
 import { chromium, type Browser, type Page } from '@playwright/test';
-import { uuidV5 } from '../../src/lib/ids/uuid.ts';
+import { INTAKE_LABEL } from '../../src/features/intake/start.ts';
 import { DEVICE, enterPreview, QUIET, signInPage, TIMEOUT } from './app.ts';
 import { addDays } from './arm.ts';
-import { must, syncPush } from './client.ts';
+import { must } from './client.ts';
+import { dropLabTrip, retireFixedImportTrip } from './drop.ts';
 import type { Check } from './evaluate.ts';
 import { costUsd, LAB_IMPORT_EXPECT, LAB_IMPORT_TEXT } from './import-lab.ts';
-import { clean } from './road.ts';
 import { sleep, type Session } from './session.ts';
 
 /**
- * `app_importar` (fase 10, D139), na produção: o lab-a, numa viagem fixa esvaziada a cada execução,
- * cola o texto fixo do laboratório, lê com a IA de verdade (uma chamada por dia), revisa o preview,
- * escolhe o local quando há escolha e salva. Confere no servidor as paradas, a reserva e o contato;
- * a parada sem horário no texto continua sem horário; o telefone em E.164 e o código exato. Guarda em
- * `data` o tempo até a primeira parada, os tokens e o custo, lidos da linha de `ai_imports`. No fim,
- * a viagem volta a ficar vazia: a progressão do dia seguinte começa sem parada importada viva (D125).
+ * `app_importar` (fase 10, D139; pelo campo desde a fase 17), na produção: o lab-a cola o texto fixo
+ * do laboratório no campo da lista de viagens, a IA lê de verdade (uma chamada por dia, numa viagem
+ * que ainda não existe), a revisão pergunta a data que o texto não dá, escolhe o local quando há
+ * escolha, e "Criar a viagem" a faz nascer. Confere no servidor as paradas, a reserva e o contato; a
+ * parada sem horário no texto continua sem horário; o telefone em E.164 e o código exato; o registro
+ * da leitura sem viagem. Guarda em `data` o tempo até a primeira parada, os tokens e o custo, lidos
+ * da linha de `ai_imports`. No fim, a viagem sai pelo expurgo do laboratório (`dropLabTrip`).
  */
 export type ImportContext = {
   appUrl: string;
@@ -29,39 +30,6 @@ export type ImportContext = {
 
 const READ_TIMEOUT = 170_000;
 
-async function prepareImport(a: Session, today: string) {
-  const trip = await uuidV5(a.uid, 'lab:importar');
-  const start = addDays(today, 30);
-  const end = addDays(today, 31);
-  const days = [await uuidV5(trip, start), await uuidV5(trip, end)];
-  await syncPush(a.client, [
-    {
-      table: 'trips',
-      id: trip,
-      op: 'upsert',
-      values: {
-        owner_id: a.uid,
-        name: 'Laboratório · importação',
-        start_date: start,
-        end_date: end,
-        origin: 'Papanduva/SC',
-        deleted_at: null,
-      },
-    },
-  ]);
-  await clean(a, [trip], days);
-  await syncPush(
-    a.client,
-    [start, end].map((date, i) => ({
-      table: 'trip_days',
-      id: days[i] ?? '',
-      op: 'upsert' as const,
-      values: { trip_id: trip, date, title: null, notes: null, deleted_at: null },
-    })),
-  );
-  return { trip, days };
-}
-
 export async function appImportar(ctx: ImportContext, today: string): Promise<Check> {
   const { a, appUrl } = ctx;
   const startedAt = Date.now();
@@ -70,7 +38,6 @@ export async function appImportar(ctx: ImportContext, today: string): Promise<Ch
   let browser: Browser | null = null;
   let page: Page | null = null;
   let trip = '';
-  let keepDays: string[] = [];
   let since = new Date().toISOString();
   // o limite diário de leituras do lab-a (D24), gasto pelo próprio laboratório num dia de muitas
   // execuções: o app mostra o aviso certo, e a leitura fica para depois (não é defeito do app)
@@ -90,9 +57,8 @@ export async function appImportar(ctx: ImportContext, today: string): Promise<Ch
   };
 
   try {
-    await step('preparo da viagem vazia', async () => {
-      ({ trip, days: keepDays } = await prepareImport(a, today));
-    });
+    // a viagem fixa de antes da fase 17 sai uma vez; daqui em diante, cada execução cria a sua
+    await step('a viagem fixa de antes sai', () => retireFixedImportTrip(a));
     browser = await chromium.launch({ channel: 'chromium' });
     const context = await browser.newContext({ ...DEVICE, permissions: [] });
     await context.addInitScript({ content: QUIET });
@@ -102,37 +68,16 @@ export async function appImportar(ctx: ImportContext, today: string): Promise<Ch
     await enterPreview(p, appUrl, ctx.bypass);
 
     await step('A entra', () => signInPage(p, appUrl, ctx.email, ctx.password));
-    await step('cola o texto e lê', async () => {
-      await p.goto(`${appUrl}/viagens/${trip}/importar`);
-      await p.getByRole('textbox', { name: 'Roteiro' }).fill(LAB_IMPORT_TEXT);
-      // o app já sabe a cota ao abrir: sem leituras, o botão fica desligado com o aviso embaixo
-      const read = p.getByRole('button', { name: 'Ler o roteiro' });
-      const exhausted = p.getByText('As leituras de hoje acabaram.', { exact: true });
-      const opened = Date.now();
-      while (!(await read.isEnabled())) {
-        if (await exhausted.isVisible()) {
-          quota.message = 'As leituras de hoje acabaram.';
-          return;
-        }
-        if (Date.now() - opened > TIMEOUT) throw new Error('o botão "Ler o roteiro" não ligou');
-        await sleep(200);
-      }
+    await step('cola o texto no campo e lê', async () => {
+      await p.goto(`${appUrl}/viagens`);
+      await p.getByRole('textbox', { name: INTAKE_LABEL }).fill(LAB_IMPORT_TEXT);
       since = new Date(Date.now() - 5_000).toISOString();
       const t0 = Date.now();
-      // a cota chega do servidor depois que a tela abre: o botão pode ligar e desligar de novo entre
-      // a conferência de cima e o toque; se foi isso, é o mesmo skip (fase 13)
-      try {
-        await read.click({ timeout: 5_000 });
-      } catch (err) {
-        if (await exhausted.isVisible()) {
-          quota.message = 'As leituras de hoje acabaram.';
-          return;
-        }
-        throw err;
-      }
-      // a primeira parada que aparece no preview, ou a revisão, se tudo chegou de uma vez
+      await p.getByRole('button', { name: 'Montar a viagem' }).click();
+      // a primeira parada que aparece no preview, ou a revisão, se tudo chegou de uma vez; o limite
+      // do dia do lab-a (D24) aparece na tela da viagem nova
       const firstStop = p.getByRole('list', { name: 'Dias que chegaram' }).locator('li li');
-      const review = p.getByRole('heading', { name: 'Revisar o roteiro', exact: true });
+      const review = p.getByRole('heading', { name: 'Revisar a viagem', exact: true });
       const limit = p.getByText(/^Você já leu \d+ roteiros nas últimas 24 horas/);
       for (;;) {
         if ((await firstStop.count()) > 0 || (await review.isVisible())) break;
@@ -146,6 +91,16 @@ export async function appImportar(ctx: ImportContext, today: string): Promise<Ch
       data.primeira_parada_ms = Date.now() - t0;
       await review.waitFor({ timeout: READ_TIMEOUT });
       data.leitura_ms = Date.now() - t0;
+    });
+    await step('a data que o texto não dá: a viagem começa daqui a 30 dias', async () => {
+      // o texto diz "primeiro dia" e "segundo dia": a revisão pergunta quando, com amanhã proposto
+      data.datas_perguntadas = (await p.locator('[data-asked]').textContent())?.includes(
+        'as datas',
+      );
+      const start = p.getByLabel(/começa em$/i);
+      if (!(await start.isVisible())) await p.getByRole('button', { name: 'Mudar a data' }).click();
+      // 30 dias à frente (D33): a abertura do app nunca cai nela
+      await start.fill(addDays(today, 30));
     });
     await step('revisa: escolhe os locais e decide os não classificados', async () => {
       // a busca de lugar anda sozinha (1 por segundo); uma escolha pendente vira a primeira opção
@@ -162,9 +117,10 @@ export async function appImportar(ctx: ImportContext, today: string): Promise<Ch
         await selects.nth(i).selectOption('discard');
       }
     });
-    await step('salva na viagem', async () => {
-      await p.getByRole('button', { name: 'Salvar na viagem' }).click();
-      await p.waitForURL(`${appUrl}/viagens/${trip}/detalhes`);
+    await step('cria a viagem', async () => {
+      await p.getByRole('button', { name: 'Criar a viagem' }).click();
+      await p.waitForURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
+      trip = new URL(p.url()).pathname.split('/')[2] ?? '';
     });
     await step('o servidor tem as paradas, a reserva e o contato', async () => {
       const end = Date.now() + 60_000;
@@ -184,6 +140,13 @@ export async function appImportar(ctx: ImportContext, today: string): Promise<Ch
       data.paradas = stops.length;
       if (stops.length < LAB_IMPORT_EXPECT.minStops) {
         throw new Error(`${stops.length} paradas no servidor`);
+      }
+      const [row] = must(
+        await a.client.from('trips').select('start_date, end_date').eq('id', trip),
+        'a viagem nova',
+      );
+      if (row?.start_date !== addDays(today, 30) || row.end_date !== addDays(today, 31)) {
+        throw new Error(`a viagem nasceu de ${String(row?.start_date)} a ${String(row?.end_date)}`);
       }
       if (!stops.every((s) => s.source === 'ai')) throw new Error('parada sem a origem ai');
       const untimed = stops.find((s) => LAB_IMPORT_EXPECT.untimedStop.test(s.name));
@@ -212,7 +175,9 @@ export async function appImportar(ctx: ImportContext, today: string): Promise<Ch
       const rows = must(
         await a.client
           .from('ai_imports')
-          .select('status, model, input_tokens, output_tokens, created_at, finished_at')
+          .select(
+            'status, kind, trip_id, model, input_tokens, output_tokens, created_at, finished_at',
+          )
           .eq('user_id', a.uid)
           .gte('created_at', since)
           .order('created_at', { ascending: false })
@@ -229,11 +194,15 @@ export async function appImportar(ctx: ImportContext, today: string): Promise<Ch
         output_tokens: row.output_tokens ?? 0,
       });
       if (row.status !== 'succeeded') throw new Error(`a leitura terminou como ${row.status}`);
+      // a leitura aconteceu antes de a viagem existir (fase 17): sem viagem, e como importação
+      if (row.kind !== 'import' || row.trip_id !== null) {
+        throw new Error(`o registro veio como ${row.kind}, viagem ${String(row.trip_id)}`);
+      }
     });
   } finally {
     await browser?.close().catch(() => undefined);
-    // a viagem volta a ficar vazia (a progressão do dia seguinte não vê parada importada viva)
-    if (trip) await clean(a, [trip], keepDays).catch(() => undefined);
+    // a viagem sai pelo expurgo do laboratório: a progressão do dia seguinte não a vê
+    if (trip) await dropLabTrip(a, trip).catch(() => undefined);
   }
 
   const failed = steps.find((s) => !s.ok);
@@ -253,7 +222,7 @@ export async function appImportar(ctx: ImportContext, today: string): Promise<Ch
     latency_ms: Date.now() - startedAt,
     detail: failed
       ? `${failed.step}: ${failed.detail ?? 'não aconteceu'}`
-      : `Leu, revisou e salvou ${String(data.paradas)} paradas; a primeira apareceu em ${typeof first === 'number' ? `${(first / 1000).toFixed(1)} s` : '?'}, custo US$ ${typeof data.custo_usd === 'number' ? data.custo_usd.toFixed(3) : '?'}`,
+      : `Leu pelo campo, revisou e criou a viagem com ${String(data.paradas)} paradas; a primeira apareceu em ${typeof first === 'number' ? `${(first / 1000).toFixed(1)} s` : '?'}, custo US$ ${typeof data.custo_usd === 'number' ? data.custo_usd.toFixed(3) : '?'}`,
     data: { ...data, passos: steps },
   };
 }

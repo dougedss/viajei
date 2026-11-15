@@ -29,6 +29,7 @@ ficam na pasta como registro; tudo o que eles pedem está aqui.
 | iPhone D (fase 14) | o dia 1 do Ensaio, no carro de verdade, com o mapa aberto | 1.24 | 40 min |
 | iPhone E (fase 15) | no carro, com o mapa aberto, uma parada de verdade num posto | 1.25 | 30 min |
 | iPhone F (fase 16) | em casa, com outra pessoa do time no aparelho dela | 1.26 | 25 min |
+| iPhone G (fase 17) | em casa, com a conversa do WhatsApp da viagem; a saída de hoje na rua | 1.27 | 35 min |
 
 **Total: umas 8 h no iPhone e 3 h 15 no Android**, perto de 11 h em três dias seguidos, mais os
 toques com hora marcada. A sentada C pode ficar para depois do Android.
@@ -773,6 +774,37 @@ ao seu celular.
 
 Anotações:
 
+### 1.27 Criar a viagem conversando · 35 min (fase 17) · sem prova até a viagem
+
+Como o 1.24 a 1.26, fica como documentação até a viagem (D201 a D213). O campo, os três caminhos, a
+conferência no mapa e a saída de hoje estão provados na CI (com a IA e o mapa respondidos no teste) e
+no laboratório (o roteiro colado lido pela IA de verdade; a saída de hoje conferida no OSM de
+verdade); o que falta é a mão, a voz e o colar de um aparelho.
+
+- [ ] **Ditar no campo.** Na lista de viagens, toque no campo e dite "Serra Gaúcha em dezembro,
+  quatro dias, saindo de Papanduva" pelo microfone do teclado. Envie: "Tenho N perguntas antes de
+  montar" (até 3), cada uma com opções e o campo livre. Responda uma pela opção e outra falando.
+- [ ] **A conferência e a revisão.** Depois de montar, "Conferindo os lugares no mapa…", e a revisão
+  com "A viagem" no topo. Anote quantos lugares saíram e se algum que existe saiu. Crie: a viagem abre
+  em Detalhes.
+- [ ] **Colar do WhatsApp.** Copie a conversa da viagem do WhatsApp (as mensagens com horários) e
+  cole no campo: vira "Lendo o roteiro" e a revisão; o que o texto não disse (as datas, a origem)
+  vem como pergunta com proposta.
+- [ ] **O formato do Viajei, sem rede.** Em Detalhes de uma viagem, "Copiar roteiro como texto";
+  ponha o iPhone em modo avião, cole no campo e envie: a viagem nasce igual, sem internet. Toque em
+  "Montou a viagem com outra IA? Copie este pedido", cole no ChatGPT (ou outra), cole a resposta de
+  volta: é lida sem IA.
+- [ ] **Quero sair hoje, na rua.** Com a posição já permitida no mapa de uma viagem, escreva "quero
+  sair hoje": só a pergunta de alcance; escolha "O dia". Os lugares propostos ficam perto, o tempo de
+  hoje entra na conta, e a viagem de hoje abre no mapa. Anote se o que veio combina com o que você
+  marcou em "O que você gosta" (sem obrigar) e com as notas do "Como foi?".
+- [ ] **O que você gosta.** No Perfil, os chips; marque dois. Abaixo deles, o que o app aprendeu
+  pelas suas notas 4 e 5, se houver.
+- [ ] **O VoiceOver no campo e nas perguntas:** o rótulo do campo, o botão único, as opções de cada
+  pergunta como botões que dizem se estão marcados, e o aviso do que saiu do roteiro.
+
+Anotações:
+
 ## Parte 2 · Android
 
 O mesmo percurso, mais curto: aqui está só o que muda no Android, e no fim o resto, item a item,
@@ -965,6 +997,10 @@ Anotações:
 - [ ] **O carro é da pessoa (fase 16), o mesmo do 1.26** no Android: o mesmo carro em toda viagem,
   o acabamento e as rodas na garagem (e o fps com a perolada), o carro de quem viaja junto em
   Membros, o tema escuro com a barra do Chrome acompanhando, e o TalkBack no Perfil.
+- [ ] **Criar a viagem conversando (fase 17), o mesmo do 1.27** no Android: ditar no campo pelo
+  teclado do Google, colar do WhatsApp, o formato do Viajei sem rede, "quero sair hoje" com a posição,
+  "Copiar roteiro como texto" e o pedido para outras IAs pela área de transferência do Chrome, e o
+  TalkBack nas perguntas.
 
 Anotações:
 

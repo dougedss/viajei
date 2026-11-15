@@ -29,9 +29,9 @@ on:
   workflow_dispatch:
     inputs:
       tarefa:
-        description: 'laboratorio: os cenários de sempre; medir-importacao: a medição do pensamento da IA (D133); medir-desempenho: só o Lighthouse, com os relatórios; medir-sync: o envio do rack, 3 vezes, com o rastro do motor (fase 13)'
+        description: 'laboratorio: os cenários de sempre; medir-importacao: a medição do pensamento da IA (D133); medir-conversa: o custo e o tempo de uma conversa e de uma saída de hoje (fase 17); medir-desempenho: só o Lighthouse, com os relatórios; medir-sync: o envio do rack, 3 vezes, com o rastro do motor (fase 13)'
         type: choice
-        options: [laboratorio, medir-importacao, medir-desempenho, medir-sync]
+        options: [laboratorio, medir-importacao, medir-conversa, medir-desempenho, medir-sync]
         default: laboratorio
       alvo:
         description: 'Onde o navegador abre o app: a produção ou o preview da branch escolhida acima (D106)'

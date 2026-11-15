@@ -1,7 +1,13 @@
 import { readFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { encodeEvent } from '../../supabase/functions/_shared/import-protocol.ts';
-import { toAi, validateImport } from '../../supabase/functions/_shared/import-schema.ts';
+import {
+  fromAiWithTrip,
+  toAi,
+  validateImport,
+  type ImportData,
+  type ImportTripHeader,
+} from '../../supabase/functions/_shared/import-schema.ts';
 
 /**
  * A importação nos testes de ponta a ponta, sem IA nenhuma (a CI não tem a chave e não deve ter):
@@ -118,4 +124,35 @@ export async function importInSteps(page: Page, parts: readonly string[]): Promi
     },
     [...parts],
   );
+}
+
+/**
+ * O SSE de uma resposta da IA (fase 17): `start`, o JSON como a IA escreve em pedaços, e o `done` com
+ * o que o servidor validou (e, na viagem nova, o cabeçalho). Serve à importação e à conversa.
+ */
+export function aiSse(json: string, done: { data: unknown; trip?: unknown }): string {
+  let out = encodeEvent({
+    type: 'start',
+    id: 'c0ffee00-0000-4000-8000-000000000017',
+    model: 'claude-sonnet-5-5',
+  });
+  for (let i = 0; i < json.length; i += 48) {
+    out += encodeEvent({ type: 'delta', text: json.slice(i, i + 48) });
+  }
+  return (
+    out +
+    encodeEvent({
+      type: 'done',
+      ...done,
+      model: 'claude-sonnet-5-5',
+      usage: { input_tokens: 3_000, output_tokens: 1_200 },
+    })
+  );
+}
+
+/** Um roteiro da IA (sem coordenada, o texto ausente vazio) e o `done` dele, com o cabeçalho. */
+export function aiPlan(data: ImportData, trip: ImportTripHeader): string {
+  const json = JSON.stringify(toAi(data, trip));
+  const done = fromAiWithTrip(JSON.parse(json));
+  return aiSse(json, { data: done.data, trip: done.trip });
 }

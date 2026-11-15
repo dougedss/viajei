@@ -128,7 +128,12 @@ export const LAB_SCENARIOS = {
   app_importar: {
     label: 'App · importar',
     description:
-      'Cola um roteiro curto, a IA lê de verdade, a revisão salva; horário, telefone e código exatos no servidor',
+      'Cola um roteiro curto no campo, a IA lê de verdade, a revisão pergunta a data e cria a viagem; horário, telefone e código exatos no servidor',
+  },
+  app_conversa: {
+    label: 'App · saída de hoje',
+    description:
+      '"Quero sair hoje" com a posição: a pergunta de alcance, o roteiro conferido no OSM de verdade (o inventado sai) e a viagem de hoje no mapa',
   },
   app_mapa: {
     label: 'App · mapa',
