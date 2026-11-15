@@ -33,14 +33,14 @@ isOneToOne: false
                   ]
                 },"ai_imports": {
                   Row: {
-                    "created_at": string,"error": string | null,"finished_at": string | null,"id": string,"input_chars": number,"input_tokens": number | null,"model": string,"output_tokens": number | null,"status": string,"trip_id": string | null,"user_id": string
+                    "created_at": string,"error": string | null,"finished_at": string | null,"id": string,"input_chars": number,"input_tokens": number | null,"kind": string,"model": string,"output_tokens": number | null,"status": string,"trip_id": string | null,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"input_chars": number,"input_tokens"?: number | null,"model": string,"output_tokens"?: number | null,"status"?: string,"trip_id"?: string | null,"user_id"?: string
+                    "created_at"?: string,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"input_chars": number,"input_tokens"?: number | null,"kind"?: string,"model": string,"output_tokens"?: number | null,"status"?: string,"trip_id"?: string | null,"user_id"?: string
                   }
                   Update: {
-                    "created_at"?: string,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"input_chars"?: number,"input_tokens"?: number | null,"model"?: string,"output_tokens"?: number | null,"status"?: string,"trip_id"?: string | null,"user_id"?: string
+                    "created_at"?: string,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"input_chars"?: number,"input_tokens"?: number | null,"kind"?: string,"model"?: string,"output_tokens"?: number | null,"status"?: string,"trip_id"?: string | null,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -325,14 +325,14 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "achievement_keys": (string)[],"car_accessories": (string)[],"car_color": string,"car_finish": string,"car_model": string,"car_wheels": string,"color": string,"created_at": string,"field_versions": NonNullable<Json>,"id": string,"name": string,"notify_lead_minutes": number,"notify_morning_time": string,"synced_at": string,"updated_at": string,"xp_total": number
+                    "achievement_keys": (string)[],"car_accessories": (string)[],"car_color": string,"car_finish": string,"car_model": string,"car_wheels": string,"color": string,"created_at": string,"field_versions": NonNullable<Json>,"id": string,"interests": (string)[],"name": string,"notify_lead_minutes": number,"notify_morning_time": string,"synced_at": string,"updated_at": string,"xp_total": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "achievement_keys"?: (string)[],"car_accessories"?: (string)[],"car_color"?: string,"car_finish"?: string,"car_model"?: string,"car_wheels"?: string,"color": string,"created_at"?: string,"field_versions"?: NonNullable<Json>,"id": string,"name": string,"notify_lead_minutes"?: number,"notify_morning_time"?: string,"synced_at": string,"updated_at": string,"xp_total"?: number
+                    "achievement_keys"?: (string)[],"car_accessories"?: (string)[],"car_color"?: string,"car_finish"?: string,"car_model"?: string,"car_wheels"?: string,"color": string,"created_at"?: string,"field_versions"?: NonNullable<Json>,"id": string,"interests"?: (string)[],"name": string,"notify_lead_minutes"?: number,"notify_morning_time"?: string,"synced_at": string,"updated_at": string,"xp_total"?: number
                   }
                   Update: {
-                    "achievement_keys"?: (string)[],"car_accessories"?: (string)[],"car_color"?: string,"car_finish"?: string,"car_model"?: string,"car_wheels"?: string,"color"?: string,"created_at"?: string,"field_versions"?: NonNullable<Json>,"id"?: string,"name"?: string,"notify_lead_minutes"?: number,"notify_morning_time"?: string,"synced_at"?: string,"updated_at"?: string,"xp_total"?: number
+                    "achievement_keys"?: (string)[],"car_accessories"?: (string)[],"car_color"?: string,"car_finish"?: string,"car_model"?: string,"car_wheels"?: string,"color"?: string,"created_at"?: string,"field_versions"?: NonNullable<Json>,"id"?: string,"interests"?: (string)[],"name"?: string,"notify_lead_minutes"?: number,"notify_morning_time"?: string,"synced_at"?: string,"updated_at"?: string,"xp_total"?: number
                   }
                   Relationships: [
                     
@@ -619,6 +619,9 @@ isOneToOne: false
                            },
 "lab_diagnostics":
 { Args: { "p_since": string }; Returns: Json
+                           },
+"lab_drop_trip":
+{ Args: { "p_trip_id": string }; Returns: undefined
                            },
 "lab_grant":
 { Args: { "p_email": string,"p_role": string }; Returns: string

@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import type { PersonColor } from '@shared/constants.ts';
+import type { Interest, PersonColor } from '@shared/constants.ts';
 import { connectivity } from '@/lib/db/connectivity.ts';
 import { mutate } from '@/lib/db/mutate.ts';
 import { db, syncKeys, type Profile } from '@/lib/db/schema.ts';
@@ -63,4 +63,14 @@ export async function saveNotifyDefaults(
   const uid = (await db.sync_state.get(syncKeys.uid))?.value;
   if (!uid) throw new Error('sem a pessoa deste aparelho');
   await mutate.patch('profiles', uid, patch);
+}
+
+/**
+ * "O que você gosta" (fase 17), no perfil, pela outbox: offline, como o carro. Só a própria pessoa
+ * muda (o grant da 0015).
+ */
+export async function saveInterests(interests: readonly Interest[]): Promise<void> {
+  const uid = (await db.sync_state.get(syncKeys.uid))?.value;
+  if (!uid) throw new Error('sem a pessoa deste aparelho');
+  await mutate.patch('profiles', uid, { interests: [...interests] });
 }

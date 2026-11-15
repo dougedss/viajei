@@ -1,5 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
+  INTERESTS,
+  INTEREST_KEYS,
   LEAD_MINUTE_OPTIONS,
   PERSON_COLORS,
   PERSON_COLOR_KEYS,
@@ -36,20 +38,27 @@ import { useMyProgress } from '@/features/progression/useTeamProgress.ts';
 import { useSoundPref, writeSoundPref } from '@/lib/audio/index.ts';
 import { nameSchema } from '@/lib/auth/schemas.ts';
 import { cx } from '@/lib/cx.ts';
+import type { Profile } from '@/lib/db/schema.ts';
 import { useReducedMotion } from '@/lib/reduced-motion.ts';
 import { useSession } from '@/lib/supabase/session.ts';
 import { useThemePref, writeThemePref, type ThemePref } from '@/lib/theme.ts';
-import { saveNotifyDefaults, signOutNow, trySignOut, useUpdateProfile } from '../actions.ts';
-import { asPersonColor, useProfile } from '../queries.ts';
+import {
+  saveInterests,
+  saveNotifyDefaults,
+  signOutNow,
+  trySignOut,
+  useUpdateProfile,
+} from '../actions.ts';
+import { interestsOf, learnedPhrase, toggleInterest, type Learned } from '../likes.ts';
+import { asPersonColor, useLearnedLikes, useProfile } from '../queries.ts';
 
 const schema = z.object({ name: nameSchema, color: z.enum(PERSON_COLOR_KEYS) });
 type Values = z.infer<typeof schema>;
 
 /**
- * O Perfil em seções (fase 16), nesta ordem: Você, O seu carro, Progresso, (O que você gosta),
- * Avisos neste aparelho, Aparência, Dados e Laboratório. "O que você gosta" é da fase 17: pela regra
- * do não-preencher (16), não aparece enquanto não houver o que mostrar; o lugar dela é entre
- * Progresso e Avisos. Cada seção tem título; a raiz é uma coluna que nunca passa da tela (D161).
+ * O Perfil em seções (fase 16), nesta ordem: Você, O seu carro, Progresso, O que você gosta (fase
+ * 17), Avisos neste aparelho, Aparência, Dados e Laboratório. Cada seção tem título; a raiz é uma
+ * coluna que nunca passa da tela (D161).
  *
  * A tela pinta inteira (fase 17, 3.0): a fila das comemorações e o perfil do aparelho são lidos antes
  * da primeira pintura, como a visão geral faz (D162). Antes, o cartão do resumo chegava um quadro
@@ -57,9 +66,11 @@ type Values = z.infer<typeof schema>;
  */
 export default function PerfilPage() {
   const labRole = useLabRole();
+  const { session } = useSession();
   const celebrations = useCelebrations();
   const me = useMyProfile();
-  if (celebrations === undefined || me === undefined) return <Splash />;
+  const learned = useLearnedLikes(session?.user.id ?? '');
+  if (celebrations === undefined || me === undefined || learned === undefined) return <Splash />;
   return (
     <div className="grid grid-cols-1 gap-6">
       <h1 className="font-num text-[30px] leading-none font-semibold">Perfil</h1>
@@ -68,7 +79,7 @@ export default function PerfilPage() {
       <You />
       <YourCar />
       <Progress />
-      {/* O que você gosta (fase 17): aqui, quando houver o que mostrar */}
+      <Likes profile={me} learned={learned} />
       <DeviceNotices />
       <Appearance />
       <Data />
@@ -232,6 +243,60 @@ function Progress() {
     <Section id="h-progresso" title="Progresso">
       <LevelBar progress={levelProgress(mine.xp)} who="me" />
       <AchievementGrid mine={new Set(mine.achievements)} />
+    </Section>
+  );
+}
+
+// ------------------------------------------------------------------ O que você gosta
+/**
+ * Fase 17: os chips opcionais e o que o app aprende pelas notas. Pela regra 16, os chips vazios são a
+ * própria pergunta, então a seção aparece sempre. É pista para a IA, nunca regra.
+ */
+function Likes({ profile, learned }: { profile: Profile | null; learned: readonly Learned[] }) {
+  const toast = useToast();
+  const chosen = interestsOf(profile?.interests);
+  const phrase = learnedPhrase(learned);
+  return (
+    <Section
+      id="h-gostos"
+      title="O que você gosta"
+      lead="Uma pista para a IA montar as viagens com vocês, nunca uma regra. Escolha quantos quiser, ou nenhum."
+    >
+      <Card className="grid gap-3" data-likes>
+        <div role="group" aria-label="Gostos" className="flex flex-wrap gap-2">
+          {INTEREST_KEYS.map((key) => {
+            const on = chosen.includes(key);
+            return (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={on}
+                disabled={!profile}
+                data-interest={key}
+                onClick={() =>
+                  void saveInterests(toggleInterest(chosen, key)).catch(() =>
+                    toast.show({ title: 'Não deu para salvar o gosto.', kind: 'late' }),
+                  )
+                }
+                className={cx(
+                  'inline-flex min-h-12 items-center gap-1.5 rounded-full px-4 text-[15px] font-semibold disabled:opacity-50',
+                  on
+                    ? 'bg-accent-soft text-ink shadow-[inset_0_0_0_1.5px_var(--color-accent)]'
+                    : 'bg-paper text-ink-2 shadow-[inset_0_0_0_1px_var(--color-line)]',
+                )}
+              >
+                {on ? <Check className="size-4" aria-hidden="true" /> : null}
+                {INTERESTS[key].label}
+              </button>
+            );
+          })}
+        </div>
+        {phrase ? (
+          <p className="text-[14px] text-ink-2" data-learned>
+            {phrase}
+          </p>
+        ) : null}
+      </Card>
     </Section>
   );
 }

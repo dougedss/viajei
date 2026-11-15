@@ -40,6 +40,7 @@ export function makeProfile(over: Partial<Profile> = {}): Profile {
     car_wheels: 'classic',
     notify_lead_minutes: 15,
     notify_morning_time: '07:00:00',
+    interests: [],
     created_at: '2026-11-01T10:00:00.000Z',
     updated_at: '2026-11-01T10:00:00.000Z',
     synced_at: null,

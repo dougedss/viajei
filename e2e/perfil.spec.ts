@@ -6,8 +6,8 @@ import { linhas } from './helpers/db.ts';
 import { criarUsuario } from './helpers/users.ts';
 
 /**
- * O Perfil em seções (fase 16): Você, O seu carro, Progresso, Avisos neste aparelho, Aparência e
- * Dados (o Laboratório só para quem o tem; "O que você gosta" não aparece até a fase 17). Os padrões
+ * O Perfil em seções (fase 16): Você, O seu carro, Progresso, O que você gosta (fase 17), Avisos
+ * neste aparelho, Aparência e Dados (o Laboratório só para quem o tem). Os padrões
  * dos avisos chegam à viagem nova; a permissão e os sons saem de Avisos da viagem, que aponta para
  * cá; o tema escuro sobrevive a recarregar sem piscar; nada rola para o lado a 393 e a 360 px.
  */
@@ -43,12 +43,31 @@ test('o perfil em seções, o carro, os padrões dos avisos numa viagem nova e o
   await page.goto('/perfil');
   await expect(page.getByRole('heading', { name: 'Perfil', level: 1 })).toBeVisible();
 
-  // as seções, nesta ordem, e nenhuma vazia ("O que você gosta" só na fase 17)
+  // as seções, nesta ordem, e nenhuma vazia ("O que você gosta" desde a fase 17: os chips vazios são
+  // a própria pergunta)
   await expect
     .poll(async () => (await titulos(page)).map((t) => t.trim().toLowerCase()))
-    .toEqual(['você', 'o seu carro', 'progresso', 'avisos neste aparelho', 'aparência', 'dados']);
-  await expect(page.getByText('O que você gosta')).toHaveCount(0);
+    .toEqual([
+      'você',
+      'o seu carro',
+      'progresso',
+      'o que você gosta',
+      'avisos neste aparelho',
+      'aparência',
+      'dados',
+    ]);
   await semRolagem(page, '/perfil');
+
+  // o que você gosta: um toque liga o chip, e o gosto sobe pela outbox
+  const gostos = page.getByRole('region', { name: 'O que você gosta' });
+  const vinicolas = gostos.getByRole('button', { name: 'Vinícolas' });
+  await expect(vinicolas).toHaveAttribute('aria-pressed', 'false');
+  await vinicolas.click();
+  await gostos.getByRole('button', { name: 'Estrada de chão: não' }).click();
+  await expect(vinicolas).toHaveAttribute('aria-pressed', 'true');
+  await expect
+    .poll(async () => (await linhas('profiles', `id=eq.${user.id}&select=interests`))[0]?.interests)
+    .toEqual(['wineries', 'no_dirt_road']);
 
   // o seu carro: a vista lateral e a entrada da garagem, que volta para cá
   const carro = page.getByRole('region', { name: 'O seu carro' });

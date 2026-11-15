@@ -16,6 +16,7 @@ export const COLUMN_LABELS: Record<string, string> = {
   car_wheels: 'rodas do carro',
   notify_lead_minutes: 'antecedência padrão',
   notify_morning_time: 'briefing padrão',
+  interests: 'gostos',
   invited_email: 'convite',
   title: 'título',
   time: 'horário',
@@ -100,11 +101,16 @@ export function describeOp(op: OutboxOp, ctx: OpContext): OpDescription {
     return { title: `Avisos · ${trip}`, detail: describeColumns(Object.keys(op.values)) };
   }
   if (op.table === 'profiles') {
-    // o perfil pela outbox (fase 16): o carro, ou os padrões dos avisos das viagens novas
+    // o perfil pela outbox (fase 16): o carro, os padrões dos avisos das viagens novas, ou o que a
+    // pessoa gosta (fase 17)
     const columns = Object.keys(op.values);
     const car = columns.some((c) => c.startsWith('car_'));
     return {
-      title: car ? 'O seu carro' : 'Avisos das viagens novas',
+      title: car
+        ? 'O seu carro'
+        : columns.includes('interests')
+          ? 'O que você gosta'
+          : 'Avisos das viagens novas',
       detail: describeColumns(columns),
     };
   }

@@ -15,6 +15,23 @@ export const PERSON_COLORS = {
 export type PersonColor = keyof typeof PERSON_COLORS;
 export const PERSON_COLOR_KEYS = Object.keys(PERSON_COLORS) as PersonColor[];
 
+/**
+ * "O que você gosta" (fase 17): os chips do perfil, o `check` de `profiles.interests` (0015). Pista
+ * para a IA da conversa e da saída de hoje, nunca regra: "estrada de chão: não" é o único que diz o
+ * que evitar.
+ */
+export const INTERESTS = {
+  nature: { label: 'Natureza' },
+  wineries: { label: 'Vinícolas' },
+  food: { label: 'Comida' },
+  historic: { label: 'Cidades históricas' },
+  beach: { label: 'Praia' },
+  museums: { label: 'Museus' },
+  no_dirt_road: { label: 'Estrada de chão: não' },
+} as const;
+export type Interest = keyof typeof INTERESTS;
+export const INTEREST_KEYS = Object.keys(INTERESTS) as [Interest, ...Interest[]];
+
 export const STOP_KINDS = {
   origin: { label: 'Origem', icon: 'house' },
   transit: { label: 'Deslocamento', icon: 'route' },

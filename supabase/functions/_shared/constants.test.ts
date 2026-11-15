@@ -1,8 +1,11 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   ACHIEVEMENTS,
   CAR_ACCESSORIES,
   CAR_COLORS,
+  INTEREST_KEYS,
+  INTERESTS,
   isValidXp,
   LEVELS,
   PERSON_COLORS,
@@ -82,5 +85,17 @@ describe('constantes compartilhadas', () => {
     }
     const unlocked = new Set(Object.values(CAR_ACCESSORIES).map((c) => c.achievement));
     expect([...unlocked].sort()).toEqual([...keys].sort());
+  });
+
+  it('os gostos do perfil (fase 17) são os do check de profiles.interests, na 0015', () => {
+    const sql = readFileSync('supabase/migrations/0015_conversa.sql', 'utf8');
+    const listed = /interests <@ array\[([^\]]+)\]/.exec(sql)?.[1] ?? '';
+    expect(
+      listed
+        .split(',')
+        .map((v) => v.trim().replace(/'/g, ''))
+        .filter(Boolean),
+    ).toEqual(INTEREST_KEYS);
+    expect(Object.values(INTERESTS).every((i) => i.label.length > 0)).toBe(true);
   });
 });

@@ -16,6 +16,7 @@ import {
 import { mutate } from '../mutate.ts';
 import { db, syncKeys, type UploadJob } from '../schema.ts';
 import { applyTripPull, applyUserPull, parseTripPull, parseUserPull } from './apply-pull.ts';
+import { saveInterests } from '@/features/profile/actions.ts';
 import { pullUser } from './pull.ts';
 
 const SERVER_TIME = '2026-11-04T12:00:00.000Z';
@@ -298,6 +299,33 @@ describe('o perfil no sync (fase 16)', () => {
     expect((await db.profiles.get(OTHER_UID))?.car_model).toBe('pickup');
     const op = (await db.outbox.toArray()).at(-1);
     expect(op).toMatchObject({ table: 'profiles', row_id: UID, op: 'patch', trip_id: null });
+  });
+
+  it('os gostos (fase 17): escolhidos aqui sem rede, ficam por cima do pull até subirem, como o carro', async () => {
+    await db.profiles.put(makeProfile({ synced_at: SERVER_TIME }));
+    await db.sync_state.put({ key: syncKeys.uid, value: UID });
+    await saveInterests(['nature', 'wineries']);
+    const op = (await db.outbox.toArray()).at(-1);
+    expect(op).toMatchObject({
+      table: 'profiles',
+      row_id: UID,
+      op: 'patch',
+      trip_id: null,
+      values: { interests: ['nature', 'wineries'] },
+    });
+    // o pull do usuário traz o perfil de antes (o outro aparelho ainda não viu a escolha)
+    await applyUserPull(
+      db,
+      parseUserPull({
+        server_time: SERVER_TIME,
+        memberships: [],
+        profiles: [serverRow(makeProfile({ interests: ['beach'], car_model: 'suv' }))],
+      }),
+    );
+    expect(await db.profiles.get(UID)).toMatchObject({
+      interests: ['nature', 'wineries'],
+      car_model: 'suv',
+    });
   });
 
   it('sem o próprio perfil no aparelho, o pull do usuário começa do zero uma vez', async () => {

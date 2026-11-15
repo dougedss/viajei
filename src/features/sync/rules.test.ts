@@ -71,6 +71,11 @@ describe('descrição das pendências', () => {
       title: 'Avisos das viagens novas',
       detail: 'antecedência padrão',
     });
+    // o que a pessoa gosta (fase 17)
+    expect(describeOp(profile({ interests: ['nature'] }), ctx)).toEqual({
+      title: 'O que você gosta',
+      detail: 'gostos',
+    });
     expect(describeOp(op({ table: 'notification_prefs', op: 'upsert' }), ctx)).toEqual({
       title: 'Avisos da viagem',
       detail: 'Serra',
