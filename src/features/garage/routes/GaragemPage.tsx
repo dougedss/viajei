@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button.tsx';
 import { PageHeader } from '@/components/ui/PageHeader.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { FULL_PROGRESS, levelName, type TeamProgress } from '@/features/progression/team.ts';
+import { useCelebrations, type CelebrationState } from '@/features/progression/celebrations.ts';
 import { CelebrationHost } from '@/features/progression/components/CelebrationHost.tsx';
 import { useMyCarProgress } from '@/features/progression/useTeamProgress.ts';
 import { audio } from '@/lib/audio/index.ts';
@@ -46,9 +47,12 @@ export default function GaragemPage() {
   // conferência visual em dev: tudo liberado; no build de produção esta linha nem existe
   const devAll = import.meta.env.DEV && new URLSearchParams(search).get('garagem') === 'tudo';
   const progress = devAll ? FULL_PROGRESS : mine;
+  // a fila das comemorações na mesma espera do perfil: o cartão do resumo nasce acima do palco na
+  // primeira pintura, em vez de chegar um quadro depois e empurrá-lo (0,34 de CLS na fase 16; D162)
+  const celebrations = useCelebrations();
   useThemeOverride('dark');
 
-  if (profile === undefined) return <Splash />;
+  if (profile === undefined || celebrations === undefined) return <Splash />;
   // o perfil ainda não chegou a este aparelho (o primeiro sync depois de entrar): o carro é gravado
   // nele, então a garagem espera, e diz o que está esperando
   if (profile === null) {
@@ -61,7 +65,15 @@ export default function GaragemPage() {
       </div>
     );
   }
-  return <Garage profile={profile} progress={progress} search={search} back={garageBack(state)} />;
+  return (
+    <Garage
+      profile={profile}
+      progress={progress}
+      celebrations={celebrations}
+      search={search}
+      back={garageBack(state)}
+    />
+  );
 }
 
 type Preview = { car: CarSpec; hints: string[] };
@@ -69,11 +81,13 @@ type Preview = { car: CarSpec; hints: string[] };
 function Garage({
   profile,
   progress,
+  celebrations,
   search,
   back,
 }: {
   profile: Profile;
   progress: TeamProgress;
+  celebrations: CelebrationState;
   search: string;
   back: string;
 }) {
@@ -143,7 +157,7 @@ function Garage({
       />
 
       {/* abrir a garagem é um momento calmo: o resumo ou o cartão de desbloqueio sai aqui */}
-      <CelebrationHost active />
+      <CelebrationHost active state={celebrations} />
 
       <div
         className="relative isolate -mx-4 h-[clamp(320px,52svh,560px)] overflow-hidden sm:mx-0 sm:rounded-card"

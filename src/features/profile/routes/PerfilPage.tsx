@@ -9,6 +9,7 @@ import { Check, ChevronRight, FlaskConical, Monitor, Moon, Sun } from 'lucide-re
 import { useEffect, useState, type ReactNode } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
+import { Splash } from '@/app/Splash.tsx';
 import { CarSide } from '@/art/cars/CarSide.tsx';
 import { describeCar } from '@/art/cars/describe.ts';
 import { Avatar } from '@/components/ui/Avatar.tsx';
@@ -26,6 +27,7 @@ import { useLabRole } from '@/features/lab/queries.ts';
 import { DevicePush } from '@/features/notifications/components/DevicePush.tsx';
 import { newTripDefaults } from '@/features/notifications/prefs.ts';
 import { AchievementGrid } from '@/features/progression/components/AchievementBadge.tsx';
+import { useCelebrations } from '@/features/progression/celebrations.ts';
 import { CelebrationHost } from '@/features/progression/components/CelebrationHost.tsx';
 import { LevelBar } from '@/features/progression/components/LevelBar.tsx';
 import { levelProgress } from '@/features/progression/level.ts';
@@ -48,14 +50,21 @@ type Values = z.infer<typeof schema>;
  * Avisos neste aparelho, Aparência, Dados e Laboratório. "O que você gosta" é da fase 17: pela regra
  * do não-preencher (16), não aparece enquanto não houver o que mostrar; o lugar dela é entre
  * Progresso e Avisos. Cada seção tem título; a raiz é uma coluna que nunca passa da tela (D161).
+ *
+ * A tela pinta inteira (fase 17, 3.0): a fila das comemorações e o perfil do aparelho são lidos antes
+ * da primeira pintura, como a visão geral faz (D162). Antes, o cartão do resumo chegava um quadro
+ * depois, acima de "Você", e empurrava a página: 0,40 de CLS no laboratório da produção.
  */
 export default function PerfilPage() {
   const labRole = useLabRole();
+  const celebrations = useCelebrations();
+  const me = useMyProfile();
+  if (celebrations === undefined || me === undefined) return <Splash />;
   return (
     <div className="grid grid-cols-1 gap-6">
       <h1 className="font-num text-[30px] leading-none font-semibold">Perfil</h1>
       {/* abrir o perfil é um momento calmo: o resumo ou o cartão de desbloqueio sai aqui */}
-      <CelebrationHost active />
+      <CelebrationHost active state={celebrations} />
       <You />
       <YourCar />
       <Progress />

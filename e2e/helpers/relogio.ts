@@ -1,4 +1,5 @@
 import type { BrowserContext, Page, Request } from '@playwright/test';
+import { PendingRequests, requestPath } from '../../src/features/lab/pending-requests.ts';
 
 /**
  * O relógio de mentira do Playwright andando como o de verdade anda para a rede (fase 16, 3.0).
@@ -12,8 +13,10 @@ import type { BrowserContext, Page, Request } from '@playwright/test';
  *
  * Por isso o relógio anda em passos de 5 s (menos que o menor prazo do app, os 6 s do OSM) e, antes de
  * cada passo, espera os pedidos do próprio app voltarem (`pedidoDoApp`; um pedido de fora que nunca
- * fecha não segura nada, e um do app aberto há mais de 30 s conta como travado e também não). E a
- * posição só conta quando o app a leu: depois de
+ * fecha não segura nada, e um do app aberto há mais de 30 s conta como travado e também não). Os
+ * pedidos de um documento que a página deixou (o `goto` logo depois de entrar corta o primeiro sync)
+ * saem da conta quando o documento novo carrega: o navegador os corta sem que o Playwright avise o fim
+ * deles (fase 17, 3.0; `PendingRequests`). E a posição só conta quando o app a leu: depois de
  * `setGeolocation`, espera o `data-fix-at` mudar, para a leitura ter a hora certa (entregue no meio de
  * um `runFor`, ela levaria uma hora qualquer do minuto).
  */
@@ -22,14 +25,8 @@ import type { BrowserContext, Page, Request } from '@playwright/test';
 export const PASSO_MS = 5_000;
 
 /**
- * Quanto um pedido do app pode ficar aberto antes de contar como travado: daí em diante ele não
- * segura mais o relógio (o prazo do próprio app, no relógio de mentira, cuida dele).
- */
-const TRAVADO_MS = 30_000;
-
-/**
  * Os pedidos que importam: os do próprio app, que têm prazo no relógio de mentira (o sync e as
- * funções do Supabase, o OSM, o Open-Meteo). Um pedido de fora que nunca fecha não diz nada do app:
+ * funções do Supabase, o OSM e o Overpass, o Open-Meteo). Um pedido de fora que nunca fecha não diz nada do app:
  * esperar por todos os pedidos da página travou o laboratório do preview da fase 16 por 50 min (no
  * preview da Vercel, a barra de ferramentas que ela injeta é o candidato; D200).
  */
@@ -37,6 +34,7 @@ export function pedidoDoApp(url: string): boolean {
   return (
     /\/(rest|auth|functions|storage)\/v1\//.test(url) ||
     url.startsWith('https://nominatim.openstreetmap.org/') ||
+    url.startsWith('https://overpass-api.de/') ||
     url.startsWith('https://api.open-meteo.com/')
   );
 }
@@ -44,30 +42,37 @@ export function pedidoDoApp(url: string): boolean {
 export type Rede = {
   /** os pedidos do app ainda sem resposta (os travados também) */
   emVoo: () => number;
-  /** os pedidos do app abertos há mais de 30 s, que já não seguram o relógio */
-  travados: () => number;
+  /**
+   * os pedidos do app abertos há mais de 30 s no documento de agora, que já não seguram o relógio:
+   * o método, o host e o caminho (sem a query), com há quantos segundos
+   */
+  travados: () => string[];
   /** espera não haver pedido do app recente sem resposta; devolve quanto esperou, em ms */
   quieta: () => Promise<number>;
 };
 
 const pausa = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-/** Conta os pedidos do app que ainda não voltaram, com a hora em que saíram (o Realtime não entra). */
+/**
+ * Conta os pedidos do app que ainda não voltaram, com a hora em que saíram e o documento que os fez
+ * (o Realtime não entra: é um WebSocket).
+ */
 export function redeDa(page: Page): Rede {
-  const abertos = new Map<Request, number>();
-  const fecha = (r: Request) => abertos.delete(r);
+  const pedidos = new PendingRequests<Request>();
   page.on('request', (r) => {
-    if (pedidoDoApp(r.url())) abertos.set(r, Date.now());
+    // uma navegação do quadro principal: o que sair daqui em diante é do documento novo
+    if (r.isNavigationRequest() && r.frame() === page.mainFrame()) pedidos.navigating();
+    if (pedidoDoApp(r.url())) pedidos.started(r, requestPath(r.method(), r.url()), Date.now());
   });
-  page.on('requestfinished', fecha);
-  page.on('requestfailed', fecha);
-  const recentes = () => [...abertos.values()].filter((t) => Date.now() - t < TRAVADO_MS).length;
+  page.on('domcontentloaded', () => pedidos.documentLoaded());
+  page.on('requestfinished', (r) => pedidos.ended(r));
+  page.on('requestfailed', (r) => pedidos.ended(r));
   return {
-    emVoo: () => abertos.size,
-    travados: () => abertos.size - recentes(),
+    emVoo: () => pedidos.inFlight(),
+    travados: () => pedidos.stuck(Date.now()),
     quieta: async () => {
       const t0 = Date.now();
-      while (recentes() > 0) await pausa(20);
+      while (pedidos.recent(Date.now()) > 0) await pausa(20);
       return Date.now() - t0;
     },
   };

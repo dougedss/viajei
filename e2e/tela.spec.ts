@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { LARGURA_ESTREITA, ROLAGEM_LATERAL } from '../src/features/lab/guards.ts';
+import { inserir } from './helpers/db.ts';
+import { uuidV4, uuidV5 } from './helpers/ids.ts';
 import { criarUsuario, SENHA } from './helpers/users.ts';
 import { viagemNaSerra } from './helpers/world.ts';
 
@@ -173,4 +175,58 @@ test('a tela da viagem não rola, "Hoje" volta, e a ação e Detalhes ficam sob 
     // o cabeçalho do app não está nesta tela: ela é inteira
     await expect(page.getByRole('link', { name: 'Viajei, início' })).toHaveCount(0);
   });
+});
+
+/**
+ * O perfil e a garagem pintam inteiros (fase 17, 3.0): no laboratório da produção da fase 16 as duas
+ * telas deram 76 e 79 no Lighthouse, e não pelo bloqueio da thread (a lista, com o mesmo TBT, deu 96),
+ * mas pelo cartão do resumo das conquistas, que chegava um quadro depois e empurrava a página (0,40 e
+ * 0,34 de CLS). Uma pessoa com XP no servidor ganha o resumo na primeira derivação deste aparelho; com
+ * ele guardado, as duas telas recarregam sem deslocar nada.
+ */
+test('o perfil e a garagem pintam inteiros: o resumo das conquistas não empurra a página', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const user = await criarUsuario('Resumo');
+  // a viagem fica no futuro (D33): entrar cai na lista
+  const { tripId } = await viagemNaSerra(user.id, 30);
+  const xp = (kind: string, ref: string, points: number) => ({
+    id: uuidV5(user.id, `${kind}:${ref}`),
+    user_id: user.id,
+    trip_id: tripId,
+    kind,
+    ref_id: ref,
+    points,
+  });
+  await inserir('xp_events', [
+    xp('trip_completed', tripId, 100),
+    xp('checklist_complete', `${tripId}:before`, 20),
+    xp('quest_done', uuidV4(), 30),
+  ]);
+  await page.goto('/entrar');
+  await page.getByLabel('E-mail').fill(user.email);
+  await page.getByLabel('Senha', { exact: true }).fill(SENHA);
+  await page.getByRole('button', { name: 'Entrar' }).click();
+  await expect(page.getByRole('heading', { name: 'Suas viagens' })).toBeVisible({
+    timeout: 20_000,
+  });
+  const resumo = page.locator('[data-progress-summary]');
+
+  for (const [onde, rota, pronto] of [
+    ['perfil', '/perfil', page.getByRole('heading', { name: 'Você', exact: true })],
+    ['garagem', '/perfil/garagem?render=list', page.locator('[data-garage="svg"]')],
+  ] as const) {
+    await test.step(`${onde}: recarregar com o resumo guardado não desloca nada`, async () => {
+      await page.goto(rota);
+      // a primeira derivação deste aparelho cria o resumo (o XP veio do servidor)
+      await expect(resumo).toBeVisible({ timeout: 30_000 });
+      await page.reload();
+      await expect(resumo).toBeVisible({ timeout: 15_000 });
+      await expect(pronto).toBeVisible();
+      const shifts = await page.evaluate<{ valor: number; quem: string }[]>(DESLOCAMENTOS);
+      const cls = shifts.reduce((acc, x) => acc + x.valor, 0);
+      expect(cls, `layout shifts de ${onde}: ${JSON.stringify(shifts)}`).toBeLessThan(CLS_MAXIMO);
+    });
+  }
 });
