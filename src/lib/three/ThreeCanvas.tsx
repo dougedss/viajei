@@ -37,6 +37,8 @@ type Props = {
   onCreated?: (state: RootState) => void;
   onBackend: (backend: Backend) => void;
   onFail: (reason: string) => void;
+  /** um toque que não acertou nenhum objeto com toque (a maquete sai do modo de perto por ele) */
+  onPointerMissed?: (() => void) | undefined;
   style?: CSSProperties;
   children: ReactNode;
 };
@@ -79,6 +81,7 @@ export function ThreeCanvas({
   onCreated,
   onBackend,
   onFail,
+  onPointerMissed,
   style = FILL,
   children,
 }: Props) {
@@ -119,6 +122,7 @@ export function ThreeCanvas({
         shadows
         camera={camera}
         onCreated={created}
+        {...(onPointerMissed ? { onPointerMissed } : {})}
         style={style}
         aria-hidden="true"
       >

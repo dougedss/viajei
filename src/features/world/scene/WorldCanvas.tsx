@@ -2,7 +2,7 @@ import type { RootState } from '@react-three/fiber';
 import { useCallback, type ReactNode } from 'react';
 import type { Backend } from '@/lib/three/renderer.ts';
 import { ThreeCanvas, type ThreeCamera } from '@/lib/three/ThreeCanvas.tsx';
-import { FOV } from '../layout.ts';
+import { REST_FOV } from '../camera.ts';
 import type { WorldTier } from '../quality.ts';
 import type { WorldRuntime } from './runtime.ts';
 
@@ -16,12 +16,22 @@ type Props = {
   forceWebGL: boolean;
   onBackend: (backend: Backend) => void;
   onFail: (reason: string) => void;
+  /** um toque fora de tudo o que recebe toque (o carro, as peças) */
+  onPointerMissed?: (() => void) | undefined;
   children: ReactNode;
 };
 
-const CAMERA: ThreeCamera = { fov: FOV, near: 0.5, far: 1400, position: [0, 200, 200] };
+const CAMERA: ThreeCamera = { fov: REST_FOV, near: 0.5, far: 1400, position: [0, 200, -200] };
 
-export function WorldCanvas({ runtime, tier, forceWebGL, onBackend, onFail, children }: Props) {
+export function WorldCanvas({
+  runtime,
+  tier,
+  forceWebGL,
+  onBackend,
+  onFail,
+  onPointerMissed,
+  children,
+}: Props) {
   const onCreated = useCallback(
     (state: RootState) => runtime.bindInvalidate(state.invalidate),
     [runtime],
@@ -34,6 +44,7 @@ export function WorldCanvas({ runtime, tier, forceWebGL, onBackend, onFail, chil
       onCreated={onCreated}
       onBackend={onBackend}
       onFail={onFail}
+      onPointerMissed={onPointerMissed}
     >
       {children}
     </ThreeCanvas>
