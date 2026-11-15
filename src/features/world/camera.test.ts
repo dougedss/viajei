@@ -80,8 +80,12 @@ const STAGES = [
   { width: 393, height: 620 },
   { width: 360, height: 640 },
 ] as const;
-/** a altura medida do que está sobre o pé do palco: nada, a barra, o cartão pequeno, o grande */
-const INSETS = [0, 136, 170, 250] as const;
+/**
+ * a altura medida do que está sobre o pé do palco: nada, a barra, o cartão pequeno, o grande, e o
+ * pior caso (o cartão de posição mais o "Agora", ~400 px num palco de 564, como o iPhone 15 do
+ * Playwright: sobram ~120 px para o dia inteiro, e ele tem de caber)
+ */
+const INSETS = [0, 136, 170, 250, 400] as const;
 const viewportOf = (stage: { width: number; height: number }, inset: number): RestViewport => ({
   width: stage.width,
   height: stage.height,

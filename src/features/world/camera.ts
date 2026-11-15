@@ -174,10 +174,13 @@ export function restCamera(layout: RestLayout, viewport: RestViewport): CameraFr
   const wantY = (boxRect.t + boxRect.b) / 2;
   const span = bounds.z1 - bounds.z0;
   const centerZ = (distance: number): number => {
-    let lo = bounds.z0 - span;
-    let hi = bounds.z1 + span;
+    // quanto mais longe a câmera, mais o alvo tem de andar para a caixa sair do centro da tela e
+    // cair no centro da área útil (uma faixa fina sobre um cartão alto pede um alvo a centenas de
+    // unidades da maquete): a faixa de busca cresce com a distância
+    let lo = bounds.z0 - span - 2 * distance;
+    let hi = bounds.z1 + span + 2 * distance;
     // mover o alvo para a frente desce a caixa na tela (a câmera olha para +z)
-    for (let i = 0; i < 36; i++) {
+    for (let i = 0; i < 40; i++) {
       const mid = (lo + hi) / 2;
       if (boxCenterY(distance, mid) > wantY) lo = mid;
       else hi = mid;
