@@ -433,6 +433,14 @@ enabled = true
 verify_jwt = true
 entrypoint = "./functions/import-itinerary/index.ts"
 
+# plan-trip (fase 17) monta a viagem conversando: as perguntas e o roteiro, em SSE, como a
+# import-itinerary e com o mesmo esqueleto (como o usuário, RLS vale, a ANTHROPIC_API_KEY só nos
+# secrets). Limite: 10 viagens montadas e 20 conversas começadas por pessoa em 24 h.
+[functions.plan-trip]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/plan-trip/index.ts"
+
 # purge é o expurgo diário: o pg_cron a chama às 4h de São Paulo com a chave secreta no apikey, como
 # a send-notifications, e a função aceita também o JWT de um executor do laboratório, só para o
 # dry_run (`withSupabase({ auth: ['secret', 'user'] })` confere os dois). A chave secreta não é um

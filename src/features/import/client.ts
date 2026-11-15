@@ -56,7 +56,23 @@ export async function streamImport(
   signal: AbortSignal,
   onEvent: (event: ImportEvent) => void,
 ): Promise<void> {
-  const response = await supabase.functions.invoke<unknown>(IMPORT_FN, { body: request, signal });
+  return streamEvents(IMPORT_FN, request, signal, onEvent);
+}
+
+/**
+ * Uma função que responde no protocolo da importação (a `import-itinerary` e a `plan-trip`, fase 17):
+ * o pedido em JSON, os erros antes do stream com status HTTP, e os eventos SSE na ordem.
+ */
+export async function streamEvents(
+  fn: string,
+  body: unknown,
+  signal: AbortSignal,
+  onEvent: (event: ImportEvent) => void,
+): Promise<void> {
+  const response = await supabase.functions.invoke<unknown>(fn, {
+    body: body as Record<string, unknown>,
+    signal,
+  });
   const data: unknown = response.data;
   const error: unknown = response.error;
   if (error) throw await httpFailure(error, signal);

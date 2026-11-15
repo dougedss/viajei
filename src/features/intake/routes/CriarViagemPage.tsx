@@ -17,7 +17,12 @@ import { useGeocoding } from '@/features/import/useGeocoding.ts';
 import { useImport, type SaveResult } from '@/features/import/useImport.ts';
 import { todayISO, tripStatus } from '@/features/trips/rules.ts';
 import { useSession } from '@/lib/supabase/session.ts';
+import { CheckedNotice } from '../components/CheckedNotice.tsx';
+import { CheckingStep } from '../components/CheckingStep.tsx';
+import { QuestionsStep } from '../components/QuestionsStep.tsx';
+import { planErrorCopy } from '../messages.ts';
 import { startOf, type IntakeBack } from '../start.ts';
+import { useConversation } from '../useConversation.ts';
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const BACK: IntakeBack = { focusIntake: true };
@@ -29,15 +34,17 @@ const BACK: IntakeBack = { focusIntake: true };
 const started = new Set<string>();
 
 /**
- * `/viagens/nova` (fase 17): o que acontece depois do campo da lista. A leitura do roteiro chegando,
- * e a revisão da fase 10 com "A viagem" no topo, que cria a viagem só ao salvar. Abrir sem nada a
- * fazer (sem revisão guardada nem leitura pedida) volta à lista, com o campo em foco: o formulário de
- * antes não existe mais.
+ * `/viagens/nova` (fase 17): o que acontece depois do campo da lista. O roteiro colado, lido chegando;
+ * a conversa (as perguntas da IA, ditas antes) e a saída de hoje (a pergunta de alcance), com o
+ * roteiro conferido no mapa; e, nos três, a revisão da fase 10 com "A viagem" no topo, que cria a
+ * viagem só ao salvar. Abrir sem nada a fazer (sem revisão, conversa nem leitura pedida) volta à
+ * lista, com o campo em foco: o formulário de antes não existe mais.
  */
 export default function CriarViagemPage() {
   const { session } = useSession();
   const uid = session?.user.id ?? null;
   const imp = useImport({ kind: 'new' }, uid);
+  const talk = useConversation(uid, imp.reload);
   const location = useLocation();
   const navigate = useNavigate();
   const toast = useToast();
@@ -46,30 +53,34 @@ export default function CriarViagemPage() {
   // ficar ou voltar é decidido uma vez, ao abrir; depois, só um gesto sai daqui (criar, descartar,
   // voltar ao texto), para o instante entre gravar e navegar não mandar a pessoa à lista
   const [entry, setEntry] = useState<'stay' | 'leave' | null>(null);
-  if (imp.loaded && entry === null) setEntry(imp.stored || start ? 'stay' : 'leave');
+  if (imp.loaded && talk.loaded && entry === null) {
+    setEntry(imp.stored || talk.conv || start ? 'stay' : 'leave');
+  }
 
   useEffect(() => {
-    if (!imp.loaded || !start || started.has(location.key)) return;
+    if (!imp.loaded || !talk.loaded || !start || started.has(location.key)) return;
     started.add(location.key);
     // o sinal sai da entrada do histórico: recarregar a tela no meio não lê de novo
     void navigate(location.pathname, { replace: true, state: null });
-    // até a conversa (3.3), a descrição também vai para a leitura do roteiro
-    void imp.read({ ai: true });
+    if (start === 'itinerary') void imp.read({ ai: true });
+    else void talk.start(start === 'today' ? 'today' : 'plan', imp.text);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- uma vez por entrada, quando o rascunho carregou
-  }, [imp.loaded, start, location.key]);
+  }, [imp.loaded, talk.loaded, start, location.key]);
 
   const phase = imp.session.phase;
   const targets = imp.stored ? geoTargets(imp.stored.review) : previewTargets(imp.preview);
   const geo = useGeocoding(targets);
 
-  if (!imp.loaded || entry === null) return <Splash />;
+  if (!imp.loaded || !talk.loaded || entry === null) return <Splash />;
   if (entry === 'leave') return <Navigate to="/viagens" replace state={BACK} />;
 
   const toList = async () => {
     imp.dismiss();
+    await talk.clear();
     await navigate('/viagens', { replace: true, state: BACK });
   };
   const onSaved = async ({ tripId, plan, range }: SaveResult) => {
+    await talk.clear();
     const c = planCounts(plan);
     toast.show({
       title: 'Viagem criada',
@@ -91,7 +102,7 @@ export default function CriarViagemPage() {
   const header = (
     <PageHeader
       back="/viagens"
-      title={imp.stored ? 'Revisar a viagem' : 'Lendo o roteiro'}
+      title={imp.stored ? 'Revisar a viagem' : talk.conv ? 'Montando a viagem' : 'Lendo o roteiro'}
       eyebrow={
         <span className="label-caps text-accent-ink">
           {name ? `Nova viagem · ${name}` : 'Nova viagem'}
@@ -109,12 +120,76 @@ export default function CriarViagemPage() {
         trip={draft.header}
         header={header}
         creating={{
-          top: <NewTripCard draft={draft} onChange={imp.update} />,
+          top: (
+            <>
+              <NewTripCard draft={draft} onChange={imp.update} />
+              {imp.stored.checked ? (
+                <CheckedNotice
+                  removed={imp.stored.checked.removed}
+                  unchecked={imp.stored.checked.unchecked}
+                  onRecheck={talk.conv?.proposal ? () => void talk.recheck() : undefined}
+                />
+              ) : null}
+            </>
+          ),
           blocked: headerProblems(draft.header).length > 0,
         }}
         onSaved={onSaved}
         onDiscarded={() => void toList()}
       />
+    );
+  }
+
+  // a conversa e a saída de hoje, antes da revisão
+  if (talk.conv || talk.stage.kind !== 'idle') {
+    const stage = talk.stage;
+    return (
+      <div className="grid gap-5">
+        {header}
+        {stage.kind === 'error' ? (
+          <ConversationError
+            copy={planErrorCopy(stage.phase, stage.step, new Date())}
+            onRetry={() =>
+              void (stage.step === 'plan' && talk.conv
+                ? talk.plan()
+                : talk.start(talk.conv?.kind ?? 'plan', talk.conv?.text ?? imp.text))
+            }
+            onBack={() => void toList()}
+          />
+        ) : stage.kind === 'answering' && talk.conv ? (
+          <QuestionsStep
+            questions={talk.conv.questions}
+            answers={talk.conv.answers}
+            onAnswer={talk.answer}
+            onSubmit={() => void talk.plan()}
+            onBack={() => void toList()}
+          />
+        ) : stage.kind === 'planning' ? (
+          <ArrivingStep
+            reading={talk.preview.counts.stops === 0}
+            preview={talk.preview}
+            geo={{}}
+            onCancel={() => {
+              talk.cancel();
+              void toList();
+            }}
+          />
+        ) : stage.kind === 'checking' ? (
+          <CheckingStep done={stage.done} total={stage.total} />
+        ) : (
+          <Card className="grid gap-2" aria-live="polite" data-thinking>
+            <p className="font-num text-[20px] font-semibold motion-safe:animate-pulse">
+              {stage.kind === 'asking'
+                ? 'Pensando no que perguntar…'
+                : 'Juntando o que vocês gostam…'}
+            </p>
+            <p className="text-[14px] text-ink-2">
+              O pedido vai para a IA da Anthropic, com os gostos e as notas como pista. Nada entra
+              na viagem sem você revisar.
+            </p>
+          </Card>
+        )}
+      </div>
     );
   }
 
@@ -163,5 +238,31 @@ export default function CriarViagemPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+/** O erro da conversa: o que aconteceu, tentar de novo (as respostas continuam) ou voltar ao texto. */
+function ConversationError({
+  copy,
+  onRetry,
+  onBack,
+}: {
+  copy: { title: string; text: string };
+  onRetry: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <Card role="alert" className="grid gap-3 shadow-[inset_0_0_0_2px_var(--color-tight)]">
+      <p className="font-num text-[20px] leading-tight font-semibold">{copy.title}</p>
+      <p className="text-[15px] text-ink-2">{copy.text}</p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Button size="md" onClick={onRetry}>
+          Tentar de novo
+        </Button>
+        <Button variant="ghost" size="md" onClick={onBack}>
+          Voltar ao texto
+        </Button>
+      </div>
+    </Card>
   );
 }

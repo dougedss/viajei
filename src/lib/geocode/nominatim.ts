@@ -25,6 +25,8 @@ type NominatimRow = {
   name?: string;
   lat?: string;
   lon?: string;
+  category?: string;
+  type?: string;
 };
 
 let lastCall = 0;
@@ -49,15 +51,30 @@ function toResult(row: NominatimRow): GeocodeResult | null {
   const address = row.display_name ?? '';
   const first = address.split(',')[0]?.trim() ?? '';
   const name = row.name && row.name.trim() !== '' ? row.name : first !== '' ? first : address;
-  return { name, address, lat, lng };
+  return {
+    name,
+    address,
+    lat,
+    lng,
+    ...(row.category ? { category: row.category } : {}),
+    ...(row.type ? { type: row.type } : {}),
+  };
 }
 
-async function fetchNominatim(query: string, signal?: AbortSignal): Promise<GeocodeResult[]> {
+async function fetchNominatim(
+  query: string,
+  signal?: AbortSignal,
+  viewbox?: string,
+): Promise<GeocodeResult[]> {
   const url = new URL(ENDPOINT);
   url.searchParams.set('q', query);
   url.searchParams.set('format', 'jsonv2');
   url.searchParams.set('limit', String(LIMIT));
   url.searchParams.set('accept-language', 'pt-BR');
+  if (viewbox) {
+    url.searchParams.set('viewbox', viewbox);
+    url.searchParams.set('bounded', '1');
+  }
   const res = await fetch(url, { signal: signal ?? null, headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`Nominatim ${res.status}`);
   const rows = (await res.json()) as NominatimRow[];
@@ -73,6 +90,32 @@ export async function geocode(query: string, signal?: AbortSignal): Promise<Geoc
   const results = await throttled(() => fetchNominatim(key, signal));
   const entry: GeocodeEntry = { query: key, results, fetched_at: new Date().toISOString() };
   await db.geocode.put(entry);
+  return results;
+}
+
+/**
+ * A busca dentro de uma região (fase 17, a conferência dos lugares que a IA propõe): o `viewbox` de
+ * um quadrado em volta do centro, `bounded` (nada de fora dele), pela mesma fila de uma requisição por
+ * vez e com o mesmo cache (a chave leva a região, arredondada).
+ */
+export async function searchNear(
+  query: string,
+  center: { lat: number; lng: number },
+  radiusKm: number,
+  signal?: AbortSignal,
+): Promise<GeocodeResult[]> {
+  const q = normalizeQuery(query);
+  if (q.length < 3) return [];
+  const dLat = radiusKm / 111;
+  const dLng = radiusKm / (111 * Math.max(0.2, Math.cos((center.lat * Math.PI) / 180)));
+  const viewbox = [center.lng - dLng, center.lat + dLat, center.lng + dLng, center.lat - dLat]
+    .map((n) => n.toFixed(4))
+    .join(',');
+  const key = `near:${center.lat.toFixed(1)},${center.lng.toFixed(1)},${String(radiusKm)}:${q}`;
+  const cached = await db.geocode.get(key);
+  if (cached) return cached.results;
+  const results = await throttled(() => fetchNominatim(q, signal, viewbox));
+  await db.geocode.put({ query: key, results, fetched_at: new Date().toISOString() });
   return results;
 }
 
@@ -100,13 +143,15 @@ export async function reverseGeocode(
   lat: number,
   lng: number,
   signal?: AbortSignal,
+  /** 18, o ponto de interesse (a parada); 10, a cidade (a posição da saída de hoje, fase 17) */
+  zoom = 18,
 ): Promise<ReverseRow | null> {
   return throttled(async () => {
     const url = new URL(REVERSE_ENDPOINT);
     url.searchParams.set('lat', lat.toFixed(6));
     url.searchParams.set('lon', lng.toFixed(6));
     url.searchParams.set('format', 'jsonv2');
-    url.searchParams.set('zoom', '18');
+    url.searchParams.set('zoom', String(zoom));
     url.searchParams.set('addressdetails', '1');
     url.searchParams.set('namedetails', '1');
     url.searchParams.set('accept-language', 'pt-BR');

@@ -71,7 +71,13 @@ export type ImportStore = {
   isLab(): Promise<boolean>;
   /** a viagem já chegou ao servidor? (criada sem sinal pode ainda não ter subido) */
   tripOnServer(tripId: string): Promise<boolean>;
-  open(row: { trip_id: string | null; input_chars: number; model: string }): Promise<string>;
+  /** `kind`: para que foi a leitura (0015); sem ele, a importação */
+  open(row: {
+    trip_id: string | null;
+    input_chars: number;
+    model: string;
+    kind?: 'import' | 'plan' | 'today';
+  }): Promise<string>;
   close(id: string, row: ImportClose): Promise<void>;
 };
 
@@ -95,10 +101,17 @@ export type Outcome = {
   event: ImportEvent | null;
 };
 
+/** O JSON inteiro da IA no que o `done` leva; lança quando não confere (vira `invalid`). */
+export type ParseDone = (json: unknown) => { data: unknown; trip?: unknown };
+
+/** A importação: o roteiro no formato do seed e o cabeçalho da viagem (fase 17). */
+export const parseImport: ParseDone = (json) => fromAiWithTrip(json);
+
 /** Como a IA parou, em estado do registro e evento para o app. Puro. */
 export function outcomeOfMessage(
   message: Pick<BetaMessage, 'stop_reason' | 'stop_details' | 'model' | 'usage'>,
   text: string,
+  parse: ParseDone = parseImport,
 ): Outcome {
   switch (message.stop_reason) {
     case 'refusal': {
@@ -124,7 +137,7 @@ export function outcomeOfMessage(
         return invalid('json');
       }
       try {
-        const { data, trip } = fromAiWithTrip(json);
+        const { data, trip } = parse(json);
         const { input, output } = tokensOf(message.usage);
         return {
           status: 'succeeded',
@@ -132,7 +145,7 @@ export function outcomeOfMessage(
           event: {
             type: 'done',
             data,
-            trip,
+            ...(trip === undefined ? {} : { trip }),
             model: message.model,
             usage: { input_tokens: input, output_tokens: output },
           },
@@ -210,14 +223,14 @@ function failed(error: string): Outcome {
 }
 
 // ------------------------------------------------------------------------------ HTTP
-const SSE_HEADERS = {
+export const SSE_HEADERS = {
   'Content-Type': 'text/event-stream; charset=utf-8',
   'Cache-Control': 'no-store',
   // proxies que respeitam este cabeçalho não seguram os pedaços
   'X-Accel-Buffering': 'no',
 };
 
-function httpError(
+export function httpError(
   status: number,
   code: ImportHttpError['error']['code'],
   message: string,
@@ -268,7 +281,7 @@ export async function handleImport(req: Request, deps: ImportDeps): Promise<Resp
     input_chars: input.text.length,
     model: config.model,
   });
-  const run = new ImportRun({
+  return streamRun({
     deps,
     id,
     variant,
@@ -276,8 +289,14 @@ export async function handleImport(req: Request, deps: ImportDeps): Promise<Resp
     params: paramsFor(config, input.trip, input.text, new Date(startedAt)),
     startedAt,
     textChars: input.text.length,
+    parse: parseImport,
+    label: IMPORT_FN,
   });
-  return new Response(run.body, { headers: SSE_HEADERS });
+}
+
+/** Uma leitura em andamento como resposta SSE (a importação e a conversa, fase 17, usam esta). */
+export function streamRun(init: RunInit): Response {
+  return new Response(new ImportRun(init).body, { headers: SSE_HEADERS });
 }
 
 /** O pedido à Anthropic. `thinking` e `effort` saem da variante; nada de temperature nem prefill. */
@@ -301,7 +320,7 @@ export function paramsFor(
 
 type StopReason = 'deadline' | 'canceled' | 'shutdown';
 
-type RunInit = {
+export type RunInit = {
   deps: ImportDeps;
   id: string;
   variant: string;
@@ -309,6 +328,10 @@ type RunInit = {
   params: BetaMessageStreamParams;
   startedAt: number;
   textChars: number;
+  /** como ler o JSON inteiro no fim */
+  parse: ParseDone;
+  /** o nome da função no log */
+  label: string;
 };
 
 /**
@@ -421,7 +444,7 @@ class ImportRun {
       const tokens = tokensOf(message.usage);
       this.#input = tokens.input;
       this.#output = tokens.output;
-      outcome = outcomeOfMessage(message, this.#text);
+      outcome = outcomeOfMessage(message, this.#text, this.#init.parse);
     } catch (err) {
       outcome = this.#why ? outcomeOfStop(this.#why) : failed(failureCode(err));
       if (!this.#why) {
@@ -429,7 +452,7 @@ class ImportRun {
         const status = err instanceof Anthropic.APIError ? String(err.status ?? '-') : '-';
         const request = err instanceof Anthropic.APIError ? (err.requestID ?? '-') : '-';
         deps.log(
-          `import-itinerary id=${id} erro=${outcome.error ?? '-'} http=${status} request=${request}`,
+          `${this.#init.label} id=${id} erro=${outcome.error ?? '-'} http=${status} request=${request}`,
         );
       }
     } finally {
@@ -453,12 +476,12 @@ class ImportRun {
         output_tokens: this.#output,
       });
     } catch {
-      deps.log(`import-itinerary id=${id} registro=não fechado (o job fecha em 10 min)`);
+      deps.log(`${this.#init.label} id=${id} registro=não fechado (o job fecha em 10 min)`);
     }
     const end = this.#now();
     deps.log(
       [
-        'import-itinerary',
+        this.#init.label,
         `id=${id}`,
         `status=${outcome.status}`,
         `error=${outcome.error ?? '-'}`,

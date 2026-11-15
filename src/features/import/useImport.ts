@@ -282,6 +282,10 @@ export function useImport(target: ImportTarget | null, uid: string | null) {
       setTextState(value);
       setFormatErrors(null);
     },
+    /** a revisão que outro caminho gravou no aparelho (a conversa, fase 17), lida de novo */
+    reload: async () => {
+      if (key) setStored(await loadReview(key));
+    },
     /** o texto já no aparelho, antes de sair da tela (o campo da lista, antes de abrir `/viagens/nova`) */
     flushDraft: async () => {
       if (key) await saveDraft(key, latestText.current);

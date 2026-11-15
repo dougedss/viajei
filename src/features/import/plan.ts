@@ -29,7 +29,12 @@ export type Keyed<T> = T & { key: string; include: boolean };
  * parada manual pode ficar). `null` na parada: a fila ainda vai procurar.
  */
 export type GeoDecision =
-  | { status: 'found'; label: string; via: 'file' | 'link' | 'search' | 'choice' | 'edit' }
+  | {
+      status: 'found';
+      label: string;
+      /** `osm`: um lugar que a conversa propôs e o mapa confirmou (fase 17) */
+      via: 'file' | 'link' | 'search' | 'choice' | 'edit' | 'osm';
+    }
   | { status: 'none' };
 export type ReviewStop = Keyed<ImportStop> & {
   /** o mesmo nome no mesmo dia: no próprio texto, ou já no roteiro */

@@ -32,6 +32,11 @@ export type StoredReview = {
   newTrip: NewTripDraft | null;
   /** quem leu: a IA (`ai`) ou o aparelho, pelo formato do Viajei (`user`); vai para `stops.source` */
   source: 'ai' | 'user';
+  /**
+   * a conversa (fase 17): os lugares propostos que o mapa não confirmou (saíram) e os que não deu para
+   * conferir (o mapa não respondeu); null fora da conversa
+   */
+  checked?: { removed: string[]; unchecked: string[] } | null;
 };
 
 // A forma mínima para confiar no que voltou do disco: uma versão antiga do app, ou um valor que não
@@ -58,6 +63,10 @@ const storedSchema = z.object({
     .nullable()
     .optional(),
   source: z.enum(['ai', 'user']).optional(),
+  checked: z
+    .object({ removed: z.array(z.string()), unchecked: z.array(z.string()) })
+    .nullable()
+    .optional(),
 });
 
 /** O valor guardado como revisão, ou null se não for uma (formato antigo, JSON quebrado). */

@@ -30,12 +30,13 @@ export default defineConfig({
     trace: 'on-first-retry',
     locale: 'pt-BR',
     timezoneId: 'America/Sao_Paulo',
-    // Nenhum teste pede tile ao OSM nem previsão ao Open-Meteo de verdade (fase 11): no navegador
+    // Nenhum teste pede tile ao OSM, previsão ao Open-Meteo (fase 11) nem consulta ao Overpass (fase
+    // 17) de verdade: no navegador
     // inteiro, inclusive nos contextos criados à mão e no service worker, os dois nem resolvem. Os
     // testes do mapa e do clima fingem os dois com `context.route` (e2e/helpers/world.ts).
     launchOptions: {
       args: [
-        '--host-resolver-rules=MAP tile.openstreetmap.org ~NOTFOUND, MAP api.open-meteo.com ~NOTFOUND',
+        '--host-resolver-rules=MAP tile.openstreetmap.org ~NOTFOUND, MAP api.open-meteo.com ~NOTFOUND, MAP overpass-api.de ~NOTFOUND',
       ],
     },
   },

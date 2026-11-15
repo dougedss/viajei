@@ -187,7 +187,15 @@ export type WeatherEntry = {
   stops: Record<string, HourWeather & { hour: string }>;
 };
 
-export type GeocodeResult = { name: string; address: string; lat: number; lng: number };
+export type GeocodeResult = {
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+  /** a classe do OSM (`tourism`, `amenity`…) e o valor (`viewpoint`, `restaurant`…), quando vêm */
+  category?: string;
+  type?: string;
+};
 /** Cache das buscas de endereço (Nominatim), por consulta normalizada. */
 export type GeocodeEntry = { query: string; results: GeocodeResult[]; fetched_at: string };
 

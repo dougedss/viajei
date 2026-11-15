@@ -10,8 +10,9 @@ import { SENHA } from './users.ts';
  * `playwright.config.ts` já não deixa resolver; o WebKit não tem a opção, então o contexto recusa.
  */
 export async function semMundoDeFora(context: BrowserContext): Promise<void> {
-  await context.route(/^https:\/\/(tile\.openstreetmap\.org|api\.open-meteo\.com)\//, (route) =>
-    route.abort('blockedbyclient'),
+  await context.route(
+    /^https:\/\/(tile\.openstreetmap\.org|api\.open-meteo\.com|overpass-api\.de)\//,
+    (route) => route.abort('blockedbyclient'),
   );
 }
 
