@@ -130,16 +130,21 @@ export { NOTIFICATION_KIND_KEYS };
  * muda: o que a pessoa escolheu vale.
  */
 export async function bornPrefs(uid: string, tripId: string): Promise<void> {
+  const row = await bornPrefsRow(uid, tripId, new Date().toISOString());
+  if (row) await mutate.insert('notification_prefs', row);
+}
+
+/**
+ * A linha que `bornPrefs` grava, para quem a põe num lote (a viagem nova do campo nasce com ela, na
+ * mesma transação: fase 17); null quando a linha já existe no aparelho.
+ */
+export async function bornPrefsRow(
+  uid: string,
+  tripId: string,
+  now: string,
+): Promise<Omit<NotificationPref, 'synced_at'> | null> {
   const id = await prefsId(uid, tripId);
-  if (await db.notification_prefs.get(id)) return;
+  if (await db.notification_prefs.get(id)) return null;
   const values = newTripDefaults(await db.profiles.get(uid));
-  const now = new Date().toISOString();
-  await mutate.insert('notification_prefs', {
-    id,
-    user_id: uid,
-    trip_id: tripId,
-    ...values,
-    created_at: now,
-    updated_at: now,
-  });
+  return { id, user_id: uid, trip_id: tripId, ...values, created_at: now, updated_at: now };
 }

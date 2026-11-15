@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { novaViagem } from './helpers/app.ts';
 import { comCartoes } from './helpers/celebrations.ts';
 import { dateInSaoPaulo } from './helpers/dates.ts';
 import { linhas } from './helpers/db.ts';
@@ -35,12 +36,12 @@ test('concluir uma parada → cartão do primeiro pé na estrada → Usar no car
   await page.getByRole('button', { name: 'Entrar' }).click();
   await expect(page.getByRole('heading', { name: 'Suas viagens' })).toBeVisible();
 
-  await page.goto('/viagens/nova');
-  await page.getByLabel('Nome da viagem').fill(`Progresso ${Date.now()}`);
-  await page.getByRole('textbox', { name: 'Início' }).fill(dateInSaoPaulo());
-  await page.getByRole('textbox', { name: 'Fim' }).fill(dateInSaoPaulo(1));
-  await page.getByRole('button', { name: 'Criar viagem' }).click();
-  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
+  // pelo campo da lista, no formato do Viajei (fase 17)
+  await novaViagem(page, {
+    nome: `Progresso ${Date.now()}`,
+    inicio: dateInSaoPaulo(),
+    fim: dateInSaoPaulo(1),
+  });
   const tripUrl = page.url().replace(/\/detalhes$/, '');
   const tripId = tripUrl.split('/').at(-1) ?? '';
 

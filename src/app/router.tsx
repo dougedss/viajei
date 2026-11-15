@@ -51,8 +51,10 @@ export const router = createBrowserRouter([
                 lazy: page(() => import('@/features/trips/routes/HomePage.tsx')),
               },
               {
+                // a viagem nova (fase 17): o que vem depois do campo da lista (a leitura, a conversa e
+                // a revisão); sem nada a fazer, volta à lista com o campo em foco
                 path: '/viagens/nova',
-                lazy: page(() => import('@/features/trips/routes/NovaViagemPage.tsx')),
+                lazy: page(() => import('@/features/intake/routes/CriarViagemPage.tsx')),
               },
               // a viagem é o mapa (fase 14): tocar na viagem abre a maquete inteira na tela; a visão
               // geral de antes vira "Detalhes". A tela é inteira (sem o cabeçalho do app): o layout lê

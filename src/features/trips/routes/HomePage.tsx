@@ -1,11 +1,11 @@
-import { MailOpen, Plus, Route } from 'lucide-react';
+import { MailOpen, Route } from 'lucide-react';
 import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { Button } from '@/components/ui/Button.tsx';
-import { ButtonLink } from '@/components/ui/ButtonLink.tsx';
 import { Card } from '@/components/ui/Card.tsx';
 import { EmptyState } from '@/components/ui/EmptyState.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
+import { IntakeField } from '@/features/intake/components/IntakeField.tsx';
 import { InstallCard } from '@/features/pwa/components/InstallCard.tsx';
 import { useAcceptInvite, useDeclineInvite } from '../actions.ts';
 import { TripCard } from '../components/TripCard.tsx';
@@ -117,31 +117,19 @@ export default function HomePage() {
       ) : null}
 
       <section className="grid gap-3" aria-labelledby="h-viagens">
-        <div className="flex items-end justify-between gap-3">
-          <h1 id="h-viagens" className="font-num text-[30px] leading-none font-semibold">
-            Suas viagens
-          </h1>
-          {trips && trips.length > 0 ? (
-            <ButtonLink to="/viagens/nova" size="sm" variant="secondary">
-              <Plus className="size-4" aria-hidden="true" />
-              Nova viagem
-            </ButtonLink>
-          ) : null}
-        </div>
+        <h1 id="h-viagens" className="font-num text-[30px] leading-none font-semibold">
+          Suas viagens
+        </h1>
+        {/* a porta de entrada (fase 17): um campo no lugar do botão "Nova viagem" e do formulário */}
+        <IntakeField />
         {trips === undefined ? null : trips.length === 0 ? (
           <EmptyState
             icon={Route}
             title="Nenhuma viagem ainda"
-            text="Crie a primeira: ela fica neste celular, funciona sem sinal e sincroniza quando a internet voltar."
-            action={
-              <ButtonLink to="/viagens/nova">
-                <Plus className="size-5" aria-hidden="true" />
-                Nova viagem
-              </ButtonLink>
-            }
+            text="A primeira nasce no campo aí em cima. Fica neste celular, funciona sem sinal e sincroniza quando a internet voltar."
           />
         ) : (
-          <ul className="grid gap-3">
+          <ul className="grid gap-3" aria-label="Viagens">
             {trips.map((item) => (
               <li key={item.trip.id} className="min-w-0">
                 <TripCard item={item} today={today} />

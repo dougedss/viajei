@@ -228,7 +228,8 @@ for (const tema of ['light', 'dark'] as const) {
     const rotas: [string, string | RegExp | ((p: Page) => Locator)][] = [
       ['/', 'Suas viagens'],
       ['/perfil', 'Perfil'],
-      ['/viagens/nova', 'Nova viagem'],
+      // sem nada a fazer, a tela da viagem nova volta à lista, com o campo em foco (fase 17)
+      ['/viagens/nova', 'Suas viagens'],
       [`${t}/detalhes`, 'Serra gaúcha'],
       [`${t}/editar`, 'Editar viagem'],
       [`${t}/importar`, 'Colar roteiro'],

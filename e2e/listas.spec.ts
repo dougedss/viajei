@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { novaViagem } from './helpers/app.ts';
 import { dateInSaoPaulo } from './helpers/dates.ts';
 import { linhas } from './helpers/db.ts';
 
@@ -14,12 +15,12 @@ async function entrar(page: Page, email: string) {
 
 /** Uma viagem 30 dias à frente (D33), com uma parada de natureza; devolve a URL da viagem. */
 async function viagem(page: Page, nome: string): Promise<string> {
-  await page.goto('/viagens/nova');
-  await page.getByLabel('Nome da viagem').fill(`${nome} ${Date.now()}`);
-  await page.getByRole('textbox', { name: 'Início' }).fill(dateInSaoPaulo(30));
-  await page.getByRole('textbox', { name: 'Fim' }).fill(dateInSaoPaulo(31));
-  await page.getByRole('button', { name: 'Criar viagem' }).click();
-  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
+  // pelo campo da lista, no formato do Viajei (fase 17)
+  await novaViagem(page, {
+    nome: `${nome} ${Date.now()}`,
+    inicio: dateInSaoPaulo(30),
+    fim: dateInSaoPaulo(31),
+  });
   const tripUrl = page.url().replace(/\/detalhes$/, '');
   await page.getByRole('link', { name: 'Editar roteiro' }).click();
   await page

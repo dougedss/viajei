@@ -2,7 +2,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { BetaMessageStreamParams } from '@anthropic-ai/sdk/resources/beta/messages/messages';
 import { describe, expect, it } from 'vitest';
 import { anthropicRecording, seedAiJson } from '@/test/fixtures/import-recording.ts';
-import { fromAi } from './import-schema.ts';
+import seed from '../../seed/viagem-rs.json';
+import { fromAi, toAi, validateImport } from './import-schema.ts';
 import {
   failureCode,
   handleImport,
@@ -147,6 +148,8 @@ describe('import-itinerary com a resposta gravada', () => {
     expect(list.at(-1)).toEqual({
       type: 'done',
       data: fromAi(JSON.parse(json)),
+      // o cabeçalho da viagem (fase 17): a gravação do seed não diz nada dele
+      trip: { name: null, start_date: null, end_date: null, origin: null, budget: null },
       model: 'claude-sonnet-5-5',
       usage: { input_tokens: 4_100, output_tokens: 2_300 },
     });
@@ -234,6 +237,42 @@ describe('import-itinerary com a resposta gravada', () => {
     expect(joined(list)).toBe(json);
     expect(list.at(-1)).toMatchObject({ type: 'done', model: 'claude-sonnet-5' });
     expect(db.closed[0]).toMatchObject({ status: 'succeeded', model: 'claude-sonnet-5' });
+  });
+
+  it('a viagem nova do campo (fase 17): sem trip_id nem trip, lê, devolve o cabeçalho e registra sem viagem', async () => {
+    let asked = 0;
+    const trip = {
+      name: 'RS — concurso em Montenegro',
+      start_date: '2026-12-11',
+      end_date: '2026-12-14',
+      origin: 'Papanduva',
+      budget: 3000,
+    };
+    const json = JSON.stringify(toAi(validateImport(seed), trip));
+    const { res, pending, db, anthropic } = await run(
+      post(body({ trip_id: null, trip: null })),
+      anthropicRecording(json),
+      {
+        store: {
+          tripOnServer: () => {
+            asked += 1;
+            return Promise.resolve(true);
+          },
+        },
+      },
+    );
+    const list = await events(res);
+    await Promise.all(pending);
+    expect(list.at(-1)).toMatchObject({ type: 'done', trip });
+    expect(db.opened).toEqual([
+      { trip_id: null, input_chars: body().text.length, model: 'claude-sonnet-5-5' },
+    ]);
+    // a viagem ainda não existe: ninguém pergunta ao banco por ela
+    expect(asked).toBe(0);
+    // a mensagem diz que a viagem é nova, sem nome nem período de outra viagem
+    const content = anthropic.calls[0]?.messages[0]?.content;
+    expect(content).toContain('viagem nova');
+    expect(content).not.toContain('período:');
   });
 
   it('o prazo para a IA, devolve o que chegou e registra deadline', async () => {

@@ -147,10 +147,43 @@ function withBlanks<S extends z.ZodRawShape>(schema: z.ZodObject<S>): z.ZodObjec
   return z.object(shape as WithBlanks<S>);
 }
 
+/**
+ * O cabeçalho de uma viagem: nome, datas, origem e orçamento, o que o texto disser (fase 17). A
+ * viagem nova do campo nasce dele; numa viagem que já existe, a importação o ignora.
+ */
+export type ImportTripHeader = {
+  name: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  origin: string | null;
+  budget: number | null;
+};
+
+/** O cabeçalho que o `done` leva ao app, conferido de novo do lado de lá. */
+export const importTripHeaderSchema = z.object({
+  name: z.string().nullable(),
+  start_date: dateString.nullable(),
+  end_date: dateString.nullable(),
+  origin: z.string().nullable(),
+  budget: z.number().nullable(),
+});
+
+/** O cabeçalho como a IA escreve: os textos vazios quando o texto não diz, o orçamento null. */
+export const aiTripSchema = z.object({
+  name: blank(undefined),
+  start_date: blank('AAAA-MM-DD'),
+  end_date: blank('AAAA-MM-DD'),
+  origin: blank(undefined),
+  budget: nullable(z.number()),
+});
+
 /** Coordenada nunca vem da IA: a parada da IA é a do arquivo sem `lat` e `lng`. */
 export const aiStopSchema = withBlanks(importStopSchema.omit({ lat: true, lng: true }));
 export const aiDaySchema = withBlanks(importDaySchema).extend({ stops: z.array(aiStopSchema) });
-export const aiImportSchema = importSchema.extend({
+/** O cabeçalho vem primeiro: a IA escreve na ordem do schema, e a tela mostra o nome logo. */
+export const aiImportSchema = z.object({
+  trip: aiTripSchema,
+  ...importSchema.shape,
   days: z.array(aiDaySchema),
   reservations: z.array(withBlanks(importReservationSchema)),
   contacts: z.array(withBlanks(importContactSchema)),
@@ -160,19 +193,61 @@ export const aiImportSchema = importSchema.extend({
 });
 export type AiImport = z.infer<typeof aiImportSchema>;
 
-/** A ida, para a resposta gravada dos testes: os dados do arquivo como a IA os escreveria. */
-export function toAi(data: ImportData): unknown {
-  return z.encode(aiImportSchema, data);
+const NO_TRIP: ImportTripHeader = {
+  name: null,
+  start_date: null,
+  end_date: null,
+  origin: null,
+  budget: null,
+};
+
+/**
+ * A ida, para a resposta gravada dos testes: os dados do arquivo como a IA os escreveria, com o
+ * cabeçalho (vazio, numa viagem que já existe).
+ */
+export function toAi(data: ImportData, trip: ImportTripHeader = NO_TRIP): unknown {
+  return z.encode(aiImportSchema, { trip, ...data });
+}
+
+/** O texto sem as pontas, ou null quando não sobra nada. */
+const filled = (text: string | null): string | null => {
+  const t = text?.trim();
+  if (t === undefined || t === '') return null;
+  return t;
+};
+
+/** Uma data do cabeçalho que não é data (a IA errou o formato) vira "não disse". */
+const day = (s: string | null) =>
+  s !== null && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T12:00:00Z`))
+    ? s
+    : null;
+
+/** A volta, inteira: os dados no formato do seed (paradas sem coordenada) e o cabeçalho da viagem. */
+export function fromAiWithTrip(raw: unknown): { data: ImportData; trip: ImportTripHeader } {
+  const { trip: t, ...ai } = aiImportSchema.parse(raw);
+  const data = validateImport({
+    ...ai,
+    days: ai.days.map((d) => ({
+      ...d,
+      stops: d.stops.map((stop) => ({ ...stop, lat: null, lng: null })),
+    })),
+  });
+  const start = day(t.start_date);
+  const end = day(t.end_date);
+  const ordered = start !== null && end !== null && start <= end;
+  return {
+    data,
+    trip: {
+      name: filled(t.name),
+      start_date: ordered ? start : null,
+      end_date: ordered ? end : null,
+      origin: filled(t.origin),
+      budget: t.budget !== null && t.budget >= 0 ? t.budget : null,
+    },
+  };
 }
 
 /** A volta: o JSON da IA no formato do seed (paradas sem coordenada), pelas checagens finas. */
 export function fromAi(raw: unknown): ImportData {
-  const ai = aiImportSchema.parse(raw);
-  return validateImport({
-    ...ai,
-    days: ai.days.map((day) => ({
-      ...day,
-      stops: day.stops.map((stop) => ({ ...stop, lat: null, lng: null })),
-    })),
-  });
+  return fromAiWithTrip(raw).data;
 }

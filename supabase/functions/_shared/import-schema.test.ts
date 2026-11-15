@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import seed from '../../seed/viagem-rs.json';
 import { seedAiJson } from '@/test/fixtures/import-recording.ts';
-import { fromAi, importSchema, validateImport } from './import-schema.ts';
+import { fromAi, fromAiWithTrip, importSchema, toAi, validateImport } from './import-schema.ts';
 
 describe('import-schema', () => {
   it('o seed da viagem do RS passa inteiro', () => {
@@ -110,5 +110,46 @@ describe('a volta da IA', () => {
       })),
     };
     expect(fromAi(withCoords).days[0]?.stops[0]).toMatchObject({ lat: null, lng: null });
+  });
+
+  it('o cabeçalho da viagem (fase 17): vazio é "não disse"; uma data fora do formato ou ao contrário cai', () => {
+    const ai = JSON.parse(seedAiJson()) as Record<string, unknown>;
+    const trip = (t: Record<string, unknown>) =>
+      fromAiWithTrip({
+        ...ai,
+        trip: { name: '', start_date: '', end_date: '', origin: '', budget: null, ...t },
+      }).trip;
+    expect(trip({})).toEqual({
+      name: null,
+      start_date: null,
+      end_date: null,
+      origin: null,
+      budget: null,
+    });
+    expect(
+      trip({
+        name: ' RS ',
+        start_date: '2026-12-11',
+        end_date: '2026-12-14',
+        origin: 'Papanduva',
+        budget: 3000,
+      }),
+    ).toEqual({
+      name: 'RS',
+      start_date: '2026-12-11',
+      end_date: '2026-12-14',
+      origin: 'Papanduva',
+      budget: 3000,
+    });
+    expect(trip({ start_date: '11/12', end_date: '2026-12-14' })).toMatchObject({
+      start_date: null,
+      end_date: null,
+    });
+    expect(trip({ start_date: '2026-12-14', end_date: '2026-12-11' })).toMatchObject({
+      start_date: null,
+    });
+    expect(trip({ budget: -5 }).budget).toBeNull();
+    // a ida dos testes leva o cabeçalho que se der, ou o vazio
+    expect(fromAiWithTrip(toAi(validateImport(seed))).trip.name).toBeNull();
   });
 });

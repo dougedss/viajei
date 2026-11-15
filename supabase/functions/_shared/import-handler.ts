@@ -27,7 +27,7 @@ import {
   type ImportEvent,
   type ImportHttpError,
 } from './import-protocol.ts';
-import { fromAi } from './import-schema.ts';
+import { fromAiWithTrip } from './import-schema.ts';
 
 /**
  * O handler da `import-itinerary`, sem Deno e sem rede: o `index.ts` liga o client da Anthropic, o
@@ -124,7 +124,7 @@ export function outcomeOfMessage(
         return invalid('json');
       }
       try {
-        const data = fromAi(json);
+        const { data, trip } = fromAiWithTrip(json);
         const { input, output } = tokensOf(message.usage);
         return {
           status: 'succeeded',
@@ -132,6 +132,7 @@ export function outcomeOfMessage(
           event: {
             type: 'done',
             data,
+            trip,
             model: message.model,
             usage: { input_tokens: input, output_tokens: output },
           },
@@ -259,7 +260,9 @@ export async function handleImport(req: Request, deps: ImportDeps): Promise<Resp
       ? input.variant
       : IMPORT_DEFAULT_VARIANT;
   const config = IMPORT_VARIANTS[variant];
-  const tripId = (await deps.store.tripOnServer(input.trip_id)) ? input.trip_id : null;
+  // a viagem nova ainda não existe; a que foi criada sem sinal pode ainda não ter subido
+  const tripId =
+    input.trip_id !== null && (await deps.store.tripOnServer(input.trip_id)) ? input.trip_id : null;
   const id = await deps.store.open({
     trip_id: tripId,
     input_chars: input.text.length,

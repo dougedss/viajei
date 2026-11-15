@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { novaViagem } from './helpers/app.ts';
 import { dateInSaoPaulo } from './helpers/dates.ts';
 import { linhas } from './helpers/db.ts';
 import { makePng } from './helpers/images.ts';
@@ -22,12 +23,12 @@ test('reserva com print abre sem rede, depois de recarregar', async ({ page, con
   test.setTimeout(120_000);
   await entrar(page, 'dono@viajei.local');
 
-  await page.goto('/viagens/nova');
-  await page.getByLabel('Nome da viagem').fill(`Reservas ${Date.now()}`);
-  await page.getByRole('textbox', { name: 'Início' }).fill(dateInSaoPaulo(30));
-  await page.getByRole('textbox', { name: 'Fim' }).fill(dateInSaoPaulo(31));
-  await page.getByRole('button', { name: 'Criar viagem' }).click();
-  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
+  // pelo campo da lista, no formato do Viajei (fase 17)
+  await novaViagem(page, {
+    nome: `Reservas ${Date.now()}`,
+    inicio: dateInSaoPaulo(30),
+    fim: dateInSaoPaulo(31),
+  });
   const tripUrl = page.url().replace(/\/detalhes$/, '');
 
   await page.getByRole('link', { name: 'Reservas: 0' }).click();

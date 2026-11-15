@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { novaViagem } from './helpers/app.ts';
 import { dateInSaoPaulo } from './helpers/dates.ts';
 
 const SENHA = 'viajei123';
@@ -12,13 +13,9 @@ async function entrar(page: Page, email: string) {
   await expect(page.getByRole('heading', { name: 'Suas viagens' })).toBeVisible();
 }
 
+/** A viagem nasce pelo campo da lista (fase 17), no formato do Viajei, e termina em Detalhes. */
 async function criarViagem(page: Page, nome: string, inicio: string, fim: string) {
-  await page.getByRole('link', { name: 'Nova viagem' }).first().click();
-  await page.getByLabel('Nome da viagem').fill(nome);
-  await page.getByRole('textbox', { name: 'Início' }).fill(inicio);
-  await page.getByRole('textbox', { name: 'Fim' }).fill(fim);
-  await page.getByRole('button', { name: 'Criar viagem' }).click();
-  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
+  await novaViagem(page, { nome, inicio, fim });
 }
 
 async function adicionarParada(

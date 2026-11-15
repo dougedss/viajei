@@ -1,4 +1,5 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
+import { novaViagem } from './helpers/app.ts';
 import { dateInSaoPaulo } from './helpers/dates.ts';
 import { criarUsuarioDescartavel, SENHA } from './helpers/users.ts';
 
@@ -39,13 +40,9 @@ test('o card "Desde a última vez" aparece depois de marcar Partiu! em outra ses
   const pageA = await ctxA.newPage();
   await preencherLogin(pageA, email);
   await expect(pageA.getByRole('heading', { name: 'Suas viagens' })).toBeVisible();
-  await pageA.goto('/viagens/nova');
   const nome = `Hoje ${Date.now()}`;
-  await pageA.getByLabel('Nome da viagem').fill(nome);
-  await pageA.getByRole('textbox', { name: 'Início' }).fill(today());
-  await pageA.getByRole('textbox', { name: 'Fim' }).fill(today(1));
-  await pageA.getByRole('button', { name: 'Criar viagem' }).click();
-  await expect(pageA).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
+  // pelo campo da lista, no formato do Viajei (fase 17)
+  await novaViagem(pageA, { nome: nome, inicio: today(), fim: today(1) });
   const tripUrl = pageA.url().replace(/\/detalhes$/, '');
 
   await pageA.getByRole('link', { name: 'Editar roteiro' }).click();

@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { IMPORT_MAX_CHARS } from '@shared/import-protocol.ts';
 import { db } from '@/lib/db/schema.ts';
+import type { NewTripDraft } from './new-trip.ts';
 import type { Review } from './plan.ts';
 
 /**
@@ -14,14 +14,24 @@ export const draftKeys = {
   review: (tripId: string) => `import:review:${tripId}`,
 };
 
+/**
+ * A viagem que ainda não existe (fase 17): o campo da lista e a tela de `/viagens/nova` guardam o
+ * texto e a revisão por esta chave, no lugar do id da viagem. A viagem só nasce ao salvar a revisão.
+ */
+export const NEW_TRIP_KEY = 'nova';
+
 /** A revisão guardada: o que a pessoa já decidiu, e de qual leitura veio (o id em `ai_imports`). */
 export type StoredReview = {
   review: Review;
-  /** null no carregador do exemplo ou quando o `start` não chegou */
+  /** null no carregador do exemplo, no formato do Viajei, ou quando o `start` não chegou */
   importId: string | null;
   /** a leitura parou antes do fim (`truncated`, ou a conexão caiu): só o que chegou inteiro */
   partial: boolean;
   saved_at: string;
+  /** a viagem nova: o cabeçalho que a revisão mostra e o que foi proposta (null numa viagem que existe) */
+  newTrip: NewTripDraft | null;
+  /** quem leu: a IA (`ai`) ou o aparelho, pelo formato do Viajei (`user`); vai para `stops.source` */
+  source: 'ai' | 'user';
 };
 
 // A forma mínima para confiar no que voltou do disco: uma versão antiga do app, ou um valor que não
@@ -39,6 +49,15 @@ const storedSchema = z.object({
   importId: z.string().nullable(),
   partial: z.boolean(),
   saved_at: z.string(),
+  newTrip: z
+    .object({
+      header: z.object({ name: z.string(), start_date: z.string(), end_date: z.string() }),
+      asked: z.object({ name: z.boolean(), dates: z.boolean(), origin: z.boolean() }),
+      originProposal: z.string().nullable(),
+    })
+    .nullable()
+    .optional(),
+  source: z.enum(['ai', 'user']).optional(),
 });
 
 /** O valor guardado como revisão, ou null se não for uma (formato antigo, JSON quebrado). */
@@ -50,13 +69,23 @@ export function parseStoredReview(value: string | undefined): StoredReview | nul
   } catch {
     return null;
   }
-  // a validação é da forma; o conteúdo é o que o próprio app gravou
-  return storedSchema.safeParse(json).success ? (json as StoredReview) : null;
+  // a validação é da forma; o conteúdo é o que o próprio app gravou. A revisão guardada antes da
+  // fase 17 não tem a viagem nova nem a origem da leitura: era sempre uma viagem que existia, lida
+  // com a IA
+  if (!storedSchema.safeParse(json).success) return null;
+  const stored = json as Partial<StoredReview> & Omit<StoredReview, 'newTrip' | 'source'>;
+  return { ...stored, newTrip: stored.newTrip ?? null, source: stored.source ?? 'ai' };
 }
 
-/** O texto como fica guardado: no máximo o que a função aceita (o contador já não deixa passar). */
+/**
+ * O maior texto guardado: o formato do Viajei de uma viagem longa passa dos 30.000 caracteres que a
+ * IA lê, e é lido no aparelho (fase 17). A leitura com a IA continua recusando acima do limite dela.
+ */
+export const DRAFT_MAX_CHARS = 200_000;
+
+/** O texto como fica guardado: no máximo `DRAFT_MAX_CHARS`. */
 export function clampDraft(text: string): string {
-  return text.length > IMPORT_MAX_CHARS ? text.slice(0, IMPORT_MAX_CHARS) : text;
+  return text.length > DRAFT_MAX_CHARS ? text.slice(0, DRAFT_MAX_CHARS) : text;
 }
 
 export async function loadDraft(tripId: string): Promise<string> {

@@ -4,7 +4,9 @@ import { IMPORT_MAX_CHARS } from '@shared/import-protocol.ts';
 import { Button } from '@/components/ui/Button.tsx';
 import { Card } from '@/components/ui/Card.tsx';
 import { cx } from '@/lib/cx.ts';
+import { looksLikeViajei, type FormatError } from '../format.ts';
 import { charCount, quotaHint, type ErrorCopy } from '../messages.ts';
+import { FormatErrors } from './FormatErrors.tsx';
 
 type Props = {
   text: string;
@@ -12,9 +14,12 @@ type Props = {
   online: boolean;
   remaining: number | null;
   error: ErrorCopy | null;
+  /** o formato do Viajei com linhas que não deu para ler (fase 17) */
+  formatErrors: readonly FormatError[] | null;
   /** o que chegou antes do corte dá para revisar */
   canReviewPartial: boolean;
   onRead: () => void;
+  onReadWithAi: () => void;
   onReviewPartial: () => void;
   onDismiss: () => void;
 };
@@ -26,14 +31,18 @@ export function ComposeStep({
   online,
   remaining,
   error,
+  formatErrors,
   canReviewPartial,
   onRead,
+  onReadWithAi,
   onReviewPartial,
   onDismiss,
 }: Props) {
   const fieldId = useId();
   const counterId = `${fieldId}-count`;
-  const tooLong = text.length > IMPORT_MAX_CHARS;
+  // o formato do Viajei é lido aqui, sem IA nem rede, e sem o limite da IA (fase 17)
+  const local = looksLikeViajei(text);
+  const tooLong = !local && text.length > IMPORT_MAX_CHARS;
   const empty = text.trim() === '';
   const outOfReads = remaining === 0;
   const hint = quotaHint(remaining);
@@ -55,6 +64,10 @@ export function ComposeStep({
             </Button>
           </div>
         </Card>
+      ) : null}
+
+      {formatErrors ? (
+        <FormatErrors errors={formatErrors} online={online} onReadWithAi={onReadWithAi} />
       ) : null}
 
       <div className="grid gap-1.5">
@@ -93,13 +106,14 @@ export function ComposeStep({
       <p className="flex gap-2 text-[14px] text-ink-2">
         <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
         <span>
-          O texto vai para a IA da Anthropic, que monta o roteiro. Nada entra na viagem sem você
-          revisar.
+          {local
+            ? 'Está no formato do Viajei: é lido aqui mesmo, sem IA e sem internet. Nada entra na viagem sem você revisar.'
+            : 'O texto vai para a IA da Anthropic, que monta o roteiro. Nada entra na viagem sem você revisar.'}
         </span>
       </p>
 
-      <Button onClick={onRead} disabled={!online || empty || tooLong || outOfReads}>
-        {online ? (
+      <Button onClick={onRead} disabled={empty || tooLong || (!local && (!online || outOfReads))}>
+        {online || local ? (
           <>
             <Sparkles className="size-5" aria-hidden="true" />
             Ler o roteiro
@@ -111,7 +125,7 @@ export function ComposeStep({
           </>
         )}
       </Button>
-      {!online ? (
+      {!online && !local ? (
         <p className="-mt-2 text-center text-[14px] text-ink-2">
           O texto fica guardado aqui até a rede voltar.
         </p>

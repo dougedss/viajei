@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { novaViagem } from './helpers/app.ts';
 import { dateInSaoPaulo } from './helpers/dates.ts';
 import { linhas } from './helpers/db.ts';
 import { importInSteps, importSse, nominatimLocal, seedText } from './helpers/import.ts';
@@ -14,13 +15,13 @@ async function entrar(page: Page) {
   await expect(page.getByRole('heading', { name: 'Suas viagens' })).toBeVisible();
 }
 
-/** A viagem nasce pelo "Criar e colar roteiro" e cai direto na tela de colar. */
+/**
+ * A viagem nasce pelo campo da lista (fase 17), vazia, e "Colar roteiro" de Detalhes abre a tela de
+ * colar: a importação numa viagem que já existe, que acrescenta e nunca apaga.
+ */
 async function criarEColar(page: Page, nome: string): Promise<string> {
-  await page.getByRole('link', { name: 'Nova viagem' }).first().click();
-  await page.getByLabel('Nome da viagem').fill(nome);
-  await page.getByRole('textbox', { name: 'Início' }).fill(DATES[0] ?? '');
-  await page.getByRole('textbox', { name: 'Fim' }).fill(DATES[3] ?? '');
-  await page.getByRole('button', { name: 'Criar e colar roteiro' }).click();
+  await novaViagem(page, { nome, inicio: DATES[0] ?? '', fim: DATES[3] ?? '' });
+  await page.getByRole('link', { name: 'Colar roteiro' }).click();
   await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/importar$/);
   await expect(page.getByRole('heading', { name: 'Colar roteiro', exact: true })).toBeVisible();
   return page.url().split('/').at(-2) ?? '';

@@ -10,6 +10,8 @@ import {
   type PreviewStop,
 } from './preview.ts';
 
+const NO_TRIP = { name: null, start_date: null, end_date: null, origin: null, budget: null };
+
 const JSON_TEXT = seedAiJson();
 const DATA = fromAi(JSON.parse(JSON_TEXT));
 const IMPORT_ID = 'c0ffee00-0000-4000-8000-000000000001';
@@ -78,10 +80,26 @@ describe('o preview enquanto o JSON chega', () => {
       session = reduceImport(session, {
         type: 'done',
         data: DATA,
+        trip: { ...NO_TRIP, name: 'RS' },
         model: 'claude-sonnet-5-5',
         usage: { input_tokens: 4100, output_tokens: 2300 },
       });
-      expect(session.phase).toEqual({ kind: 'review', data: DATA, id: IMPORT_ID });
+      // o cabeçalho da viagem (fase 17) chega junto; um que não confere vira "não disse"
+      expect(session.phase).toEqual({
+        kind: 'review',
+        data: DATA,
+        trip: { ...NO_TRIP, name: 'RS' },
+        id: IMPORT_ID,
+      });
+      expect(
+        reduceImport(session, {
+          type: 'done',
+          data: DATA,
+          trip: { name: 3 },
+          model: 'x',
+          usage: { input_tokens: 0, output_tokens: 0 },
+        }).phase,
+      ).toMatchObject({ trip: NO_TRIP });
     });
   }
 

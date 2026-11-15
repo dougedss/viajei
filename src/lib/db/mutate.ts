@@ -74,11 +74,16 @@ type PatchChanges<T extends SyncTable> = Partial<
   Omit<RowOf<T>, 'id' | 'synced_at' | 'created_at' | 'updated_at'>
 >;
 
-/** Uma escrita de um lote (`mutate.batch`), tipada pela tabela. */
+/**
+ * Uma escrita de um lote (`mutate.batch`), tipada pela tabela. `project` é a projeção local de uma
+ * linha que o servidor deriva sozinho (como `mutate.project`), na mesma transação: a viagem nova do
+ * campo (fase 17) nasce com o dono, os avisos e o roteiro de uma vez, ou não nasce.
+ */
 export type BatchWrite = {
   [T in SyncTable]:
     | { kind: 'insert'; table: T; row: InsertRow<T> }
-    | { kind: 'patch'; table: T; id: string; changes: PatchChanges<T> };
+    | { kind: 'patch'; table: T; id: string; changes: PatchChanges<T> }
+    | { kind: 'project'; table: T; row: InsertRow<T> };
 }[SyncTable];
 
 /** As duas escritas, para rodar dentro de uma transação que já inclui a tabela e a outbox. */
@@ -157,6 +162,9 @@ export const mutate = {
       for (const w of writes) {
         if (w.kind === 'insert') {
           await putInsert(w.table, w.row, now);
+          wrote.add(w.table);
+        } else if (w.kind === 'project') {
+          await tableOf(w.table).put({ ...w.row, synced_at: null });
           wrote.add(w.table);
         } else if (await putPatch(w.table, w.id, w.changes, now)) wrote.add(w.table);
       }

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { novaViagem } from './helpers/app.ts';
 import { dateInSaoPaulo } from './helpers/dates.ts';
 
 const SENHA = 'viajei123';
@@ -16,17 +17,15 @@ async function entrar(page: Page, email: string) {
   await expect(page.getByRole('heading', { name: 'Suas viagens' })).toBeVisible();
 }
 
+/** Pelo campo da lista, no formato do Viajei (fase 17): sem rede também, sem IA. */
 async function criarViagem(page: Page, nome: string) {
-  await page.getByRole('link', { name: 'Nova viagem' }).first().click();
-  await page.getByLabel('Nome da viagem').fill(nome);
-  // "Início" também é o rótulo do link do cabeçalho: mira o campo de data
-  await page.getByRole('textbox', { name: 'Início' }).fill(INICIO);
-  await page.getByRole('textbox', { name: 'Fim' }).fill(FIM);
-  await page.getByLabel('Origem').fill('Papanduva/SC');
-  await page.getByLabel('Orçamento').fill('3.000,00');
-  await page.getByRole('button', { name: 'Criar viagem' }).click();
-  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
-  await expect(page.getByRole('heading', { name: nome })).toBeVisible();
+  await novaViagem(page, {
+    nome,
+    inicio: INICIO,
+    fim: FIM,
+    origem: 'Papanduva/SC',
+    orcamento: '3.000,00',
+  });
 }
 
 test('cria uma viagem sem sinal, fica pendente, e sincroniza quando a rede volta', async ({

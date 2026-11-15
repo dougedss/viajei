@@ -86,12 +86,33 @@ export function neutralizeTags(text: string): string {
   );
 }
 
-/** A mensagem do usuário: o contexto da viagem e o texto colado, cada um na sua tag. */
+/** "2026-11-15 domingo": a data em São Paulo com o dia da semana. */
+function dayIn(now: Date, plusDays = 0): string {
+  const date = todayInSaoPaulo.format(new Date(now.getTime() + plusDays * 86_400_000));
+  return `${date} ${weekday.format(new Date(`${date}T12:00:00Z`))}`;
+}
+
+/**
+ * A mensagem do usuário: o contexto da viagem e o texto colado, cada um na sua tag. Na viagem nova
+ * (fase 17), o bloco <viagem> diz isso e dá hoje e amanhã: o nome, as datas e a origem saem do texto.
+ */
 export function buildImportMessage(
   trip: ImportRequest['trip'],
   text: string,
   now: Date = new Date(),
 ): string {
+  if (!trip) {
+    return [
+      '<viagem>',
+      'viagem nova: o nome, as datas e a origem saem do texto',
+      `hoje: ${dayIn(now)}`,
+      `amanhã: ${dayIn(now, 1)}`,
+      '</viagem>',
+      '<roteiro>',
+      neutralizeTags(text),
+      '</roteiro>',
+    ].join('\n');
+  }
   const days = tripDays(trip.start_date, trip.end_date);
   return [
     '<viagem>',
@@ -123,8 +144,16 @@ export const IMPORT_SYSTEM_PROMPT = `Você lê roteiros de viagem de carro que u
 - Não há campo de coordenada: a localização é buscada depois, no aparelho.
 - Não crie dias, paradas, reservas, contatos ou itens que o texto não mencione. A exceção são as missões sugeridas, descritas abaixo.
 
+## A viagem (trip)
+- name: o nome que o texto dá à viagem (um título no começo da mensagem, "Fim de semana na serra"); sem nome escrito, vazio.
+- start_date e end_date: o período que o texto diz ("de 5 a 8/3", "de sexta a domingo"), AAAA-MM-DD, ou o primeiro e o último dia com data escrita; sem data nenhuma escrita, vazios.
+- origin: de onde o carro sai, se o texto disser ("saindo de Joinville"); senão, vazio.
+- budget: o orçamento total da viagem em reais, como número, se o texto disser; senão, null.
+- Numa viagem que já existe (o bloco <viagem> traz o nome e o período), copie dele o nome, as datas e a origem.
+
 ## Datas
 - Resolva as datas pelo bloco <viagem> (nome, início e fim, origem, os dias da semana de cada data): "sexta", "no dia seguinte", "dia 13", "13/12", "segundo dia" viram AAAA-MM-DD.
+- Numa viagem nova (o bloco <viagem> diz "viagem nova"), resolva pelo hoje e pelo amanhã dele: uma data sem ano é a próxima vez que ela acontece a partir de hoje; um dia da semana sem data é o próximo a partir de hoje; sem data nenhuma no texto, o primeiro dia é o amanhã do bloco e os outros vêm em sequência, e trip.start_date e trip.end_date ficam vazios.
 - Um item de days por data, em ordem, só com as datas que têm paradas.
 - Se o texto der uma data fora do período da viagem, mantenha a data do texto: a pessoa decide na revisão.
 - Uma parada sem data que dê para resolver vai para o dia em que o texto a coloca; se não houver nenhum, vai para unclassified.

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { novaViagem } from './helpers/app.ts';
 import { dateInSaoPaulo } from './helpers/dates.ts';
 import { linhas } from './helpers/db.ts';
 import { criarUsuarioDescartavel, SENHA } from './helpers/users.ts';
@@ -15,14 +16,7 @@ async function criarViagem(
   page: Page,
   dados: { nome: string; inicio: number; fim: number; orcamento?: string },
 ): Promise<string> {
-  await page.goto('/viagens/nova');
-  await page.getByLabel('Nome da viagem').fill(`${dados.nome} ${Date.now()}`);
-  await page.getByRole('textbox', { name: 'Início' }).fill(dateInSaoPaulo(dados.inicio));
-  await page.getByRole('textbox', { name: 'Fim' }).fill(dateInSaoPaulo(dados.fim));
-  if (dados.orcamento) await page.getByLabel('Orçamento').fill(dados.orcamento);
-  await page.getByRole('button', { name: 'Criar viagem' }).click();
-  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
-  return page.url().replace(/\/detalhes$/, '');
+  return novaViagem(page, { ...dados, nome: `${dados.nome} ${Date.now()}` });
 }
 
 async function adicionarParada(page: Page, dados: { tipo: string; nome: string; horario: string }) {

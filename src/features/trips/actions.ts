@@ -1,52 +1,66 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { checkDays, DaysBlockedError, syncDays } from '@/features/itinerary/actions.ts';
-import { bornPrefs } from '@/features/notifications/prefs.ts';
-import { mutate } from '@/lib/db/mutate.ts';
-import { db } from '@/lib/db/schema.ts';
+import { bornPrefs, bornPrefsRow } from '@/features/notifications/prefs.ts';
+import { mutate, type BatchWrite } from '@/lib/db/mutate.ts';
+import { db, type Trip } from '@/lib/db/schema.ts';
 import { syncEngine } from '@/lib/db/sync/engine.ts';
-import { uuidV4, uuidV5 } from '@/lib/ids/uuid.ts';
+import { uuidV5 } from '@/lib/ids/uuid.ts';
 import { supabase } from '@/lib/supabase/client.ts';
 import { useSession } from '@/lib/supabase/session.ts';
 import { invitesKeys } from './queries.ts';
 import type { TripFormValues } from './schemas.ts';
 
+/** O que a viagem nova leva de saída: o cabeçalho que a revisão do campo decidiu (fase 17). */
+export type NewTripValues = Pick<
+  Trip,
+  'name' | 'start_date' | 'end_date' | 'origin' | 'budget' | 'notes'
+>;
+
 /**
- * Cria a viagem no Dexie e enfileira; o dono entra em trip_members como projeção local (o servidor
- * o cria por trigger e o pull confirma). Os avisos dela nascem com os padrões do Perfil (fase 16).
- * Funciona sem sinal e devolve o id na hora.
+ * As escritas da viagem nova, para o lote que também grava o roteiro dela (`saveNewTrip`): a viagem,
+ * o dono em trip_members como projeção local (o servidor o cria por trigger e o pull confirma) e os
+ * avisos com os padrões do Perfil (fase 16). Não grava nada: quem grava é o lote, inteiro ou nada.
+ * Funciona sem sinal.
  */
-export async function createTrip(values: TripFormValues, uid: string): Promise<string> {
-  const id = uuidV4();
-  const now = new Date().toISOString();
-  await mutate.insert('trips', {
-    id,
-    owner_id: uid,
-    name: values.name,
-    start_date: values.start_date,
-    end_date: values.end_date,
-    origin: values.origin,
-    budget: values.budget,
-    notes: values.notes,
-    created_at: now,
-    updated_at: now,
-    deleted_at: null,
-  });
-  await mutate.project('trip_members', {
-    id: await uuidV5(id, 'owner'),
-    trip_id: id,
-    user_id: uid,
-    invited_email: null,
-    role: 'owner',
-    status: 'accepted',
-    invited_by: uid,
-    share_position: true,
-    created_at: now,
-    updated_at: now,
-    deleted_at: null,
-  });
-  await syncDays(id, values); // um dia por data, id determinístico
-  await bornPrefs(uid, id);
-  return id;
+export async function newTripWrites(
+  values: NewTripValues,
+  uid: string,
+  id: string,
+  now: string,
+): Promise<BatchWrite[]> {
+  const prefs = await bornPrefsRow(uid, id, now);
+  return [
+    {
+      kind: 'insert',
+      table: 'trips',
+      row: {
+        id,
+        owner_id: uid,
+        ...values,
+        created_at: now,
+        updated_at: now,
+        deleted_at: null,
+      },
+    },
+    {
+      kind: 'project',
+      table: 'trip_members',
+      row: {
+        id: await uuidV5(id, 'owner'),
+        trip_id: id,
+        user_id: uid,
+        invited_email: null,
+        role: 'owner',
+        status: 'accepted',
+        invited_by: uid,
+        share_position: true,
+        created_at: now,
+        updated_at: now,
+        deleted_at: null,
+      },
+    },
+    ...(prefs ? [{ kind: 'insert', table: 'notification_prefs', row: prefs } as const] : []),
+  ];
 }
 
 /**

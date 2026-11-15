@@ -35,6 +35,11 @@ type Props = {
   /** paradas que já existiam no roteiro, por data */
   existingByDate: Readonly<Record<string, number>>;
   saving: boolean;
+  /**
+   * A viagem nova (fase 17): o cartão do cabeçalho no topo, o botão "Criar a viagem", e ela pode nascer
+   * só com o nome e as datas; `blocked` quando o cabeçalho ainda não dá (o nome vazio).
+   */
+  creating?: { top: ReactNode; blocked: boolean } | undefined;
   onChange: (change: (review: Review) => Review) => void;
   onEditStop: (key: string) => void;
   onChoose: (key: string) => void;
@@ -169,6 +174,7 @@ export function ReviewStep({
   geo,
   existingByDate,
   saving,
+  creating,
   onChange,
   onEditStop,
   onChoose,
@@ -190,10 +196,18 @@ export function ReviewStep({
     counts.quests > 0 ? plural(counts.quests, 'missão', 'missões') : null,
   ].filter(Boolean);
 
+  const something =
+    counts.stops + counts.reservations + counts.contacts + counts.before + counts.pack > 0 ||
+    counts.quests > 0;
+  const savable = creating ? !creating.blocked && warnings.undecided === 0 : canSave(review);
+
   return (
     <div className="grid gap-5">
+      {creating?.top}
       <div className="grid gap-2">
-        <p className="font-num text-[20px] font-semibold">{summary.join(' · ')}</p>
+        {something || !creating ? (
+          <p className="font-num text-[20px] font-semibold">{summary.join(' · ')}</p>
+        ) : null}
         {partial ? (
           <p className="text-[15px] text-ink-2">
             A leitura parou antes do fim: aqui está só o que chegou inteiro.
@@ -421,13 +435,15 @@ export function ReviewStep({
       ) : null}
 
       <div className="grid gap-2">
-        <Button loading={saving} disabled={!canSave(review)} onClick={onSave}>
-          Salvar na viagem
+        <Button loading={saving} disabled={!savable} onClick={onSave}>
+          {creating ? 'Criar a viagem' : 'Salvar na viagem'}
         </Button>
         <p className="text-center text-[14px] text-ink-2">
           {warnings.undecided > 0
             ? `Falta decidir ${plural(warnings.undecided, 'não classificado', 'não classificados')}.`
-            : 'Acrescenta ao roteiro; nada do que já existe é apagado.'}
+            : creating
+              ? 'A viagem nasce agora, com o que está marcado, e fica guardada neste celular.'
+              : 'Acrescenta ao roteiro; nada do que já existe é apagado.'}
         </p>
         <Button variant="ghost" size="md" onClick={() => setConfirmDiscard(true)}>
           Descartar esta leitura
@@ -438,7 +454,11 @@ export function ReviewStep({
         open={confirmDiscard}
         onClose={() => setConfirmDiscard(false)}
         title="Descartar a leitura?"
-        description="Nada entra na viagem. O texto colado continua guardado para ler de novo."
+        description={
+          creating
+            ? 'A viagem não é criada. O texto continua guardado no campo, para ler de novo.'
+            : 'Nada entra na viagem. O texto colado continua guardado para ler de novo.'
+        }
       >
         <Button
           variant="danger"

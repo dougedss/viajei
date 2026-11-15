@@ -62,6 +62,14 @@ const stop = object({
   url: text,
 });
 const expected = object({
+  // o cabeçalho da viagem (fase 17), primeiro: a viagem nova do campo nasce dele
+  trip: object({
+    name: text,
+    start_date: date,
+    end_date: date,
+    origin: text,
+    budget: or({ type: 'number' }),
+  }),
   days: list(object({ date, title: text, stops: list(stop) })),
   reservations: list(
     object({
@@ -176,6 +184,23 @@ describe('a mensagem da IA', () => {
         '</roteiro>',
       ].join('\n'),
     );
+  });
+
+  it('na viagem nova, o bloco <viagem> diz isso e dá hoje e amanhã, com o dia da semana', () => {
+    const message = buildImportMessage(null, 'sábado 9h café', new Date('2026-11-15T13:00:00Z'));
+    expect(message).toBe(
+      [
+        '<viagem>',
+        'viagem nova: o nome, as datas e a origem saem do texto',
+        'hoje: 2026-11-15 domingo',
+        'amanhã: 2026-11-16 segunda-feira',
+        '</viagem>',
+        '<roteiro>',
+        'sábado 9h café',
+        '</roteiro>',
+      ].join('\n'),
+    );
+    expect(IMPORT_SYSTEM_PROMPT).toContain('viagem nova');
   });
 
   it('um roteiro não fecha a própria tag nem abre outra', () => {

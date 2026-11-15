@@ -5,8 +5,10 @@ import { makeTrip, TRIP_ID } from '@/test/factories.ts';
 import {
   clampDraft,
   clearImport,
+  DRAFT_MAX_CHARS,
   clearReview,
   draftKeys,
+  NEW_TRIP_KEY,
   loadDraft,
   loadReview,
   parseStoredReview,
@@ -31,7 +33,14 @@ function stored(): StoredReview {
     },
     { trip: makeTrip(), days: [], stops: [], reservations: [], contacts: [], items: [] },
   );
-  return { review, importId: null, partial: false, saved_at: '2026-11-20T12:00:00.000Z' };
+  return {
+    review,
+    importId: null,
+    partial: false,
+    saved_at: '2026-11-20T12:00:00.000Z',
+    newTrip: null,
+    source: 'ai',
+  };
 }
 
 beforeEach(async () => {
@@ -53,11 +62,13 @@ describe('o rascunho da importação', () => {
     expect(window.localStorage.length).toBe(0);
   });
 
-  it('apagar o texto apaga o rascunho; acima do limite guarda só o que a leitura aceita', async () => {
+  it('apagar o texto apaga o rascunho; o formato de uma viagem longa cabe, até o limite do rascunho', async () => {
     await saveDraft(TRIP_ID, 'algo');
     await saveDraft(TRIP_ID, '');
     expect(await db.sync_state.get(draftKeys.text(TRIP_ID))).toBeUndefined();
-    expect(clampDraft('x'.repeat(IMPORT_MAX_CHARS + 10))).toHaveLength(IMPORT_MAX_CHARS);
+    // acima do que a IA lê (o formato do Viajei é lido no aparelho, fase 17)
+    expect(clampDraft('x'.repeat(IMPORT_MAX_CHARS + 10))).toHaveLength(IMPORT_MAX_CHARS + 10);
+    expect(clampDraft('x'.repeat(DRAFT_MAX_CHARS + 10))).toHaveLength(DRAFT_MAX_CHARS);
   });
 
   it('a revisão em andamento volta igual depois de fechar o app', async () => {
@@ -82,5 +93,35 @@ describe('o rascunho da importação', () => {
     expect(parseStoredReview('{')).toBeNull();
     expect(parseStoredReview(JSON.stringify({ review: { days: 'x' } }))).toBeNull();
     expect(parseStoredReview(JSON.stringify(stored()))).toEqual(stored());
+  });
+
+  it('a revisão guardada antes da fase 17 era de uma viagem que existia, lida com a IA', () => {
+    const old: Partial<StoredReview> = stored();
+    delete old.newTrip;
+    delete old.source;
+    expect(parseStoredReview(JSON.stringify(old))).toEqual(stored());
+  });
+
+  it('a viagem nova guarda o texto e a revisão pela chave dela, com o cabeçalho (fase 17)', async () => {
+    const draft = {
+      ...stored(),
+      source: 'user' as const,
+      newTrip: {
+        header: {
+          name: 'Serra',
+          start_date: '2026-12-11',
+          end_date: '2026-12-14',
+          origin: null,
+          budget: null,
+        },
+        asked: { name: false, dates: false, origin: true },
+        originProposal: 'Papanduva/SC',
+      },
+    };
+    await saveDraft(NEW_TRIP_KEY, 'viajei/1\n# Serra');
+    await saveReview(NEW_TRIP_KEY, draft);
+    expect(await loadReview(NEW_TRIP_KEY)).toEqual(draft);
+    expect(await loadDraft(NEW_TRIP_KEY)).toBe('viajei/1\n# Serra');
+    expect(await loadReview(TRIP_ID)).toBeNull();
   });
 });

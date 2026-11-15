@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { novaViagem as pelaLista } from './helpers/app.ts';
 import { dateInSaoPaulo } from './helpers/dates.ts';
 import { inserir, linhas } from './helpers/db.ts';
 import { uuidV4, uuidV5 } from './helpers/ids.ts';
@@ -17,13 +18,8 @@ async function entrar(page: Page, email: string) {
 /** Uma viagem 30 dias à frente (D33); devolve a URL e o nome. */
 async function novaViagem(page: Page): Promise<{ url: string; nome: string }> {
   const nome = `Garagem ${Date.now()}`;
-  await page.goto('/viagens/nova');
-  await page.getByLabel('Nome da viagem').fill(nome);
-  await page.getByRole('textbox', { name: 'Início' }).fill(dateInSaoPaulo(30));
-  await page.getByRole('textbox', { name: 'Fim' }).fill(dateInSaoPaulo(31));
-  await page.getByRole('button', { name: 'Criar viagem' }).click();
-  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
-  return { url: page.url().replace(/\/detalhes$/, ''), nome };
+  const url = await pelaLista(page, { nome, inicio: 30, fim: 31 });
+  return { url, nome };
 }
 
 const swatch = (page: Page, nome: string) =>

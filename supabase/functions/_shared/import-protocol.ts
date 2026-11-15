@@ -26,15 +26,21 @@ export type ImportVariant = (typeof IMPORT_VARIANT_KEYS)[number];
 const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const importRequestSchema = z.object({
-  trip_id: z.uuid(),
+  /** null na viagem que ainda não existe (o campo da lista, fase 17): ela nasce ao salvar a revisão */
+  trip_id: z.uuid().nullable(),
   text: z.string().min(1),
-  /** o contexto que resolve as datas relativas; vem do aparelho, que pode ter edição não enviada */
-  trip: z.object({
-    name: z.string().min(1).max(120),
-    start_date: dateString,
-    end_date: dateString,
-    origin: z.string().max(200).nullable(),
-  }),
+  /**
+   * o contexto que resolve as datas relativas; vem do aparelho, que pode ter edição não enviada. Na
+   * viagem nova, null: o nome, as datas e a origem saem do texto
+   */
+  trip: z
+    .object({
+      name: z.string().min(1).max(120),
+      start_date: dateString,
+      end_date: dateString,
+      origin: z.string().max(200).nullable(),
+    })
+    .nullable(),
   variant: z.enum(IMPORT_VARIANT_KEYS).optional(),
 });
 export type ImportRequest = z.infer<typeof importRequestSchema>;
@@ -73,8 +79,17 @@ export const importEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('start'), id: z.uuid(), model: z.string() }),
   /** mais um pedaço do JSON, na ordem em que a IA escreve */
   z.object({ type: z.literal('delta'), text: z.string() }),
-  /** o resultado validado no servidor por `validateImport` (o app valida de novo) */
-  z.object({ type: z.literal('done'), data: z.unknown(), model: z.string(), usage: usageSchema }),
+  /**
+   * o resultado validado no servidor por `validateImport` (o app valida de novo) e o cabeçalho da
+   * viagem que o texto deu (fase 17: a viagem nova nasce dele)
+   */
+  z.object({
+    type: z.literal('done'),
+    data: z.unknown(),
+    trip: z.unknown().optional(),
+    model: z.string(),
+    usage: usageSchema,
+  }),
   z.object({
     type: z.literal('error'),
     code: z.enum(IMPORT_ERROR_CODES),

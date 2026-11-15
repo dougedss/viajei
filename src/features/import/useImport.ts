@@ -2,7 +2,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { IMPORT_DAILY_LIMIT, IMPORT_FN, IMPORT_MAX_CHARS } from '@shared/import-protocol.ts';
 import type { ImportEvent } from '@shared/import-protocol.ts';
-import type { ImportData } from '@shared/import-schema.ts';
+import type { ImportData, ImportTripHeader } from '@shared/import-schema.ts';
+import { todayISO } from '@/features/trips/rules.ts';
 import { useOnline } from '@/lib/db/connectivity.ts';
 import type { Trip } from '@/lib/db/schema.ts';
 import { supabase } from '@/lib/supabase/client.ts';
@@ -12,25 +13,33 @@ import {
   clearReview,
   loadDraft,
   loadReview,
+  NEW_TRIP_KEY,
   saveDraft,
   saveReview,
   type StoredReview,
 } from './draft.ts';
+import { looksLikeViajei, readViajei, type FormatError } from './format.ts';
 import { applyGeo } from './geocode.ts';
+import { newTripReview } from './new-review.ts';
 import { reviewOf, type ImportPlan, type Review } from './plan.ts';
 import {
   EMPTY_PREVIEW,
   failWith,
   IDLE,
-  partialImport,
+  partialImportWithTrip,
   previewOf,
   reduceImport,
   type ImportSession,
   type Preview,
 } from './preview.ts';
-import { readExisting, saveImport } from './save.ts';
+import { readExisting, saveImport, saveNewTrip } from './save.ts';
 
 export type ImportTrip = Pick<Trip, 'id' | 'name' | 'start_date' | 'end_date' | 'origin'>;
+/**
+ * O que a importação alimenta: uma viagem que existe (`/viagens/:id/importar`), ou a viagem nova do
+ * campo da lista (`/viagens/nova`, fase 17), que só nasce ao salvar a revisão.
+ */
+export type ImportTarget = { kind: 'trip'; trip: ImportTrip } | { kind: 'new' };
 
 type View = { session: ImportSession; preview: Preview };
 const IDLE_VIEW: View = { session: IDLE, preview: EMPTY_PREVIEW };
@@ -54,19 +63,30 @@ function useImportQuota(enabled: boolean) {
   });
 }
 
+/** O que o "Salvar" fez: a viagem (a nova, ou a mesma), o plano gravado e, na nova, as datas dela. */
+export type SaveResult = {
+  tripId: string;
+  plan: ImportPlan;
+  range: { start_date: string; end_date: string } | null;
+};
+
 /**
- * A importação de uma viagem, do texto colado à revisão salva. O rascunho e a revisão moram no
- * aparelho (`draft.ts`); a leitura é um stream da função, e o preview é refeito do JSON acumulado no
- * máximo uma vez por quadro. Nada é salvo na viagem sem `save`, que passa pela outbox.
+ * A importação, do texto colado à revisão salva. O rascunho e a revisão moram no aparelho
+ * (`draft.ts`), pela viagem ou pela chave da viagem nova. O formato do Viajei é lido aqui, sem rede e
+ * sem IA; o resto é um stream da função, e o preview é refeito do JSON acumulado no máximo uma vez por
+ * quadro. Nada é salvo sem `save`, que passa pela outbox (e, na viagem nova, cria a viagem junto).
  */
-export function useImport(trip: ImportTrip | null, uid: string | null) {
-  const tripId = trip?.id ?? null;
+export function useImport(target: ImportTarget | null, uid: string | null) {
+  const trip = target?.kind === 'trip' ? target.trip : null;
+  const key = target === null ? null : (trip?.id ?? NEW_TRIP_KEY);
   const online = useOnline();
   const queryClient = useQueryClient();
   const [loaded, setLoaded] = useState(false);
   const [text, setTextState] = useState('');
   const [view, setView] = useState<View>(IDLE_VIEW);
   const [stored, setStored] = useState<StoredReview | null>(null);
+  /** o texto parece o formato do Viajei, e uma linha não deu para ler: as linhas e o porquê */
+  const [formatErrors, setFormatErrors] = useState<FormatError[] | null>(null);
   const quota = useImportQuota(online && loaded && stored === null);
 
   // a sessão viva fica num ref: os eventos chegam fora do render, e o render lê o espelho em `view`
@@ -78,11 +98,11 @@ export function useImport(trip: ImportTrip | null, uid: string | null) {
   /** o registro da leitura em andamento (o `start`), que a revisão guarda */
   const importId = useRef<string | null>(null);
 
-  // o rascunho e a revisão guardados, ao abrir a viagem
+  // o rascunho e a revisão guardados, ao abrir
   useEffect(() => {
-    if (!tripId) return;
+    if (!key) return;
     let alive = true;
-    void Promise.all([loadDraft(tripId), loadReview(tripId)]).then(([draft, review]) => {
+    void Promise.all([loadDraft(key), loadReview(key)]).then(([draft, review]) => {
       if (!alive) return;
       latestText.current = draft;
       setTextState(draft);
@@ -92,22 +112,30 @@ export function useImport(trip: ImportTrip | null, uid: string | null) {
     return () => {
       alive = false;
     };
-  }, [tripId]);
+  }, [key]);
 
   // o texto vai para o aparelho numa pausa da digitação, e ao sair da tela
   useEffect(() => {
-    if (!tripId || !loaded) return;
-    const t = setTimeout(() => void saveDraft(tripId, text), 300);
+    if (!key || !loaded) return;
+    const t = setTimeout(() => void saveDraft(key, text), 300);
     return () => clearTimeout(t);
-  }, [tripId, loaded, text]);
+  }, [key, loaded, text]);
+  // sair da tela cancela a leitura. O StrictMode do desenvolvimento desmonta e remonta na hora (a
+  // leitura que a tela da viagem nova começa sozinha seria cortada): só cancela se não voltou
+  const mounted = useRef(false);
   useEffect(() => {
-    if (!tripId) return;
+    if (!key) return;
+    mounted.current = true;
     return () => {
-      void saveDraft(tripId, latestText.current);
-      abort.current?.abort();
-      if (frame.current !== null) cancelAnimationFrame(frame.current);
+      mounted.current = false;
+      void saveDraft(key, latestText.current);
+      setTimeout(() => {
+        if (mounted.current) return;
+        abort.current?.abort();
+        if (frame.current !== null) cancelAnimationFrame(frame.current);
+      }, 0);
     };
-  }, [tripId]);
+  }, [key]);
 
   const publish = (next: ImportSession) => {
     live.current = next;
@@ -127,13 +155,29 @@ export function useImport(trip: ImportTrip | null, uid: string | null) {
 
   const keep = async (next: StoredReview) => {
     setStored(next);
-    if (tripId) await saveReview(tripId, next);
+    if (key) await saveReview(key, next);
   };
 
-  const startReview = async (data: ImportData, id: string | null, partial: boolean) => {
-    if (!trip) return;
-    const review = reviewOf(data, await readExisting(trip));
-    await keep({ review, importId: id, partial, saved_at: new Date().toISOString() });
+  /**
+   * A revisão nasce do que foi lido. Na viagem que existe, marcada contra o que ela já tem; na nova,
+   * com o cabeçalho do texto e as propostas para o que faltar (a última origem da pessoa, as datas
+   * pelos dias), contra uma viagem vazia com essas datas.
+   */
+  const startReview = async (
+    data: ImportData,
+    id: string | null,
+    partial: boolean,
+    source: 'ai' | 'user',
+    header: ImportTripHeader | null,
+  ) => {
+    const saved_at = new Date().toISOString();
+    if (trip) {
+      const review = reviewOf(data, await readExisting(trip));
+      await keep({ review, importId: id, partial, saved_at, newTrip: null, source });
+      return;
+    }
+    if (!key) return;
+    await keep(await newTripReview(data, header, { uid, source, importId: id, partial }));
   };
 
   const onEvent = (event: ImportEvent) => {
@@ -149,14 +193,32 @@ export function useImport(trip: ImportTrip | null, uid: string | null) {
     if (event.type === 'start') importId.current = event.id;
     const next = reduceImport(live.current, event);
     publish(next);
-    if (next.phase.kind === 'review') void startReview(next.phase.data, next.phase.id, false);
+    if (next.phase.kind === 'review') {
+      void startReview(next.phase.data, next.phase.id, false, 'ai', next.phase.trip);
+    }
   };
 
-  const read = async () => {
-    if (!trip || text.trim() === '' || text.length > IMPORT_MAX_CHARS) return;
+  /**
+   * Lê o texto. O formato do Viajei (ou o JSON do schema) é lido aqui mesmo, na hora e sem rede; com
+   * `{ ai: true }`, ou com outro texto, vai para a IA. Devolve se a revisão ficou pronta (o formato
+   * lido sem erro): a leitura da IA termina depois, pelos eventos.
+   */
+  const read = async (options: { ai?: boolean } = {}): Promise<boolean> => {
+    if (!key || text.trim() === '') return false;
+    setFormatErrors(null);
+    if (!options.ai && looksLikeViajei(text)) {
+      const result = readViajei(text, todayISO());
+      if (!result.ok) {
+        setFormatErrors(result.errors);
+        return false;
+      }
+      await startReview(result.doc.data, null, false, 'user', result.doc.trip);
+      return true;
+    }
+    if (text.length > IMPORT_MAX_CHARS) return false;
     if (!online) {
       publish(failWith(IDLE, 'offline'));
-      return;
+      return false;
     }
     abort.current?.abort();
     const controller = new AbortController();
@@ -167,14 +229,16 @@ export function useImport(trip: ImportTrip | null, uid: string | null) {
     try {
       await streamImport(
         {
-          trip_id: trip.id,
+          trip_id: trip?.id ?? null,
           text,
-          trip: {
-            name: trip.name,
-            start_date: trip.start_date,
-            end_date: trip.end_date,
-            origin: trip.origin,
-          },
+          trip: trip
+            ? {
+                name: trip.name,
+                start_date: trip.start_date,
+                end_date: trip.end_date,
+                origin: trip.origin,
+              }
+            : null,
         },
         controller.signal,
         onEvent,
@@ -199,6 +263,14 @@ export function useImport(trip: ImportTrip | null, uid: string | null) {
       if (abort.current === controller) abort.current = null;
       void queryClient.invalidateQueries({ queryKey: ['import-quota'] });
     }
+    return false;
+  };
+
+  const reset = () => {
+    latestText.current = '';
+    setTextState('');
+    setStored(null);
+    publish(IDLE);
   };
 
   return {
@@ -208,40 +280,65 @@ export function useImport(trip: ImportTrip | null, uid: string | null) {
     setText: (value: string) => {
       latestText.current = value;
       setTextState(value);
+      setFormatErrors(null);
+    },
+    /** o texto já no aparelho, antes de sair da tela (o campo da lista, antes de abrir `/viagens/nova`) */
+    flushDraft: async () => {
+      if (key) await saveDraft(key, latestText.current);
     },
     session: view.session,
     preview: view.preview,
     remaining: quota.data ?? null,
     stored,
+    formatErrors,
     read,
     /** a pessoa desistiu: o pedido é abortado, a função aborta a IA e registra `canceled` */
     cancel: () => abort.current?.abort(),
     /** volta ao texto, sem a mensagem de erro */
-    dismiss: () => publish(IDLE),
+    dismiss: () => {
+      setFormatErrors(null);
+      publish(IDLE);
+    },
     /** o que chegou antes de um corte, como revisão (só os itens que chegaram inteiros) */
     reviewPartial: async () => {
-      const data = partialImport(live.current.raw);
-      if (data) await startReview(data, importId.current, true);
+      const partial = partialImportWithTrip(live.current.raw);
+      if (partial) await startReview(partial.data, importId.current, true, 'ai', partial.trip);
     },
     edit: (change: (review: Review) => Review) => {
       if (!stored) return;
       void keep({ ...stored, review: change(stored.review) });
     },
+    /** uma mudança na revisão inteira (o cabeçalho da viagem nova muda as datas dos dias junto) */
+    update: (change: (stored: StoredReview) => StoredReview) => {
+      if (!stored) return;
+      void keep(change(stored));
+    },
     discard: async () => {
       setStored(null);
       publish(IDLE);
-      if (tripId) await clearReview(tripId);
+      if (key) await clearReview(key);
     },
-    /** grava na viagem a revisão com os lugares já achados, numa transação, e limpa o rascunho */
-    save: async (geo: Parameters<typeof applyGeo>[1]): Promise<ImportPlan | null> => {
-      if (!trip || !uid || !stored) return null;
-      const plan = await saveImport(applyGeo(stored.review, geo), trip, uid, 'ai');
-      await clearImport(trip.id);
-      latestText.current = '';
-      setTextState('');
-      setStored(null);
-      publish(IDLE);
-      return plan;
+    /**
+     * Grava a revisão com os lugares já achados, numa transação, e limpa o rascunho. Na viagem nova,
+     * é aqui que ela nasce: a viagem, o dono, os avisos e o roteiro, de uma vez.
+     */
+    save: async (geo: Parameters<typeof applyGeo>[1]): Promise<SaveResult | null> => {
+      if (!uid || !stored || !key) return null;
+      const review = applyGeo(stored.review, geo);
+      if (trip) {
+        const plan = await saveImport(review, trip, uid, stored.source);
+        await clearImport(trip.id);
+        reset();
+        return { tripId: trip.id, plan, range: null };
+      }
+      if (!stored.newTrip) return null;
+      const out = await saveNewTrip(review, stored.newTrip.header, uid, stored.source);
+      await clearImport(key);
+      reset();
+      return out;
     },
   };
 }
+
+/** O que a tela recebe do `useImport`. */
+export type ImportState = ReturnType<typeof useImport>;

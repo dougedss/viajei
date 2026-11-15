@@ -1,6 +1,12 @@
 import { Allow, parse as parsePartial } from 'partial-json';
 import { STOP_KIND_KEYS, type StopKind } from '@shared/constants.ts';
-import { fromAi, validateImport, type ImportData } from '@shared/import-schema.ts';
+import {
+  fromAiWithTrip,
+  importTripHeaderSchema,
+  validateImport,
+  type ImportData,
+  type ImportTripHeader,
+} from '@shared/import-schema.ts';
 import type { ImportErrorCode, ImportEvent } from '@shared/import-protocol.ts';
 
 /**
@@ -31,11 +37,13 @@ export type PreviewCounts = {
   contacts: number;
   items: number;
 };
-export type Preview = { days: PreviewDay[]; counts: PreviewCounts };
+/** `tripName`: o nome da viagem que o texto deu, assim que chega inteiro (a viagem nova, fase 17). */
+export type Preview = { days: PreviewDay[]; counts: PreviewCounts; tripName: string | null };
 
 export const EMPTY_PREVIEW: Preview = {
   days: [],
   counts: { days: 0, stops: 0, reservations: 0, contacts: 0, items: 0 },
+  tripName: null,
 };
 
 type Loose = Record<string, unknown>;
@@ -59,6 +67,7 @@ const kindOf = (v: unknown): StopKind | null =>
 
 /** As chaves do schema na ordem em que a IA as escreve: a presença de uma fecha as anteriores. */
 const TOP_ORDER = [
+  'trip',
   'days',
   'reservations',
   'contacts',
@@ -103,7 +112,9 @@ export function previewOf(raw: string, whole = false): Preview | null {
     };
   });
   const count = (key: (typeof TOP_ORDER)[number]) => arr(parsed[key]).length;
+  const trip = isLoose(parsed.trip) ? parsed.trip : null;
   return {
+    tripName: trip && (whole || closedAfter(parsed, 'trip')) ? str(trip.name) : null,
     days,
     counts: {
       days: days.filter((d) => d.date !== null).length,
@@ -121,7 +132,7 @@ export type ImportPhase =
   /** o pedido saiu; até o primeiro pedaço, "Lendo o roteiro…" */
   | { kind: 'reading'; id: string | null }
   | { kind: 'arriving'; id: string }
-  | { kind: 'review'; data: ImportData; id: string | null }
+  | { kind: 'review'; data: ImportData; trip: ImportTripHeader; id: string | null }
   | {
       kind: 'error';
       code: ImportErrorCode | 'offline';
@@ -153,9 +164,16 @@ export function reduceImport(session: ImportSession, event: ImportEvent): Import
     case 'done': {
       const id = session.phase.kind === 'arriving' ? session.phase.id : null;
       try {
-        // o servidor já validou; o app confere de novo pelo mesmo schema
+        // o servidor já validou; o app confere de novo pelo mesmo schema. O cabeçalho (fase 17) que
+        // não confere vira "não disse": a revisão pergunta
+        const trip = importTripHeaderSchema.safeParse(event.trip);
         return {
-          phase: { kind: 'review', data: validateImport(event.data), id },
+          phase: {
+            kind: 'review',
+            data: validateImport(event.data),
+            trip: trip.success ? trip.data : NO_HEADER,
+            id,
+          },
           raw: session.raw,
         };
       } catch {
@@ -176,6 +194,14 @@ export function reduceImport(session: ImportSession, event: ImportEvent): Import
   }
 }
 
+const NO_HEADER: ImportTripHeader = {
+  name: null,
+  start_date: null,
+  end_date: null,
+  origin: null,
+  budget: null,
+};
+
 export function failWith(
   session: ImportSession,
   code: ImportErrorCode | 'offline',
@@ -191,6 +217,13 @@ export function failWith(
  * É o JSON como a IA escreve: passa pela mesma volta do servidor (`fromAi`), que tira o texto vazio.
  */
 export function partialImport(raw: string): ImportData | null {
+  return partialImportWithTrip(raw)?.data ?? null;
+}
+
+/** O que chegou antes do corte, com o cabeçalho da viagem se ele chegou inteiro (a viagem nova). */
+export function partialImportWithTrip(
+  raw: string,
+): { data: ImportData; trip: ImportTripHeader } | null {
   let parsed: unknown;
   try {
     parsed = parsePartial(raw, Allow.ALL);
@@ -210,7 +243,13 @@ export function partialImport(raw: string): ImportData | null {
     // só o último dia pode sair (vazio, porque a parada dele não chegou inteira): tirar um do meio
     // mudaria o índice dos seguintes, que é a chave da revisão e da busca de lugar
     .filter((day, i, all) => day.stops.length > 0 || i < all.length - 1);
+  // o cabeçalho só conta inteiro (quando os dias já começaram); senão, vazio
+  const blankTrip = { name: '', start_date: '', end_date: '', origin: '', budget: null };
   const candidate = {
+    trip:
+      closedAfter(parsed, 'trip') && isLoose(parsed.trip)
+        ? { ...blankTrip, ...parsed.trip }
+        : blankTrip,
     days,
     reservations: closed('reservations', arr(parsed.reservations)),
     contacts: closed('contacts', arr(parsed.contacts)),
@@ -220,8 +259,17 @@ export function partialImport(raw: string): ImportData | null {
     unclassified: closed('unclassified', arr(parsed.unclassified)),
   };
   try {
-    return fromAi(candidate);
+    return fromAiWithTrip(candidate);
   } catch {
     return null;
   }
+}
+
+/** O nome da última parada que chegou inteira: "o texto foi lido até…". */
+export function lastStopOf(preview: Preview): string | null {
+  for (const day of [...preview.days].reverse()) {
+    const stop = [...day.stops].reverse().find((s) => s.complete && s.name.trim() !== '');
+    if (stop) return stop.name;
+  }
+  return null;
 }

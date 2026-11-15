@@ -1,4 +1,5 @@
 import { expect, type BrowserContext, type Page } from '@playwright/test';
+import { INTAKE_LABEL } from '../../src/features/intake/start.ts';
 import { dateInSaoPaulo } from './dates.ts';
 import { SENHA } from './users.ts';
 
@@ -22,23 +23,50 @@ export async function entrar(page: Page, email: string): Promise<void> {
   await expect(page.getByRole('heading', { name: 'Suas viagens' })).toBeVisible();
 }
 
-/** Pela tela inicial, como uma pessoa; `inicio` e `fim` em dias a partir de hoje. Devolve a URL. */
-export async function novaViagem(
-  page: Page,
-  dados: { nome: string; inicio: number; fim: number; origem?: string; orcamento?: string },
-): Promise<string> {
-  await page.getByRole('link', { name: 'Nova viagem' }).first().click();
-  await page.getByLabel('Nome da viagem').fill(dados.nome);
-  // "Início" também é o rótulo do link do cabeçalho: mira o campo de data
-  await page.getByRole('textbox', { name: 'Início' }).fill(dateInSaoPaulo(dados.inicio));
-  await page.getByRole('textbox', { name: 'Fim' }).fill(dateInSaoPaulo(dados.fim));
-  if (dados.origem) await page.getByLabel('Origem').fill(dados.origem);
-  if (dados.orcamento) await page.getByLabel('Orçamento').fill(dados.orcamento);
-  await page.getByRole('button', { name: 'Criar viagem' }).click();
-  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
+/** O campo da lista de viagens (fase 17): a porta de entrada de uma viagem nova. */
+export const campo = (page: Page) => page.getByRole('textbox', { name: INTAKE_LABEL });
+
+export type DadosDaViagem = {
+  nome: string;
+  /** dias a partir de hoje, ou a data (AAAA-MM-DD) */
+  inicio: number | string;
+  fim: number | string;
+  origem?: string;
+  orcamento?: string;
+};
+
+/** A viagem no formato do Viajei, como o campo lê sem IA e sem rede. */
+export function textoDaViagem(dados: DadosDaViagem): string {
+  const data = (d: number | string) => (typeof d === 'number' ? dateInSaoPaulo(d) : d);
+  return [
+    'viajei/1',
+    `# ${dados.nome}`,
+    `datas: ${data(dados.inicio)} a ${data(dados.fim)}`,
+    ...(dados.origem ? [`origem: ${dados.origem}`] : []),
+    ...(dados.orcamento ? [`orçamento: R$ ${dados.orcamento}`] : []),
+  ].join('\n');
+}
+
+/**
+ * A viagem nova como uma pessoa a cria desde a fase 17: o formato do Viajei no campo da lista, a
+ * revisão e "Criar a viagem". Funciona sem rede. Abre a lista se a página não estiver nela; termina em
+ * Detalhes (a viagem de hoje abre no mapa, D174: daí, pelo link). Devolve a URL da viagem (o mapa).
+ */
+export async function novaViagem(page: Page, dados: DadosDaViagem): Promise<string> {
+  const path = new URL(page.url()).pathname;
+  if (path !== '/' && path !== '/viagens') await page.goto('/viagens');
+  await campo(page).fill(textoDaViagem(dados));
+  await page.getByRole('button', { name: 'Montar a viagem' }).click();
+  await expect(page.getByRole('heading', { name: 'Revisar a viagem' })).toBeVisible();
+  await page.getByRole('button', { name: 'Criar a viagem' }).click();
+  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}(\/detalhes)?$/);
+  const tripUrl = page.url().replace(/\/detalhes$/, '');
+  if (!page.url().endsWith('/detalhes')) {
+    await page.getByRole('link', { name: 'Detalhes' }).click();
+    await expect(page).toHaveURL(/\/detalhes$/);
+  }
   await expect(page.getByRole('heading', { name: dados.nome })).toBeVisible();
-  // a URL da viagem (o mapa); a criação cai em Detalhes, a visão geral
-  return page.url().replace(/\/detalhes$/, '');
+  return tripUrl;
 }
 
 /** Da visão geral para o dia `n` do roteiro. */
