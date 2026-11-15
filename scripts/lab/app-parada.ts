@@ -296,10 +296,16 @@ export async function appParadaAuto(ctx: ParadaContext, today: string): Promise<
         });
       }
       const t0 = Date.now();
-      await A.page
-        .getByText(`Parada registrada: ${FORGED.postoName}`, { exact: true })
-        .waitFor({ timeout: 30_000 });
+      // a prova é a parada registrada em A: o toast "Parada registrada" (10 s no relógio do
+      // aparelho, que os passos acima adiantam) ou, se ele já passou, a linha dela na lista do dia.
+      // No preview da fase 22 o posto se confirmou um passo antes do fim (o relógio de mentira anda
+      // também com o tempo de verdade), o toast se foi durante o último minuto, e o cenário ficou
+      // vermelho com a parada registrada na lista e no servidor
+      const toast = A.page.getByText(`Parada registrada: ${FORGED.postoName}`, { exact: true });
+      const row = A.page.getByRole('button', { name: FORGED.postoName, exact: true });
+      await toast.or(row).first().waitFor({ timeout: 30_000 });
       data.registro_ms = Date.now() - t0;
+      data.registro_por = (await toast.isVisible()) ? 'toast' : 'lista';
       data.chamadas_osm_a = A.reverse();
     });
 

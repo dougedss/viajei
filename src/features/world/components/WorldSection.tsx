@@ -125,9 +125,13 @@ type StageProps = WorldSlotProps & {
 
 /** Quanto o chip do clima fica grande depois de o carro estacionar, antes de subir para a faixa. */
 const WEATHER_HOLD_MS = 1_200;
-/** o desfoque das bordas (a maquete de mesa, fase 22): a faixa de cima e a de baixo, em px */
-const BLUR_TOP = { height: 96, px: 1.6 } as const;
-const BLUR_BOTTOM = { height: 150, px: 3.2 } as const;
+/**
+ * O desfoque da borda de baixo (a maquete de mesa, fase 22): a faixa acima do que está sobre o pé do
+ * palco, em px, com uma máscara que só chega ao desfoque cheio no terço de baixo dela. Só embaixo: o
+ * alto da maquete é o fim do dia (a última peça, o carro ao chegar) e fica nítido; o laboratório
+ * mostrou a faixa de cima borrando os dois.
+ */
+const BLUR_BOTTOM = { height: 110, px: 2.4 } as const;
 
 function formatDistance(m: number): string {
   if (m >= 10_000) return `${Math.round(m / 1000)} km`;
@@ -537,27 +541,14 @@ function WorldStage(p: StageProps) {
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-x-0"
-            data-world-blur="top"
-            style={{
-              top: HUD_TOP,
-              height: BLUR_TOP.height,
-              backdropFilter: `blur(${String(BLUR_TOP.px)}px)`,
-              WebkitBackdropFilter: `blur(${String(BLUR_TOP.px)}px)`,
-              maskImage: 'linear-gradient(#000 0%, #000 25%, transparent 100%)',
-              WebkitMaskImage: 'linear-gradient(#000 0%, #000 25%, transparent 100%)',
-            }}
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0"
             data-world-blur="bottom"
             style={{
               bottom: bottomInset,
               height: BLUR_BOTTOM.height,
               backdropFilter: `blur(${String(BLUR_BOTTOM.px)}px)`,
               WebkitBackdropFilter: `blur(${String(BLUR_BOTTOM.px)}px)`,
-              maskImage: 'linear-gradient(transparent 0%, #000 55%, #000 100%)',
-              WebkitMaskImage: 'linear-gradient(transparent 0%, #000 55%, #000 100%)',
+              maskImage: 'linear-gradient(transparent 0%, #000 65%, #000 100%)',
+              WebkitMaskImage: 'linear-gradient(transparent 0%, #000 65%, #000 100%)',
             }}
           />
           <div
