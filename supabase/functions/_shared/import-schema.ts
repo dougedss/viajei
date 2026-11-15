@@ -81,6 +81,7 @@ export const importQuestSchema = z.object({
 });
 export type ImportQuest = z.infer<typeof importQuestSchema>;
 
+/** As missões que a IA escreve, no máximo (as do texto e as sugeridas); a viagem pode ter mais. */
 export const MAX_QUESTS = 8;
 
 export const importSchema = z.object({
@@ -89,9 +90,8 @@ export const importSchema = z.object({
   contacts: z.array(importContactSchema),
   checklist_before: z.array(z.string()),
   checklist_pack: z.array(z.string()),
-  quests: z
-    .array(importQuestSchema)
-    .refine((q) => q.length <= MAX_QUESTS, { message: `No máximo ${MAX_QUESTS} missões.` }),
+  /** sem limite aqui: o arquivo do Viajei de uma viagem com 12 missões volta com as 12 (fase 17) */
+  quests: z.array(importQuestSchema),
   /** o que a IA não soube classificar; a pessoa decide */
   unclassified: z.array(z.string()),
 });
@@ -154,7 +154,9 @@ export const aiImportSchema = importSchema.extend({
   days: z.array(aiDaySchema),
   reservations: z.array(withBlanks(importReservationSchema)),
   contacts: z.array(withBlanks(importContactSchema)),
-  quests: z.array(withBlanks(importQuestSchema)),
+  quests: z
+    .array(withBlanks(importQuestSchema))
+    .refine((q) => q.length <= MAX_QUESTS, { message: `No máximo ${MAX_QUESTS} missões.` }),
 });
 export type AiImport = z.infer<typeof aiImportSchema>;
 

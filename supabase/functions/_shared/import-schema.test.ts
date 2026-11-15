@@ -48,9 +48,9 @@ describe('import-schema', () => {
     ).toBe(false);
   });
 
-  it('recusa mais de 8 missões', () => {
+  it('o arquivo aceita mais de 8 missões (a viagem de uma pessoa); a IA, não (abaixo)', () => {
     const quests = Array.from({ length: 9 }, (_, i) => ({ text: `m${i}`, stop_ref: null }));
-    expect(importSchema.safeParse({ ...seed, quests }).success).toBe(false);
+    expect(importSchema.safeParse({ ...seed, quests }).success).toBe(true);
   });
 
   it('validateImport pega dia repetido, parada sem nome e coordenada pela metade', () => {

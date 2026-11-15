@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/ui/EmptyState.tsx';
 import { PageHeader } from '@/components/ui/PageHeader.tsx';
 import { Sheet } from '@/components/ui/Sheet.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
+import { CopyTripText } from '@/features/import/components/CopyTripText.tsx';
 import { CalendarExport } from '@/features/notifications/components/CalendarExport.tsx';
 import {
   PushAskSheet,
@@ -239,7 +240,7 @@ export default function DetalhesPage() {
             }
           />
         ) : (
-          <Card>
+          <Card className="grid gap-3">
             <p className="flex items-center gap-2 text-[16px]">
               <Route className="size-5 shrink-0 text-accent-ink" aria-hidden="true" />
               <span>
@@ -247,6 +248,7 @@ export default function DetalhesPage() {
                 {tripDays.length === 1 ? 'dia' : 'dias'}
               </span>
             </p>
+            <CopyTripText rows={{ trip, days: tripDays, stops, reservations, contacts, items }} />
           </Card>
         )}
       </section>
