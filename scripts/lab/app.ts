@@ -755,62 +755,111 @@ export function appExtras(app: App): Promise<Check> {
 /** O SwiftShader do Chromium sem tela compila os shaders da cena devagar (o e2e espera 60 s). */
 const WORLD_TIMEOUT = 90_000;
 
+/** A âncora do carro no palco (o HUD a põe onde o carro está) e as pílulas por baixo do que está sobre a maquete. */
+const ANCORA_DO_CARRO = `(() => {
+  const el = document.querySelector('[data-world-car-anchor]');
+  if (!el) return null;
+  return { left: parseFloat(el.style.left), top: parseFloat(el.style.top), visible: el.dataset.visible };
+})()`;
+const PILULAS_SOB_A_BARRA = `(() => {
+  const sobre = document.querySelector('[data-overlay]');
+  if (!sobre) return ['sem a barra'];
+  let top = sobre.getBoundingClientRect().bottom;
+  for (const c of sobre.children) {
+    const r = c.getBoundingClientRect();
+    if (r.height > 0) top = Math.min(top, r.top);
+  }
+  return [...document.querySelectorAll('[data-pill]:not([hidden])')]
+    .map((el) => [el.getAttribute('data-pill'), parseFloat(el.style.top) - top])
+    .filter(([, d]) => d > 0)
+    .map(([id, d]) => id + ' entra ' + Math.round(d) + ' px');
+})()`;
+
 /**
- * A maquete, sem prender o laboratório a fps: monta com um motor de verdade (WebGPU ou WebGL2), as
- * pílulas aparecem por cima, e o "Rever o dia" anda até o fim. O movimento é medido pelo relógio,
- * não por quadros: o "Pular" aparecer prova que o laço de quadros começou o movimento, e o "Rever o
- * dia" voltar prova que ele terminou. O replay ao abrir não serve aqui: o `app_reabrir` já mostrou os
- * eventos pelo card. Motor e tempos ficam em `data`, só como informação.
+ * A maquete, sem prender o laboratório a fps: monta com um motor de verdade (WebGPU ou WebGL2) com o
+ * dia inteiro na tela (fase 22), todas as pílulas por cima e nenhuma por baixo do que está sobre a
+ * maquete, com o cartão da vez na tela; o toque no carro leva para perto e a câmera volta sozinha; a
+ * folha abre ao toque na pílula; o "Rever o dia" anda até o fim, com o fps do chip de diagnóstico
+ * anotado (medido, não cobrado: a máquina do GitHub desenha por software); a noite pela chave da URL.
+ * O movimento é medido pelo relógio, não por quadros: o "Pular" aparecer prova que o laço de quadros
+ * começou o movimento, e o "Rever o dia" voltar prova que ele terminou. Motor, tempos, capturas e
+ * estados da câmera ficam em `data` e nos artefatos.
  */
 export function appMaquete(app: App): Promise<Check> {
   const { page, target } = app;
   const info: Record<string, unknown> = {};
   const world = page.locator('[data-world="webgl2"], [data-world="webgpu"]');
   const hud = page.locator('[data-world-hud]');
+  const shot = (name: string) =>
+    page.screenshot({ path: join(target.artifactsDir, name) }).catch(() => undefined);
+  const montar = async (query = '') => {
+    await page.goto(tripUrl(target, query));
+    await page.getByRole('heading', { name: 'Agora' }).waitFor();
+    const t0 = Date.now();
+    await world.waitFor({ timeout: WORLD_TIMEOUT });
+    await page
+      .getByText('Montando a maquete…')
+      .waitFor({ state: 'hidden', timeout: WORLD_TIMEOUT });
+    await page.locator('[data-pill][data-placed]').first().waitFor({ timeout: WORLD_TIMEOUT });
+    return Date.now() - t0;
+  };
+  const camera = () => world.getAttribute('data-world-camera');
   return runSteps(
     app,
     'app_maquete',
-    'A maquete montou com as pílulas e as miniaturas, a folha abriu ao toque e o "Rever o dia" andou',
+    'A maquete montou com o dia inteiro e todas as pílulas, de dia e de noite; o toque no carro aproximou e voltou; a folha abriu; o "Rever o dia" andou',
     [
-      [
-        'abrir o "Agora" com a maquete',
-        async () => {
-          await page.goto(tripUrl(target));
-          await page.getByRole('heading', { name: 'Agora' }).waitFor();
-        },
-      ],
       [
         'a maquete monta com um motor de verdade',
         async () => {
-          const t0 = Date.now();
-          await world.waitFor({ timeout: WORLD_TIMEOUT });
-          await page
-            .getByText('Montando a maquete…')
-            .waitFor({ state: 'hidden', timeout: WORLD_TIMEOUT });
+          info.primeiro_quadro_ms = await montar();
           info.motor = await world.getAttribute('data-world');
-          info.primeiro_quadro_ms = Date.now() - t0;
         },
       ],
       [
-        'as pílulas das paradas em cena por cima dela',
+        'o dia inteiro: todas as pílulas em cena, com o cartão da vez na tela, nenhuma sob a barra',
         async () => {
-          // a câmera segue o carro (fase 14, D177): só os nós em cena têm pílula. Depois do
-          // `app_reabrir` o carro está parado no destino, e a origem ficou para trás, fora da cena.
-          // O cartão da vez (o "Como foi?" daquela chegada) cobre o pé da maquete, onde o carro e a
-          // pílula do destino estão, e nenhuma pílula fica por baixo do que está sobre a maquete
-          // (D177): dispensa-se o cartão antes, como a pessoa faria
-          const dismiss = page.getByRole('button', { name: 'Dispensar' });
-          if (await dismiss.isVisible()) {
-            await dismiss.click();
-            await dismiss.waitFor({ state: 'detached' });
-          }
+          // a câmera de repouso enquadra o dia inteiro pela altura medida (fase 22): o cartão da vez
+          // (o "Como foi?" da chegada do `app_reabrir`) fica na tela, e mesmo assim toda pílula aparece
+          info.cartao_na_tela = await page.getByRole('button', { name: 'Dispensar' }).isVisible();
           await hud.getByText(target.destinationName).first().waitFor();
-          info.pilulas_em_cena = await hud.locator('[data-pill]:not([hidden])').count();
-          // a captura da maquete, com as miniaturas e os ícones das pílulas lado a lado, para o
-          // Douglas ver (o artefato sobe sempre, não só na falha)
-          await page
-            .screenshot({ path: join(target.artifactsDir, 'maquete.png') })
-            .catch(() => undefined);
+          // a abertura do dia termina em 2,4 s; as pílulas em cena se contam depois dela
+          const total = await hud.locator('[data-pill]').count();
+          const emCena = await until(
+            () => hud.locator('[data-pill]:not([hidden])').count(),
+            (n) => n === total,
+            `pílulas fora de cena (de ${String(total)})`,
+          );
+          info.pilulas_total = total;
+          info.pilulas_em_cena = emCena;
+          info.camera = await camera();
+          if (info.camera !== 'repouso') throw new Error(`a câmera está em ${String(info.camera)}`);
+          const sob = await page.evaluate<string[]>(PILULAS_SOB_A_BARRA);
+          if (sob.length > 0)
+            throw new Error(`pílula sob o que está sobre a maquete: ${sob.join(' | ')}`);
+          // a captura da maquete de dia, com as peças e as pílulas, para o Douglas ver ao lado do
+          // esboço (o artefato sobe sempre, não só na falha)
+          await shot('maquete.png');
+        },
+      ],
+      [
+        'tocar no carro leva para perto, e a câmera volta sozinha',
+        async () => {
+          const box = await hud.boundingBox();
+          const at = await page.evaluate<{ left: number; top: number; visible: string } | null>(
+            ANCORA_DO_CARRO,
+          );
+          if (!box || !at) throw new Error('sem a âncora do carro');
+          if (at.visible !== 'true') throw new Error('o carro não está em cena');
+          const t0 = Date.now();
+          await page.mouse.click(box.x + at.left, box.y + at.top);
+          await until(camera, (v) => v === 'perto', 'o toque no carro não levou para perto');
+          info.perto_ms = Date.now() - t0;
+          // a câmera chega perto em menos de um segundo; a captura depois disso
+          await page.waitForTimeout(1_500);
+          await shot('maquete-perto.png');
+          await until(camera, (v) => v === 'repouso', 'a câmera não voltou ao repouso');
+          info.perto_volta_ms = Date.now() - t0;
         },
       ],
       [
@@ -822,27 +871,59 @@ export function appMaquete(app: App): Promise<Check> {
           const sheet = page.getByRole('dialog', { name: target.destinationName });
           await sheet.waitFor();
           await sheet.getByRole('link', { name: 'Ver no roteiro' }).waitFor();
-          await page
-            .screenshot({ path: join(target.artifactsDir, 'maquete-folha.png') })
-            .catch(() => undefined);
+          await shot('maquete-folha.png');
           await page.keyboard.press('Escape');
           await sheet.waitFor({ state: 'detached', timeout: WORLD_TIMEOUT });
         },
       ],
       [
-        '"Rever o dia" começa e anda até o fim',
+        '"Rever o dia" começa e anda até o fim, com o fps do chip anotado',
         async () => {
+          // com o chip de diagnóstico (`?diag=1`): o fps só existe em movimento, e é o do "Rever o dia"
+          await montar('?diag=1');
           const review = page.getByRole('button', { name: 'Rever o dia', exact: true });
           // um replay ao abrir, se houver, termina antes de o botão aparecer
           await review.waitFor({ timeout: WORLD_TIMEOUT });
           await review.click();
           const t0 = Date.now();
           // o "Pular" do replay mora na faixa de cima do palco (fase 14), no lugar do "Rever o dia"
-          await page
-            .getByRole('button', { name: 'Pular', exact: true })
-            .waitFor({ timeout: WORLD_TIMEOUT });
+          const skip = page.getByRole('button', { name: 'Pular', exact: true });
+          await skip.waitFor({ timeout: WORLD_TIMEOUT });
+          const fps: number[] = [];
+          const end = Date.now() + WORLD_TIMEOUT;
+          while (Date.now() < end && (await skip.isVisible())) {
+            const text =
+              (await page
+                .locator('[data-diag-fps]')
+                .textContent()
+                .catch(() => '')) ?? '';
+            const n = Number.parseInt(text, 10);
+            if (Number.isFinite(n)) fps.push(n);
+            await page.waitForTimeout(500);
+          }
           await review.waitFor({ timeout: WORLD_TIMEOUT });
           info.rever_ms = Date.now() - t0;
+          const sorted = [...fps].sort((a, b) => a - b);
+          info.fps_rever = {
+            amostras: fps.length,
+            mediana: sorted[Math.floor(sorted.length / 2)] ?? null,
+            max: sorted.at(-1) ?? null,
+          };
+        },
+      ],
+      [
+        'a noite pela chave da URL, com todas as pílulas em cena',
+        async () => {
+          await montar('?noite=1');
+          const total = await hud.locator('[data-pill]').count();
+          await until(
+            () => hud.locator('[data-pill]:not([hidden])').count(),
+            (n) => n === total,
+            `pílulas fora de cena à noite (de ${String(total)})`,
+          );
+          // a noite entra em 1,5 s de transição
+          await page.waitForTimeout(2_500);
+          await shot('maquete-noite.png');
         },
       ],
     ],

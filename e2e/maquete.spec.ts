@@ -47,14 +47,36 @@ async function viagemComParadas(page: Page): Promise<string> {
   return tripUrl;
 }
 
+/** A âncora do carro, em px do palco: o HUD a põe onde o carro está, pelo laço da cena. */
+const ANCORA_DO_CARRO = `(() => {
+  const el = document.querySelector('[data-world-car-anchor]');
+  if (!el) return null;
+  return { left: parseFloat(el.style.left), top: parseFloat(el.style.top), visible: el.dataset.visible };
+})()`;
+
+/** Onde o carro está na tela, em coordenadas da página. */
+async function posicaoDoCarro(page: Page): Promise<{ x: number; y: number }> {
+  const box = await page.locator('[data-world-hud]').boundingBox();
+  const at = await page.evaluate<{ left: number; top: number; visible: string } | null>(
+    ANCORA_DO_CARRO,
+  );
+  if (!box || !at) throw new Error('sem a âncora do carro');
+  if (at.visible !== 'true') throw new Error('o carro não está em cena');
+  return { x: box.x + at.left, y: box.y + at.top };
+}
+
 /**
  * O Chromium do Playwright não tem WebGPU utilizável e desenha WebGL2 pelo SwiftShader: a maquete
  * tem de aceitar esse motor. A lista acessível entra no lugar dela pelo botão do topo (fase 14), e
- * "Ver como lista" desliga a maquete neste aparelho até a pessoa querer de volta.
+ * "Ver como lista" desliga a maquete neste aparelho até a pessoa querer de volta. Fase 22: o quadro
+ * de repouso é o dia inteiro, com uma pílula por parada em cena (a do Parque inclusive); o toque no
+ * carro leva para perto e a câmera volta sozinha; `?noite=1` mostra a maquete de noite.
  */
-test('a tela da viagem monta a maquete e "Ver como lista" persiste', async ({ page }) => {
+test('a tela da viagem monta a maquete do dia inteiro, o toque no carro aproxima, e "Ver como lista" persiste', async ({
+  page,
+}) => {
   // criar a viagem leva uns 15 s; o SwiftShader compila os shaders da cena devagar
-  test.setTimeout(150_000);
+  test.setTimeout(240_000);
   await entrar(page, 'dono@viajei.local');
   const tripUrl = await viagemComParadas(page);
 
@@ -64,25 +86,71 @@ test('a tela da viagem monta a maquete e "Ver como lista" persiste', async ({ pa
   await expect(maquete).toBeVisible({ timeout: 60_000 });
   // o 3D é decorativo: o canvas fica escondido do leitor de tela
   await expect(page.locator('[aria-hidden="true"] canvas')).toHaveCount(1);
-  // as pílulas em HTML por cima da cena; tocar numa abre a folha da parada (fase 14). Só os nós em
-  // cena têm pílula: a abertura começa larga (o dia inteiro) e desce até o carro (D177), e aí o Parque
-  // fica fora da cena; a que fica é a da parada do carro. No SwiftShader da CI um quadro leva
-  // centenas de ms e a maquete segura a thread por segundos: a pílula ainda anda com a câmera quando
-  // o Playwright a acha estável, e a folha demora a montar. Toca de novo até a folha abrir, como
-  // faria uma pessoa (com a folha aberta, o toque seguinte nem chega à pílula)
+  // o dia inteiro na tela (fase 22): depois da abertura, uma pílula por parada em cena, a do Parque
+  // inclusive (na fase 14 ela saía de cena quando a câmera descia até o carro); a câmera em repouso
   const hud = page.locator('[data-world-hud]');
-  const pilula = hud.getByRole('button', { name: /^Saída de casa/ });
-  const folha = page.getByRole('dialog', { name: 'Saída de casa' });
+  await expect(page.locator('[data-pill][data-placed]').first()).toBeAttached({ timeout: 60_000 });
+  await expect
+    .poll(() => page.locator('[data-pill]:not([hidden])').count(), { timeout: 60_000 })
+    .toBe(2);
+  await expect(hud.getByRole('button', { name: /^Parque/ })).toBeVisible();
+  await expect(hud.getByRole('button', { name: /^Saída de casa/ })).toBeVisible();
+  await expect(maquete).toHaveAttribute('data-world-camera', 'repouso');
+  // os nomes das cidades de passagem (se houver) ficam fora da árvore de acessibilidade e sem toque
+  await expect(page.locator('[data-passing-place]:not([aria-hidden="true"])')).toHaveCount(0);
+  await expect(page.locator('[data-passing-place] button, [data-passing-place] a')).toHaveCount(0);
+
+  // tocar no carro (pela âncora que o HUD põe onde ele está) leva para perto; a câmera volta sozinha
+  // ao dia inteiro alguns segundos depois (o relógio de verdade: no SwiftShader cada quadro leva
+  // centenas de ms, e o laço continua vivo enquanto o modo dura)
+  await expect(async () => {
+    const at = await posicaoDoCarro(page);
+    await page.mouse.click(at.x, at.y);
+    await expect(maquete).toHaveAttribute('data-world-camera', 'perto', { timeout: 5_000 });
+  }).toPass({ timeout: 60_000 });
+  await expect(maquete).toHaveAttribute('data-world-camera', 'repouso', { timeout: 40_000 });
+  // um toque de novo no carro e um toque fora dele: volta na hora
+  await expect(async () => {
+    const at = await posicaoDoCarro(page);
+    await page.mouse.click(at.x, at.y);
+    await expect(maquete).toHaveAttribute('data-world-camera', 'perto', { timeout: 5_000 });
+  }).toPass({ timeout: 60_000 });
+  const palco = await maquete.boundingBox();
+  if (!palco) throw new Error('sem o palco');
+  await page.mouse.click(palco.x + 30, palco.y + palco.height * 0.45);
+  await expect(maquete).toHaveAttribute('data-world-camera', 'repouso', { timeout: 20_000 });
+
+  // as pílulas em HTML por cima da cena; tocar numa abre a folha da parada (fase 14). No SwiftShader
+  // da CI um quadro leva centenas de ms e a maquete segura a thread por segundos, e a folha demora a
+  // montar: toca de novo até a folha abrir, como faria uma pessoa (com a folha aberta, o toque
+  // seguinte nem chega à pílula)
+  const pilula = hud.getByRole('button', { name: /^Parque/ });
+  const folha = page.getByRole('dialog', { name: 'Parque' });
   await expect(async () => {
     if (!(await folha.isVisible())) await pilula.click({ timeout: 10_000 });
     await expect(folha).toBeVisible({ timeout: 10_000 });
   }).toPass({ timeout: 60_000 });
-  await expect(folha).toContainText('Origem · Dia 1 · saída');
+  await expect(folha).toContainText('Natureza · Dia 1 · 1ª parada');
   await expect(folha.getByRole('link', { name: 'Ver no roteiro' })).toBeVisible();
   await expect(folha.getByRole('button', { name: 'Gasto' })).toBeVisible();
   // a folha desce com animação; no SwiftShader da CI a maquete segura a thread por segundos
   await page.keyboard.press('Escape');
   await expect(folha).toBeHidden({ timeout: 30_000 });
+
+  // a noite pela chave da URL (sem gravar nada): a maquete monta e todas as pílulas continuam em cena
+  await page.goto(`${tripUrl}?noite=1`);
+  await expect(maquete).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('[data-pill][data-placed]').first()).toBeAttached({ timeout: 60_000 });
+  await expect
+    .poll(() => page.locator('[data-pill]:not([hidden])').count(), { timeout: 60_000 })
+    .toBe(2);
+  await page.waitForTimeout(2_000);
+  await test.info().attach('maquete-noite', {
+    body: await page.screenshot(),
+    contentType: 'image/png',
+  });
+  await page.goto(tripUrl);
+  await expect(maquete).toBeVisible({ timeout: 60_000 });
 
   // a lista do dia não está na tela: entra no lugar da maquete pelo botão do topo
   await expect(page.getByRole('list', { name: 'Trilha do dia' })).toHaveCount(0);

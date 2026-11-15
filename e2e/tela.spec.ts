@@ -161,15 +161,28 @@ test('a tela da viagem não rola, "Hoje" volta, e a ação e Detalhes ficam sob 
       timeout: 60_000,
     });
     await semRolagem(page, 'maquete a 393 px');
-    // nenhuma pílula em cena fica por baixo do que está sobre a maquete (a altura medida, não um número)
+    // o dia inteiro na tela (fase 22): as quatro pílulas em cena, com o cartão da vez (o pedido de
+    // posição) na tela, e nenhuma por baixo do que está sobre a maquete (a altura medida, não um número)
     await expect(page.locator('[data-pill][data-placed]').first()).toBeAttached({
       timeout: 30_000,
     });
+    await expect(page.getByRole('button', { name: 'Usar posição' })).toBeVisible();
+    await expect
+      .poll(() => page.locator('[data-pill]:not([hidden])').count(), { timeout: 30_000 })
+      .toBe(4);
     await expect.poll(() => page.evaluate<string[]>(PILULAS_SOB_A_BARRA)).toEqual([]);
+    await expect(page.locator('[data-world="webgl2"], [data-world="webgpu"]')).toHaveAttribute(
+      'data-world-camera',
+      'repouso',
+    );
     const size = page.viewportSize();
     if (size) {
       await page.setViewportSize({ width: LARGURA_ESTREITA, height: size.height });
       await semRolagem(page, 'maquete a 360 px');
+      await expect
+        .poll(() => page.locator('[data-pill]:not([hidden])').count(), { timeout: 30_000 })
+        .toBe(4);
+      await expect.poll(() => page.evaluate<string[]>(PILULAS_SOB_A_BARRA)).toEqual([]);
       await page.setViewportSize(size);
     }
     // o cabeçalho do app não está nesta tela: ela é inteira

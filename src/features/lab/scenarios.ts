@@ -84,7 +84,7 @@ export const LAB_SCENARIOS = {
   app_maquete: {
     label: 'App · maquete',
     description:
-      'A maquete monta (WebGPU ou WebGL2) com as pílulas, e o "Rever o dia" anda até o fim',
+      'A maquete monta (WebGPU ou WebGL2) com o dia inteiro e todas as pílulas em cena, de dia e de noite; o toque no carro leva para perto e volta; o "Rever o dia" anda até o fim',
   },
   app_listas: {
     label: 'App · listas',
