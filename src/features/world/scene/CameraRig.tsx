@@ -12,7 +12,12 @@ import type { WorldRuntime } from './runtime.ts';
  * avisa o React só quando muda (o atributo `data-world-camera`). Com reduzir movimento, corta.
  * Parada, não pede quadro nenhum; a abertura do dia inteira acontece no repouso.
  */
-type Rig = { view: CameraFrame; pos: Vector3; look: Vector3; first: boolean };
+type Rig = { view: CameraFrame; pos: Vector3; look: Vector3; first: boolean; last: number };
+
+/** a câmera chega perto do desejado em ~1 s de tempo de parede (k = 1 − e^(−RATE·dt)) */
+const RATE = 2.6;
+/** um quadro mais longo que isto (uma aba que voltou, uma máquina lenta) conta como um segundo */
+const MAX_DT_S = 1;
 
 function apply(camera: Camera, rig: Rig): void {
   const eye = cameraPosition(rig.view);
@@ -37,9 +42,14 @@ export function CameraRig({ runtime }: { runtime: WorldRuntime }) {
       pos: new Vector3(),
       look: new Vector3(),
       first: true,
+      last: 0,
     };
-    const update = ({ now, dt }: { now: number; dt: number }) => {
+    const update = ({ now }: { now: number }) => {
       const { layout, motion } = runtime;
+      // pelo tempo de parede, não pelo `dt` preso a 50 ms do laço: numa máquina que desenha a 2 fps
+      // a câmera anda o mesmo tanto por segundo que num celular a 60
+      const dt = Math.min(MAX_DT_S, Math.max(0, (now - rig.last) / 1000));
+      rig.last = now;
       // o tempo do modo de perto acabou: volta ao repouso (um toque fora já teria tirado)
       if (runtime.close !== null && !closeActive(runtime.close, now)) runtime.leaveClose();
       const nextS = nextNodeS(layout.nodes, motion.s);
@@ -55,7 +65,7 @@ export function CameraRig({ runtime }: { runtime: WorldRuntime }) {
         reducedMotion: motion.reducedMotion,
       });
       runtime.setCameraMode(mode);
-      const k = rig.first || motion.reducedMotion ? 1 : Math.min(1, dt * 2.6);
+      const k = rig.first || motion.reducedMotion ? 1 : 1 - Math.exp(-RATE * dt);
       rig.first = false;
       const next = approachFrame(rig.view, want, k);
       rig.view = next.view;
@@ -63,7 +73,7 @@ export function CameraRig({ runtime }: { runtime: WorldRuntime }) {
       runtime.setView(rig.view);
       apply(camera, rig);
     };
-    update({ now: performance.now(), dt: 1 });
+    update({ now: performance.now() });
     invalidate();
     return runtime.register(update);
   }, [runtime, camera, invalidate]);

@@ -21,7 +21,12 @@ type Props = {
   children: ReactNode;
 };
 
-const CAMERA: ThreeCamera = { fov: REST_FOV, near: 0.5, far: 1400, position: [0, 200, -200] };
+/**
+ * O plano de corte distante dá para o repouso mais afastado que existe (um palco baixo com um cartão
+ * alto sobre ele leva a câmera a mais de 2.000 de distância); o próximo começa em 1 porque nada
+ * fica a menos disso da câmera (o mergulho olha o carro de 40).
+ */
+const CAMERA: ThreeCamera = { fov: REST_FOV, near: 1, far: 6000, position: [0, 200, -200] };
 
 export function WorldCanvas({
   runtime,

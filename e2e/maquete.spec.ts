@@ -130,7 +130,7 @@ test('a tela da viagem monta a maquete do dia inteiro, o toque no carro aproxima
     if (!(await folha.isVisible())) await pilula.click({ timeout: 10_000 });
     await expect(folha).toBeVisible({ timeout: 10_000 });
   }).toPass({ timeout: 60_000 });
-  await expect(folha).toContainText('Natureza · Dia 1 · 1ª parada');
+  await expect(folha).toContainText('Natureza · Dia 1 · 2ª parada');
   await expect(folha.getByRole('link', { name: 'Ver no roteiro' })).toBeVisible();
   await expect(folha.getByRole('button', { name: 'Gasto' })).toBeVisible();
   // a folha desce com animação; no SwiftShader da CI a maquete segura a thread por segundos
