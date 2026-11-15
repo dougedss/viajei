@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import type { Page } from '@playwright/test';
+import type { Page, Route } from '@playwright/test';
 import { encodeEvent } from '../../supabase/functions/_shared/import-protocol.ts';
 import {
   fromAiWithTrip,
@@ -155,4 +155,32 @@ export function aiPlan(data: ImportData, trip: ImportTripHeader): string {
   const json = JSON.stringify(toAi(data, trip));
   const done = fromAiWithTrip(JSON.parse(json));
   return aiSse(json, { data: done.data, trip: done.trip });
+}
+
+const CORS = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-headers': 'authorization, x-client-info, apikey, content-type',
+  'access-control-allow-methods': 'POST, OPTIONS',
+};
+
+/**
+ * A função respondida no teste (fase 17): o preflight do navegador, quando chega à rota, ganha o CORS
+ * e mais nada; o pedido de verdade, o SSE dado. `onRequest` vê o corpo do pedido.
+ */
+export async function respondSse(
+  route: Route,
+  sse: string | ((body: unknown) => string),
+  onRequest?: (body: unknown) => void,
+): Promise<void> {
+  if (route.request().method() === 'OPTIONS') {
+    await route.fulfill({ status: 204, headers: CORS });
+    return;
+  }
+  const body: unknown = route.request().postDataJSON();
+  onRequest?.(body);
+  await route.fulfill({
+    status: 200,
+    headers: { 'Content-Type': 'text/event-stream', ...CORS },
+    body: typeof sse === 'string' ? sse : sse(body),
+  });
 }

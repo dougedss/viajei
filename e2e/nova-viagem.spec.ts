@@ -6,7 +6,7 @@ import { LARGURA_ESTREITA, ROLAGEM_LATERAL } from '../src/features/lab/guards.ts
 import { campo, entrar, novaViagem } from './helpers/app.ts';
 import { dateInSaoPaulo } from './helpers/dates.ts';
 import { linhas } from './helpers/db.ts';
-import { aiPlan, aiSse } from './helpers/import.ts';
+import { aiPlan, aiSse, respondSse } from './helpers/import.ts';
 import { criarUsuario } from './helpers/users.ts';
 import { fakeOpenMeteo, fakeOverpass } from './helpers/world.ts';
 
@@ -205,20 +205,21 @@ test('um roteiro em texto livre: a importação cria a viagem e pergunta as data
     },
   ]);
   let pedido: unknown = null;
-  await page.route('**/functions/v1/import-itinerary', async (route) => {
-    pedido = route.request().postDataJSON();
-    await route.fulfill({
-      status: 200,
-      headers: { 'Content-Type': 'text/event-stream' },
-      body: aiPlan(lida, {
+  await page.route('**/functions/v1/import-itinerary', (route) =>
+    respondSse(
+      route,
+      aiPlan(lida, {
         name: 'Fim de semana na serra',
         start_date: null,
         end_date: null,
         origin: 'Papanduva/SC',
         budget: null,
       }),
-    });
-  });
+      (body) => {
+        pedido = body;
+      },
+    ),
+  );
   const user = await criarUsuario('Livre');
   await entrar(page, user.email);
   await campo(page).fill(
@@ -306,18 +307,11 @@ test('a conversa: as perguntas ditas antes, o roteiro conferido no mapa, um luga
     ],
   );
   const pedidos: { step?: string; answers?: string[]; kind?: string }[] = [];
-  await page.route('**/functions/v1/plan-trip', async (route) => {
-    const body = route.request().postDataJSON() as {
-      step: string;
-      answers?: string[];
-      kind: string;
-    };
-    pedidos.push(body);
-    await route.fulfill({
-      status: 200,
-      headers: { 'Content-Type': 'text/event-stream' },
-      body:
-        body.step === 'ask'
+  await page.route('**/functions/v1/plan-trip', (route) =>
+    respondSse(
+      route,
+      (body) =>
+        (body as { step?: string }).step === 'ask'
           ? aiSse(JSON.stringify({ questions: [] }), {
               data: {
                 questions: [
@@ -333,8 +327,9 @@ test('a conversa: as perguntas ditas antes, o roteiro conferido no mapa, um luga
               origin: 'Papanduva/SC',
               budget: null,
             }),
-    });
-  });
+      (body) => pedidos.push(body as { step?: string; answers?: string[]; kind?: string }),
+    ),
+  );
   const user = await criarUsuario('Conversa');
   await entrar(page, user.email);
   await campo(page).fill('Serra Gaúcha em dezembro, saindo de Papanduva');
@@ -408,34 +403,32 @@ test('quero sair hoje: a pergunta de alcance, a posição e o tempo na conta, e 
   ]);
   const hoje = dateInSaoPaulo(0);
   let contexto: Record<string, unknown> | null = null;
-  await page.route('**/functions/v1/plan-trip', async (route) => {
-    const body = route.request().postDataJSON() as { context: Record<string, unknown> };
-    contexto = { ...body.context, kind: (body as { kind?: string }).kind };
-    await route.fulfill({
-      status: 200,
-      headers: { 'Content-Type': 'text/event-stream' },
-      body: aiPlan(
-        plan([
-          {
-            date: hoje,
-            title: 'Tarde na serra',
-            stops: [
-              stop('origin', 'Saída de Canela', 'Canela, RS', '13:00'),
-              stop('nature', 'Cascata do Caracol', 'Canela, RS', '13:30'),
-              stop('city', 'Lago Negro', 'Gramado, RS', '16:00'),
-            ],
-          },
-        ]),
-        {
-          name: 'Tarde na serra',
-          start_date: hoje,
-          end_date: hoje,
-          origin: 'Canela, RS',
-          budget: null,
-        },
-      ),
-    });
-  });
+  const hojeSse = aiPlan(
+    plan([
+      {
+        date: hoje,
+        title: 'Tarde na serra',
+        stops: [
+          stop('origin', 'Saída de Canela', 'Canela, RS', '13:00'),
+          stop('nature', 'Cascata do Caracol', 'Canela, RS', '13:30'),
+          stop('city', 'Lago Negro', 'Gramado, RS', '16:00'),
+        ],
+      },
+    ]),
+    {
+      name: 'Tarde na serra',
+      start_date: hoje,
+      end_date: hoje,
+      origin: 'Canela, RS',
+      budget: null,
+    },
+  );
+  await page.route('**/functions/v1/plan-trip', (route) =>
+    respondSse(route, hojeSse, (body) => {
+      const b = body as { kind?: string; context: Record<string, unknown> };
+      contexto = { ...b.context, kind: b.kind };
+    }),
+  );
   const user = await criarUsuario('Hoje');
   await entrar(page, user.email);
   // a posição já tinha sido permitida no mapa (D176): no navegador e na pergunta do app

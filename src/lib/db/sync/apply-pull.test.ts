@@ -16,7 +16,7 @@ import {
 import { mutate } from '../mutate.ts';
 import { db, syncKeys, type UploadJob } from '../schema.ts';
 import { applyTripPull, applyUserPull, parseTripPull, parseUserPull } from './apply-pull.ts';
-import { saveInterests } from '@/features/profile/actions.ts';
+import { saveInterests } from '@/features/profile/interests.ts';
 import { pullUser } from './pull.ts';
 
 const SERVER_TIME = '2026-11-04T12:00:00.000Z';

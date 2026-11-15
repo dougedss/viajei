@@ -42,13 +42,8 @@ import type { Profile } from '@/lib/db/schema.ts';
 import { useReducedMotion } from '@/lib/reduced-motion.ts';
 import { useSession } from '@/lib/supabase/session.ts';
 import { useThemePref, writeThemePref, type ThemePref } from '@/lib/theme.ts';
-import {
-  saveInterests,
-  saveNotifyDefaults,
-  signOutNow,
-  trySignOut,
-  useUpdateProfile,
-} from '../actions.ts';
+import { saveNotifyDefaults, signOutNow, trySignOut, useUpdateProfile } from '../actions.ts';
+import { saveInterests } from '../interests.ts';
 import { interestsOf, learnedPhrase, toggleInterest, type Learned } from '../likes.ts';
 import { asPersonColor, useLearnedLikes, useProfile } from '../queries.ts';
 
