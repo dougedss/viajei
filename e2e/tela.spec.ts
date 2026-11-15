@@ -179,11 +179,11 @@ test('a tela da viagem não rola, "Hoje" volta, e a ação e Detalhes ficam sob 
     if (size) {
       await page.setViewportSize({ width: LARGURA_ESTREITA, height: size.height });
       await semRolagem(page, 'maquete a 360 px');
-      // a 360 px o cartão de posição ocupa mais linhas e o que está sobre a maquete cresce: a câmera
-      // se afasta até o dia inteiro caber de novo (no SwiftShader, segundos por quadro)
-      await expect
-        .poll(() => page.locator('[data-pill]:not([hidden])').count(), { timeout: 60_000 })
-        .toBe(4);
+      // a 360 px o cartão de posição ocupa quatro linhas e o "Agora" três: o que está sobre a
+      // maquete chega a 462 px dos 564 do palco, sobram 58 px, e a faixa das pílulas tem 10 px. Não
+      // há como o dia inteiro caber ali (D223): a câmera se afasta até o fim, a maquete vira uma faixa
+      // e as pílulas que não cabem se escondem. O que vale aqui é o que vale sempre: nenhuma pílula
+      // em cena fica por baixo do que está sobre a maquete, e nada rola
       await expect.poll(() => page.evaluate<string[]>(PILULAS_SOB_A_BARRA)).toEqual([]);
       await page.setViewportSize(size);
     }
