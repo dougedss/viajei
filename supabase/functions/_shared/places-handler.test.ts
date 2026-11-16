@@ -73,7 +73,7 @@ function deps(responses: (Response | Error)[], over: Partial<PlacesDeps> = {}) {
       return Promise.resolve('ok');
     },
     fetch: (input, init) => {
-      calls.push({ url: String(input), init });
+      calls.push({ url: input instanceof Request ? input.url : input.toString(), init });
       const next = responses.shift() ?? new Response('{}', { status: 500 });
       return next instanceof Error ? Promise.reject(next) : Promise.resolve(next);
     },
@@ -108,7 +108,7 @@ describe('find-places: o pedido à Geoapify', () => {
     const { url, init } = geoapifyRequest(placesRequestSchema.parse(corridor), null, KEY);
     expect(url).toBe(GEOAPIFY_PLACES_URL);
     expect(init.method).toBe('POST');
-    expect(JSON.parse(String(init.body))).toEqual({
+    expect(JSON.parse(init.body as string)).toEqual({
       categories: ['entertainment.zoo', 'tourism.attraction.viewpoint'],
       filter: {
         type: 'polyline',

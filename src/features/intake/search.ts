@@ -117,6 +117,13 @@ export function optionsFor(
   return out.sort((a, b) => a.km - b.km);
 }
 
+/**
+ * A coordenada que sai do aparelho para a busca (fase 24): arredondada a duas casas (uns 1 km), como a
+ * posição da saída de hoje (D208). Para achar os cafés de uma cidade, 1 km não muda nada; a posição
+ * exata da pessoa não vai para a Geoapify.
+ */
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
 /** O pedido de uma busca de opções: as categorias, as palavras, o círculo e a proximidade. */
 export function optionsRequest(
   search: PlaceSearch,
@@ -127,8 +134,13 @@ export function optionsRequest(
   return {
     categories: [...search.categories],
     names: search.names.slice(0, 3),
-    area: { type: 'circle', lng: center[0], lat: center[1], radius_m: Math.round(radiusKm * 1000) },
-    near: { lng: near[0], lat: near[1] },
+    area: {
+      type: 'circle',
+      lng: round2(center[0]),
+      lat: round2(center[1]),
+      radius_m: Math.round(radiusKm * 1000),
+    },
+    near: { lng: round2(near[0]), lat: round2(near[1]) },
     limit: 20,
   };
 }
@@ -202,7 +214,8 @@ export function corridorLine(geometry: readonly LngLat[]): LngLat[] {
     tolerance *= 2;
     line = simplify(geometry, tolerance);
   }
-  return line.map(([lng, lat]) => [Math.round(lng * 1e5) / 1e5, Math.round(lat * 1e5) / 1e5]);
+  // a ~100 m: a faixa é de 8 km, e a ponta da linha (a saída) não leva a posição exata da pessoa
+  return line.map(([lng, lat]) => [Math.round(lng * 1e3) / 1e3, Math.round(lat * 1e3) / 1e3]);
 }
 
 export function corridorArea(geometry: readonly LngLat[]): PlacesArea {

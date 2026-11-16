@@ -128,7 +128,7 @@ export function hoursOf(answer: string): number | null {
     .toLocaleLowerCase('pt-BR')
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '');
-  if (/meia hora/.test(s)) return 0.5;
+  if (s.includes('meia hora')) return 0.5;
   const hm = /(\d+(?:[.,]\d+)?)\s*(?:h|hora|horas)\s*(?:e\s*)?(\d{1,2})?/.exec(s);
   if (hm) return Number((hm[1] ?? '0').replace(',', '.')) + Number(hm[2] ?? 0) / 60;
   const m = /(\d+)\s*min/.exec(s);

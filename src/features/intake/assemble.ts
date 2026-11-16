@@ -233,10 +233,8 @@ export function assemble(input: AssembleInput): Assembled {
   const after = new Map<string, PlacePick[]>();
   const before: PlacePick[] = [];
   for (const s of [...input.suggestions].sort((a, b) => a.fraction - b.fraction)) {
-    let anchor: string | null = null;
-    chosen.forEach((p, i) => {
-      if ((input.chosenFractions[i] ?? 0) <= s.fraction) anchor = p.ref;
-    });
+    const anchor =
+      chosen.filter((_, i) => (input.chosenFractions[i] ?? 0) <= s.fraction).at(-1)?.ref ?? null;
     if (anchor === null) before.push(s);
     else after.set(anchor, [...(after.get(anchor) ?? []), s]);
   }

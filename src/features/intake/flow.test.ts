@@ -119,8 +119,8 @@ describe('a conversa nova: as opções do mapa (fase 24)', () => {
     expect(requests[0]).toMatchObject({
       categories: ['catering.cafe', 'catering.restaurant'],
       names: ['colonial'],
-      area: { type: 'circle', lng: -49.177, lat: -26.74, radius_m: 30_000 },
-      near: { lng: -50.144, lat: -26.37 },
+      area: { type: 'circle', lng: -49.18, lat: -26.74, radius_m: 30_000 },
+      near: { lng: -50.14, lat: -26.37 },
     });
   });
 
@@ -138,7 +138,7 @@ describe('a conversa nova: as opções do mapa (fase 24)', () => {
       d,
     );
     const area = requests[0]?.area;
-    expect(area?.type === 'circle' ? [area.lng, area.lat] : null).toEqual([-50.144, -26.37]);
+    expect(area?.type === 'circle' ? [area.lng, area.lat] : null).toEqual([-50.14, -26.37]);
     expect(area?.type === 'circle' ? area.radius_m : 0).toBeGreaterThan(90_000);
   });
 

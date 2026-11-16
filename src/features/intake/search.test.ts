@@ -80,8 +80,8 @@ describe('as opções', () => {
     expect(optionsRequest(cafe, POMERODE, 30, PAPANDUVA)).toEqual({
       categories: ['catering.cafe', 'catering.restaurant'],
       names: ['colonial'],
-      area: { type: 'circle', lng: -49.177, lat: -26.74, radius_m: 30_000 },
-      near: { lng: -50.144, lat: -26.37 },
+      area: { type: 'circle', lng: -49.18, lat: -26.74, radius_m: 30_000 },
+      near: { lng: -50.14, lat: -26.37 },
       limit: 20,
     });
   });

@@ -252,10 +252,10 @@ const BY_KIND: Readonly<Record<StopKind, readonly string[]>> = {
 };
 
 const STOPWORDS = new Set(
-  'a o as os um uma uns umas de da do das dos e em no na nos nas num numa para pra por com ir ' +
-    'quero queria vamos ver conhecer visitar passar passear lugar lugares algum alguma bom boa'.split(
-      ' ',
-    ),
+  (
+    'a o as os um uma uns umas de da do das dos e em no na nos nas num numa para pra por com ir ' +
+    'quero queria vamos ver conhecer visitar passar passear lugar lugares algum alguma bom boa'
+  ).split(' '),
 );
 /** As palavras do pedido que vão no filtro de nome do "outro": as que distinguem, no máximo três. */
 export function nameWords(words: string): string[] {
