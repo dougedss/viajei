@@ -837,6 +837,37 @@ sem instalar com o palco de 563 px, o dedo no carro, o fps e o desfoque num celu
 
 Anotações:
 
+### 1.29 As opções vêm do mapa · 35 min (fase 24) · sem prova até a viagem
+
+Como o 1.24 a 1.28, fica como documentação até a viagem (D224 a D237). A vontade, a tabela de tipos,
+as buscas, a regra de ouro, a reconciliação, o nó de chegada e a projeção com piso estão provados na CI
+(Vitest, as funções com entrada fixa e os e2e, com a busca no mapa, a rota e a IA respondidas no
+navegador) e no laboratório (o Chromium de verdade, com a Geoapify de verdade pela função); o que falta
+é um celular de verdade: a voz, o dedo, a estrada.
+
+- [ ] **Ditar o pedido.** No campo, pelo teclado do iPhone, dite "quero ir num café colonial": a
+  pergunta que falta (de onde, quando) e, respondida, os cartões dos cafés coloniais que existem, com a
+  cidade, "cerca de X de carro" e o horário só quando o mapa tem. Confira um ou dois no Maps: existem?
+  O tempo de carro estimado bate, mais ou menos, com o de verdade?
+- [ ] **Tocar nas opções com o dedo.** Escolha um café (o cartão fica marcado), dois se quiser, "Mais
+  opções" se houver; "Traçar o caminho". Um pedido sem nada por perto ("um aquário" no interior): a tela
+  diz que não achou, oferece procurar mais longe e não cria viagem vazia.
+- [ ] **As sugestões, desligadas.** Na revisão, o que vale a pena no caminho vem desligado, com o
+  desvio em minutos e a frase; ligue uma: ela entra na ordem do caminho e os horários do dia mudam.
+  Nada entrou sem você ligar. Diga o nome de um lugar no pedido ("passando no Zoo Pomerode"): ele entra
+  direto; com dois no mapa, a tela pede para escolher.
+- [ ] **O Chegamos! em casa, de verdade.** Numa saída de verdade, deixe o último lugar: o dia **não**
+  se conclui; o "Agora" diz "chega às" a casa; ao chegar e ficar uns 3 min com o mapa aberto, o
+  Chegamos! vem sozinho e aí o dia se conclui.
+- [ ] **A porcentagem numa ida e volta.** Numa ida e volta pela mesma estrada, o "% do caminho do dia"
+  sobe na ida e continua subindo na volta (nunca volta para trás); ao sair de casa, nenhum "Vocês
+  passaram por Chegada em…".
+- [ ] **O VoiceOver nas opções e nas sugestões.** Cada cartão de opção é um botão com o nome, a cidade e
+  o tempo, e diz se está escolhido; cada sugestão é uma caixa de marcar "…, sugestão no caminho"; a
+  escolha do local é um grupo de opções; a atribuição ("Powered by Geoapify") se lê.
+
+Anotações:
+
 ## Parte 2 · Android
 
 O mesmo percurso, mais curto: aqui está só o que muda no Android, e no fim o resto, item a item,
@@ -1036,6 +1067,9 @@ Anotações:
 - [ ] **O dia inteiro na tela (fase 22), o mesmo do 1.28** no Android: a maquete inteira no Chrome sem
   instalar e no app instalado, o toque no carro e a volta, o fps do "Rever o dia" em Alta e em Leve com
   o desfoque das bordas, a noite e as cidades de passagem sem foco no TalkBack.
+- [ ] **As opções vêm do mapa (fase 24), o mesmo do 1.29** no Android: ditar o pedido pelo teclado do
+  Google, tocar nas opções e nas sugestões com o dedo, o Chegamos! em casa de verdade, a porcentagem
+  numa ida e volta, e o TalkBack nos cartões, nas sugestões e na escolha do local.
 
 Anotações:
 

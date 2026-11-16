@@ -374,6 +374,12 @@ Ubuntu, nenhum cenário rodou) e 13/11 (`app_parada_auto` e `app_clima`). É a 3
   mudam na D175, na D177, na D178 e na 6.1 do prompt mestre. O plano e a ideia ficaram fora do git até o
   commit de fechamento da fase 22.
 
+- **Completado às 21h09 de 15/11 pelo orquestrador, com a nota que a própria sessão mandou pelo Douglas à
+  noite:** chat do VS Code, `session_id` `205cc4ba-e62a-492a-ab8d-cd17538f6f2e`, 11h19 a 16h50 UTC; sem o
+  JSON do `claude -p`, o custo em dinheiro não foi medido. Actions: ~130 min em 9 execuções (5 CI, 1
+  laboratório no preview, 1 na produção, 2 medições). **Um desvio de regra:** a sessão rodou uma vez
+  `vercel whoami` (só leitura; nada mudou). As armadilhas da fase estão na memória do projeto.
+
 ### Portão de saída (conferido às 14h50 de 15/11 pelo orquestrador, a pedido do Douglas)
 - ponta da `main`: `6894c7c`, com o commit `fase 17:` (`56d055d`) e os cinco seguintes; fast-forward de
   `9945f35`; 12 commits, nenhum trailer de coautoria.
@@ -417,5 +423,105 @@ Ubuntu, nenhum cenário rodou) e 13/11 (`app_parada_auto` e `app_clima`). É a 3
   este relatório, o plano modificado e `docs/ideias/`.
 
 ### Sessão
+- **Aberta pelo Douglas às 15h16 de 15/11** (18h16 UTC) num chat novo do VS Code, `session_id`
+  `45b6c7cf-d183-47c5-85c0-1fe60335f2e2`, com o prompt de colar do orquestrador, pela autorização antecipada
+  da seção 2. **No Fable 5.1** (o modelo com que o chat foi aberto; o pedido de 08/11 era o Opus 5.5), com
+  as 12 últimas respostas, as da conferência final, no Opus 5.5. Uma sessão só, sem resumo automático de
+  contexto. A conta pela transcrição: 332 respostas, 1,53 M tokens de saída, 176 M de cache lido, 6,45 M
+  de cache criado; sem o JSON do `claude -p`, o custo em dinheiro não foi medido.
+- **Os commits:** 13 entre 16h12 e 17h40, todos sem coautoria: sete das entregas às 16h12 (3.3, 3.1, 3.5,
+  3.4, 3.2, 3.6 e `fase 22: o dia inteiro na tela` em `f7b493b`, com a 3.7 e os quatro documentos que
+  estavam fora do git: este relatório, o plano, `docs/ideias/2026-11-15-mapa-do-dia-inteiro.md` e o
+  próprio `fase-22.md`), depois três de CI, um do laboratório do preview e dois de números (D223).
+- **Os pushes na branch:** cinco, pela regra do push em lote (um deles cancelou a CI do anterior um minuto
+  depois): `f7b493b` (CI 43751134754 vermelha: o texto da folha), `202e219` (CI 43754133765 vermelha, a
+  43753985002 de `209c1d1` cancelada: o plano distante da câmera e a suavização presa a 50 ms),
+  `2915247` (CI 43756050024 vermelha: a faixa fixa de busca do alvo), `72d233a` (CI 43757882155 **verde**:
+  a 360 px com o cartão de posição não há espaço para o dia inteiro, teste relaxado e registrado) e
+  `f8b7563` (CI 43759372096 verde: 1.161 Vitest em 125 arquivos, 493 pgTAP, 62 Playwright).
+- **No hospedado:** nada, como a seção 2 mandava. **Leituras de IA:** nenhuma.
+- **O laboratório do preview, uma vez** (run 43751240397, em `f7b493b`, 16h13, índice de CPU 4.438):
+  37 de 38 verdes; o `app_maquete` verde com o cenário novo (primeiro quadro 3.820 ms, 2 pílulas de 2 com o
+  "Como foi?" na tela, `perto` em 1,3 s e a volta em 9,4 s); as capturas `maquete.png` e
+  `maquete-noite.png` batem com os esboços A e N; o `app_parada_auto` vermelho por um toast de 10 s que já
+  tinha sumido (a prova virou toast ou a linha da lista, `registro_por`), corrigido em `209c1d1` **sem
+  segundo laboratório**, pela regra; a faixa de desfoque de cima borrava o fim do dia e saiu. Lighthouse
+  96–100 / 100 / 96–100.
+- **O merge** por fast-forward às 17h55 (`f8b7563` na `main`; CI da `main` 43760733057 verde). **O
+  laboratório da produção, uma vez** (run 43761590255, 18h04 a 18h42, índice de CPU 2.475, máquina lenta):
+  38 cenários, 34 verdes, 4 pulados por horário (véspera, prazo, retrospectiva, e o Lighthouse de
+  `viagens` 86 "medido, não cobrado" pela régua da D170), **nenhum vermelho**. `app_maquete` verde
+  (primeiro quadro 7.720 ms na máquina lenta, 2 de 2 pílulas, `perto` em 3,0 s, a volta em 15,4 s, a
+  noite com as pílulas); `app_parada_auto` verde pelo toast. **A captura `maquete-perto.png` da produção
+  saiu igual ao repouso:** o atributo já dizia `perto`, mas numa máquina de segundos por quadro o canvas
+  não tinha apresentado o quadro 1,5 s depois; a D223 diz que essa captura valeria ao lado do esboço Z e
+  está errada nisso (a sessão registrou no resumo final: a correção é da próxima fase).
+- **O resumo final** às 18h44. A sessão deixou esta seção em branco (preenchida pelo orquestrador às
+  21h09 pelos registros do GitHub e pela transcrição) e não apagou a `origin/fase-22`.
+
+### Portão de saída (conferido às 21h09 de 15/11 pelo orquestrador, a pedido do Douglas: "terminei a 22 e vamos para a proxima")
+- ponta da `main` = `f8b7563`, fast-forward de `6894c7c`, com o commit `fase 22: o dia inteiro na tela`
+  (`f7b493b`): sim.
+- CI verde na `main` nesse sha: sim (43760733057). Laboratório do preview uma vez (um vermelho, corrigido
+  pela CI sem segundo laboratório) e da produção uma vez, verde: sim.
+- `docs/decisoes.md` com a seção "Fase 22 · O dia inteiro na tela", D214 a D223 sem buraco: sim. A D221
+  diz o que mudou na D175, na D177 e na D178. **As D da próxima fase começam na D224.** Nenhuma migration
+  (a próxima continua sendo a `0016`, de quem precisar dela). Prompt mestre na v9.
+- `docs/fases/fase-22.md` e este relatório commitados em `f7b493b`, com o plano e `docs/ideias/`: sim. Memória
+  do projeto com o estado final, os números e as armadilhas da 22: sim (pela sessão). Resumo final: sim.
+- **O que ficou (para a 3.0 da próxima fase):** apagar a `origin/fase-22`; corrigir a frase da D223 sobre a
+  `maquete-perto.png` da produção (e fazer a captura esperar o quadro de perto apresentado, não só o
+  atributo); ler o agendado de 16/11, o primeiro com a 22 na `main`; `docs/ideias/2026-11-15-quero-ir-num-cafe-colonial.md`
+  (fora do git desde a noite de 15/11) e este relatório entram no commit de fechamento. Registradas pela
+  22, sem dono ainda: as pílulas de um dia de oito paradas se sobrepõem a 393 px; um palco baixo com um
+  cartão alto deixa pouco para o dia inteiro (um cartão compacto a 360 px); o CLS da lista passou de 0,05
+  uma vez (0,063); o aviso "PCFSoftShadowMap has been removed" vem do `shadows` do R3F.
+- **Pendências só do Douglas**, que ele disse que vê depois: o `progressao.spec` instável (D167; passou nas
+  CIs da 17 e da 22, só observar); a migration que tira `trips.car_*` (a partir de ~21/11, com o
+  `--dry-run` lido; se a próxima fase abrir antes, fica para a seguinte); o `pnpm audit` (D163, baixa);
+  quem subiu o Supabase local no Mac em 15/11; trocar ou não a instância do Overpass (o app não depende
+  dela); o `.claude/commands/ideia.md` fora do git. **Resolvidas por ele na noite de 15/11:** o nome fica
+  Viajei até o app estar pronto e disponível; o e-mail da 18 vai num subdomínio de `reitechia.com.br`; a
+  CLI da Vercel saiu da conta de cliente (no viajei fica sem login; a regra de não usá-la continua).
+- **15/11, noite, com a 22 fechada:** o balcão de ideias fechou com o Douglas
+  `docs/ideias/2026-11-15-quero-ir-num-cafe-colonial.md` (um teste realista na produção: a viagem nasceu sem o
+  café colonial pedido) e pediu ao orquestrador o encaixe no plano. O plano ganhou a **fase 24 (As opções
+  vêm do mapa)**, grande, dependente da 17 e da 15; a 23 passa a depender da 22 e da 24; a ordem proposta
+  é 24 → 18 → 23 → 19 → 20 → 21, à espera da palavra do Douglas. A decisão em aberto, dele: a fonte da
+  busca por tipo (um Overpass próprio ou uma API comercial atrás de uma Edge Function).
+
+## Fase 24 · As opções vêm do mapa
+
+### Portão de entrada (aberto às 21h36 de 15/11, a pedido do Douglas: "terminei a 22 e vamos para a proxima")
+- **A escolha da fase:** perguntado às 21h10 ("24 agora ou 18 agora?"), o Douglas escolheu a **24**, e, para a
+  fonte da busca por tipo, **a API comercial atrás de uma Edge Function** (a Places da Geoapify; a chave no
+  servidor, que ele cria), contra o Overpass próprio e contra cortar a fase em duas. A ordem do plano fica
+  24 → 18 → 23 → 19 → 20 → 21.
+- fase 22 na `main`: sim, `f8b7563`, a ponta. CI da `main` nesse sha: verde (43760733057). Laboratório da
+  produção: verde no sha (run 43761590255, nenhum vermelho).
+- `docs/decisoes.md` com a seção da fase 22: sim, D214 a D223. **As D da fase 24 começam na D224.**
+  Nenhuma migration (a próxima continua sendo a `0016`, de quem precisar dela); no hospedado, uma função nova
+  (a busca no mapa) e a `plan-trip` republicada, compatível com o app da produção; um secret novo
+  (`GEOAPIFY_API_KEY`), **que só o Douglas cria**.
+- memória do projeto atualizada depois da fase 22: sim (pela sessão), completada pelo orquestrador (as notas
+  da noite de 15/11 e o parágrafo da fase 24).
+- dependências (17 e 15 → 24): satisfeitas (as duas na `main`). A 24 vem antes da 18 pela ordem proposta em
+  15/11 à noite e confirmada pelo Douglas às 21h36.
+- `docs/fases/fase-24.md` escrito às 21h36 de 15/11 pelo orquestrador, a partir do plano (a fase 24 e as
+  decisões da noite de 15/11), da ideia, das D201 a D213, da D29 e da D223, da memória do defeito
+  (`viajei-defeito-lugares-reais.md`), da documentação pública da Geoapify (a Places API: o POST com o corredor
+  de uma linha e o `buffer`, as categorias, o plano gratuito de 3.000 créditos por dia com atribuição
+  obrigatória) e de um levantamento do código em `f8b7563` (a conversa e a `plan-trip`, a conferência no OSM,
+  a revisão e a escolha de local, a `route-day` como molde, o modo viagem e a projeção na rota, os e2e e o
+  laboratório). Com a 3.0 (a `fase-22` remota; a D223 e a espera do quadro apresentado na captura de perto; o
+  agendado de 16/11), a intenção no `ask`, a função nova com a tabela de tipos e os cartões das opções, a
+  confirmação por nome revista com a escolha, a rota e as sugestões desligadas numa só leitura `plan`, a
+  regra de ouro em código, a viagem sem lugar que não é sucesso, os quatro consertos do modo viagem, os
+  testes (um e2e de GPS de ida e volta), o `app_conversa` novo e a medição com o pedido de Pomerode, a
+  documentação (D29, D207 e D208 revistas; prompt mestre v10). Fora do git até o commit de fechamento da fase,
+  junto com este relatório, o plano modificado e `docs/ideias/2026-11-15-quero-ir-num-cafe-colonial.md`.
+
+### Sessão
 _(a abrir pelo Douglas num chat novo; a preencher no próximo passo)_
+
 

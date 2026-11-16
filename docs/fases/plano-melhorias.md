@@ -1,4 +1,4 @@
-# Melhorias depois da fase 12: as fases 13 a 23
+# Melhorias depois da fase 12: as fases 13 a 24
 
 As anotações do Douglas de 08/11/2026 (o caderno com o desenho do mapa e o print da tela do mapa),
 organizadas em fases. Cada fase ganha o próprio `docs/fases/fase-N.md` quando chegar a vez dela,
@@ -31,7 +31,12 @@ a 23 chegaram pelo balcão de ideias em 15/11 (`docs/ideias/2026-11-15-mapa-do-d
 entram onde a dependência e o valor mandam. A 22 vem logo depois da 17 porque conserta a tela
 principal, que o dono do app não reconheceu; a 18 fecha o trio do "sem digitar" (15, 17, 18) antes
 do bloco dos geradores; a 23 vem antes da 19 porque constrói a maquinaria que a 19 e a 20 reaproveitam
-(busca de referência, visão, segunda olhada, cache), e a maquete é o que a pessoa vê todo dia.
+(busca de referência, visão, segunda olhada, cache), e a maquete é o que a pessoa vê todo dia. A 24
+chegou pelo balcão na noite de 15/11 (`docs/ideias/2026-11-15-quero-ir-num-cafe-colonial.md`), depois de
+um teste realista na produção, e vem antes da 18 pelo mesmo motivo que pôs a 22 antes dela: é a porta de
+entrada do app, e o dono do app a achou ruim ("ainda está ruim o principal do app"); a 23 passa a
+depender da escolha de lugares que a 24 constrói. Ordem proposta pelo orquestrador em 15/11 à noite e
+confirmada pelo Douglas na mesma noite: 24 → 18 → 23 → 19 → 20 → 21.
 
 | Fase | Entrega | Depende de | Tamanho |
 |---|---|---|---|
@@ -41,8 +46,9 @@ do bloco dos geradores; a 23 vem antes da 19 porque constrói a maquinaria que a
 | 16 | A garagem é da pessoa, e o perfil organizado | 13 | média |
 | 17 | Criar a viagem conversando: um campo só, a saída de hoje, o pedido para outras IAs | 16 | grande |
 | 22 | O dia inteiro na tela: a câmera A (a maquete do dia inteiro, inclinada; de perto ao tocar no carro), o traçado em retrato, a maquete de mesa | 14 | grande |
+| 24 | As opções vêm do mapa: a conversa devolve a vontade, a pessoa escolhe entre lugares reais, o caminho vem como sugestão desligada; a chegada em casa e a ida e volta no modo viagem | 17, 15 | grande |
 | 18 | Reservas e gastos sem digitar: ler a confirmação (colada, anexada ou encaminhada por e-mail) e a nota | 17 | média |
-| 23 | Os cartões-postais: a parada é o lugar, a cidade de passagem na beira da estrada; o catálogo que cresce por viagem | 22, 17 | grande |
+| 23 | Os cartões-postais: a parada é o lugar, a cidade de passagem na beira da estrada; o catálogo que cresce por viagem | 22, 24 | grande |
 | 19 | O gerador de carros: o perfil paramétrico capaz de descrever carros de verdade | 16 | grande |
 | 20 | O seu carro: marca, modelo e ano viram o carro da maquete, com cache e aviso | 19 | grande |
 | 21 | O banco conectado (opcional): os gastos pelo Open Finance, por um agregador, com contrato | 18 | média |
@@ -370,6 +376,97 @@ mudou na D175, na D177 e na D178.
 
 ---
 
+## Fase 24 · As opções vêm do mapa
+
+A pessoa escreve o que quer, do jeito que fala ("quero ir num café colonial"), e o app **não adivinha
+um roteiro**. Ele pergunta só o essencial que faltar (quando, de onde), **mostra as opções que existem
+de verdade** (os cafés coloniais ao alcance, com a cidade e o tempo de carro) e a pessoa escolhe. Com o
+destino escolhido, traça a rota e, se houver algo que vale a pena **no caminho ou perto**, **sugere**,
+cada coisa com o desvio em minutos, desligada até ela ligar. A viagem nasce com a saída, o que ela
+escolheu, o que ela aceitou e a volta. A regra de ouro, nas palavras do Douglas: **"apenas pode colocar
+algo direto na rota se a pessoa realmente falar no chat"**. Nasceu de um defeito, achado num teste
+realista na produção em 15/11: "um café colonial em Pomerode, saindo de Major Vieira" virou uma viagem
+**sem café colonial**, porque a conversa da fase 17 propõe nomes de memória da IA, a conferência da D207
+tira em silêncio o que não bate no mapa (e aceitou um museu só pela palavra "pomerode"), a IA acrescenta
+o que ninguém pediu e a tela deixa salvar uma viagem sem lugar nenhum com um aviso amarelo. Ideia fechada
+no balcão na noite de 15/11 (`docs/ideias/2026-11-15-quero-ir-num-cafe-colonial.md`); o defeito, o teste
+com GPS falso e o que ele achou no modo viagem estão na memória do projeto.
+
+**O que entra**
+
+- **O pedido vira uma vontade, não um roteiro.** A IA devolve a **intenção estruturada**: o tipo de
+  lugar, o destino ou a área se ela disse, quando, de onde, e **os lugares que ela nomeou de verdade**.
+  Nada de lista de paradas inventada. É o passo das perguntas de hoje (`step: 'ask'`) com a saída mais
+  rica; as perguntas continuam poucas e ditas antes (decisão 6 de 08/11), só o que falta para buscar.
+- **As opções vêm do mapa, por tipo.** "Café colonial" não é classe do OSM: a tradução do pedido em
+  classes e palavras do nome é **uma tabela pequena e explicável do app**, que a IA preenche e que nunca
+  inventa um nome; o que não estiver nela vira "outro" com as palavras do pedido. O alcance é o da D207
+  ou a área que ela disse. A pessoa vê **cartões**: o nome como está no mapa, a cidade, o tempo de carro
+  (estimado pela distância para ordenar e mostrar "cerca de"; a rota real só para a escolhida, dentro da
+  cota do OpenRouteService) e o horário só quando o mapa tem. Sem opção ao alcance, o app diz isso e
+  oferece aumentar o alcance ou mudar o tipo, em vez de uma viagem vazia. Mais de um destino no mesmo
+  pedido é permitido. O lugar **nomeado** se confirma no mapa como hoje, mas com segunda tentativa (as
+  palavras que distinguem, sem preposição), a cidade fora da conta de semelhança e, com mais de um
+  candidato, a **escolha** na tela ("Escolher o local", que a revisão da fase 10 já tem), nunca o chute
+  nem o apagar.
+- **A rota e as sugestões no caminho.** Com o destino escolhido, a `route-day` traça a rota e o app
+  busca no corredor dela e perto do destino o que a pessoa gosta (perfil e notas como pista) mais o
+  clássico de turismo. **Sugestões, desligadas:** até seis, as mais perto da rota e mais parecidas com o
+  gosto dela, cada uma com o nome do mapa, a cidade, o desvio em minutos e uma frase da IA sobre o
+  porquê. **Nada liga sozinho**, nem a IA: ela escreve a frase e as missões, não decide o que entra.
+- **A viagem nasce do que foi escolhido.** A revisão da fase 10 e 17, com a saída, as opções, as
+  sugestões aceitas e a chegada, os horários pela rota (uma permanência padrão por tipo, ajustável) e o
+  título do dia pela IA. O que é texto vem da IA; o que é **fato** (lugar, coordenada, distância,
+  horário) vem do mapa e da rota, nunca dela. **Uma viagem com zero lugares além da saída e da chegada
+  não é um sucesso:** a tela diz o que faltou e volta às opções. A saída de hoje (D208) usa as mesmas
+  peças.
+- **Os quatro consertos do modo viagem** que o teste pediu: **o último nó do dia do tipo origem é um nó
+  de chegada** ("chega às 17:00", Chegamos! pela presença de 3 min, e só ele conclui o dia; o Partiu!
+  do último lugar não o toca; a D29 ganha a exceção; a conversa, a importação e o pedido para outras IAs
+  continuam escrevendo "Chegada em <cidade>", quem muda é a leitura); **a projeção na rota respeita a
+  ordem** (numa ida e volta pela mesma estrada a fração não anda para trás: só a partir da última parada
+  concluída, e a posição de cada parada é a do trecho dela); **a pergunta das passadas** só para paradas
+  até a próxima, em ordem (e nunca "passaram pela Chegada" ao sair de casa); **os rótulos das cidades de
+  passagem** sem sobreposição (da 22).
+
+**O que pede de fora.** **A fonte da busca por tipo** (abaixo), que só o Douglas resolve. Leituras de
+IA parecidas com as de hoje (o passo das perguntas devolve a intenção; o do roteiro recebe as escolhas e
+os candidatos em vez de inventar), medidas como a D140 e a D213 mediram; as cotas por pessoa
+(`edge_call`) continuam. **Nenhuma migration:** a viagem, os dias e as paradas não mudam de forma; um
+cache dos achados do mapa cabe no Dexie, como o `geocode`.
+
+**O que não dá, e o que dá.** O Nominatim é um geocodificador: não busca por tipo nem ao longo de uma
+linha. A busca que a ideia pede é a do **Overpass**, e os servidores públicos dele não responderam
+nenhuma vez em 15/11, além de a política deles não servir de base para um app. Duas saídas, e a escolha
+é do Douglas: **(1) um Overpass próprio**, com o extrato regional do Sul (Geofabrik) num servidor
+pequeno (o `around` com uma linha de coordenadas faz o corredor da rota nativamente; é infraestrutura
+nova neste projeto, com custo e operação); **(2) uma API comercial sobre o OSM atrás de uma Edge
+Function**, como a `route-day` faz com o OpenRouteService (a chave no servidor, regra 9): a Places da
+Geoapify busca por categoria num `polyline` com faixa em volta, e tem plano gratuito com limite diário
+(o número se confere ao escrever o prompt). **Recomendação:** a 2, pela simplicidade operacional e pelo
+padrão que o app já tem; a 1 se ele preferir não depender de mais um terceiro. Nos dois casos a
+atribuição ao OpenStreetMap continua na tela. Sem a fonte, a fase ainda entrega a intenção, a regra de
+ouro, a confirmação com escolha e os consertos do modo viagem; as opções e as sugestões ficariam presas
+ao que o Nominatim acha por nome, que é pouco.
+
+**Se precisar cortar em duas:** os consertos do modo viagem saem antes, como uma fase curta própria,
+sem IA e sem servidor; a conversa nova fica para a seguinte. Uma fase só se a fonte estiver decidida ao
+abrir.
+
+Testes: Vitest da intenção (saídas fixas da IA, inclusive o pedido com ordens dentro, que continua sendo
+dado), da tradução em classes, da montagem das buscas (ao alcance; no corredor), da ordenação, **da regra
+de ouro**, da confirmação com candidatos, da revisão sem lugar bloqueada, do nó de chegada e da projeção
+com ordem; a função com entrada fixa, como a 17; e2e `nova-viagem.spec` com o mapa e a IA respondidos no
+navegador (pedido → uma pergunta → três opções → a escolha → duas sugestões, uma ligada → a revisão → a
+viagem com exatamente saída, café, a sugestão e chegada) e um e2e de GPS de ida e volta no molde do
+`parada-auto.spec` (sair do último lugar não conclui; chegar em casa conclui; a porcentagem não volta);
+laboratório: o `app_conversa` passa a cobrar as opções e as sugestões (contagens, nenhum texto da
+pessoa) e uma medição real, uma vez, com o pedido do teste de 15/11 (Torten Paradies e Mahlzeit nas
+opções; o Bioparque Zoo Pomerode nas sugestões). Decisões: a intenção, a fonte do mapa, a tabela de
+tipos, a regra de ouro, a escolha, o nó de chegada, a projeção; a D207 e a D208 recebem o que mudou.
+
+---
+
 ## Fase 18 · Reservas e gastos sem digitar
 
 **Reservas.** O que a pessoa recebe ao reservar é a fonte (ver "O que não dá"). "Ler a
@@ -384,14 +481,20 @@ confirma numa revisão como a da importação.
 3. **Encaminhar o e-mail** para um endereço do app, o caminho que funciona igual nos dois celulares
    e sem abrir o app. Cada pessoa tem o seu endereço, com um código próprio
    (`r-7f3k@reservas.<domínio>`): é ele que diz de quem é o e-mail, e não o remetente, que qualquer
-   um forja. O e-mail entra pelo Cloudflare Email Routing (de graça, com um Email Worker que repassa
-   o texto e os anexos a uma Edge Function `inbound-mail`); a função confere ainda que o remetente é
+   um forja. O e-mail entra por um recebimento no subdomínio, que repassa o texto e os anexos a uma
+   Edge Function `inbound-mail` (o Resend, que o app já usa para enviar, também recebe: MX no
+   subdomínio, webhook `email.received` só com metadados, corpo e anexos pela API de Receiving; o
+   Cloudflare Email Routing só serviria levando o DNS para a Cloudflare; a 3.0 decide); a função
+   confere ainda que o remetente é
    o e-mail da conta, trata o conteúdo como dado (nunca como instrução, D130) e lê a confirmação. A
    reserva vai para a viagem cujas datas a contêm; sem viagem certa, para **Reservas recebidas**,
    onde um toque a põe no lugar; a pessoa recebe um push "Chegou a reserva do Vila Suzana". O
    e-mail não fica guardado: só o que a leitura tirou dele e os anexos, como qualquer anexo.
-   **Depende de um domínio próprio**, que depende da decisão do nome (a pesquisa de marca de 08/11:
-   "Viajei" está tomado no INPI).
+   **O domínio é o que o app já usa para enviar** (decisão do Douglas de 15/11 à noite):
+   `reitechia.com.br`, o do remetente do Auth (`viajei@reitechia.com.br`, Resend, D11), num subdomínio
+   próprio de recebimento (algo como `reservas.reitechia.com.br`), porque o DNS está na GoDaddy e o MX
+   da raiz é o e-mail da GoDaddy. Nenhum domínio novo antes da troca de nome. O registro MX, ligar o
+   recebimento e os secrets novos são do Douglas.
 
 "Procurar hotel perto de <parada>" abre o Booking ou o Google Hotels com as datas e o lugar: um link,
 sem API.
@@ -608,6 +711,11 @@ consentimento, o mínimo de dado, o casamento.
   a D177 e a D178 recebem o que a fase 22 registra (acima); as peças por lugar e o catálogo entram na
   6.1 e no modelo de dados (seção 5) pela fase 23. Nenhum desses documentos muda antes da fase que o
   toca: o plano é o mapa.
+- **Com a fase 24 (15/11, noite):** a D207 (a conferência no OSM) e a D208 (a saída de hoje) recebem o
+  que a fase registra, do jeito da D221 com a D175, a D177 e a D178; a D29 ganha a exceção do último nó
+  do dia; a seção 12 do prompt mestre ganha a 24 na vez dela; a regra do não-preencher ganha o seu
+  exemplo maior: a pessoa diz o que quer e escolhe entre lugares reais, nunca desfaz um roteiro
+  adivinhado.
 
 ## O que o Douglas decidiu em 08/11/2026
 
@@ -659,3 +767,35 @@ lugar delas quando existe) e a **D175** (o enquadramento desconta a altura medid
 **seção 6.1 do prompt mestre** na fase 22 e na 23. O orquestrador encaixou a ideia como as fases 22
 e 23 (a tabela "A ordem") em 15/11, com a fase 17 em andamento; nenhuma das duas começa antes do
 Douglas pedir.
+
+## O que o Douglas decidiu em 15/11/2026, à noite (com a fase 22 fechada)
+
+1. **O nome fica Viajei** até o app estar pronto e disponível; a troca se vê depois. Nenhum domínio
+   novo antes disso.
+2. **O e-mail encaminhado da fase 18 usa o domínio que o app já usa para enviar**, `reitechia.com.br`
+   (o remetente do Auth é `viajei@reitechia.com.br`, Resend, D11), num subdomínio próprio de
+   recebimento, porque o DNS está na GoDaddy e o MX da raiz é o e-mail da GoDaddy. A 3.0 da 18 decide
+   o provedor do recebimento; o MX, ligar o recebimento e os secrets são dele (a seção da fase 18,
+   acima, já diz isso).
+3. **A CLI da Vercel saiu da conta de cliente:** a identidade agora vem da pasta; no viajei a CLI fica
+   sem login, e a regra das fases de não usá-la continua.
+
+No balcão de ideias, sobre o café colonial (`docs/ideias/2026-11-15-quero-ir-num-cafe-colonial.md`):
+
+4. **"As coisas precisam ser mais simples para o usuário."** A pessoa diz o que quer e o app **dá as
+   opções**; ela escolhe. Não um roteiro pronto para ela desfazer.
+5. **"Se tiver algum ponto interessante no caminho para visitar, você vai sugerir e não apenas
+   adicionar."** O que está no caminho é sugestão, desligada; a pessoa liga.
+6. **"Apenas pode colocar algo direto na rota se a pessoa realmente falar no chat."** A regra de ouro.
+7. **Os lugares vêm do mapa, não da memória da IA** (proposta do balcão no fechamento, sem objeção): a
+   IA entende e escreve; o mapa diz o que existe, onde e a que distância.
+8. **Vira trabalho de fase**, com plano, testes e laboratório, não um remendo na conferência de hoje.
+
+9. **A fonte da busca por tipo é a API comercial atrás de uma Edge Function** (a Places da Geoapify,
+   sobre o OSM; a chave no servidor, como a do OpenRouteService; o plano gratuito, com a atribuição),
+   decidida às 21h de 15/11 quando o orquestrador perguntou, contra o Overpass próprio e contra cortar a
+   fase em duas. A conta e a chave são dele.
+10. **A 24 é a próxima**, antes da 18 (a mesma pergunta): a ordem 24 → 18 → 23 → 19 → 20 → 21.
+
+O orquestrador encaixou a ideia como a **fase 24** na noite de 15/11, com a 22 fechada, e abriu o portão
+dela na mesma noite, a pedido do Douglas (`docs/fases/fase-24.md`).
