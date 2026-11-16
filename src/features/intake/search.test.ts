@@ -114,6 +114,34 @@ describe('a ordem do caminho', () => {
   });
 });
 
+describe('os marcos e os bustos (a medição de 16/11)', () => {
+  it('o zoológico a 2 km entra na frente de vinte bustos, casas e praças mais perto; busto não é sugestão', () => {
+    const ROUTE2: LngLat[] = [PAPANDUVA, POMERODE];
+    const perto = Array.from({ length: 20 }, (_, i) =>
+      place(`b${String(i)}`, `Busto ${String(i)}`, -49.177 + i * 0.0001, -26.74, [
+        'tourism',
+        'tourism.sights',
+        'tourism.sights.memorial',
+        'tourism.sights.memorial.monument',
+      ]),
+    );
+    const casas = Array.from({ length: 5 }, (_, i) =>
+      place(`c${String(i)}`, `Casa ${String(i)}`, -49.177, -26.7405 - i * 0.0001, [
+        'tourism',
+        'tourism.sights',
+        'building.historic',
+      ]),
+    );
+    const zoo = place('zoo', 'Bioparque Zoo Pomerode', -49.1745, -26.7302, [
+      'entertainment',
+      'entertainment.zoo',
+    ]);
+    const s = suggestionsFor([...perto, ...casas, zoo], ROUTE2, [], new Set());
+    expect(s[0]?.place.id).toBe('zoo');
+    expect(s.some((x) => x.place.id.startsWith('b'))).toBe(false);
+  });
+});
+
 describe('o corredor e as sugestões', () => {
   const ROUTE: LngLat[] = [PAPANDUVA, [-49.6, -26.5], POMERODE];
   it('a linha do corredor é a rota simplificada, com a faixa de 8 km', () => {
@@ -147,10 +175,8 @@ describe('o corredor e as sugestões', () => {
     expect(s.map((x) => x.place.id)).not.toContain('x');
     expect(s.filter((x) => x.kind === 'city')).toHaveLength(2);
     expect(s.length).toBeLessThanOrEqual(6);
-    // o que a pessoa gosta passa na frente de quem tem o mesmo desvio
-    expect(s.findIndex((x) => x.place.id === 'v')).toBeLessThan(
-      s.findIndex((x) => x.place.id === 'm1'),
-    );
+    // o que a pessoa gosta vale como um marco: a vinícola entra junto com os museus
+    expect(s.map((x) => x.place.id)).toContain('v');
     expect(s.find((x) => x.place.id === 'zoo')?.fraction).toBeGreaterThan(0.9);
   });
 });

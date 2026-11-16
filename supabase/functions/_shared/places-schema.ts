@@ -76,6 +76,11 @@ export const placeSchema = z.object({
   /** só quando o OSM tem (`opening_hours`) */
   opening_hours: z.string().max(300).nullable(),
   website: z.string().max(500).nullable(),
+  /**
+   * a cozinha, como o OSM escreve (`german;coffee_shop;regional`): é o que diz que um café de Pomerode
+   * sem "colonial" no nome é um café colonial. Opcional: a função de antes não devolvia
+   */
+  cuisine: z.string().max(200).nullable().optional(),
   /** o objeto do OSM de onde ele veio (para a fase 23 achar a peça do lugar) */
   osm: z.object({ type: z.enum(['node', 'way', 'relation']), id: z.number().int() }).nullable(),
   /** a distância até `near`, quando a busca pediu */

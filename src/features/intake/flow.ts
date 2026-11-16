@@ -25,6 +25,7 @@ import {
   AREA_RADIUS_KM,
   bestOrder,
   corridorArea,
+  cuisineRequest,
   DESTINATION_RADIUS_M,
   nightOptions,
   OPTIONS_SHOWN,
@@ -182,8 +183,14 @@ async function runGroup(
 ): Promise<OptionGroup> {
   const base = { label, search, center, centerLabel, radiusKm, options: [], shown: OPTIONS_SHOWN };
   try {
-    const places = await deps.findPlaces(optionsRequest(search, center, radiusKm, from));
-    const options = optionsFor(places, search, from);
+    // a ordem dos resultados é a da área pedida (os cafés de Pomerode, não os mais perto de casa)
+    const byName = deps.findPlaces(optionsRequest(search, center, radiusKm, center));
+    const extra = cuisineRequest(search, center, radiusKm);
+    const [named, cuisine] = await Promise.all([
+      byName,
+      extra ? deps.findPlaces(extra).catch(() => []) : Promise.resolve([]),
+    ]);
+    const options = optionsFor([...named, ...cuisine], search, from, center);
     return { ...base, options, status: options.length > 0 ? 'ok' : 'none' };
   } catch (err) {
     return { ...base, status: statusOf(err) };
@@ -414,22 +421,23 @@ export async function prepare(
     (best, p) => (haversineM(start, at(p.place)) > haversineM(start, best) ? at(p.place) : best),
     at(picks[0]?.place ?? { lat: start[1], lng: start[0] }),
   );
-  const { categories, liked } = suggestionCategories(likes.interests, likes.learned);
+  const { landmarks, classic, liked } = suggestionCategories(likes.interests, likes.learned);
   const found: Place[] = [];
   if (geometry.length >= 2) {
+    // os marcos numa busca própria: na de todos juntos, os 20 mais perto do destino eram bustos e
+    // casas, e o zoológico ficava de fora (a medição de 16/11)
+    const near: PlacesRequest['area'] = {
+      type: 'circle',
+      lng: destination[0],
+      lat: destination[1],
+      radius_m: DESTINATION_RADIUS_M,
+    };
+    const around = { near: { lng: destination[0], lat: destination[1] }, limit: 20 };
     const runs = await Promise.allSettled([
-      deps.findPlaces({ categories, area: corridorArea(geometry), limit: 20 }),
-      deps.findPlaces({
-        categories,
-        area: {
-          type: 'circle',
-          lng: destination[0],
-          lat: destination[1],
-          radius_m: DESTINATION_RADIUS_M,
-        },
-        near: { lng: destination[0], lat: destination[1] },
-        limit: 20,
-      }),
+      deps.findPlaces({ categories: landmarks, area: corridorArea(geometry), limit: 20 }),
+      deps.findPlaces({ categories: classic, area: corridorArea(geometry), limit: 20 }),
+      deps.findPlaces({ categories: landmarks, area: near, ...around }),
+      deps.findPlaces({ categories: classic, area: near, ...around }),
     ]);
     for (const r of runs) if (r.status === 'fulfilled') found.push(...r.value);
   }

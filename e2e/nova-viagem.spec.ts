@@ -435,7 +435,7 @@ test('a conversa nova: uma pergunta, as opções do mapa, a escolha, as sugestõ
   await semRolagem(page, 'as opções');
   await axe(page, 'as opções');
   // a busca por tipo: as categorias da tabela, a palavra do nome, a posição arredondada
-  expect(mapa.pedidos[0]).toMatchObject({
+  expect(mapa.pedidos.find((p) => p.names?.includes('colonial'))).toMatchObject({
     categories: ['catering.cafe', 'catering.restaurant'],
     names: ['colonial'],
     area: { type: 'circle', lng: -50.14, lat: -26.37, radius_m: 200_000 },
@@ -550,8 +550,9 @@ test('nenhuma opção ao alcance: a tela diz, oferece procurar mais longe, e nã
   await expect(page.getByRole('button', { name: 'Criar a viagem' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Procurar mais longe' }).click();
   await expect(page.getByText(/^Não achei café colonial a até/)).toBeVisible({ timeout: 20_000 });
+  // cada procura são duas buscas (pelo nome "colonial" e pela cozinha regional), no mesmo raio
   expect(mapa.pedidos.map((p) => (p.area.type === 'circle' ? p.area.radius_m : 0))).toEqual([
-    200_000, 400_000,
+    200_000, 200_000, 400_000, 400_000,
   ]);
   // no teto, não há mais longe: só mudar o pedido
   await expect(page.getByRole('button', { name: 'Procurar mais longe' })).toHaveCount(0);
@@ -684,7 +685,7 @@ test('quero sair hoje: a pergunta de alcance, as opções em volta da posição,
   await page.getByRole('button', { name: 'Procurar no mapa' }).click();
   // o tipo saiu do texto, pela tabela, e a busca foi em volta da posição arredondada (uns 1 km)
   await expect(page.locator('[data-option]')).toHaveCount(1, { timeout: 20_000 });
-  expect(mapa.pedidos[0]).toMatchObject({
+  expect(mapa.pedidos.find((p) => p.names?.includes('colonial'))).toMatchObject({
     names: ['colonial'],
     area: { type: 'circle', lng: -50.88, lat: -29.37, radius_m: 120_000 },
   });

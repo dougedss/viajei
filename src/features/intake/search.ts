@@ -13,7 +13,15 @@ import type {
   PlacesRequest,
 } from '../../../supabase/functions/_shared/places-schema.ts';
 import { PLACES_MAX_LINE_POINTS } from '../../../supabase/functions/_shared/places-schema.ts';
-import { kindOfCategories, nameFits, plain, type PlaceSearch } from './places.ts';
+import {
+  inFamily,
+  kindOfCategories,
+  LANDMARK_CATEGORIES,
+  NOT_SUGGESTED,
+  placeFits,
+  plain,
+  type PlaceSearch,
+} from './places.ts';
 
 /**
  * As contas da busca no mapa (fase 24), puras: o alcance, o tempo de carro estimado das opções, a
@@ -101,10 +109,12 @@ export function optionsFor(
   places: readonly Place[],
   search: PlaceSearch,
   from: LngLat,
+  /** de onde se ordena: a área pedida ("em Pomerode"), ou de onde se sai */
+  sortFrom: LngLat = from,
 ): MapOption[] {
-  const out: MapOption[] = [];
+  const out: (MapOption & { order: number })[] = [];
   for (const place of places) {
-    if (!nameFits(search, place.name)) continue;
+    if (!placeFits(search, place)) continue;
     const dup = out.some(
       (o) =>
         plain(o.place.name) === plain(place.name) &&
@@ -112,9 +122,12 @@ export function optionsFor(
     );
     if (dup || out.some((o) => o.place.id === place.id)) continue;
     const km = haversineM(from, [place.lng, place.lat]) / 1000;
-    out.push({ place, km, minutes: driveMinutes(km), kind: search.kind });
+    const order = haversineM(sortFrom, [place.lng, place.lat]);
+    out.push({ place, km, minutes: driveMinutes(km), kind: search.kind, order });
   }
-  return out.sort((a, b) => a.km - b.km);
+  return out
+    .sort((a, b) => a.order - b.order)
+    .map((o) => ({ place: o.place, km: o.km, minutes: o.minutes, kind: o.kind }));
 }
 
 /**
@@ -123,6 +136,22 @@ export function optionsFor(
  * exata da pessoa não vai para a Geoapify.
  */
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * A busca a mais pela cozinha (o café colonial sem "colonial" no nome): as categorias dela, sem nome,
+ * no mesmo círculo; o que vale é decidido pela cozinha (`placeFits`).
+ */
+export function cuisineRequest(
+  search: PlaceSearch,
+  center: LngLat,
+  radiusKm: number,
+): PlacesRequest | null {
+  if (!search.cuisine) return null;
+  return {
+    ...optionsRequest({ ...search, names: [] }, center, radiusKm, center),
+    categories: [...search.cuisine.categories],
+  };
+}
 
 /** O pedido de uma busca de opções: as categorias, as palavras, o círculo e a proximidade. */
 export function optionsRequest(
@@ -236,6 +265,8 @@ export type Suggestion = {
   /** a fração da rota em que ele cai (de 0 a 1): o lugar dele na ordem do caminho */
   fraction: number;
   liked: boolean;
+  /** um marco (zoológico, museu, mirante…): vale o desvio para qualquer pessoa */
+  landmark: boolean;
 };
 
 /** No máximo seis sugestões, nunca uma lista para rolar; duas de cada tipo, para não serem seis museus. */
@@ -243,8 +274,9 @@ export const MAX_SUGGESTIONS = 6;
 const MAX_PER_KIND = 2;
 /** Mais que isto de desvio já não é "no caminho". */
 export const MAX_DETOUR_MIN = 30;
-/** Um lugar que a pessoa gosta vale como estar uns 10 min mais perto. */
+/** Um lugar que a pessoa gosta vale como estar uns 10 min mais perto; um marco também. */
 const LIKED_BONUS_MIN = 10;
+const LANDMARK_BONUS_MIN = 10;
 
 /**
  * As sugestões no caminho: os lugares do corredor e de perto do destino, menos o que a pessoa já
@@ -271,6 +303,8 @@ export function suggestionsFor(
       (c) => c.id === place.id || haversineM([c.lng, c.lat], at) < SAME_PLACE_M,
     );
     if (isChosen) continue;
+    // um busto ou um túmulo não é um desvio que se sugere
+    if (place.categories.some((c) => NOT_SUGGESTED.some((f) => inFamily(c, f)))) continue;
     if (candidates.some((s) => plain(s.place.name) === plain(place.name))) continue;
     const p = projectOntoLine(route, cum, at);
     const detour = detourMinutes(p.distance_m);
@@ -281,9 +315,11 @@ export function suggestionsFor(
       detour,
       fraction: p.fraction,
       liked: place.categories.some((c) => liked.has(c)),
+      landmark: place.categories.some((c) => LANDMARK_CATEGORIES.some((f) => inFamily(c, f))),
     });
   }
-  const score = (s: Suggestion) => s.detour - (s.liked ? LIKED_BONUS_MIN : 0);
+  const score = (s: Suggestion) =>
+    s.detour - (s.liked ? LIKED_BONUS_MIN : 0) - (s.landmark ? LANDMARK_BONUS_MIN : 0);
   const out: Suggestion[] = [];
   const perKind = new Map<StopKind, number>();
   for (const s of [...candidates].sort((a, b) => score(a) - score(b) || a.detour - b.detour)) {

@@ -69,9 +69,9 @@ function deps(over: Partial<FlowDeps> = {}) {
   const d: FlowDeps = {
     findPlaces: (r) => {
       requests.push(r);
-      if (r.area.type === 'corridor' || r.categories.includes('entertainment.zoo'))
-        return Promise.resolve([ZOO, TORTEN]);
-      return Promise.resolve([TORTEN, MAHLZEIT]);
+      // as buscas das opções (cafés e restaurantes); as das sugestões (os marcos e o clássico)
+      if (r.categories.includes('catering.cafe')) return Promise.resolve([TORTEN, MAHLZEIT]);
+      return Promise.resolve([ZOO, TORTEN]);
     },
     geocode: (q) =>
       Promise.resolve(/papanduva/i.test(q) ? [PAPANDUVA] : /pomerode/i.test(q) ? [POMERODE] : []),
@@ -112,16 +112,20 @@ describe('a conversa nova: as opções do mapa (fase 24)', () => {
     expect(stage.groups).toHaveLength(1);
     const g = stage.groups[0];
     expect(g?.status).toBe('ok');
+    // os mais perto de Pomerode primeiro (a área pedida), com o tempo de carro de Papanduva
     expect(g?.options.map((o) => o.place.name)).toEqual([
-      'Mahlzeit Café Colonial',
       'Torten Paradies Café Colonial',
+      'Mahlzeit Café Colonial',
     ]);
+    expect(g?.options[0]?.minutes).toBeGreaterThan(100);
     expect(requests[0]).toMatchObject({
       categories: ['catering.cafe', 'catering.restaurant'],
       names: ['colonial'],
       area: { type: 'circle', lng: -49.18, lat: -26.74, radius_m: 30_000 },
-      near: { lng: -50.14, lat: -26.37 },
+      near: { lng: -49.18, lat: -26.74 },
     });
+    // e a busca pela cozinha: os cafés, sem nome, no mesmo círculo
+    expect(requests[1]).toMatchObject({ categories: ['catering.cafe'], names: [] });
   });
 
   it('sem área: em volta de onde se sai, pelo alcance que a resposta deu', async () => {
@@ -239,8 +243,11 @@ describe('a conversa nova: a escolha e o caminho', () => {
     expect(prepared.chosenFractions).toEqual([0.5]);
     expect(prepared.places.chosen[0]).toMatchObject({ ref: 'e1', minutes: 125 });
     expect(prepared.places.home_minutes).toBe(125);
-    const kinds = requests.slice(1).map((r) => r.area.type);
-    expect(kinds.sort()).toEqual(['circle', 'corridor']);
+    // depois das duas buscas das opções, as quatro das sugestões: os marcos e o clássico, no corredor
+    // e em volta do destino
+    const kinds = requests.slice(2).map((r) => r.area.type);
+    expect(kinds.sort()).toEqual(['circle', 'circle', 'corridor', 'corridor']);
+    expect(requests.slice(2).some((r) => r.categories.includes('entertainment.zoo'))).toBe(true);
   });
 
   it('sem rota (a route-day não respondeu): a linha reta, e as sugestões ainda vêm', async () => {

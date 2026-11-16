@@ -68,6 +68,7 @@ const featureSchema = z.object({
               osm_type: z.string().optional(),
               opening_hours: z.string().optional(),
               website: z.string().optional(),
+              cuisine: z.string().optional(),
             })
             .loose()
             .optional(),
@@ -104,6 +105,7 @@ export function placeOf(raw: unknown): Place | null {
     address: text(p.formatted, 300),
     opening_hours: text(p.opening_hours ?? r?.opening_hours, 300),
     website: text(p.website ?? r?.website, 500),
+    cuisine: text(r?.cuisine, 200),
     osm:
       osmType && r?.osm_id !== undefined && Number.isInteger(r.osm_id)
         ? { type: osmType, id: r.osm_id }

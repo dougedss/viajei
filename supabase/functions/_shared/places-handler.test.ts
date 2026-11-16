@@ -153,9 +153,14 @@ describe('find-places: a resposta', () => {
       address: 'Torten Paradies, Rua XV de Novembro, Pomerode - SC, Brasil',
       opening_hours: 'Tu-Su 13:00-19:00',
       website: null,
+      cuisine: null,
       osm: { type: 'node', id: 4944605516 },
       distance_m: 1200,
     });
+    // a cozinha do OSM, quando vem: o café colonial sem "colonial" no nome (o Torten Paradies)
+    expect(
+      placeOf(feature({}, { cuisine: 'german;breakfast;coffee_shop;regional' }))?.cuisine,
+    ).toBe('german;breakfast;coffee_shop;regional');
     // sem horário no mapa, sem horário: nada se inventa
     expect(placeOf(feature({}, { opening_hours: undefined }))?.opening_hours).toBeNull();
     // sem nome, não é um lugar que se escolhe

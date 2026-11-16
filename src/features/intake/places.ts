@@ -19,6 +19,11 @@ export type PlaceSearch = {
   categories: readonly string[];
   /** cada palavra é uma busca (a Places filtra por um nome); vazio: só as categorias */
   names: readonly string[];
+  /**
+   * uma busca a mais, sem nome, que vale pela cozinha do OSM: o café colonial que não tem "colonial"
+   * no nome (o Torten Paradies, em Pomerode, é `amenity=cafe` com `cuisine=german;…;regional`)
+   */
+  cuisine?: { categories: readonly string[]; match: RegExp } | undefined;
 };
 
 type TypeRow = PlaceSearch & { key: string; match: RegExp };
@@ -41,6 +46,8 @@ export const PLACE_TYPES: readonly TypeRow[] = [
     match: /colonia(l|is)/,
     categories: ['catering.cafe', 'catering.restaurant'],
     names: ['colonial'],
+    // a medição de 16/11: o Torten Paradies não tem "colonial" no nome; a cozinha regional ou alemã diz
+    cuisine: { categories: ['catering.cafe'], match: /regional|german|colonial/ },
   },
   {
     key: 'churrascaria',
@@ -268,8 +275,15 @@ export function nameWords(words: string): string[] {
 export function searchFor(want: Pick<PlanWant, 'words' | 'kind'>): PlaceSearch {
   const text = plain(want.words);
   const row = PLACE_TYPES.find((t) => t.match.test(text));
-  if (row)
-    return { label: row.label, kind: row.kind, categories: row.categories, names: row.names };
+  if (row) {
+    return {
+      label: row.label,
+      kind: row.kind,
+      categories: row.categories,
+      names: row.names,
+      cuisine: row.cuisine,
+    };
+  }
   const kind = want.kind === 'origin' || want.kind === 'transit' ? 'other' : want.kind;
   return {
     label: want.words.trim().toLocaleLowerCase('pt-BR'),
@@ -299,20 +313,39 @@ export function wantsInText(text: string): PlanWant[] {
 
 // --------------------------------------------------------------- o que vale a pena no caminho
 /**
- * O clássico de turismo: o que se sugere no caminho de qualquer pessoa (atração, mirante, museu,
- * centro histórico, zoológico, parque). Cascata entra pela atração e pelo parque (não há categoria
- * própria).
+ * Os marcos: o que vale um desvio para qualquer pessoa (zoológico, museu, parque temático, aquário,
+ * mirante, reserva, parque nacional). Numa busca própria e com vantagem na ordem: na medição de 16/11,
+ * a busca única em volta de Pomerode trouxe os 20 lugares mais perto (bustos, casas, uma praça) e o
+ * Bioparque Zoo Pomerode ficou de fora.
+ */
+export const LANDMARK_CATEGORIES: readonly string[] = [
+  'entertainment.zoo',
+  'entertainment.museum',
+  'entertainment.theme_park',
+  'entertainment.aquarium',
+  'tourism.attraction.viewpoint',
+  'leisure.park.nature_reserve',
+  'national_park',
+];
+
+/**
+ * O clássico de turismo: o resto do que se sugere no caminho de qualquer pessoa (atração, centro
+ * histórico, parque, patrimônio). Cascata entra pela atração e pelo parque (não há categoria própria).
  */
 export const CLASSIC_CATEGORIES: readonly string[] = [
   'tourism.attraction',
-  'tourism.attraction.viewpoint',
   'tourism.sights',
-  'entertainment.museum',
-  'entertainment.zoo',
   'leisure.park',
-  'national_park',
   'heritage',
+  'building.historic',
 ];
+
+/** O que não é sugestão: bustos, túmulos, marcos de estrada (a família dos memoriais). */
+export const NOT_SUGGESTED: readonly string[] = ['tourism.sights.memorial'];
+
+/** A categoria é desta família ("tourism.sights.memorial.tomb" é da "tourism.sights.memorial")? */
+export const inFamily = (category: string, family: string): boolean =>
+  category === family || category.startsWith(`${family}.`);
 
 /** O que cada gosto do perfil (D209) acrescenta às sugestões. */
 export const LIKE_CATEGORIES: Readonly<Record<Interest, readonly string[]>> = {
@@ -334,16 +367,23 @@ export const LEARNED_CATEGORIES: Readonly<Partial<Record<StopKind, readonly stri
   event: ['entertainment'],
 };
 
-/** As categorias das sugestões: o clássico, mais o que a pessoa gosta; sem repetir, até 20. */
+/**
+ * As categorias das sugestões, em duas buscas: os marcos mais o que a pessoa gosta (os gostos do
+ * perfil e o aprendido pelas notas), e o clássico de turismo; sem repetir, até 20 em cada.
+ */
 export function suggestionCategories(
   interests: readonly Interest[],
   learned: readonly { kind: StopKind }[],
-): { categories: string[]; liked: Set<string> } {
+): { landmarks: string[]; classic: string[]; liked: Set<string> } {
   const liked = new Set<string>([
     ...interests.flatMap((i) => LIKE_CATEGORIES[i]),
     ...learned.flatMap((l) => LEARNED_CATEGORIES[l.kind] ?? []),
   ]);
-  return { categories: [...new Set([...CLASSIC_CATEGORIES, ...liked])].slice(0, 20), liked };
+  return {
+    landmarks: [...new Set([...LANDMARK_CATEGORIES, ...liked])].slice(0, 20),
+    classic: [...CLASSIC_CATEGORIES],
+    liked,
+  };
 }
 
 /** O tipo do app de um lugar do mapa, pelas categorias dele (a escolha e a sugestão nascem com ele). */
@@ -385,4 +425,13 @@ export function nameFits(search: Pick<PlaceSearch, 'names'>, name: string): bool
   if (search.names.length === 0) return true;
   const n = plain(name);
   return search.names.some((w) => n.includes(plain(w)));
+}
+
+/** O lugar é desta busca: pelo nome, ou pela cozinha do OSM quando a busca diz qual. */
+export function placeFits(
+  search: Pick<PlaceSearch, 'names' | 'cuisine'>,
+  place: { name: string; cuisine?: string | null | undefined },
+): boolean {
+  if (nameFits(search, place.name)) return true;
+  return search.cuisine?.match.test(plain(place.cuisine ?? '')) ?? false;
 }

@@ -4,6 +4,7 @@ import {
   mainCategory,
   nameFits,
   PLACE_TYPES,
+  placeFits,
   searchFor,
   suggestionCategories,
   wantsInText,
@@ -77,17 +78,33 @@ describe('a tabela de tipos (fase 24): a tabela, não a IA, decide a categoria',
     expect(wantsInText('quero sair hoje')).toEqual([]);
   });
 
-  it('as sugestões: o clássico de turismo mais o que a pessoa gosta e o que ela deu 4 e 5', () => {
-    const { categories, liked } = suggestionCategories(
+  it('as sugestões: os marcos mais o que a pessoa gosta, e o clássico de turismo, em duas buscas', () => {
+    const { landmarks, classic, liked } = suggestionCategories(
       ['wineries', 'no_dirt_road'],
       [{ kind: 'food' }],
     );
-    expect(categories).toContain('tourism.attraction');
-    expect(categories).toContain('entertainment.zoo');
-    expect(categories).toContain('production.winery');
-    expect(categories).toContain('catering.cafe');
+    expect(landmarks).toContain('entertainment.zoo');
+    expect(landmarks).toContain('entertainment.museum');
+    expect(landmarks).toContain('production.winery');
+    expect(landmarks).toContain('catering.cafe');
+    expect(classic).toContain('tourism.attraction');
+    expect(classic).not.toContain('entertainment.zoo');
     expect(liked.has('production.winery')).toBe(true);
-    expect(categories.length).toBeLessThanOrEqual(20);
+    expect(landmarks.length).toBeLessThanOrEqual(20);
+  });
+
+  it('o café colonial sem "colonial" no nome, pela cozinha do OSM (o Torten Paradies, 16/11)', () => {
+    const s = searchFor({ words: 'café colonial', kind: 'food' });
+    expect(s.cuisine?.categories).toEqual(['catering.cafe']);
+    expect(
+      placeFits(s, { name: 'Torten Paradies', cuisine: 'german;breakfast;coffee_shop;regional' }),
+    ).toBe(true);
+    expect(placeFits(s, { name: 'Mahlzeit Café Colonial', cuisine: null })).toBe(true);
+    // um café qualquer, sem a cozinha regional, não é café colonial
+    expect(placeFits(s, { name: 'Café do Centro', cuisine: 'coffee_shop' })).toBe(false);
+    expect(placeFits(s, { name: 'Café do Centro' })).toBe(false);
+    // as outras buscas não têm a segunda busca
+    expect(searchFor({ words: 'zoológico', kind: 'nature' }).cuisine).toBeUndefined();
   });
 
   it('o tipo do app de um lugar, pela categoria do mapa', () => {
