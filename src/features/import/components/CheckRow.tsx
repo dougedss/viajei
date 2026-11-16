@@ -12,6 +12,11 @@ type Props = {
   detail?: ReactNode;
   /** à direita, fora da área do toque que marca (ex.: "Editar") */
   action?: ReactNode;
+  /**
+   * desmarcada, a linha fica esmaecida; a sugestão do caminho (fase 24) nasce desmarcada e tem de
+   * ser lida inteira, com o contraste de sempre: ela não esmaece
+   */
+  dim?: boolean;
 };
 
 /**
@@ -22,7 +27,15 @@ type Props = {
  * botão dentro de botão, que passava o toque para a caixa: escolher o local desmarcava a parada.
  * Só o que é interativo no detalhe fica com o próprio toque.
  */
-export function CheckRow({ checked, onChange, label, ariaLabel, detail, action }: Props) {
+export function CheckRow({
+  checked,
+  onChange,
+  label,
+  ariaLabel,
+  detail,
+  action,
+  dim = true,
+}: Props) {
   const labelId = useId();
   const detailId = useId();
   return (
@@ -51,7 +64,7 @@ export function CheckRow({ checked, onChange, label, ariaLabel, detail, action }
         <span
           className={cx(
             'pointer-events-none relative grid min-w-0 grid-cols-1',
-            !checked && 'opacity-60',
+            !checked && dim && 'opacity-60',
           )}
         >
           {/* o rótulo é o nome do botão (pelo aria-label ou pelo aria-labelledby): não se lê duas vezes */}

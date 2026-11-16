@@ -316,21 +316,31 @@ export function atNode(nodes: readonly { s: number }[], s: number, eps = 0.5): b
  * fazer a aproximação, a pessoa ainda vê o carro de perto pelos mesmos 6 s, em vez de a câmera voltar
  * mal tendo chegado.
  */
-export type CloseMode = { until: number; arrived: boolean } | null;
+export type CloseMode = {
+  until: number;
+  arrived: boolean;
+  /** enquanto a câmera não chega, o modo continua, mas nunca além disto (um teto de segurança) */
+  limit: number;
+} | null;
 
-/** Um toque no carro: liga (ou estende) o modo de perto por `CLOSE_MS`. */
+/** O teto da aproximação: a câmera que não chegou em 30 s volta ao repouso mesmo assim. */
+export const CLOSE_APPROACH_MAX_MS = 30_000;
+
+/** Um toque no carro: liga (ou estende) o modo de perto por `CLOSE_MS` depois da chegada. */
 export function tapCar(now: number): CloseMode {
-  return { until: now + CLOSE_MS, arrived: false };
+  return { until: now + CLOSE_MS, arrived: false, limit: now + CLOSE_APPROACH_MAX_MS };
 }
 
 /** A câmera chegou perto: os 6 s passam a contar daqui, uma vez por toque. */
 export function arriveClose(close: CloseMode, now: number): CloseMode {
   if (close === null || close.arrived) return close;
-  return { until: Math.max(close.until, now + CLOSE_MS), arrived: true };
+  return { ...close, until: Math.max(close.until, now + CLOSE_MS), arrived: true };
 }
 
+/** O modo de perto vale até 6 s depois da chegada; enquanto a câmera se aproxima, vale (até o teto). */
 export function closeActive(close: CloseMode, now: number): boolean {
-  return close !== null && now < close.until;
+  if (close === null) return false;
+  return now < close.until || (!close.arrived && now < close.limit);
 }
 
 export type CameraMode = 'repouso' | 'perto' | 'mergulho';

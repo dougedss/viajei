@@ -144,6 +144,7 @@ function StopRow({
       checked={stop.include}
       onChange={onToggle}
       ariaLabel={stop.suggestion ? `${stop.name}, sugestão no caminho` : stop.name}
+      dim={!stop.suggestion}
       label={
         <span className="flex items-center gap-2">
           <span className="w-12 shrink-0 num text-ink-2">{stop.time ?? '—:—'}</span>

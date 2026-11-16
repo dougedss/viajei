@@ -248,7 +248,7 @@ describe('o modo de perto, ao tocar no carro', () => {
     expect(wantedFrame({ ...base, close: null, now: 1000 }).mode).toBe('repouso');
     expect(wantedFrame({ ...base, close: null, now: 1000 }).frame).toBe(rest);
     const close = tapCar(1000);
-    expect(close).toEqual({ until: 1000 + CLOSE_MS, arrived: false });
+    expect(close).toEqual({ until: 1000 + CLOSE_MS, arrived: false, limit: 1000 + 30_000 });
     expect(close?.until).toBe(1000 + CLOSE_MS);
     const near = wantedFrame({ ...base, close, now: 1200 });
     expect(near.mode).toBe('perto');
@@ -256,8 +256,11 @@ describe('o modo de perto, ao tocar no carro', () => {
       followCamera({ layout: flat, s: base.s, nextS: base.nextS, parked: true }),
     );
     expect(closeActive(close, 1000 + CLOSE_MS - 1)).toBe(true);
-    expect(closeActive(close, 1000 + CLOSE_MS)).toBe(false);
-    expect(wantedFrame({ ...base, close, now: 1000 + CLOSE_MS }).mode).toBe('repouso');
+    // chegou: 6 s depois da chegada, o repouso
+    const arrived = arriveClose(close, 1500);
+    expect(closeActive(arrived, 1500 + CLOSE_MS - 1)).toBe(true);
+    expect(closeActive(arrived, 1500 + CLOSE_MS)).toBe(false);
+    expect(wantedFrame({ ...base, close: arrived, now: 1500 + CLOSE_MS }).mode).toBe('repouso');
     // um toque de novo estende; um toque fora (close = null) volta na hora
     expect(tapCar(5000)?.until).toBe(5000 + CLOSE_MS);
     expect(wantedFrame({ ...base, close: null, now: 5100 }).mode).toBe('repouso');
@@ -266,13 +269,16 @@ describe('o modo de perto, ao tocar no carro', () => {
   it('os 6 s contam da chegada da câmera, uma vez por toque (fase 24: a máquina lenta)', () => {
     const close = tapCar(1000);
     // a câmera levou 4 s para chegar: o modo dura até 6 s depois disso
+    // enquanto não chega, o modo continua além dos 6 s do toque (a máquina lenta), até o teto
+    expect(closeActive(close, 1000 + CLOSE_MS + 3000)).toBe(true);
+    expect(closeActive(close, 1000 + 30_000)).toBe(false);
     const arrived = arriveClose(close, 5000);
-    expect(arrived).toEqual({ until: 5000 + CLOSE_MS, arrived: true });
+    expect(arrived).toEqual({ until: 5000 + CLOSE_MS, arrived: true, limit: 1000 + 30_000 });
     // chegou de novo no mesmo toque: não estende de novo
     expect(arriveClose(arrived, 9000)).toBe(arrived);
     // chegou logo: 6 s da chegada; e nunca encurta o que um toque mais novo deu
     expect(arriveClose(tapCar(1000), 1200)?.until).toBe(1200 + CLOSE_MS);
-    expect(arriveClose({ until: 20_000, arrived: false }, 1200)?.until).toBe(20_000);
+    expect(arriveClose({ until: 20_000, arrived: false, limit: 40_000 }, 1200)?.until).toBe(20_000);
     expect(arriveClose(null, 1000)).toBeNull();
   });
 

@@ -2,7 +2,7 @@ import type { OpeningPlan } from '../opening.ts';
 import type { MotionController } from '../motion.ts';
 import type { WorldLayout } from '../layout.ts';
 import type { CarPlacement } from '../car-position.ts';
-import { arriveClose, tapCar, type CameraMode, type CloseMode } from '../camera.ts';
+import { arriveClose, closeActive, tapCar, type CameraMode, type CloseMode } from '../camera.ts';
 import type { CameraFrame } from '../math.ts';
 import { projectWorld } from '../project.ts';
 
@@ -215,7 +215,7 @@ export class WorldRuntime {
     if (this.motion.busy || this.needsFrame) return true;
     if (Math.abs(this.night.t - this.night.target) > 0.002) return true;
     // o modo de perto conta o tempo pelo laço: enquanto dura, a cena fica viva
-    if (this.close !== null && now < this.close.until + 100) return true;
+    if (this.close !== null && closeActive(this.close, now - 100)) return true;
     return this.opening !== null && now - this.opening.startedAt < this.opening.plan.total_ms + 100;
   }
 
