@@ -48,6 +48,15 @@ describe('findSecrets', () => {
     ]);
   });
 
+  it('a chamada à Geoapify do navegador e a chave dela na URL (fase 24)', () => {
+    expect(
+      findSecrets('fetch("https://api.geoapify.com/v2/places?x=1")').map((h) => h.kind),
+    ).toEqual(['chave ou chamada da Geoapify']);
+    expect(findSecrets(`?apiKey=${'a1'.repeat(16)}`)).toHaveLength(1);
+    // o link da atribuição ("Powered by Geoapify") não é chamada
+    expect(findSecrets('href="https://www.geoapify.com/"')).toEqual([]);
+  });
+
   it('código comum não dispara', () => {
     expect(findSecrets('function d(a){return{kty:a,d:1}} const sk="sk-antes"')).toEqual([]);
   });

@@ -8,7 +8,8 @@ export type SecretKind =
   | 'JWT com service_role'
   | 'chave privada (PKCS#8)'
   | 'chave privada (JWK)'
-  | 'chave do OpenRouteService';
+  | 'chave do OpenRouteService'
+  | 'chave ou chamada da Geoapify';
 
 export type SecretHit = { kind: SecretKind; index: number };
 
@@ -28,6 +29,9 @@ const PATTERNS: readonly { kind: SecretKind; re: RegExp }[] = [
     re: new RegExp(`${PKCS8_P256}|-----BEGIN [A-Z ]*PRIVATE KEY-----`, 'g'),
   },
   { kind: 'chave do OpenRouteService', re: new RegExp(`${ORS_ORG}[0-9a-f]{32}|${ORS_B64}`, 'g') },
+  // a chave da Geoapify é um hexadecimal de 32 sem prefixo: o que se procura é a chamada do
+  // navegador (o host da API) e a chave na URL; a busca é só da função `find-places` (fase 24)
+  { kind: 'chave ou chamada da Geoapify', re: /api\.geoapify\.com|apiKey=[0-9a-f]{32}/g },
 ];
 
 const JWT = new RegExp(`eyJ${B64URL}{8,}\\.(eyJ${B64URL}{8,})\\.${B64URL}{16,}`, 'g');

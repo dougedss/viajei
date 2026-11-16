@@ -441,6 +441,16 @@ enabled = true
 verify_jwt = true
 entrypoint = "./functions/plan-trip/index.ts"
 
+# find-places (fase 24) busca os lugares por tipo no mapa (as opções ao alcance e as sugestões no
+# corredor da rota) na Places API da Geoapify, sobre o OpenStreetMap. Roda como o usuário (verify_jwt
+# ligado, RLS vale, sem chave secreta do Supabase); a GEOAPIFY_API_KEY existe só em `supabase secrets`
+# (a conta e a chave são do Douglas). Sem a chave, responde `no_source`. Limite: 60 buscas por pessoa
+# em 24 h.
+[functions.find-places]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/find-places/index.ts"
+
 # purge é o expurgo diário: o pg_cron a chama às 4h de São Paulo com a chave secreta no apikey, como
 # a send-notifications, e a função aceita também o JWT de um executor do laboratório, só para o
 # dry_run (`withSupabase({ auth: ['secret', 'user'] })` confere os dois). A chave secreta não é um

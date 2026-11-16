@@ -36,7 +36,7 @@ export default defineConfig({
     // testes do mapa e do clima fingem os dois com `context.route` (e2e/helpers/world.ts).
     launchOptions: {
       args: [
-        '--host-resolver-rules=MAP tile.openstreetmap.org ~NOTFOUND, MAP api.open-meteo.com ~NOTFOUND, MAP overpass-api.de ~NOTFOUND',
+        '--host-resolver-rules=MAP tile.openstreetmap.org ~NOTFOUND, MAP api.open-meteo.com ~NOTFOUND, MAP overpass-api.de ~NOTFOUND, MAP api.geoapify.com ~NOTFOUND',
       ],
     },
   },
