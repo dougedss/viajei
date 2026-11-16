@@ -109,28 +109,10 @@ test('a tela da viagem monta a maquete do dia inteiro, o toque no carro aproxima
     await expect(maquete).toHaveAttribute('data-world-camera', 'perto', { timeout: 5_000 });
   }).toPass({ timeout: 60_000 });
   // a imagem chega perto antes de voltar: o atributo de assentada só depois do quadro apresentado
-  // (a captura de perto do laboratório espera os dois, D224); se o modo for acabar antes de a câmera
-  // chegar (no SwiftShader cada quadro leva centenas de ms), um toque no carro o estende
-  {
-    const t0 = Date.now();
-    let ultimo = Date.now();
-    for (;;) {
-      const modo = await maquete.getAttribute('data-world-camera');
-      if (
-        modo === 'perto' &&
-        (await maquete.getAttribute('data-world-camera-settled')) === 'true'
-      ) {
-        break;
-      }
-      if (Date.now() - t0 > 60_000) throw new Error('a câmera de perto não assentou');
-      if (modo !== 'perto' || Date.now() - ultimo > 4_500) {
-        const at = await posicaoDoCarro(page);
-        await page.mouse.click(at.x, at.y);
-        ultimo = Date.now();
-      }
-      await page.waitForTimeout(250);
-    }
-  }
+  // (a captura de perto do laboratório espera os dois, D224), e os 6 s do modo contam da chegada da
+  // câmera, então mesmo no SwiftShader ela assenta perto antes de voltar
+  await expect(maquete).toHaveAttribute('data-world-camera-settled', 'true', { timeout: 30_000 });
+  await expect(maquete).toHaveAttribute('data-world-camera', 'perto');
   await expect(maquete).toHaveAttribute('data-world-camera', 'repouso', { timeout: 40_000 });
   await expect(maquete).toHaveAttribute('data-world-camera-settled', 'true', { timeout: 40_000 });
   // um toque de novo no carro e um toque fora dele: volta na hora

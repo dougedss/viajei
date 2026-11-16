@@ -33,6 +33,7 @@ import {
   REST_YAW,
   restCamera,
   tapCar,
+  arriveClose,
   wantedFrame,
   type RestViewport,
 } from './camera.ts';
@@ -247,7 +248,7 @@ describe('o modo de perto, ao tocar no carro', () => {
     expect(wantedFrame({ ...base, close: null, now: 1000 }).mode).toBe('repouso');
     expect(wantedFrame({ ...base, close: null, now: 1000 }).frame).toBe(rest);
     const close = tapCar(1000);
-    expect(close).toEqual({ until: 1000 + CLOSE_MS });
+    expect(close).toEqual({ until: 1000 + CLOSE_MS, arrived: false });
     expect(close?.until).toBe(1000 + CLOSE_MS);
     const near = wantedFrame({ ...base, close, now: 1200 });
     expect(near.mode).toBe('perto');
@@ -260,6 +261,19 @@ describe('o modo de perto, ao tocar no carro', () => {
     // um toque de novo estende; um toque fora (close = null) volta na hora
     expect(tapCar(5000)?.until).toBe(5000 + CLOSE_MS);
     expect(wantedFrame({ ...base, close: null, now: 5100 }).mode).toBe('repouso');
+  });
+
+  it('os 6 s contam da chegada da câmera, uma vez por toque (fase 24: a máquina lenta)', () => {
+    const close = tapCar(1000);
+    // a câmera levou 4 s para chegar: o modo dura até 6 s depois disso
+    const arrived = arriveClose(close, 5000);
+    expect(arrived).toEqual({ until: 5000 + CLOSE_MS, arrived: true });
+    // chegou de novo no mesmo toque: não estende de novo
+    expect(arriveClose(arrived, 9000)).toBe(arrived);
+    // chegou logo: 6 s da chegada; e nunca encurta o que um toque mais novo deu
+    expect(arriveClose(tapCar(1000), 1200)?.until).toBe(1200 + CLOSE_MS);
+    expect(arriveClose({ until: 20_000, arrived: false }, 1200)?.until).toBe(20_000);
+    expect(arriveClose(null, 1000)).toBeNull();
   });
 
   it('em movimento no modo de perto, a câmera recua como na fase 14', () => {

@@ -535,7 +535,9 @@ export async function addNamed(
   const where = searchArea(stage);
   const trimmed = name.trim();
   if (!where || trimmed.length < 3) return stage;
-  const named: PlanNamed = { name: trimmed, city: where.label, kind };
+  // a cidade do lugar a pessoa não disse: a caixa da busca (o raio em volta de onde se procura) já
+  // localiza, e a origem não é a cidade dele
+  const named: PlanNamed = { name: trimmed, city: null, kind };
   const state = await confirmNamed(named, (q) =>
     deps.searchNear(
       q,

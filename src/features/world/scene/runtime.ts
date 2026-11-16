@@ -2,7 +2,7 @@ import type { OpeningPlan } from '../opening.ts';
 import type { MotionController } from '../motion.ts';
 import type { WorldLayout } from '../layout.ts';
 import type { CarPlacement } from '../car-position.ts';
-import { tapCar, type CameraMode, type CloseMode } from '../camera.ts';
+import { arriveClose, tapCar, type CameraMode, type CloseMode } from '../camera.ts';
 import type { CameraFrame } from '../math.ts';
 import { projectWorld } from '../project.ts';
 
@@ -111,6 +111,11 @@ export class WorldRuntime {
   enterClose(now: number): void {
     this.close = tapCar(now);
     this.invalidate();
+  }
+
+  /** A câmera chegou perto: o tempo do modo passa a contar da chegada (fase 24). */
+  arrivedClose(now: number): void {
+    this.close = arriveClose(this.close, now);
   }
 
   /** Um toque fora do carro, ou o tempo que acabou: volta ao repouso. */

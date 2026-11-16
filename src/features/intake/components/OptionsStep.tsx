@@ -57,10 +57,11 @@ function OptionCard({
   const { place } = option;
   const about = `${aboutMinutes(option.minutes)} de carro`;
   return (
+    // o nome acessível é o próprio texto do cartão (o nome, a cidade, o tempo e o horário): o que se
+    // lê é o que se vê (WCAG 2.5.3)
     <button
       type="button"
       aria-pressed={chosen}
-      aria-label={`${place.name}${place.city ? `, ${place.city}` : ''}, ${about}`}
       onClick={onToggle}
       className={cx(
         'flex min-h-16 w-full items-start gap-3 rounded-[16px] px-3 py-3 text-left',

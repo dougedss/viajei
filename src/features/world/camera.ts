@@ -310,11 +310,23 @@ export function atNode(nodes: readonly { s: number }[], s: number, eps = 0.5): b
 
 // ------------------------------------------------------------------ o modo de perto
 /** O modo de perto em curso: até quando vale sem outro toque no carro. */
-export type CloseMode = { until: number } | null;
+/**
+ * O modo de perto em curso: até quando dura e se a câmera já chegou perto. Os `CLOSE_MS` contam do
+ * último toque **ou da chegada**, o que for mais tarde (fase 24): num celular que leva segundos para
+ * fazer a aproximação, a pessoa ainda vê o carro de perto pelos mesmos 6 s, em vez de a câmera voltar
+ * mal tendo chegado.
+ */
+export type CloseMode = { until: number; arrived: boolean } | null;
 
 /** Um toque no carro: liga (ou estende) o modo de perto por `CLOSE_MS`. */
 export function tapCar(now: number): CloseMode {
-  return { until: now + CLOSE_MS };
+  return { until: now + CLOSE_MS, arrived: false };
+}
+
+/** A câmera chegou perto: os 6 s passam a contar daqui, uma vez por toque. */
+export function arriveClose(close: CloseMode, now: number): CloseMode {
+  if (close === null || close.arrived) return close;
+  return { until: Math.max(close.until, now + CLOSE_MS), arrived: true };
 }
 
 export function closeActive(close: CloseMode, now: number): boolean {

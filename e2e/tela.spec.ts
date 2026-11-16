@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { LARGURA_ESTREITA, ROLAGEM_LATERAL } from '../src/features/lab/guards.ts';
+import { dateInSaoPaulo } from './helpers/dates.ts';
 import { inserir } from './helpers/db.ts';
 import { uuidV4, uuidV5 } from './helpers/ids.ts';
 import { criarUsuario, SENHA } from './helpers/users.ts';
@@ -97,6 +98,10 @@ test('a tela da viagem não rola, "Hoje" volta, e a ação e Detalhes ficam sob 
   page,
 }) => {
   test.setTimeout(150_000);
+  // a tela do meio-dia: depois das 18:30 o Modo Viagem fica de noite e o texto dele cresce 10%
+  // (prompt, 11), e a 393 px o cartão de posição mais o "Agora" deixam de dar espaço ao dia inteiro
+  // (a CI da fase 24 rodou às 23h de São Paulo). O relógio anda a partir daí, como o de verdade.
+  await page.clock.install({ time: new Date(`${dateInSaoPaulo(0)}T15:00:00.000Z`) });
   const user = await criarUsuario('Tela');
   // a viagem de hoje (dois dias): o "Agora" tem Partiu! e as setas têm para onde ir
   const { tripId } = await viagemNaSerra(user.id, 0);

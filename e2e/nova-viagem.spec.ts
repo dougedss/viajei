@@ -330,15 +330,16 @@ async function nominatimDaConversa(page: Page): Promise<void> {
       category,
       type,
     });
-    const json = /papanduva/i.test(q)
-      ? [row('Papanduva', PAPANDUVA.lat, PAPANDUVA.lng)]
-      : /bioparque/i.test(q)
-        ? [
-            row('Bioparque Zoo Pomerode', -26.7302, -49.1745, 'tourism', 'zoo'),
-            row('Bioparque Zoo Fazenda', -27.5, -48.6, 'tourism', 'zoo'),
-          ]
-        : /torten/i.test(q)
-          ? [row('Torten Paradies', -26.7404, -49.1718, 'amenity', 'cafe')]
+    // os lugares antes da cidade: a busca de um lugar pode levar a cidade junto
+    const json = /bioparque/i.test(q)
+      ? [
+          row('Bioparque Zoo Pomerode', -26.7302, -49.1745, 'tourism', 'zoo'),
+          row('Bioparque Zoo Fazenda', -27.5, -48.6, 'tourism', 'zoo'),
+        ]
+      : /torten/i.test(q)
+        ? [row('Torten Paradies', -26.7404, -49.1718, 'amenity', 'cafe')]
+        : /papanduva/i.test(q)
+          ? [row('Papanduva', PAPANDUVA.lat, PAPANDUVA.lng)]
           : [];
     await route.fulfill({ json, headers });
   });

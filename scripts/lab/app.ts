@@ -859,22 +859,18 @@ export function appMaquete(app: App): Promise<Check> {
           await until(camera, (v) => v === 'perto', 'o toque no carro não levou para perto');
           info.perto_ms = Date.now() - t0;
           // a captura espera a imagem chegar perto, não só o atributo (D223: numa máquina de segundos
-          // por quadro o atributo diz "perto" bem antes de o canvas mostrar o quadro); se o modo de
-          // perto acabar antes (6 s desde o último toque), um toque de novo o estende
-          // (numa máquina que leva segundos por quadro, a câmera leva mais que os 6 s do modo para
-          // chegar: um toque no carro antes de o modo acabar o estende, como uma pessoa faria)
+          // por quadro o atributo diz "perto" bem antes de o canvas mostrar o quadro); os 6 s do modo
+          // contam da chegada da câmera (D224), e se ainda assim ele acabar, um toque de novo o liga
           const settled = () => world.getAttribute('data-world-camera-settled');
           const end = Date.now() + WORLD_TIMEOUT;
           let toques = 1;
-          let ultimo = Date.now();
           for (;;) {
             const modo = await camera();
             if (modo === 'perto' && (await settled()) === 'true') break;
             if (Date.now() > end) throw new Error('a imagem não chegou perto');
-            if (modo !== 'perto' || Date.now() - ultimo > 4_500) {
+            if (modo === 'repouso') {
               toques += 1;
               await tapCar();
-              ultimo = Date.now();
             }
             await page.waitForTimeout(250);
           }

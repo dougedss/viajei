@@ -72,6 +72,8 @@ export function CameraRig({ runtime }: { runtime: WorldRuntime }) {
       const next = approachFrame(rig.view, want, k);
       rig.view = next.view;
       if (next.moving) runtime.requestFrame();
+      // chegou perto: os 6 s do modo contam daqui (numa máquina lenta a aproximação leva segundos)
+      else if (mode === 'perto') runtime.arrivedClose(now);
       runtime.cameraMoved(next.moving);
       runtime.setView(rig.view);
       apply(camera, rig);
