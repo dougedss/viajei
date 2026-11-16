@@ -1,5 +1,5 @@
 import type { ImportData, ImportTripHeader } from '@shared/import-schema.ts';
-import type { PlanContext, PlanQuestion, PlanRequest } from '@shared/plan-protocol.ts';
+import type { PlanContext, PlanIntent, PlanQuestion, PlanRequest } from '@shared/plan-protocol.ts';
 import { db } from '@/lib/db/schema.ts';
 import { ORIGIN_QUESTION, reachOf } from './today.ts';
 import type { LatLng } from './verify.ts';
@@ -21,6 +21,11 @@ export type Conversation = {
   questions: PlanQuestion[];
   /** uma por pergunta: a opção escolhida ou o texto livre ('' enquanto não respondeu) */
   answers: string[];
+  /**
+   * o que a pessoa quer (fase 24): lido pela IA no passo das perguntas, ou pela tabela de tipos do
+   * app na saída de hoje; null numa conversa guardada por uma versão de antes
+   */
+  intent: PlanIntent | null;
   /** a proposta da IA, antes de conferir no mapa */
   proposal: { data: ImportData; trip: ImportTripHeader; importId: string | null } | null;
   started_at: string;

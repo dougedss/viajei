@@ -210,6 +210,7 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
         center: gathered.center,
         questions: [],
         answers: [],
+        intent: null,
         proposal: null,
         started_at: new Date().toISOString(),
       };
@@ -228,7 +229,8 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
       if (!done) return;
       const parsed = planQuestionsSchema.safeParse(done.data);
       const questions = parsed.success ? parsed.data.questions : [];
-      const next = { ...base, questions, answers: questions.map(() => '') };
+      const intent = parsed.success ? (parsed.data.intent ?? null) : null;
+      const next = { ...base, questions, intent, answers: questions.map(() => '') };
       await keep(next);
       // nada a perguntar: monta direto
       if (questions.length === 0) await plan(next);
