@@ -5,6 +5,7 @@ import {
   routeErrorSchema,
   routeResponseSchema,
   type RouteErrorCode,
+  type RouteResponse,
 } from '@shared/route-schema.ts';
 import { connectivity, useOnline } from '@/lib/db/connectivity.ts';
 import { db, type DayRoute, type LngLat, type Stop } from '@/lib/db/schema.ts';
@@ -28,11 +29,11 @@ export class RouteRequestError extends Error {
 
 export { missingRoutes, waypointsHash } from './route-cache.ts';
 
-export async function fetchDayRoute(
-  tripId: string,
-  dayId: string,
-  waypoints: LngLat[],
-): Promise<DayRoute> {
+/**
+ * O pedido da rota, sem gravar: a conversa da viagem nova (fase 24) traça o caminho entre as escolhas
+ * antes de a viagem existir; a tela da viagem grava a do dia (`fetchDayRoute`).
+ */
+export async function requestRoute(waypoints: LngLat[]): Promise<RouteResponse> {
   const response = await supabase.functions.invoke<unknown>('route-day', { body: { waypoints } });
   const data: unknown = response.data;
   const error: unknown = response.error;
@@ -56,11 +57,19 @@ export async function fetchDayRoute(
   const parsed = routeResponseSchema.safeParse(data);
   if (!parsed.success)
     throw new RouteRequestError('internal', 'A rota veio num formato inesperado.');
+  return parsed.data;
+}
+
+export async function fetchDayRoute(
+  tripId: string,
+  dayId: string,
+  waypoints: LngLat[],
+): Promise<DayRoute> {
   const route: DayRoute = {
     trip_day_id: dayId,
     trip_id: tripId,
     hash: waypointsHash(waypoints),
-    ...parsed.data,
+    ...(await requestRoute(waypoints)),
   };
   await db.routes.put(route);
   return route;
