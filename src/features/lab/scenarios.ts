@@ -133,7 +133,7 @@ export const LAB_SCENARIOS = {
   app_conversa: {
     label: 'App · saída de hoje',
     description:
-      '"Quero sair hoje" com a posição: a pergunta de alcance, o roteiro conferido no OSM de verdade (o inventado sai) e a viagem de hoje no mapa',
+      '"Quero sair hoje para um café colonial" com a posição: a pergunta de alcance, as opções do mapa de verdade (Geoapify), a escolha, as sugestões desligadas e a viagem de hoje com exatamente o escolhido',
   },
   app_mapa: {
     label: 'App · mapa',

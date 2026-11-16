@@ -1,4 +1,4 @@
-import { Sparkles } from 'lucide-react';
+import { MapPinned } from 'lucide-react';
 import { Button } from '@/components/ui/Button.tsx';
 import { Card } from '@/components/ui/Card.tsx';
 import { TextField } from '@/components/ui/TextField.tsx';
@@ -16,7 +16,8 @@ type Props = {
 
 /**
  * As perguntas antes de montar (fase 17, a regra 16): quantas são, ditas antes; cada uma com as
- * opções e o campo para as palavras da pessoa. "Montar a viagem" quando todas têm resposta.
+ * opções e o campo para as palavras da pessoa. "Procurar no mapa" quando todas têm resposta (fase
+ * 24: as respostas servem para buscar as opções que existem).
  */
 export function QuestionsStep({ questions, answers, onAnswer, onSubmit, onBack }: Props) {
   return (
@@ -68,8 +69,8 @@ export function QuestionsStep({ questions, answers, onAnswer, onSubmit, onBack }
         disabled={!canPlan({ questions: [...questions], answers: [...answers] })}
         onClick={onSubmit}
       >
-        <Sparkles className="size-5" aria-hidden="true" />
-        Montar a viagem
+        <MapPinned className="size-5" aria-hidden="true" />
+        Procurar no mapa
       </Button>
       <Button variant="ghost" size="md" onClick={onBack}>
         Voltar ao texto

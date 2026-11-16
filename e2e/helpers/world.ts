@@ -292,32 +292,3 @@ export async function viagemDoSeed(
   await inserir('stops', rows);
   return { tripId, stops: rows.length, days };
 }
-
-/**
- * O Overpass de mentira (fase 17): devolve os elementos dados para a consulta da conversa e conta as
- * consultas (uma por conversa). O CORS aberto, como o serviço de verdade.
- */
-export async function fakeOverpass(
-  context: BrowserContext,
-  elements: readonly { name: string; lat: number; lng: number; tags: Record<string, string> }[],
-): Promise<{ count: () => number; last: () => string }> {
-  let n = 0;
-  let query = '';
-  await context.route('https://overpass-api.de/**', async (route: Route) => {
-    n++;
-    query = decodeURIComponent((route.request().postData() ?? '').replace(/^data=/, ''));
-    await route.fulfill({
-      json: {
-        elements: elements.map((e, i) => ({
-          type: 'node',
-          id: 1_000 + i,
-          lat: e.lat,
-          lon: e.lng,
-          tags: { name: e.name, ...e.tags },
-        })),
-      },
-      headers: { 'access-control-allow-origin': '*' },
-    });
-  });
-  return { count: () => n, last: () => query };
-}

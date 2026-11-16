@@ -1,25 +1,46 @@
 import { appendFile } from 'node:fs/promises';
-import { validateImport, type ImportData } from '../../supabase/functions/_shared/import-schema.ts';
+import type { LngLat } from '../../supabase/functions/_shared/geo.ts';
+import {
+  placesErrorSchema,
+  placesResponseSchema,
+  PLACES_FN,
+  type Place,
+  type PlacesRequest,
+} from '../../supabase/functions/_shared/places-schema.ts';
 import {
   PLAN_FN,
   planQuestionsSchema,
+  planWriteSchema,
   type PlanContext,
   type PlanRequest,
 } from '../../supabase/functions/_shared/plan-protocol.ts';
-import { matchElement, overpassQuery } from '../../src/features/intake/verify.ts';
-import { overpass } from '../../src/lib/geocode/overpass.ts';
+import { routeResponseSchema } from '../../supabase/functions/_shared/route-schema.ts';
+import {
+  prepare,
+  searchMap,
+  toggleChoice,
+  type FlowDeps,
+  type MapStage,
+  type SearchInput,
+} from '../../src/features/intake/flow.ts';
+import type { SearchResult } from '../../src/features/intake/named.ts';
+import { plain } from '../../src/features/intake/places.ts';
 import type { LabConfig } from './env.ts';
 import { costUsd, timedImport, type TimedImport } from './import-lab.ts';
-import { log, type Session } from './session.ts';
+import { log, sleep, type Session } from './session.ts';
 
 /**
- * A medição da conversa (fase 17, como a D133 e a D140 mediram a importação): poucas leituras reais,
- * contadas, pela função publicada e como o lab-a. Uma conversa (as perguntas e o roteiro) e uma saída
- * de hoje; de cada roteiro, quantos lugares propostos o Overpass confirma (uma consulta por roteiro,
- * dentro da política do serviço). Sai uma tabela só com números: nada do pedido nem da resposta.
+ * A medição da conversa (fase 24; a da fase 17 refeita): poucas leituras reais, contadas, pelas
+ * funções publicadas e como o lab-a, pelo mesmo caminho do app (`intake/flow.ts`): a IA lê a vontade
+ * e pergunta, o mapa de verdade dá as opções (a `find-places`, pela Geoapify), a primeira opção de
+ * cada vontade é a escolha, a rota e o corredor dão as sugestões, e uma leitura escreve a viagem
+ * sobre isso. Três textos fixos, sem nada da pessoa: a conversa da serra (a de antes), **"um café
+ * colonial em Pomerode, saindo de Papanduva"** (o defeito de 15/11: as opções têm de ter o Torten
+ * Paradies e o Mahlzeit, e as sugestões o Bioparque Zoo Pomerode) e uma saída de hoje em Canela. Sai
+ * uma tabela com números, custos e os nomes dos lugares públicos achados.
  */
-const GRAMADO = { lat: -29.3787, lng: -50.8737 };
 const CANELA = { lat: -29.37, lng: -50.81 };
+const UA = 'viajei-laboratorio/1.0 (medicao)';
 
 const s = (ms: number | null) => (ms === null ? '—' : `${(ms / 1000).toFixed(1)} s`);
 
@@ -39,110 +60,260 @@ function context(today: string, over: Partial<PlanContext> = {}): PlanContext {
   };
 }
 
-type Row = { label: string; run: TimedImport; detail: string };
-
-/** Quantos lugares propostos (fora a saída e o deslocamento) o Overpass confirma em volta do centro. */
-async function confirmed(data: ImportData, center: { lat: number; lng: number }, radiusKm: number) {
-  const places = data.days.flatMap((d) =>
-    d.stops.filter((st) => st.kind !== 'origin' && st.kind !== 'transit'),
-  );
-  const query = overpassQuery(places, center, radiusKm);
-  if (!query) return `0/${String(places.length)} (sem nome que distinga)`;
-  try {
-    // no Node, o cliente se identifica (sem isso o Overpass responde 406): um nome genérico
-    const elements = await overpass(query, { userAgent: 'viajei-laboratorio/1.0 (medicao)' });
-    const ok = places.filter((p) => matchElement(p, elements, center) !== null).length;
-    return `${String(ok)}/${String(places.length)} no Overpass`;
-  } catch (err) {
-    return `Overpass fora (${err instanceof Error ? err.message : 'erro'})`;
-  }
+/** A rede da medição: as funções publicadas como o lab-a, e o Nominatim identificado, um por vez. */
+function labDeps(
+  cfg: Pick<LabConfig, 'url' | 'publishableKey'>,
+  a: Session,
+  calls: { places: number; noSource: boolean },
+): FlowDeps {
+  const call = async (fn: string, body: unknown): Promise<Response> => {
+    const token = (await a.client.auth.getSession()).data.session?.access_token ?? '';
+    return fetch(`${cfg.url}/functions/v1/${fn}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: cfg.publishableKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+  };
+  let last = 0;
+  const nominatim = async (url: URL): Promise<SearchResult[]> => {
+    const wait = last + 1_100 - Date.now();
+    if (wait > 0) await sleep(wait);
+    last = Date.now();
+    url.searchParams.set('format', 'jsonv2');
+    url.searchParams.set('limit', '5');
+    url.searchParams.set('accept-language', 'pt-BR');
+    const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
+    if (!res.ok) throw new Error(`Nominatim ${String(res.status)}`);
+    const rows = (await res.json()) as {
+      name?: string;
+      display_name?: string;
+      lat: string;
+      lon: string;
+      category?: string;
+      type?: string;
+    }[];
+    return rows.map((r) => ({
+      name: r.name && r.name !== '' ? r.name : ((r.display_name ?? '').split(',')[0] ?? ''),
+      address: r.display_name ?? '',
+      lat: Number(r.lat),
+      lng: Number(r.lon),
+      ...(r.category ? { category: r.category } : {}),
+      ...(r.type ? { type: r.type } : {}),
+    }));
+  };
+  return {
+    findPlaces: async (request: PlacesRequest): Promise<Place[]> => {
+      calls.places += 1;
+      const res = await call(PLACES_FN, request);
+      const json: unknown = await res.json().catch(() => null);
+      if (!res.ok) {
+        const err = placesErrorSchema.safeParse(json);
+        const code = err.success ? err.data.error.code : 'internal';
+        if (code === 'no_source') calls.noSource = true;
+        throw Object.assign(new Error(code), { code });
+      }
+      return placesResponseSchema.parse(json).places;
+    },
+    geocode: (q) => {
+      const url = new URL('https://nominatim.openstreetmap.org/search');
+      url.searchParams.set('q', q);
+      return nominatim(url);
+    },
+    searchNear: (q, center, radiusKm) => {
+      const url = new URL('https://nominatim.openstreetmap.org/search');
+      const dLat = radiusKm / 111;
+      const dLng = radiusKm / (111 * Math.max(0.2, Math.cos((center.lat * Math.PI) / 180)));
+      url.searchParams.set('q', q);
+      url.searchParams.set(
+        'viewbox',
+        [center.lng - dLng, center.lat + dLat, center.lng + dLng, center.lat - dLat]
+          .map((n) => n.toFixed(4))
+          .join(','),
+      );
+      url.searchParams.set('bounded', '1');
+      return nominatim(url);
+    },
+    route: async (waypoints: LngLat[]) => {
+      const res = await call('route-day', { waypoints });
+      if (!res.ok) return null;
+      const parsed = routeResponseSchema.safeParse(await res.json().catch(() => null));
+      return parsed.success ? parsed.data : null;
+    },
+  };
 }
+
+type Row = { label: string; run: TimedImport | null; detail: string };
+
+/** A primeira opção de cada vontade, como uma pessoa que toca na mais perto. */
+function chooseFirst(map: MapStage): MapStage {
+  return map.groups.reduce(
+    (m, g) => (g.options[0] ? toggleChoice(m, g.options[0].place.id) : m),
+    map,
+  );
+}
+
+const has = (names: readonly string[], want: string) =>
+  names.some((n) => plain(n).includes(plain(want)));
 
 export async function measureConversa(cfg: LabConfig, a: Session): Promise<number> {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(
     new Date(),
   );
   const rows: Row[] = [];
+  const calls: { places: number; noSource: boolean } = { places: 0, noSource: false };
+  const noSource = () => calls.noSource;
+  const deps = labDeps(cfg, a, calls);
+  /** o que faltou nas conversas que cobram (o café colonial em Pomerode) */
+  const missing: string[] = [];
 
-  log('medição: a conversa, as perguntas');
-  const text = 'Serra Gaúcha em dezembro, 4 dias, saindo de Papanduva';
-  const ask: PlanRequest = { step: 'ask', kind: 'plan', text, context: context(today) };
-  const asked = await timedImport(cfg, a, ask, PLAN_FN);
-  const questions = planQuestionsSchema.safeParse(asked.data);
-  const qs = questions.success ? questions.data.questions : [];
-  rows.push({
-    label: 'conversa · perguntas',
-    run: asked,
-    detail: `${String(qs.length)} perguntas`,
-  });
-
-  log('medição: a conversa, o roteiro');
-  const plan: PlanRequest = {
-    ...ask,
-    step: 'plan',
-    questions: qs,
-    // a primeira opção de cada pergunta, ou uma resposta livre curta
-    answers: qs.map((q) => q.options[0] ?? 'tanto faz'),
-  };
-  const planned = await timedImport(cfg, a, plan, PLAN_FN);
-  let detail: string = planned.outcome;
-  if (planned.outcome === 'done') {
-    try {
-      const data = validateImport(planned.data);
-      detail = `${String(data.days.length)} dias, ${String(data.days.flatMap((d) => d.stops).length)} paradas; ${await confirmed(data, GRAMADO, 200)}`;
-    } catch {
-      detail = 'fora do schema';
+  /** Uma conversa inteira: as perguntas (se houver), as opções, o caminho e a escrita. */
+  const conversa = async (
+    label: string,
+    input: Omit<SearchInput, 'intent' | 'questions' | 'answers'>,
+    check?: (opcoes: string[], sugestoes: string[]) => string[],
+  ) => {
+    let intent = null;
+    let questions: PlanRequest['questions'];
+    let answers: string[];
+    if (input.kind === 'plan') {
+      log(`medição: ${label}, as perguntas`);
+      const ask: PlanRequest = {
+        step: 'ask',
+        kind: 'plan',
+        text: input.text,
+        context: { ...context(today), ...input.context },
+      };
+      const asked = await timedImport(cfg, a, ask, PLAN_FN);
+      const parsed = planQuestionsSchema.safeParse(asked.data);
+      questions = parsed.success ? parsed.data.questions : [];
+      intent = parsed.success ? (parsed.data.intent ?? null) : null;
+      // a primeira opção de cada pergunta, ou uma resposta livre curta
+      answers = questions.map((q) => q.options[0] ?? 'tanto faz');
+      rows.push({
+        label: `${label} · perguntas`,
+        run: asked,
+        detail: `${String(questions.length)} perguntas; vontades: ${intent && intent.wants.length > 0 ? intent.wants.map((w) => w.words).join(', ') : 'nenhuma'}; área: ${intent?.area ?? '—'}`,
+      });
+    } else {
+      questions = [
+        { text: 'Quanto tempo vocês têm?', options: ['A manhã', 'O dia', 'Até amanhã'] },
+      ];
+      answers = ['O dia'];
     }
-  }
-  rows.push({ label: 'conversa · roteiro', run: planned, detail });
+    log(`medição: ${label}, as opções do mapa`);
+    const t0 = Date.now();
+    const map = await searchMap({ ...input, intent, questions, answers }, deps);
+    const opcoes = map.groups.flatMap((g) => g.options.map((o) => o.place.name));
+    const status =
+      map.groups.map((g) => g.status).join(',') || (map.nowhere ? 'sem onde procurar' : '—');
+    const chosen = chooseFirst(map);
+    if (chosen.chosen.length === 0 && !map.named.some((n) => n.state.kind === 'found')) {
+      rows.push({
+        label: `${label} · opções`,
+        run: null,
+        detail: `busca ${status} em ${s(Date.now() - t0)}: nenhuma opção; a escrita não roda`,
+      });
+      return;
+    }
+    const prepared = await prepare(
+      chosen,
+      { interests: ['nature', 'wineries'], learned: [] },
+      deps,
+    );
+    const sugestoes = prepared.suggestions.map((x) => x.place.name);
+    const problems = check?.(opcoes, sugestoes) ?? [];
+    missing.push(...problems);
+    rows.push({
+      label: `${label} · opções`,
+      run: null,
+      detail: `${String(opcoes.length)} opções (${opcoes.slice(0, 6).join('; ')}); ${String(sugestoes.length)} sugestões (${sugestoes.join('; ')}); rota ${prepared.routed ? 'real' : 'reta'}; ${s(Date.now() - t0)}${problems.length > 0 ? `; FALTOU: ${problems.join(', ')}` : ''}`,
+    });
+    log(`medição: ${label}, a escrita`);
+    const write: PlanRequest = {
+      step: 'plan',
+      kind: input.kind,
+      text: input.text,
+      questions,
+      answers,
+      context: {
+        ...context(
+          today,
+          input.kind === 'today' ? { reach: 'day', position: CANELA, place: 'Canela, RS' } : {},
+        ),
+        ...input.context,
+      },
+      places: prepared.places,
+    };
+    const wrote = await timedImport(cfg, a, write, PLAN_FN);
+    let detail: string = wrote.outcome;
+    if (wrote.outcome === 'done') {
+      const parsed = planWriteSchema.safeParse(wrote.data);
+      detail = parsed.success
+        ? `${String(parsed.data.days.length)} dias; ${String(parsed.data.days.flatMap((d) => d.stops).length)} escolhas nos dias; ${String(parsed.data.suggestions.length)} frases de sugestão`
+        : 'fora do schema';
+    }
+    rows.push({ label: `${label} · escrita`, run: wrote, detail });
+  };
 
-  log('medição: a saída de hoje');
-  const todayPlan: PlanRequest = {
-    step: 'plan',
+  await conversa('serra', {
+    kind: 'plan',
+    text: 'Serra Gaúcha em dezembro, 4 dias, saindo de Papanduva',
+    context: { origin: 'Papanduva/SC', position: null, place: null },
+    center: null,
+  });
+  await conversa(
+    'café colonial',
+    {
+      kind: 'plan',
+      text: 'um café colonial em Pomerode, saindo de Papanduva',
+      context: { origin: null, position: null, place: null },
+      center: null,
+    },
+    (opcoes, sugestoes) =>
+      [
+        has(opcoes, 'Torten Paradies') ? null : 'Torten Paradies nas opções',
+        has(opcoes, 'Mahlzeit') ? null : 'Mahlzeit nas opções',
+        has(sugestoes, 'Zoo Pomerode') ? null : 'Bioparque Zoo Pomerode nas sugestões',
+      ].filter((x): x is string => x !== null),
+  );
+  await conversa('saída de hoje', {
     kind: 'today',
     text: 'quero sair hoje',
-    questions: [{ text: 'Quanto tempo vocês têm?', options: ['A manhã', 'O dia', 'Até amanhã'] }],
-    answers: ['O dia'],
-    context: context(today, {
-      position: CANELA,
-      place: 'Canela, RS',
-      weather: 'Parcialmente nublado, 15° a 27°',
-      reach: 'day',
-    }),
-  };
-  const out = await timedImport(cfg, a, todayPlan, PLAN_FN);
-  let todayDetail: string = out.outcome;
-  if (out.outcome === 'done') {
-    try {
-      const data = validateImport(out.data);
-      todayDetail = `${String(data.days.flatMap((d) => d.stops).length)} paradas; ${await confirmed(data, CANELA, 120)}`;
-    } catch {
-      todayDetail = 'fora do schema';
-    }
-  }
-  rows.push({ label: 'saída de hoje · roteiro', run: out, detail: todayDetail });
+    context: { origin: null, position: CANELA, place: 'Canela, RS' },
+    center: CANELA,
+  });
 
   const head =
     '| passo | resultado | 1º caractere | fim | entrada | saída | US$ | o que veio |\n|---|---|---|---|---|---|---|---|';
   const body = rows.map(({ label, run, detail: d }) => {
-    const cost = run.usage && run.model ? costUsd(run.model, run.usage) : null;
+    const cost = run?.usage && run.model ? costUsd(run.model, run.usage) : null;
     return `| ${[
       label,
-      run.outcome === 'done' ? `ok · ${run.model ?? ''}` : `${run.outcome} ${run.code ?? ''}`,
-      s(run.first_char_ms),
-      s(run.end_ms),
-      run.usage?.input_tokens ?? '—',
-      run.usage?.output_tokens ?? '—',
+      run === null
+        ? 'mapa'
+        : run.outcome === 'done'
+          ? `ok · ${run.model ?? ''}`
+          : `${run.outcome} ${run.code ?? ''}`,
+      run ? s(run.first_char_ms) : '—',
+      run ? s(run.end_ms) : '—',
+      run?.usage?.input_tokens ?? '—',
+      run?.usage?.output_tokens ?? '—',
       cost === null ? '—' : cost.toFixed(4),
-      d,
+      d.replaceAll('|', '/'),
     ].join(' | ')} |`;
   });
   const total = rows.reduce((n, r) => {
-    const c = r.run.usage && r.run.model ? costUsd(r.run.model, r.run.usage) : null;
+    const c = r.run?.usage && r.run.model ? costUsd(r.run.model, r.run.usage) : null;
     return n + (c ?? 0);
   }, 0);
-  const report = `## Medição da conversa\n\n${[head, ...body].join('\n')}\n\nTotal: US$ ${total.toFixed(4)} em ${String(rows.length)} leituras.\n`;
+  const readings = rows.filter((r) => r.run !== null).length;
+  const report = `## Medição da conversa\n\n${[head, ...body].join('\n')}\n\nTotal: US$ ${total.toFixed(4)} em ${String(readings)} leituras; ${String(calls.places)} buscas no mapa (find-places)${noSource() ? ', **sem fonte (no_source): a chave da Geoapify ainda não existe**' : ''}.\n`;
   console.log(report);
   if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, report);
-  return rows.some((r) => r.run.outcome === 'http' || r.run.outcome === 'cut') ? 1 : 0;
+  const broken = rows.some((r) => r.run && (r.run.outcome === 'http' || r.run.outcome === 'cut'));
+  return broken || (missing.length > 0 && !noSource()) ? 1 : 0;
 }
