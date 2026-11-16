@@ -14,7 +14,7 @@ import type { Backend } from '@/lib/three/renderer.ts';
 import { useQuality } from '@/lib/three/useQuality.ts';
 import { useSupport } from '@/lib/three/useSupport.ts';
 import { formatStamp } from '@/lib/time/index.ts';
-import { restCamera, type CameraMode } from '../camera.ts';
+import { restCamera } from '../camera.ts';
 import { placeCar } from '../car-position.ts';
 import { convoyCarFor } from '../convoy.ts';
 import { useElementSize } from '../hooks/useElementSize.ts';
@@ -25,7 +25,7 @@ import { OPENING_TIMELINE, OPENING_TOTAL_MS, openedKey, planOpening } from '../o
 import { HUD_TOP } from '../project.ts';
 import { tierFor } from '../quality.ts';
 import { PHOTO_CARD_MS, planLiveAdvance, planReplay, planReview } from '../replay.ts';
-import { WorldRuntime, type Opening } from '../scene/runtime.ts';
+import { WorldRuntime, type CameraStatus, type Opening } from '../scene/runtime.ts';
 import { WorldCanvas } from '../scene/WorldCanvas.tsx';
 import { WorldScene } from '../scene/WorldScene.tsx';
 import { ListView, NOW_BAR_INSET, type WorldSlotProps } from '../WorldSlot.tsx';
@@ -48,7 +48,7 @@ export default function WorldSection(props: WorldSlotProps) {
   const [observe, size] = useElementSize();
   const [failed, setFailed] = useState<string | null>(null);
   const [backend, setBackend] = useState<Backend | null>(null);
-  const [cameraMode, setCameraMode] = useState<CameraMode>('repouso');
+  const [camera, setCamera] = useState<CameraStatus>({ mode: 'repouso', settled: false });
   const { search } = useLocation();
   const flags = readUrlFlags(search);
   const diag = import.meta.env.DEV || flags.diag;
@@ -81,7 +81,8 @@ export default function WorldSection(props: WorldSlotProps) {
       className="absolute inset-0 overflow-hidden bg-stage"
       data-world={backend ?? undefined}
       data-world-car={`${shownCar.model}:${shownCar.color}:${shownCar.finish}:${shownCar.wheels}`}
-      data-world-camera={cameraMode}
+      data-world-camera={camera.mode}
+      data-world-camera-settled={String(camera.settled)}
     >
       {size.width > 0 && size.height > 0 && support !== 'pending' ? (
         <WorldStage
@@ -95,7 +96,7 @@ export default function WorldSection(props: WorldSlotProps) {
           nightByUrl={flags.night}
           onBackend={setBackend}
           onFail={setFailed}
-          onCameraMode={setCameraMode}
+          onCamera={setCamera}
         />
       ) : (
         <p className="grid h-full place-items-center mv-text-14 text-ink-2" role="status">
@@ -120,7 +121,7 @@ type StageProps = WorldSlotProps & {
   nightByUrl: boolean;
   onBackend: (backend: Backend) => void;
   onFail: (reason: string) => void;
-  onCameraMode: (mode: CameraMode) => void;
+  onCamera: (status: CameraStatus) => void;
 };
 
 /** Quanto o chip do clima fica grande depois de o carro estacionar, antes de subir para a faixa. */
@@ -201,9 +202,10 @@ function WorldStage(p: StageProps) {
     runtime.setRest(rest);
     runtime.invalidate();
   }, [runtime, rest]);
-  // o modo da câmera para o palco (`data-world-camera`): um evento discreto do runtime
-  const { onCameraMode } = p;
-  useEffect(() => runtime.onCameraMode(onCameraMode), [runtime, onCameraMode]);
+  // o modo da câmera e se a imagem já chegou lá, para o palco (`data-world-camera` e
+  // `data-world-camera-settled`): eventos discretos do runtime
+  const { onCamera } = p;
+  useEffect(() => runtime.onCamera(onCamera), [runtime, onCamera]);
   // o chip do clima grande, preso à origem na abertura
   const firstNode = layout.nodes[0]?.position ?? null;
   const weatherAnchor = useWorldAnchor(runtime, firstNode, 3);

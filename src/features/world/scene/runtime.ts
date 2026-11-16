@@ -17,6 +17,20 @@ export type Updater = (ctx: { now: number; dt: number }) => void;
 
 export type Opening = { plan: OpeningPlan; startedAt: number };
 
+/**
+ * O que o palco diz da câmera por fora (`data-world-camera` e `data-world-camera-settled`): o modo
+ * que o rig decidiu e se a imagem já chegou lá. Numa máquina que leva segundos por quadro, o modo
+ * muda bem antes de o canvas mostrar o quadro novo (a captura de perto da produção na D223 saiu igual
+ * ao repouso): quem fotografa espera os dois.
+ */
+export type CameraStatus = { mode: CameraMode; settled: boolean };
+
+type Raf = (callback: () => void) => unknown;
+const raf: Raf = (callback) =>
+  typeof requestAnimationFrame === 'function'
+    ? requestAnimationFrame(callback)
+    : setTimeout(callback, 16);
+
 export class WorldRuntime {
   layout: WorldLayout;
   readonly motion: MotionController;
@@ -31,6 +45,8 @@ export class WorldRuntime {
   close: CloseMode = null;
   /** o modo visual da câmera, como o rig o decidiu no último quadro */
   cameraMode: CameraMode = 'repouso';
+  /** o último quadro já é o do enquadramento desejado e o canvas já o apresentou */
+  cameraSettled = false;
   /** o enquadramento atual, já suavizado: o HUD projeta por ele; o carro e os anéis escalam por ele */
   view: CameraFrame;
   /** o tamanho do palco em px, para projetar */
@@ -38,7 +54,10 @@ export class WorldRuntime {
   /** algum objeto ainda está em transição e quer mais um quadro; o laço zera antes de cada quadro */
   needsFrame = false;
   private readonly updaters = new Set<Updater>();
-  private readonly modeListeners = new Set<(mode: CameraMode) => void>();
+  private readonly cameraListeners = new Set<(status: CameraStatus) => void>();
+  /** muda a cada quadro em que a câmera anda: a espera dos dois quadros só vale se nada andou */
+  private settleToken = 0;
+  private settlePending = false;
   private invalidateFn: () => void = () => undefined;
 
   constructor(layout: WorldLayout, motion: MotionController, night: boolean, rest: CameraFrame) {
@@ -105,14 +124,49 @@ export class WorldRuntime {
   setCameraMode(mode: CameraMode): void {
     if (mode === this.cameraMode) return;
     this.cameraMode = mode;
-    for (const l of this.modeListeners) l(mode);
+    // um modo novo é um enquadramento novo: a imagem ainda não chegou lá
+    this.settleToken += 1;
+    this.cameraSettled = false;
+    this.emitCamera();
   }
 
-  onCameraMode(listener: (mode: CameraMode) => void): () => void {
-    this.modeListeners.add(listener);
+  /**
+   * O rig suavizou este quadro: `moving` enquanto ainda não chegou ao desejado. Parada, a câmera só
+   * conta como assentada dois quadros de animação depois: o primeiro vem depois de o quadro final ser
+   * desenhado, o segundo depois de o compositor o apresentar. Andou de novo no meio, a espera recomeça.
+   */
+  cameraMoved(moving: boolean): void {
+    if (moving) {
+      this.settleToken += 1;
+      if (this.cameraSettled) {
+        this.cameraSettled = false;
+        this.emitCamera();
+      }
+      return;
+    }
+    if (this.cameraSettled || this.settlePending) return;
+    this.settlePending = true;
+    const token = this.settleToken;
+    raf(() =>
+      raf(() => {
+        this.settlePending = false;
+        if (token !== this.settleToken || this.cameraSettled) return;
+        this.cameraSettled = true;
+        this.emitCamera();
+      }),
+    );
+  }
+
+  onCamera(listener: (status: CameraStatus) => void): () => void {
+    this.cameraListeners.add(listener);
     return () => {
-      this.modeListeners.delete(listener);
+      this.cameraListeners.delete(listener);
     };
+  }
+
+  private emitCamera(): void {
+    const status: CameraStatus = { mode: this.cameraMode, settled: this.cameraSettled };
+    for (const l of this.cameraListeners) l(status);
   }
 
   /** A câmera gravou o enquadramento deste quadro. */

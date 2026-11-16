@@ -845,18 +845,36 @@ export function appMaquete(app: App): Promise<Check> {
       [
         'tocar no carro leva para perto, e a câmera volta sozinha',
         async () => {
-          const box = await hud.boundingBox();
-          const at = await page.evaluate<{ left: number; top: number; visible: string } | null>(
-            ANCORA_DO_CARRO,
-          );
-          if (!box || !at) throw new Error('sem a âncora do carro');
-          if (at.visible !== 'true') throw new Error('o carro não está em cena');
+          const tapCar = async () => {
+            const box = await hud.boundingBox();
+            const at = await page.evaluate<{ left: number; top: number; visible: string } | null>(
+              ANCORA_DO_CARRO,
+            );
+            if (!box || !at) throw new Error('sem a âncora do carro');
+            if (at.visible !== 'true') throw new Error('o carro não está em cena');
+            await page.mouse.click(box.x + at.left, box.y + at.top);
+          };
           const t0 = Date.now();
-          await page.mouse.click(box.x + at.left, box.y + at.top);
+          await tapCar();
           await until(camera, (v) => v === 'perto', 'o toque no carro não levou para perto');
           info.perto_ms = Date.now() - t0;
-          // a câmera chega perto em menos de um segundo; a captura depois disso
-          await page.waitForTimeout(1_500);
+          // a captura espera a imagem chegar perto, não só o atributo (D223: numa máquina de segundos
+          // por quadro o atributo diz "perto" bem antes de o canvas mostrar o quadro); se o modo de
+          // perto acabar antes (6 s desde o último toque), um toque de novo o estende
+          const settled = () => world.getAttribute('data-world-camera-settled');
+          const end = Date.now() + WORLD_TIMEOUT;
+          let toques = 1;
+          for (;;) {
+            if ((await camera()) === 'perto' && (await settled()) === 'true') break;
+            if (Date.now() > end) throw new Error('a imagem não chegou perto');
+            if ((await camera()) === 'repouso') {
+              toques += 1;
+              await tapCar();
+            }
+            await page.waitForTimeout(250);
+          }
+          info.perto_assentada_ms = Date.now() - t0;
+          info.perto_toques = toques;
           await shot('maquete-perto.png');
           await until(camera, (v) => v === 'repouso', 'a câmera não voltou ao repouso');
           info.perto_volta_ms = Date.now() - t0;

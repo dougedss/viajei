@@ -108,7 +108,18 @@ test('a tela da viagem monta a maquete do dia inteiro, o toque no carro aproxima
     await page.mouse.click(at.x, at.y);
     await expect(maquete).toHaveAttribute('data-world-camera', 'perto', { timeout: 5_000 });
   }).toPass({ timeout: 60_000 });
+  // a imagem chega perto antes de voltar: o atributo de assentada só depois do quadro apresentado
+  // (a captura de perto do laboratório espera os dois, D223); se o modo acabar antes, toca de novo
+  await expect(async () => {
+    if ((await maquete.getAttribute('data-world-camera')) === 'repouso') {
+      const at = await posicaoDoCarro(page);
+      await page.mouse.click(at.x, at.y);
+    }
+    await expect(maquete).toHaveAttribute('data-world-camera', 'perto', { timeout: 2_000 });
+    await expect(maquete).toHaveAttribute('data-world-camera-settled', 'true', { timeout: 4_000 });
+  }).toPass({ timeout: 60_000 });
   await expect(maquete).toHaveAttribute('data-world-camera', 'repouso', { timeout: 40_000 });
+  await expect(maquete).toHaveAttribute('data-world-camera-settled', 'true', { timeout: 40_000 });
   // um toque de novo no carro e um toque fora dele: volta na hora
   await expect(async () => {
     const at = await posicaoDoCarro(page);

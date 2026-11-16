@@ -9,7 +9,9 @@ import type { WorldRuntime } from './runtime.ts';
  * Quem move a câmera (fase 22): o enquadramento desejado sai de `camera.ts` (o repouso com o dia
  * inteiro, o modo de perto enquanto dura, o mergulho da curiosidade), e aqui só se suaviza o atual
  * para o desejado, avisando o laço enquanto ainda não chegou. O modo decidido vai ao runtime, que
- * avisa o React só quando muda (o atributo `data-world-camera`). Com reduzir movimento, corta.
+ * avisa o React só quando muda (o atributo `data-world-camera`), e se a imagem já chegou lá
+ * (`data-world-camera-settled`, fase 24: dois quadros depois do último que andou). Com reduzir
+ * movimento, corta.
  * Parada, não pede quadro nenhum; a abertura do dia inteira acontece no repouso.
  */
 type Rig = { view: CameraFrame; pos: Vector3; look: Vector3; first: boolean; last: number };
@@ -70,6 +72,7 @@ export function CameraRig({ runtime }: { runtime: WorldRuntime }) {
       const next = approachFrame(rig.view, want, k);
       rig.view = next.view;
       if (next.moving) runtime.requestFrame();
+      runtime.cameraMoved(next.moving);
       runtime.setView(rig.view);
       apply(camera, rig);
     };
