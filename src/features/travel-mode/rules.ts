@@ -1,5 +1,5 @@
 import { isDepartureKind } from '@shared/constants.ts';
-import { activeStops } from '@/features/itinerary/rules.ts';
+import { activeStops, isAutoStop } from '@/features/itinerary/rules.ts';
 import type { Stop, TripDay } from '@/lib/db/schema.ts';
 import { countdownState, leaveAt, wallTime, type CountdownState } from '@/lib/time/index.ts';
 
@@ -29,6 +29,10 @@ export type DayState = {
   onRoad: boolean;
   /** primeira parada não concluída nem pulada */
   next: Stop | null;
+  /** o papel da próxima no dia: a chegada em casa pede Chegamos! (fase 24) */
+  nextRole: NodeRole | null;
+  /** a chegada em casa do dia, quando há (o último nó, uma origem que não é o primeiro) */
+  arrival: Stop | null;
   /** hora de sair de `at` para chegar em `next` no horário */
   leaveAt: Date | null;
   /** horário previsto de `next` */
@@ -39,12 +43,41 @@ export type DayState = {
   arriveAvailable: boolean;
   skipAvailable: boolean;
   closingSoon: ClosingSoon | null;
+  /** nenhuma por fazer: com a chegada em casa no fim, só ela conclui o dia */
   finished: boolean;
 };
 
-/** Origem e deslocamento são nós de saída: "Partiu!" é a ação deles, nunca "Chegamos!". */
+/**
+ * Origem e deslocamento são nós da estrada: sem "Como foi?", sem pílula no filme, sem pontos de
+ * chegada. Pelo tipo só, eles são nós de saída ("Partiu!" é a ação deles); a exceção é a chegada em
+ * casa (`isArrivalNode`), que só o dia inteiro diz qual é. Quem decide a ação lê `nodeRole`.
+ */
 export function isDepartureNode(stop: Pick<Stop, 'kind'>): boolean {
   return isDepartureKind(stop.kind);
+}
+
+/**
+ * A chegada em casa (fase 24, a exceção da D29): **o último nó do dia, quando é uma origem e não é o
+ * primeiro**. É assim que a conversa, a importação e o pedido para outras IAs a escrevem ("Chegada em
+ * Papanduva", `kind: origin`), e as viagens que já existem passam a ler certo sem mudar nada do que
+ * foi gravado. As paradas que se registraram sozinhas não contam para achar o último: parar 20 min em
+ * casa depois de chegar não transforma a chegada em saída.
+ */
+export function isArrivalNode(stop: Pick<Stop, 'id' | 'kind'>, dayStops: readonly Stop[]): boolean {
+  if (stop.kind !== 'origin') return false;
+  const planned = activeStops(dayStops).filter((s) => !isAutoStop(s));
+  return planned.length > 1 && planned.at(-1)?.id === stop.id;
+}
+
+/**
+ * O papel do nó no dia: a saída e o deslocamento pedem Partiu!; a chegada em casa e as paradas pedem
+ * Chegamos!. A chegada tem "chega às", é alvo da presença de 3 min como qualquer parada, e só ela
+ * conclui o dia.
+ */
+export type NodeRole = 'departure' | 'arrival' | 'stop';
+export function nodeRole(stop: Pick<Stop, 'id' | 'kind'>, dayStops: readonly Stop[]): NodeRole {
+  if (isArrivalNode(stop, dayStops)) return 'arrival';
+  return isDepartureNode(stop) ? 'departure' : 'stop';
 }
 
 export const CLOSING_SOON_MINUTES = 60;
@@ -70,12 +103,17 @@ export function dayState(day: Pick<TripDay, 'date'>, stops: readonly Stop[], now
       ? leaveAt(day.date, next.time, at.travel_minutes_to_next)
       : null;
 
+  // a chegada em casa é um nó de chegada (fase 24): "chega às" e Chegamos!, nunca Partiu!
+  const role = next ? nodeRole(next, ordered) : null;
+  const leaves = role === 'departure';
+
   let countdown: Countdown | null = null;
   if (next) {
     if (onRoad && arriveAt) countdown = build(arriveAt, 'chega às', now);
     else if (leave) countdown = build(leave, 'sair às', now);
     else if (arriveAt) {
-      countdown = build(arriveAt, isDepartureNode(next) ? 'sair às' : 'próxima às', now);
+      const label = leaves ? 'sair às' : role === 'arrival' ? 'chega às' : 'próxima às';
+      countdown = build(arriveAt, label, now);
     }
   }
 
@@ -85,7 +123,7 @@ export function dayState(day: Pick<TripDay, 'date'>, stops: readonly Stop[], now
   if (next) {
     if (at === null) {
       // início do dia: num nó de saída, Partiu!; numa parada comum, só Chegamos!
-      if (isDepartureNode(next)) {
+      if (leaves) {
         primary = 'depart';
         departAvailable = true;
       } else {
@@ -95,11 +133,11 @@ export function dayState(day: Pick<TripDay, 'date'>, stops: readonly Stop[], now
     } else if (!onRoad) {
       primary = 'depart';
       departAvailable = true;
-      arriveAvailable = !isDepartureNode(next);
+      arriveAvailable = !leaves;
     } else {
-      primary = isDepartureNode(next) ? 'depart' : 'arrive';
-      departAvailable = isDepartureNode(next);
-      arriveAvailable = !isDepartureNode(next);
+      primary = leaves ? 'depart' : 'arrive';
+      departAvailable = leaves;
+      arriveAvailable = !leaves;
     }
   }
 
@@ -116,6 +154,8 @@ export function dayState(day: Pick<TripDay, 'date'>, stops: readonly Stop[], now
     at,
     onRoad,
     next,
+    nextRole: role,
+    arrival: ordered.find((s) => isArrivalNode(s, ordered)) ?? null,
     leaveAt: leave,
     arriveAt,
     countdown,

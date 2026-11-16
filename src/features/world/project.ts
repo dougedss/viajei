@@ -78,3 +78,46 @@ export function projectWorld(
     depth: p.depth,
   };
 }
+
+// ------------------------------------------------------------------ os nomes das cidades
+/** Um nome de cidade de passagem na tela: o centro, o tamanho e a população (quem fica). */
+export type PlaceLabel = { index: number; x: number; y: number; w: number; h: number; pop: number };
+export type PlacedLabel = { index: number; y: number; hidden: boolean };
+
+/** o tamanho de um nome em maiúsculas pequenas espaçadas (12 px, 0,18em), sem medir o DOM */
+export const LABEL_CHAR_PX = 9.4;
+export const LABEL_HEIGHT_PX = 16;
+/** a folga entre dois nomes, e quanto o nome de baixo desce para sair da frente */
+const LABEL_GAP_PX = 4;
+
+const overlaps = (
+  a: { x: number; y: number; w: number; h: number },
+  b: { x: number; y: number; w: number; h: number },
+) =>
+  Math.abs(a.x - b.x) * 2 < a.w + b.w + LABEL_GAP_PX &&
+  Math.abs(a.y - b.y) * 2 < a.h + b.h + LABEL_GAP_PX;
+
+/**
+ * Os nomes das cidades de passagem sem um por cima do outro (fase 24: "JARAGUÁ DO SUL" sobre "SÃO
+ * BENTO DO SUL" no teste de 15/11). A cidade maior fica onde está; a menor que a cruza desce uma
+ * linha e, se ainda cruzar alguma, some. Puro: o HUD só aplica.
+ */
+export function declutterLabels(labels: readonly PlaceLabel[]): PlacedLabel[] {
+  const kept: { x: number; y: number; w: number; h: number }[] = [];
+  const out = new Map<number, PlacedLabel>();
+  for (const label of [...labels].sort((a, b) => b.pop - a.pop)) {
+    const at = { x: label.x, y: label.y, w: label.w, h: label.h };
+    const lower = { ...at, y: label.y + label.h + LABEL_GAP_PX };
+    const free = (box: typeof at) => !kept.some((k) => overlaps(k, box));
+    if (free(at)) {
+      kept.push(at);
+      out.set(label.index, { index: label.index, y: at.y, hidden: false });
+    } else if (free(lower)) {
+      kept.push(lower);
+      out.set(label.index, { index: label.index, y: lower.y, hidden: false });
+    } else {
+      out.set(label.index, { index: label.index, y: label.y, hidden: true });
+    }
+  }
+  return labels.map((l) => out.get(l.index) ?? { index: l.index, y: l.y, hidden: true });
+}

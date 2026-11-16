@@ -1,6 +1,6 @@
 import { activeStops } from '@/features/itinerary/rules.ts';
 import type { Stop, TravelState } from '@/lib/db/schema.ts';
-import { isDepartureNode } from './rules.ts';
+import { nodeRole } from './rules.ts';
 
 /**
  * O que aconteceu desde a última vez que este aparelho viu a maquete. Puro. A fase 5 anima a lista
@@ -73,7 +73,7 @@ export function eventsSince(
   };
   for (const stop of activeStops(stops)) {
     if (stop.done_at !== null && !done.has(stop.id)) {
-      if (isDepartureNode(stop)) push('departed', stop);
+      if (nodeRole(stop, stops) === 'departure') push('departed', stop);
       else push(stop.done_by === uid ? 'arrived' : 'team_arrived', stop);
     } else if (stop.skipped && stop.done_at === null && !skipped.has(stop.id)) {
       push('skipped', stop);

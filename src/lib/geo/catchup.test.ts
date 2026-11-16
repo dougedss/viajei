@@ -31,7 +31,7 @@ const base = (over: Partial<Parameters<typeof catchup>[0]> = {}) => {
     stops,
     at: o,
     next: stops[1]!,
-    route: ROUTE,
+    route: { geometry: ROUTE },
     fix: null,
     teamTracks: [],
     ...over,
@@ -96,7 +96,7 @@ describe('catchup', () => {
 
   it('sem posição e sem trilha: a última concluída', () => {
     const r = base();
-    expect(r.position).toMatchObject({ source: 'last-done', fraction: 0 });
+    expect(r.position).toMatchObject({ source: 'last-done', fraction: 0, alongM: 0 });
   });
 
   it('sem nada (início do dia, sem GPS, sem trilha, sem concluída): posição nula', () => {
@@ -107,12 +107,117 @@ describe('catchup', () => {
 
   it('sem rota: posição sem fração, Chegamos! ainda funciona por raio', () => {
     const r = base({ route: null, fix: { lng: PARK[0], lat: PARK[1], t: 0 } });
-    expect(r.position).toMatchObject({ fraction: null, offRoute: false, source: 'gps' });
+    expect(r.position).toMatchObject({
+      fraction: null,
+      alongM: null,
+      offRoute: false,
+      source: 'gps',
+    });
     expect(r.autoArrive?.id).toBe('p');
   });
 
   it('latestTeamPoint ignora trilhas vazias ou malformadas', () => {
     expect(latestTeamPoint([{ points: [] }, { points: 'x' }, { points: [[1, 2]] }])).toBeNull();
     expect(latestTeamPoint([{ points: [[1, 2, 3]] }])).toEqual({ point: [1, 2], t: 3 });
+  });
+});
+
+// A ida e volta pela mesma estrada (o teste de 15/11): casa → café, 10 km ao norte → casa. A saída e
+// a chegada têm a mesma coordenada; a rota passa duas vezes por cada ponto.
+describe('catchup numa ida e volta (fase 24)', () => {
+  const HOME: LngLat = [-50.0, -26.0];
+  const CAFE: LngLat = [-50.0, -25.91];
+  const GOING: LngLat[] = [HOME, [-50.0, -25.955], CAFE];
+  const TRIP = {
+    geometry: [...GOING, [-50.0, -25.955], HOME] as LngLat[],
+    legs: [{ distance_m: 10_000 }, { distance_m: 10_000 }],
+  };
+  const saida = () =>
+    makeStop({
+      id: 's',
+      position: 'a0',
+      kind: 'origin',
+      name: 'Saída de casa',
+      lng: HOME[0],
+      lat: HOME[1],
+    });
+  const cafe = () =>
+    makeStop({ id: 'c', position: 'a1', kind: 'food', name: 'Café', lng: CAFE[0], lat: CAFE[1] });
+  const chegada = () =>
+    makeStop({
+      id: 'h',
+      position: 'a2',
+      kind: 'origin',
+      name: 'Chegada em casa',
+      lng: HOME[0],
+      lat: HOME[1],
+    });
+  const at = (lat: number) => ({ lng: -50.0, lat, t: 0 });
+
+  it('ao sair de casa, ninguém pergunta pela chegada em casa', () => {
+    const s = { ...saida(), done_at: 'x', departed_at: 'x' };
+    const stops = [s, cafe(), chegada()];
+    const r = catchup({
+      stops,
+      at: s,
+      next: stops[1]!,
+      route: TRIP,
+      fix: at(-25.99),
+      teamTracks: [],
+      arrivalId: 'h',
+    });
+    expect(r.passed).toEqual([]);
+    expect(r.position?.fraction).toBeCloseTo(0.056, 2);
+  });
+
+  it('na volta, a fração segue da última concluída em diante e nunca volta para a ida', () => {
+    const s = { ...saida(), done_at: 'x', departed_at: 'x' };
+    const c = { ...cafe(), done_at: 'y', departed_at: 'y' };
+    const stops = [s, c, chegada()];
+    const seen = [-25.92, -25.95, -25.98, -25.995].map(
+      (lat) =>
+        catchup({
+          stops,
+          at: c,
+          next: stops[2]!,
+          route: TRIP,
+          fix: at(lat),
+          teamTracks: [],
+          arrivalId: 'h',
+        }).position?.fraction ?? 0,
+    );
+    // 46% → 28% → 11% → 0% em 15/11; agora 55% → 72% → 89% → 97%
+    expect(seen[0]).toBeCloseTo(0.55, 1);
+    expect(seen.at(-1)).toBeGreaterThan(0.95);
+    for (let i = 1; i < seen.length; i++) expect(seen[i]).toBeGreaterThan(seen[i - 1] ?? 1);
+  });
+
+  it('a chegada em casa nunca é passada, e as passadas param na primeira que o carro não passou', () => {
+    const s = { ...saida(), done_at: 'x', departed_at: 'x' };
+    const stops = [s, cafe(), chegada()];
+    // o carro já esteve depois do café nesta tela (o piso), e está chegando em casa
+    const r = catchup({
+      stops,
+      at: s,
+      next: stops[1]!,
+      route: TRIP,
+      fix: at(-25.995),
+      teamTracks: [],
+      arrivalId: 'h',
+      floor_m: 12_000,
+    });
+    expect(r.position?.fraction).toBeGreaterThan(0.95);
+    expect(r.passed.map((p) => p.id)).toEqual(['c']);
+  });
+
+  it('a chegada concluída põe o carro no fim da rota, não no começo', () => {
+    const stops = [
+      { ...saida(), done_at: 'x', departed_at: 'x' },
+      { ...cafe(), done_at: 'y', departed_at: 'y' },
+      { ...chegada(), done_at: 'z' },
+    ];
+    const r = catchup({ stops, at: stops[2]!, next: null, route: TRIP, fix: null, teamTracks: [] });
+    expect(r.position?.source).toBe('last-done');
+    expect(r.position?.fraction).toBeCloseTo(1, 6);
   });
 });

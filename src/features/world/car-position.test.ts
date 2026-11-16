@@ -19,6 +19,7 @@ const layout = buildLayout({
 const node = (id: string) => layout.nodes.find((n) => n.stop_id === id)!;
 const pos = (over: Partial<CatchupPosition> = {}): CatchupPosition => ({
   fraction: 0.5,
+  alongM: null,
   offRoute: false,
   distanceM: 40,
   source: 'gps',

@@ -7,6 +7,7 @@ import {
 } from '@shared/constants.ts';
 import { activeStops, isAutoStop, isLocated, isWaypoint } from '@/features/itinerary/rules.ts';
 import { toCents } from '@/features/expenses/rules.ts';
+import { nodeRole } from '@/features/travel-mode/rules.ts';
 import { parseTrackPoints } from '@/features/travel-mode/track.ts';
 import type {
   Attachment,
@@ -237,7 +238,9 @@ export function trackExit(
  * As saídas de uma viagem, na ordem do tempo. Uma saída é uma parada com `departed_at`. O nó de
  * saída (origem, deslocamento) só conta como saída própria quando é o começo: nenhuma parada antes
  * dele no dia saiu. "Hotel → Saída para Montenegro" é uma saída só, a do hotel, gravada no mesmo
- * toque; "Chegada em Papanduva", marcada pelo Partiu! com o carro já na estrada, não é saída.
+ * toque. A chegada em casa não é saída de ninguém (fase 24): ela é o nó de chegada e se conclui pelo
+ * Chegamos!; nas viagens de antes, o Partiu! do último lugar ainda a marcava com o carro na
+ * estrada, e esse `departed_at` velho continua não contando (há uma saída antes dela no dia).
  *
  * O "sair às" é a mesma conta do "Agora" (D29): numa parada comum, o horário da próxima não pulada
  * menos o deslocamento; num nó de saída, o horário dele. Todo caminho que grava `departed_at` (o
@@ -261,8 +264,9 @@ export function departures(trip: TripData, tracks: readonly TripTrack[]): Depart
         if (next?.time && stop.travel_minutes_to_next !== null) {
           target =
             wallToInstant(day.date, next.time.slice(0, 5)) - stop.travel_minutes_to_next * 60_000;
-        } else if (next?.time && isDepartureKind(next.kind)) {
-          // sem deslocamento informado, o "Agora" mostra o horário do nó de saída como "sair às"
+        } else if (next?.time && nodeRole(next, stops) === 'departure') {
+          // sem deslocamento informado, o "Agora" mostra o horário do nó de saída como "sair às";
+          // para a chegada em casa ele diz "chega às", e não há "sair às" a cumprir
           target = wallToInstant(day.date, next.time.slice(0, 5));
         }
       }

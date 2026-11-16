@@ -1,6 +1,6 @@
 import { mutate } from '@/lib/db/mutate.ts';
 import type { Stop } from '@/lib/db/schema.ts';
-import { isDepartureNode, type DayState } from './rules.ts';
+import type { DayState } from './rules.ts';
 
 /**
  * As escritas do "Agora", todas pela `mutate` (offline primeiro). Cada ação devolve o `undo`
@@ -20,13 +20,15 @@ async function patchWithUndo(stop: Stop, changes: StopPatch): Promise<() => Prom
 
 /**
  * Partiu!: o carro sai de `at` (`departed_at`). Quando a próxima é um nó de saída (origem ou
- * deslocamento), ela é concluída e deixada no mesmo toque: "saímos de Papanduva" é uma ação só.
+ * deslocamento), ela é concluída e deixada no mesmo toque: "saímos de Papanduva" é uma ação só. A
+ * chegada em casa não é nó de saída (fase 24): o Partiu! do último lugar grava só o `departed_at`
+ * dele, e o dia só se conclui com o Chegamos! em casa.
  */
 export async function depart(state: DayState, uid: string): Promise<Undoable> {
   const now = new Date().toISOString();
   const undos: (() => Promise<void>)[] = [];
   if (state.at && !state.onRoad) undos.push(await patchWithUndo(state.at, { departed_at: now }));
-  if (state.next && isDepartureNode(state.next)) {
+  if (state.next && state.nextRole === 'departure') {
     undos.push(await patchWithUndo(state.next, { done_at: now, done_by: uid, departed_at: now }));
   }
   return {

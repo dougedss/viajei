@@ -8,7 +8,7 @@ import {
   type Fix,
 } from '@/lib/geo/geofence.ts';
 import { isAutoStop } from '@/features/itinerary/rules.ts';
-import { isDepartureNode, type DayState } from './rules.ts';
+import type { DayState } from './rules.ts';
 
 /**
  * As decisões do acompanhamento da posição, puras (as regras da D47, antes do modo painel): quando
@@ -55,18 +55,20 @@ export type LiveDecision = {
   lowPower: boolean;
 };
 
+type LiveState = Pick<DayState, 'at' | 'next' | 'onRoad' | 'nextRole'>;
+
 /** A parada de onde se sai: `at` parado, ou o nó de saída quando ainda não há `at`. */
-export function departureStop(state: Pick<DayState, 'at' | 'next' | 'onRoad'>): Stop | null {
+export function departureStop(state: LiveState): Stop | null {
   if (state.at && !state.onRoad) return state.at;
-  if (!state.at && state.next && isDepartureNode(state.next)) return state.next;
+  if (!state.at && state.next && state.nextRole === 'departure') return state.next;
   return null;
 }
 
-export function liveDecision(
-  fixes: readonly Fix[],
-  state: Pick<DayState, 'at' | 'next' | 'onRoad'>,
-  now: number,
-): LiveDecision {
+/**
+ * Chegamos! pela presença de 3 min no raio da próxima, quando ela pede Chegamos!: uma parada ou a
+ * chegada em casa (fase 24). Um nó de saída nunca recebe Chegamos!.
+ */
+export function liveDecision(fixes: readonly Fix[], state: LiveState, now: number): LiveDecision {
   const latest = fixes.at(-1);
   if (!latest) return { autoDepart: false, autoArrive: false, lowPower: false };
 
@@ -77,7 +79,8 @@ export function liveDecision(
   const autoDepart = located(from) && !isAutoStop(from) && wasThere && hasDeparted(latest, from);
 
   const next = state.next;
-  const autoArrive = located(next) && !isDepartureNode(next) && arrivalAt(fixes, next) !== null;
+  const autoArrive =
+    located(next) && state.nextRole !== 'departure' && arrivalAt(fixes, next) !== null;
 
   const recent = fixes.filter((f) => now - f.t <= STATIONARY_MS);
   const oldest = recent[0];

@@ -11,6 +11,8 @@ const origin = () =>
   makeStop({ id: 'o', position: 'a0', kind: 'origin', name: 'Saída', lng: -50.0, lat: -26.0 });
 
 const MIN = 60_000;
+const STOP = 'stop' as const;
+const DEPARTURE = 'departure' as const;
 const fix = (p: { lng: number; lat: number }, t: number, dLng = 0): Fix => ({
   lng: p.lng + dLng,
   lat: p.lat,
@@ -27,7 +29,7 @@ describe('o acompanhamento da posição', () => {
   });
 
   it('Partiu! automático só depois de ter visto o carro na parada', () => {
-    const state = { at: { ...park(), done_at: 'x' }, next: hotel(), onRoad: false };
+    const state = { at: { ...park(), done_at: 'x' }, next: hotel(), onRoad: false, nextRole: STOP };
     const far = [fix(PARK, 0, 0.01)]; // 1 km do parque, sem nunca ter estado lá
     expect(liveDecision(far, state, 0).autoDepart).toBe(false);
     const there = pushFix(pushFix([], fix(PARK, 0)), fix(PARK, MIN, 0.004)); // 400 m depois
@@ -37,13 +39,14 @@ describe('o acompanhamento da posição', () => {
   it('da parada que se registrou sozinha, a saída é do detector, não desta regra', () => {
     const auto = { ...park(), source: 'auto', done_at: 'x' };
     const there = pushFix(pushFix([], fix(PARK, 0)), fix(PARK, MIN, 0.004));
-    expect(liveDecision(there, { at: auto, next: hotel(), onRoad: false }, MIN).autoDepart).toBe(
-      false,
-    );
+    expect(
+      liveDecision(there, { at: auto, next: hotel(), onRoad: false, nextRole: STOP }, MIN)
+        .autoDepart,
+    ).toBe(false);
   });
 
   it('a saída do nó de origem usa o próprio nó quando ainda não há at', () => {
-    const state = { at: null, next: origin(), onRoad: false };
+    const state = { at: null, next: origin(), onRoad: false, nextRole: DEPARTURE };
     expect(departureStop(state)?.id).toBe('o');
     const fixes = pushFix(
       pushFix([], fix({ lng: -50.0, lat: -26.0 }, 0)),
@@ -51,7 +54,12 @@ describe('o acompanhamento da posição', () => {
     );
     expect(liveDecision(fixes, state, MIN).autoDepart).toBe(true);
     expect(
-      departureStop({ at: { ...park(), departed_at: 'x' }, next: hotel(), onRoad: true }),
+      departureStop({
+        at: { ...park(), departed_at: 'x' },
+        next: hotel(),
+        onRoad: true,
+        nextRole: STOP,
+      }),
     ).toBeNull();
   });
 
@@ -60,18 +68,41 @@ describe('o acompanhamento da posição', () => {
       at: { ...park(), done_at: 'x', departed_at: 'x' },
       next: hotel(),
       onRoad: true,
+      nextRole: STOP,
     };
     let fixes: Fix[] = [];
     for (let i = 0; i <= 2; i++) fixes = pushFix(fixes, fix(HOTEL, i * MIN, 0.0003));
     expect(liveDecision(fixes, state, 2 * MIN).autoArrive).toBe(false);
     fixes = pushFix(fixes, fix(HOTEL, 3 * MIN, 0.0003));
     expect(liveDecision(fixes, state, 3 * MIN).autoArrive).toBe(true);
-    const node = { at: null, next: origin(), onRoad: false };
+    const node = { at: null, next: origin(), onRoad: false, nextRole: DEPARTURE };
     expect(liveDecision(fixes, node, 3 * MIN).autoArrive).toBe(false);
   });
 
+  it('a chegada em casa recebe o Chegamos! pela presença, como qualquer parada (fase 24)', () => {
+    const home = makeStop({
+      id: 'c',
+      position: 'a3',
+      kind: 'origin',
+      name: 'Chegada em casa',
+      lng: -50.0,
+      lat: -26.0,
+    });
+    const state = {
+      at: { ...hotel(), done_at: 'x', departed_at: 'x' },
+      next: home,
+      onRoad: true,
+      nextRole: 'arrival' as const,
+    };
+    let fixes: Fix[] = [];
+    for (let i = 0; i <= 3; i++) fixes = pushFix(fixes, fix({ lng: -50.0, lat: -26.0 }, i * MIN));
+    expect(liveDecision(fixes, state, 3 * MIN).autoArrive).toBe(true);
+    // e ela nunca é de onde se sai
+    expect(departureStop({ ...state, at: null, onRoad: false })).toBeNull();
+  });
+
   it('parado por 10 min: baixa precisão; andou: volta ao normal', () => {
-    const state = { at: null, next: park(), onRoad: false };
+    const state = { at: null, next: park(), onRoad: false, nextRole: STOP };
     let fixes: Fix[] = [];
     for (let i = 0; i <= 10; i++) fixes = pushFix(fixes, fix(HOTEL, i * MIN, 0.0002 * (i % 2)));
     expect(liveDecision(fixes, state, 10 * MIN).lowPower).toBe(true);
@@ -82,7 +113,7 @@ describe('o acompanhamento da posição', () => {
   it('o buffer guarda só 15 min', () => {
     const fixes = pushFix(pushFix([], fix(PARK, 0)), fix(PARK, 16 * MIN));
     expect(fixes).toHaveLength(1);
-    expect(liveDecision([], { at: null, next: null, onRoad: false }, 0)).toEqual({
+    expect(liveDecision([], { at: null, next: null, onRoad: false, nextRole: null }, 0)).toEqual({
       autoDepart: false,
       autoArrive: false,
       lowPower: false,

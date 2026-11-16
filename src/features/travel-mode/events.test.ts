@@ -91,3 +91,31 @@ describe('snapshotTravelState', () => {
     });
   });
 });
+
+describe('a chegada em casa nos eventos (fase 24)', () => {
+  it('concluída, é uma chegada, não uma saída', async () => {
+    const { eventsSince } = await import('./events.ts');
+    const { makeStop } = await import('@/test/factories.ts');
+    const saida = makeStop({
+      id: 's',
+      position: 'a0',
+      kind: 'origin',
+      done_at: 'x',
+      done_by: 'u1',
+    });
+    const cafe = makeStop({ id: 'k', position: 'a1', kind: 'food', done_at: 'y', done_by: 'u1' });
+    const casa = makeStop({ id: 'c', position: 'a2', kind: 'origin', done_at: 'z', done_by: 'u1' });
+    const prev = {
+      trip_day_id: 'd',
+      trip_id: 't',
+      fraction: null,
+      at: null,
+      done_stop_ids: [],
+      skipped_stop_ids: [],
+      seen_event_ids: [],
+      updated_at: 'x',
+    };
+    const kinds = eventsSince(prev, [saida, cafe, casa], 'u1').map((e) => `${e.kind}:${e.stop_id}`);
+    expect(kinds).toEqual(['departed:s', 'arrived:k', 'arrived:c']);
+  });
+});

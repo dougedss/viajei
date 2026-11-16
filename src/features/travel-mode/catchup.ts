@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { LngLat } from '@shared/geo.ts';
-import type { TravelState, TripTrack } from '@/lib/db/schema.ts';
+import type { DayRoute, TravelState, TripTrack } from '@/lib/db/schema.ts';
 import { catchup, type CatchupResult } from '@/lib/geo/catchup.ts';
 import type { Fix } from '@/lib/geo/geofence.ts';
 import { eventsSince, snapshotTravelState, type TravelEvent } from './events.ts';
@@ -38,7 +37,8 @@ export type CatchupArgs = {
   dayId: string;
   uid: string;
   state: DayState;
-  route: readonly LngLat[] | null;
+  /** a rota do dia em cache: o traçado e os trechos */
+  route: Pick<DayRoute, 'geometry' | 'legs'> | null;
   teamTracks: readonly Pick<TripTrack, 'user_id' | 'points'>[];
   /** a pessoa já permitiu usar a posição neste aparelho */
   geoAllowed: boolean;
@@ -99,29 +99,34 @@ export function useCatchup(args: CatchupArgs): Catchup {
     latest.current = { state, route, fix };
   }, [state, route, fix]);
 
+  // onde o carro já esteve na rota nesta tela, enquanto a última concluída é a mesma: a fração do
+  // dia nunca anda para trás enquanto o carro segue a rota (fase 24)
+  const atId = state.at?.id ?? null;
+  const [reached, setReached] = useState<{ atId: string | null; along: number } | null>(null);
+  const floorM = reached?.atId === atId ? reached.along : null;
+  const arrivalId = state.arrival?.id ?? null;
+
   // a posição e as "passadas" pela leitura mais nova; o Chegamos! automático só pela leitura única
   // ao abrir: com o mapa aberto, quem decide a chegada é a presença de 3 min (`live-rules.ts`), e
   // cada leitura do acompanhamento não pode valer uma chegada (fase 14)
   const result = useMemo(() => {
-    const now = catchup({
-      stops: state.stops,
-      at: state.at,
-      next: state.next,
-      route,
-      fix,
-      teamTracks,
-    });
+    const base = { stops: state.stops, at: state.at, next: state.next, route, teamTracks };
+    const now = catchup({ ...base, fix, arrivalId, floor_m: floorM });
     if (fix === gpsFix) return now;
-    const once = catchup({
-      stops: state.stops,
-      at: state.at,
-      next: state.next,
-      route,
-      fix: gpsFix,
-      teamTracks,
-    });
+    const once = catchup({ ...base, fix: gpsFix, arrivalId, floor_m: floorM });
     return { ...now, autoArrive: once.autoArrive };
-  }, [state.stops, state.at, state.next, route, fix, gpsFix, teamTracks]);
+  }, [state.stops, state.at, state.next, route, fix, gpsFix, teamTracks, arrivalId, floorM]);
+
+  // o piso anda com o carro, durante o render (o estado que se ajusta pelo que mudou): a próxima
+  // conta já parte dali, e a mesma leitura dá o mesmo lugar, então para na hora
+  const position = result.position;
+  const along =
+    position?.source === 'gps' && !position.offRoute && position.alongM !== null
+      ? position.alongM
+      : null;
+  if (along !== null && (reached?.atId !== atId || along > reached.along)) {
+    setReached({ atId, along });
+  }
 
   const events = useMemo(
     () => eventsSince(prev, state.stops, uid, result.passed),
@@ -134,8 +139,15 @@ export function useCatchup(args: CatchupArgs): Catchup {
     if (!loadedRef.current || s.stops.length === 0) return;
     const fraction =
       r && f
-        ? (catchup({ stops: s.stops, at: s.at, next: s.next, route: r, fix: f, teamTracks: [] })
-            .position?.fraction ?? null)
+        ? (catchup({
+            stops: s.stops,
+            at: s.at,
+            next: s.next,
+            route: r,
+            fix: f,
+            teamTracks: [],
+            arrivalId: s.arrival?.id ?? null,
+          }).position?.fraction ?? null)
         : null;
     await saveTravelState(
       snapshotTravelState(dayId, tripId, s.stops, s.at, fraction, [...seenRef.current], new Date()),

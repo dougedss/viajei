@@ -352,7 +352,8 @@ function DayView({
   const departLabel =
     state.at && !state.onRoad ? `Saímos de ${state.at.name}` : `Saímos: ${state.next?.name ?? ''}`;
   // os eventos que cada ação produz, para o card "Desde a última vez" não listar o que foi feito aqui
-  const departSeen = state.next && isDepartureNode(state.next) ? [`departed:${state.next.id}`] : [];
+  const departSeen =
+    state.next && state.nextRole === 'departure' ? [`departed:${state.next.id}`] : [];
   const arriveSeen = state.next ? [`arrived:${state.next.id}`] : [];
   const skipSeen = state.next ? [`skipped:${state.next.id}`] : [];
 
@@ -400,7 +401,7 @@ function DayView({
     dayId,
     uid,
     state,
-    route: route?.geometry ?? null,
+    route: route ?? null,
     teamTracks,
     geoAllowed: geo.allowed,
     active,

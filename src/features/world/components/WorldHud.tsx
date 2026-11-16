@@ -11,7 +11,15 @@ import { cx } from '@/lib/cx.ts';
 import { hhmm } from '@/lib/time/index.ts';
 import type { LayoutNode, LayoutPlace } from '../layout.ts';
 import type { OpeningPlan } from '../opening.ts';
-import { HUD_TOP, PILL_LIFT, pillInView } from '../project.ts';
+import {
+  declutterLabels,
+  HUD_TOP,
+  LABEL_CHAR_PX,
+  LABEL_HEIGHT_PX,
+  PILL_LIFT,
+  pillInView,
+  type PlaceLabel,
+} from '../project.ts';
 import type { WorldRuntime } from '../scene/runtime.ts';
 
 /**
@@ -93,6 +101,7 @@ function placeLabels(
   places: readonly LayoutPlace[],
 ): void {
   const { width, height } = runtime.viewport;
+  const shown: PlaceLabel[] = [];
   places.forEach((place, i) => {
     const el = root.querySelector<HTMLElement>(`[data-passing-place="${String(i)}"]`);
     if (!el) return;
@@ -100,12 +109,29 @@ function placeLabels(
     const p = runtime.project([x, y + PLACE_LIFT, z]);
     const inView =
       p.depth > 0 && p.x > 8 && p.x < width - 8 && p.y > HUD_TOP + 16 && p.y < height - 8;
-    el.hidden = !inView;
-    if (inView) {
-      el.style.left = `${String(Math.round(p.x))}px`;
-      el.style.top = `${String(Math.round(p.y))}px`;
+    if (!inView) {
+      el.hidden = true;
+      return;
     }
+    shown.push({
+      index: i,
+      x: p.x,
+      y: p.y,
+      w: place.name.length * LABEL_CHAR_PX,
+      h: LABEL_HEIGHT_PX,
+      pop: place.pop,
+    });
   });
+  // dois nomes que se cruzam: o da cidade menor desce uma linha ou some (fase 24)
+  for (const label of declutterLabels(shown)) {
+    const el = root.querySelector<HTMLElement>(`[data-passing-place="${String(label.index)}"]`);
+    const at = shown.find((s) => s.index === label.index);
+    if (!el || !at) continue;
+    el.hidden = label.hidden;
+    if (label.hidden) continue;
+    el.style.left = `${String(Math.round(at.x))}px`;
+    el.style.top = `${String(Math.round(label.y))}px`;
+  }
   const car = root.querySelector<HTMLElement>('[data-world-car-anchor]');
   if (car) {
     const q = runtime.layout.pathAt(runtime.motion.s);

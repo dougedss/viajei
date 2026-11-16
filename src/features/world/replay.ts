@@ -1,5 +1,5 @@
 import type { TravelEvent } from '@/features/travel-mode/events.ts';
-import { isDepartureNode } from '@/features/travel-mode/rules.ts';
+import { nodeRole } from '@/features/travel-mode/rules.ts';
 import type { Stop, TravelState } from '@/lib/db/schema.ts';
 import type { CuriosityKind } from '@/lib/geo/index.ts';
 import type { LayoutCuriosity, WorldLayout } from './layout.ts';
@@ -228,11 +228,13 @@ export function dayEvents(stops: readonly Stop[], uid: string): TravelEvent[] {
   for (const stop of stops) {
     if (stop.deleted_at !== null) continue;
     if (stop.done_at !== null) {
-      const kind = isDepartureNode(stop)
-        ? 'departed'
-        : stop.done_by === uid
-          ? 'arrived'
-          : 'team_arrived';
+      // a chegada em casa é uma chegada (fase 24), não uma saída
+      const kind =
+        nodeRole(stop, stops) === 'departure'
+          ? 'departed'
+          : stop.done_by === uid
+            ? 'arrived'
+            : 'team_arrived';
       out.push({
         id: `${kind}:${stop.id}`,
         kind,

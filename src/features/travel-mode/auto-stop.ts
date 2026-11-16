@@ -3,7 +3,7 @@ import { activeStops, isAutoStop } from '@/features/itinerary/rules.ts';
 import type { Stop } from '@/lib/db/schema.ts';
 import { positionBetween } from '@/lib/ids/position.ts';
 import { uuidV5 } from '@/lib/ids/uuid.ts';
-import { isDepartureNode } from './rules.ts';
+import { nodeRole } from './rules.ts';
 import { SAME_PLACE_M, SAME_PLACE_MS, type KnownAutoStop, type Place } from './stop-detector.ts';
 
 /**
@@ -103,7 +103,7 @@ export function autoStopPosition(stops: readonly Stop[], arrivedAt: number): str
   if (anchor === -1) {
     while (anchor + 1 < ordered.length) {
       const s = ordered[anchor + 1];
-      if (!s || !isDepartureNode(s) || s.done_at !== null) break;
+      if (!s || nodeRole(s, ordered) !== 'departure' || s.done_at !== null) break;
       anchor += 1;
     }
   }
