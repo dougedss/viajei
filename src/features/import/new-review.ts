@@ -4,7 +4,8 @@ import { db } from '@/lib/db/schema.ts';
 import { NEW_TRIP_KEY, type StoredReview } from './draft.ts';
 import { EMPTY_HEADER } from './format.ts';
 import { lastOrigin, proposeHeader } from './new-trip.ts';
-import { reviewOf } from './plan.ts';
+import { reviewOf, type ReviewStop } from './plan.ts';
+import type { Schedule } from '@/features/intake/assemble.ts';
 
 /** O rótulo do lugar confirmado no mapa (a revisão mostra; a atribuição do OSM vai junto). */
 export const OSM_LABEL = 'Conferido no mapa (OpenStreetMap)';
@@ -24,7 +25,15 @@ export async function newTripReview(
     importId: string | null;
     partial: boolean;
     /** a conversa: o que o mapa confirmou tem coordenada, e o que saiu vai para a tela dizer */
-    checked?: { removed: string[]; unchecked: string[] };
+    checked?: { removed: string[]; unchecked: string[]; missing?: string[] };
+    /**
+     * a conversa da fase 24: as sugestões do caminho pela chave da revisão (nascem desligadas) e os
+     * horários para refazer ao ligar uma
+     */
+    plan?: {
+      suggestions: Record<string, NonNullable<ReviewStop['suggestion']>>;
+      schedule: Schedule;
+    };
   },
 ): Promise<StoredReview> {
   const newTrip = proposeHeader(header ?? EMPTY_HEADER, data, {
@@ -50,17 +59,22 @@ export async function newTripReview(
         ...review,
         days: review.days.map((d) => ({
           ...d,
-          stops: d.stops.map((s) =>
-            s.geo?.status === 'found' && s.geo.via === 'file'
-              ? { ...s, geo: { status: 'found' as const, label: OSM_LABEL, via: 'osm' as const } }
-              : s,
-          ),
+          stops: d.stops.map((s) => {
+            const suggestion = options.plan?.suggestions[s.key] ?? null;
+            const located =
+              s.geo?.status === 'found' && s.geo.via === 'file'
+                ? { ...s, geo: { status: 'found' as const, label: OSM_LABEL, via: 'osm' as const } }
+                : s;
+            // a regra de ouro: a sugestão nasce desligada, e só a pessoa a liga
+            return suggestion ? { ...located, suggestion, include: false } : located;
+          }),
         })),
       }
     : review;
   return {
     review: verified,
     checked: options.checked ?? null,
+    schedule: options.plan?.schedule ?? null,
     importId: options.importId,
     partial: options.partial,
     saved_at: new Date().toISOString(),

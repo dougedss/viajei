@@ -13,7 +13,7 @@ import { db } from '@/lib/db/schema.ts';
 import { geocode, reverseGeocode } from '@/lib/geocode/nominatim.ts';
 import { isoToWall } from '@/lib/time/zone.ts';
 import { contextFor, historyOf, placeOfReverse } from './today.ts';
-import type { LatLng } from './verify.ts';
+import type { LatLng } from './named.ts';
 
 /**
  * O que o aparelho sabe, para a conversa e a saída de hoje (fase 17): o perfil, as notas, as viagens,

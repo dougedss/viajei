@@ -40,6 +40,11 @@ export type ReviewStop = Keyed<ImportStop> & {
   /** o mesmo nome no mesmo dia: no próprio texto, ou já no roteiro */
   repeated: 'text' | 'trip' | null;
   geo: GeoDecision | null;
+  /**
+   * a sugestão do caminho (fase 24): nasce desligada, com o desvio e a cidade; só entra se a pessoa
+   * ligar. `night`: onde dormir, no fim de um dia que não é o último
+   */
+  suggestion?: { detour: number; city: string | null; night: boolean } | null;
 };
 export type ReviewDay = {
   date: string;

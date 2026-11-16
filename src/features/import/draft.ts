@@ -1,3 +1,4 @@
+import type { Schedule } from '@/features/intake/assemble.ts';
 import { z } from 'zod';
 import { db } from '@/lib/db/schema.ts';
 import type { NewTripDraft } from './new-trip.ts';
@@ -36,7 +37,12 @@ export type StoredReview = {
    * a conversa (fase 17): os lugares propostos que o mapa não confirmou (saíram) e os que não deu para
    * conferir (o mapa não respondeu); null fora da conversa
    */
-  checked?: { removed: string[]; unchecked: string[] } | null;
+  checked?: { removed: string[]; unchecked: string[]; missing?: string[] } | null;
+  /**
+   * a conversa da fase 24: a hora de sair de cada dia e os trechos da rota real, para refazer os
+   * horários no aparelho quando a pessoa liga uma sugestão
+   */
+  schedule?: Schedule | null;
 };
 
 // A forma mínima para confiar no que voltou do disco: uma versão antiga do app, ou um valor que não
@@ -64,7 +70,15 @@ const storedSchema = z.object({
     .optional(),
   source: z.enum(['ai', 'user']).optional(),
   checked: z
-    .object({ removed: z.array(z.string()), unchecked: z.array(z.string()) })
+    .object({
+      removed: z.array(z.string()),
+      unchecked: z.array(z.string()),
+      missing: z.array(z.string()).optional(),
+    })
+    .nullable()
+    .optional(),
+  schedule: z
+    .object({ starts: z.record(z.string(), z.string()), legs: z.record(z.string(), z.number()) })
     .nullable()
     .optional(),
 });

@@ -1,12 +1,18 @@
-import type { ImportData, ImportTripHeader } from '@shared/import-schema.ts';
-import type { PlanContext, PlanIntent, PlanQuestion, PlanRequest } from '@shared/plan-protocol.ts';
+import type {
+  PlanContext,
+  PlanIntent,
+  PlanPlaces,
+  PlanQuestion,
+  PlanRequest,
+} from '@shared/plan-protocol.ts';
 import { db } from '@/lib/db/schema.ts';
+import type { MapStage, Prepared } from './flow.ts';
+import type { LatLng } from './named.ts';
 import { ORIGIN_QUESTION, reachOf } from './today.ts';
-import type { LatLng } from './verify.ts';
 
 /**
  * A conversa da viagem nova (fase 17), no aparelho: a descrição, o que o app sabe, as perguntas, as
- * respostas e, depois da leitura, a proposta da IA (para conferir de novo, se o mapa não respondeu).
+ * respostas e, desde a fase 24, a vontade, as opções do mapa com a escolha e o caminho pronto.
  * Mora no Dexie, como o rascunho (D138), e some quando a viagem nasce ou a pessoa desiste: fechar o
  * app no meio das perguntas não pergunta de novo (perguntar gasta cota).
  */
@@ -26,8 +32,10 @@ export type Conversation = {
    * app na saída de hoje; null numa conversa guardada por uma versão de antes
    */
   intent: PlanIntent | null;
-  /** a proposta da IA, antes de conferir no mapa */
-  proposal: { data: ImportData; trip: ImportTripHeader; importId: string | null } | null;
+  /** as opções do mapa e a escolha (fase 24): fechar o app aqui não busca de novo */
+  map: MapStage | null;
+  /** o caminho pronto para a leitura que escreve: tentar de novo não busca nem traça de novo */
+  prepared: Prepared | null;
   started_at: string;
 };
 
@@ -47,7 +55,7 @@ export function canPlan(c: Pick<Conversation, 'questions' | 'answers'>): boolean
  * O pedido do roteiro. Na saída de hoje, as perguntas são do app: a resposta do alcance vira o
  * `reach`, e a de origem (quando ela foi perguntada) vira a origem.
  */
-export function planRequestOf(c: Conversation): PlanRequest {
+export function planRequestOf(c: Conversation, places?: PlanPlaces): PlanRequest {
   const answers = c.questions.map((_, i) => (c.answers[i] ?? '').trim());
   let context: PlanContext = { ...c.context, reach: null };
   if (c.kind === 'today') {
@@ -58,7 +66,15 @@ export function planRequestOf(c: Conversation): PlanRequest {
       origin: originAt >= 0 ? (answers[originAt] ?? null) : context.origin,
     };
   }
-  return { step: 'plan', kind: c.kind, text: c.text, questions: c.questions, answers, context };
+  return {
+    step: 'plan',
+    kind: c.kind,
+    text: c.text,
+    questions: c.questions,
+    answers,
+    context,
+    ...(places ? { places } : {}),
+  };
 }
 
 /** O pedido das perguntas (só na conversa: a saída de hoje pergunta no app). */
@@ -77,7 +93,14 @@ export async function loadConversation(): Promise<Conversation | null> {
       Array.isArray(value.questions) &&
       Array.isArray(value.answers) &&
       value.context
-      ? (value as Conversation)
+      ? {
+          ...(value as Conversation),
+          // a conversa guardada por uma versão de antes (sem a vontade e sem as opções) recomeça das
+          // perguntas, com as respostas que tinha
+          intent: value.intent ?? null,
+          map: value.map ?? null,
+          prepared: value.prepared ?? null,
+        }
       : null;
   } catch {
     return null;

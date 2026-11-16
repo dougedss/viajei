@@ -23,6 +23,8 @@ import {
   setLooseDestination,
   setStopIncluded,
 } from '../review-edit.ts';
+import type { Schedule } from '@/features/intake/assemble.ts';
+import { reschedule } from '@/features/intake/reschedule.ts';
 import { CheckRow } from './CheckRow.tsx';
 
 type Props = {
@@ -39,12 +41,14 @@ type Props = {
    * A viagem nova (fase 17): o cartão do cabeçalho no topo, o botão "Criar a viagem", e ela pode nascer
    * só com o nome e as datas; `blocked` quando o cabeçalho ainda não dá (o nome vazio).
    */
-  creating?: { top: ReactNode; blocked: boolean } | undefined;
+  creating?: { top: ReactNode; blocked: boolean; bottom?: ReactNode } | undefined;
   onChange: (change: (review: Review) => Review) => void;
   onEditStop: (key: string) => void;
   onChoose: (key: string) => void;
   onSave: () => void;
   onDiscard: () => void;
+  /** a conversa da fase 24: os horários para refazer quando uma sugestão é ligada */
+  schedule?: Schedule | null;
 };
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -105,6 +109,23 @@ function Place({
   return <span>Localizando…</span>;
 }
 
+/** "Sugestão · cerca de 10 min de desvio · Pomerode": o que vale a pena no caminho, desligado. */
+function SuggestionLine({ stop }: { stop: ReviewStop }) {
+  const s = stop.suggestion;
+  if (!s) return null;
+  const parts = [
+    s.night ? 'Para dormir' : 'Sugestão',
+    s.night ? null : `cerca de ${String(s.detour)} min de desvio`,
+    s.city,
+  ].filter(Boolean);
+  return (
+    <>
+      <span className="font-semibold text-accent-ink">{parts.join(' · ')}</span>
+      {stop.notes ? <span>{stop.notes}</span> : null}
+    </>
+  );
+}
+
 function StopRow({
   stop,
   state,
@@ -122,7 +143,7 @@ function StopRow({
     <CheckRow
       checked={stop.include}
       onChange={onToggle}
-      ariaLabel={stop.name}
+      ariaLabel={stop.suggestion ? `${stop.name}, sugestão no caminho` : stop.name}
       label={
         <span className="flex items-center gap-2">
           <span className="w-12 shrink-0 num text-ink-2">{stop.time ?? '—:—'}</span>
@@ -132,7 +153,8 @@ function StopRow({
       }
       detail={
         <>
-          {stop.time === null ? <span>sem horário no texto</span> : null}
+          <SuggestionLine stop={stop} />
+          {stop.time === null && !stop.suggestion ? <span>sem horário no texto</span> : null}
           {stop.closes_at ? <span>fecha às {stop.closes_at}</span> : null}
           {stop.repeated === 'trip' ? (
             <Chip kind="warn">Já está no roteiro</Chip>
@@ -180,6 +202,7 @@ export function ReviewStep({
   onChoose,
   onSave,
   onDiscard,
+  schedule = null,
 }: Props) {
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const counts = reviewCounts(review);
@@ -285,7 +308,15 @@ export function ReviewStep({
                     key={stop.key}
                     stop={stop}
                     state={geo[stop.key]}
-                    onToggle={(include) => onChange((r) => setStopIncluded(r, stop.key, include))}
+                    onToggle={(include) =>
+                      onChange((r) => {
+                        const next = setStopIncluded(r, stop.key, include);
+                        // ligar uma sugestão a põe na ordem do caminho e refaz os horários do dia
+                        return stop.suggestion && schedule
+                          ? reschedule(next, schedule, day.date)
+                          : next;
+                      })
+                    }
                     onEdit={() => onEditStop(stop.key)}
                     onChoose={() => onChoose(stop.key)}
                   />
@@ -434,6 +465,7 @@ export function ReviewStep({
         </Section>
       ) : null}
 
+      {creating?.bottom}
       <div className="grid gap-2">
         <Button loading={saving} disabled={!savable} onClick={onSave}>
           {creating ? 'Criar a viagem' : 'Salvar na viagem'}

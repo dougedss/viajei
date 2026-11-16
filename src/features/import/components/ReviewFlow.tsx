@@ -17,7 +17,7 @@ type Props = {
   /** o cabeçalho da tela (fica de fora quando uma parada está aberta no formulário) */
   header: ReactNode;
   existingByDate?: Readonly<Record<string, number>>;
-  creating?: { top: ReactNode; blocked: boolean } | undefined;
+  creating?: { top: ReactNode; blocked: boolean; bottom?: ReactNode } | undefined;
   /** antes de gravar (a tela da viagem nova para de decidir sozinha para onde vai) */
   onSaving?: () => void;
   onSaved: (result: SaveResult) => Promise<void> | void;
@@ -93,6 +93,7 @@ export function ReviewFlow({
         existingByDate={existingByDate}
         saving={saving}
         creating={creating}
+        schedule={imp.stored.schedule ?? null}
         onChange={imp.edit}
         onEditStop={setEditing}
         onChoose={setChoosing}

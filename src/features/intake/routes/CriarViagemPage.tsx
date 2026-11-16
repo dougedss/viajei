@@ -17,7 +17,9 @@ import { useGeocoding } from '@/features/import/useGeocoding.ts';
 import { useImport, type SaveResult } from '@/features/import/useImport.ts';
 import { todayISO, tripStatus } from '@/features/trips/rules.ts';
 import { useSession } from '@/lib/supabase/session.ts';
-import { CheckedNotice } from '../components/CheckedNotice.tsx';
+import { CheckedNotice, NoPlaceNotice } from '../components/CheckedNotice.tsx';
+import { MapAttribution, OptionsStep } from '../components/OptionsStep.tsx';
+import { hasPlace } from '../assemble.ts';
 import { CheckingStep } from '../components/CheckingStep.tsx';
 import { QuestionsStep } from '../components/QuestionsStep.tsx';
 import { planErrorCopy } from '../messages.ts';
@@ -113,6 +115,12 @@ export default function CriarViagemPage() {
 
   if (imp.stored?.newTrip) {
     const draft = imp.stored.newTrip;
+    // a viagem que nasceu da conversa (fase 24): sem lugar além da saída e da chegada, não é sucesso
+    const fromMap = imp.stored.schedule !== undefined && imp.stored.schedule !== null;
+    const placed = hasPlace(imp.stored.review.days.flatMap((d) => (d.include ? d.stops : [])));
+    const toOptions = talk.conv?.map
+      ? () => void imp.discard().then(() => talk.toOptions())
+      : undefined;
     return (
       <ReviewFlow
         imp={imp}
@@ -123,16 +131,12 @@ export default function CriarViagemPage() {
           top: (
             <>
               <NewTripCard draft={draft} onChange={imp.update} />
-              {imp.stored.checked ? (
-                <CheckedNotice
-                  removed={imp.stored.checked.removed}
-                  unchecked={imp.stored.checked.unchecked}
-                  onRecheck={talk.conv?.proposal ? () => void talk.recheck() : undefined}
-                />
-              ) : null}
+              {fromMap && !placed ? <NoPlaceNotice onToOptions={toOptions} /> : null}
+              <CheckedNotice missing={imp.stored.checked?.missing ?? []} onToOptions={toOptions} />
             </>
           ),
-          blocked: headerProblems(draft.header).length > 0,
+          blocked: headerProblems(draft.header).length > 0 || (fromMap && !placed),
+          bottom: fromMap ? <MapAttribution /> : null,
         }}
         onSaved={onSaved}
         onDiscarded={() => void toList()}
@@ -151,7 +155,7 @@ export default function CriarViagemPage() {
             copy={planErrorCopy(stage.phase, stage.step, new Date())}
             onRetry={() =>
               void (stage.step === 'plan' && talk.conv
-                ? talk.plan()
+                ? talk.retry()
                 : talk.start(talk.conv?.kind ?? 'plan', talk.conv?.text ?? imp.text))
             }
             onBack={() => void toList()}
@@ -161,32 +165,51 @@ export default function CriarViagemPage() {
             questions={talk.conv.questions}
             answers={talk.conv.answers}
             onAnswer={talk.answer}
-            onSubmit={() => void talk.plan()}
+            onSubmit={() => void talk.search()}
             onBack={() => void toList()}
           />
-        ) : stage.kind === 'planning' ? (
-          <ArrivingStep
-            reading={talk.preview.counts.stops === 0}
-            preview={talk.preview}
-            geo={{}}
-            onCancel={() => {
-              talk.cancel();
-              void toList();
-            }}
-          />
-        ) : stage.kind === 'checking' ? (
+        ) : stage.kind === 'searching' ? (
           <CheckingStep done={stage.done} total={stage.total} />
+        ) : stage.kind === 'choosing' && talk.conv?.map ? (
+          <OptionsStep
+            map={talk.conv.map}
+            onToggle={talk.toggle}
+            onPick={talk.pick}
+            onMore={talk.more}
+            onWider={(g) => void talk.wider(g)}
+            onByType={(n) => void talk.byType(n)}
+            onByName={(name, kind) => void talk.byName(name, kind)}
+            onBuild={() => void talk.build()}
+            onBack={() => void toList()}
+          />
         ) : (
-          <Card className="grid gap-2" aria-live="polite" data-thinking>
+          <Card className="grid gap-2" aria-live="polite" data-thinking={stage.kind}>
             <p className="font-num text-[20px] font-semibold motion-safe:animate-pulse">
               {stage.kind === 'asking'
-                ? 'Pensando no que perguntar…'
-                : 'Juntando o que vocês gostam…'}
+                ? 'Lendo o que vocês querem…'
+                : stage.kind === 'routing'
+                  ? 'Traçando o caminho e o que há nele…'
+                  : stage.kind === 'writing'
+                    ? 'Escrevendo a viagem…'
+                    : 'Juntando o que vocês gostam…'}
             </p>
             <p className="text-[14px] text-ink-2">
-              O pedido vai para a IA da Anthropic, com os gostos e as notas como pista. Nada entra
-              na viagem sem você revisar.
+              {stage.kind === 'routing'
+                ? 'Os lugares vêm do mapa; nada entra na viagem sem vocês escolherem.'
+                : 'O pedido vai para a IA da Anthropic, que só escreve: os lugares vêm do mapa, e nada entra na viagem sem você revisar.'}
             </p>
+            {stage.kind === 'writing' ? (
+              <Button
+                variant="ghost"
+                size="md"
+                onClick={() => {
+                  talk.cancel();
+                  void talk.toOptions();
+                }}
+              >
+                Voltar às opções
+              </Button>
+            ) : null}
           </Card>
         )}
       </div>
