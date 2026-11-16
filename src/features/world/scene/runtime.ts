@@ -57,6 +57,8 @@ export class WorldRuntime {
   private readonly cameraListeners = new Set<(status: CameraStatus) => void>();
   /** muda a cada quadro em que a câmera anda: a espera dos dois quadros só vale se nada andou */
   private settleToken = 0;
+  /** o quadro da volta do modo de perto, pedido para quando o tempo acabar */
+  private closeTimer: ReturnType<typeof setTimeout> | null = null;
   private settlePending = false;
   private invalidateFn: () => void = () => undefined;
 
@@ -113,15 +115,35 @@ export class WorldRuntime {
     this.invalidate();
   }
 
-  /** A câmera chegou perto: o tempo do modo passa a contar da chegada (fase 24). */
+  /**
+   * A câmera chegou perto: o tempo do modo passa a contar da chegada (fase 24), e a cena para de
+   * pedir quadros (nada se move); um quadro só é pedido quando o tempo acaba, para a volta. Antes, a
+   * cena ficava viva o modo inteiro para contar o tempo: um quadro atrás do outro sem nada mudar, o
+   * contrário do render sob demanda (D59), e numa máquina que leva segundos por quadro a captura da
+   * tela não mostrava o quadro de perto.
+   */
   arrivedClose(now: number): void {
+    const before = this.close;
     this.close = arriveClose(this.close, now);
+    if (this.close === null || this.close === before) return;
+    this.clearCloseTimer();
+    const wait = Math.max(0, this.close.until - now) + 50;
+    this.closeTimer = setTimeout(() => {
+      this.closeTimer = null;
+      this.invalidate();
+    }, wait);
+  }
+
+  private clearCloseTimer(): void {
+    if (this.closeTimer !== null) clearTimeout(this.closeTimer);
+    this.closeTimer = null;
   }
 
   /** Um toque fora do carro, ou o tempo que acabou: volta ao repouso. */
   leaveClose(): void {
     if (this.close === null) return;
     this.close = null;
+    this.clearCloseTimer();
     this.invalidate();
   }
 
@@ -214,8 +236,9 @@ export class WorldRuntime {
   busy(now: number): boolean {
     if (this.motion.busy || this.needsFrame) return true;
     if (Math.abs(this.night.t - this.night.target) > 0.002) return true;
-    // o modo de perto conta o tempo pelo laço: enquanto dura, a cena fica viva
-    if (this.close !== null && closeActive(this.close, now - 100)) return true;
+    // a câmera indo para perto fica viva; chegando, para (a volta vem pelo temporizador)
+    if (this.close !== null && !this.close.arrived && closeActive(this.close, now - 100))
+      return true;
     return this.opening !== null && now - this.opening.startedAt < this.opening.plan.total_ms + 100;
   }
 

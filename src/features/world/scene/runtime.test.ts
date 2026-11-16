@@ -84,3 +84,54 @@ describe('a câmera assentada (fase 24, D223)', () => {
     expect(seen).toHaveLength(1);
   });
 });
+
+describe('o modo de perto e o render sob demanda (fase 24, D59)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('indo para perto a cena fica viva; chegando, para, e um quadro só é pedido no fim do tempo', () => {
+    vi.useFakeTimers();
+    const rt = new WorldRuntime(
+      { nodes: [] } as unknown as WorldLayout,
+      { busy: false } as unknown as MotionController,
+      false,
+      REST,
+    );
+    let frames = 0;
+    rt.bindInvalidate(() => {
+      frames += 1;
+    });
+    rt.enterClose(1_000);
+    expect(rt.busy(1_500)).toBe(true);
+    rt.arrivedClose(4_000);
+    // chegou: nada se move, nenhum quadro até o tempo acabar (6 s depois da chegada)
+    expect(rt.busy(4_100)).toBe(false);
+    const before = frames;
+    vi.advanceTimersByTime(5_900);
+    expect(frames).toBe(before);
+    vi.advanceTimersByTime(200);
+    expect(frames).toBe(before + 1);
+  });
+
+  it('um toque fora cancela o quadro marcado', () => {
+    vi.useFakeTimers();
+    const rt = new WorldRuntime(
+      { nodes: [] } as unknown as WorldLayout,
+      { busy: false } as unknown as MotionController,
+      false,
+      REST,
+    );
+    let frames = 0;
+    rt.bindInvalidate(() => {
+      frames += 1;
+    });
+    rt.enterClose(0);
+    rt.arrivedClose(1_000);
+    rt.leaveClose();
+    const after = frames;
+    vi.advanceTimersByTime(10_000);
+    expect(frames).toBe(after);
+    expect(rt.close).toBeNull();
+  });
+});
