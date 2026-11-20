@@ -576,6 +576,38 @@ async function main(): Promise<number> {
   if (argv.includes('--medir-leitura')) {
     return measureRead(cfg, await signIn(cfg, LAB_USERS.a));
   }
+  // só o e-mail recebido (fase 18): um e-mail de verdade pelo Resend até a recebida e o aviso, sem os
+  // outros cenários e sem navegador; uma assinatura do lab-a no receptor, criada e apagada aqui
+  if (argv.includes('--email')) {
+    const a = await signIn(cfg, LAB_USERS.a);
+    await probeReceiver(cfg);
+    const [sub] = await subscribe(a, cfg, [{ sub: await newSub(), gone: false }]);
+    if (!sub) throw new Error('a assinatura do lab-a não nasceu');
+    try {
+      const check = await appEmailRecebido(
+        {
+          cfg,
+          a,
+          page: null,
+          apiKey: process.env.RESEND_API_KEY,
+          inbox: { inbox: sub.inbox, keys: sub.keys },
+          artifactsDir: join(process.cwd(), 'lab-artifacts'),
+        },
+        new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date()),
+      );
+      log(`app_email_recebido ${check.status} · ${check.detail}`);
+      log(JSON.stringify(check.data));
+      if (process.env.GITHUB_STEP_SUMMARY) {
+        await appendFile(
+          process.env.GITHUB_STEP_SUMMARY,
+          `## E-mail recebido (fase 18)\n\n**${check.status}** · ${check.detail}\n\n\`\`\`json\n${JSON.stringify(check.data, null, 2)}\n\`\`\`\n`,
+        );
+      }
+      return check.status === 'fail' ? 1 : 0;
+    } finally {
+      await a.client.from('push_subscriptions').delete().eq('id', sub.id);
+    }
+  }
   // o Lighthouse sozinho (fase 12): a viagem do lab-a preparada pelo laboratório do dia, sem os
   // outros cenários; os relatórios inteiros vão para os artefatos
   if (argv.includes('--medir-desempenho')) {

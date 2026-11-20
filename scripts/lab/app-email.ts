@@ -80,7 +80,7 @@ export async function appEmailRecebido(ctx: EmailContext, today: string): Promis
   data.sonda_http = probe?.status ?? null;
   if (probe?.status === 503) {
     return skip(
-      'A função inbound-mail respondeu no_source: as chaves do Resend (RESEND_API_KEY e RESEND_WEBHOOK_SECRET) ainda não estão nos secrets do hospedado (são do Douglas).',
+      'A função inbound-mail respondeu no_source: as chaves do Resend (RESEND_INBOUND_API_KEY e RESEND_WEBHOOK_SECRET) ainda não estão nos secrets do hospedado (são do Douglas).',
       data,
     );
   }

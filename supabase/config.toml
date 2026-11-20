@@ -464,7 +464,8 @@ entrypoint = "./functions/read-document/index.ts"
 # inbound-mail (fase 18) recebe o webhook `email.received` do Resend: um e-mail encaminhado para
 # <código>@reservas.… vira uma reserva. Quem autentica é a assinatura svix do webhook, conferida pela
 # função sobre o corpo bruto com RESEND_WEBHOOK_SECRET (sem a chave, responde `no_source`), então o JWT
-# da plataforma fica desligado. O conteúdo e os anexos vêm pela API do Resend (RESEND_API_KEY); a
+# da plataforma fica desligado. O conteúdo e os anexos vêm pela API do Resend (RESEND_INBOUND_API_KEY,
+# a chave da conta só do recebimento, separada da RESEND_API_KEY do SMTP abaixo); a
 # escrita no banco é só pelas RPCs estreitas da 0016, com a chave do servidor que o ambiente dá.
 [functions.inbound-mail]
 enabled = true

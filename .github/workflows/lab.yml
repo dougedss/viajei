@@ -32,7 +32,7 @@ on:
   workflow_dispatch:
     inputs:
       tarefa:
-        description: 'laboratorio: os cenários de sempre; medir-importacao: a medição do pensamento da IA (D133); medir-conversa: o custo e o tempo de uma conversa e de uma saída de hoje (fase 17); medir-leitura: a leitura da confirmação em texto, PDF e print e a da nota, uma vez, com entradas inventadas (fase 18); medir-desempenho: só o Lighthouse, com os relatórios; medir-sync: o envio do rack, 3 vezes, com o rastro do motor (fase 13)'
+        description: 'laboratorio: os cenários de sempre; medir-importacao: a medição do pensamento da IA (D133); medir-conversa: o custo e o tempo de uma conversa e de uma saída de hoje (fase 17); medir-leitura: a leitura da confirmação em texto, PDF e print e a da nota, uma vez, com entradas inventadas (fase 18); email: só o e-mail recebido de ponta a ponta, pelo Resend, sem navegador (fase 18); medir-desempenho: só o Lighthouse, com os relatórios; medir-sync: o envio do rack, 3 vezes, com o rastro do motor (fase 13)'
         type: choice
         options:
           [
@@ -40,6 +40,7 @@ on:
             medir-importacao,
             medir-conversa,
             medir-leitura,
+            email,
             medir-desempenho,
             medir-sync,
           ]
