@@ -22,16 +22,21 @@ export function useQualityPrefs(): QualityPrefs {
   return useLocalValue(QUALITY_STORAGE_KEY, parseQualityPrefs);
 }
 
-/** As chaves da URL que mudam as cenas: `render=list`, `diag=1` e `noite=1`. */
+/**
+ * As chaves da URL que mudam as cenas: `render=list`, `diag=1`, `noite=1` e `peca=1` (a câmera de
+ * repouso vira um close no primeiro cartão-postal da maquete, para a captura do laboratório, fase 23).
+ */
 export function readUrlFlags(search: string): {
   forceList: boolean;
   diag: boolean;
   night: boolean;
+  piece: boolean;
 } {
   const params = new URLSearchParams(search);
   return {
     forceList: params.get('render') === 'list',
     diag: params.get('diag') === '1',
     night: params.get('noite') === '1',
+    piece: params.get('peca') === '1',
   };
 }

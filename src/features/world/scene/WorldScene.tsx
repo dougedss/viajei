@@ -49,6 +49,8 @@ export type WorldSceneProps = {
    * isto, a câmera da maquete (o repouso, o modo de perto, o mergulho) e o laço dela.
    */
   controls?: ReactNode;
+  /** o catálogo dos cartões-postais publicados, pela chave do lugar (fase 23) */
+  catalog?: ReadonlyMap<string, unknown> | undefined;
 };
 
 export function WorldScene({
@@ -65,6 +67,7 @@ export function WorldScene({
   convoy,
   carFor,
   controls,
+  catalog,
 }: WorldSceneProps) {
   const gl = useThree((s) => s.gl) as unknown as WebGPURenderer;
   const scene = useThree((s) => s.scene);
@@ -158,7 +161,7 @@ export function WorldScene({
           group={groups.objects}
         />
       ) : null}
-      <Miniatures runtime={runtime} field={field} onTap={onTapStop} />
+      <Miniatures runtime={runtime} field={field} onTap={onTapStop} catalog={catalog} />
       {controls ?? (
         <>
           <CameraRig runtime={runtime} />

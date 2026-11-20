@@ -297,6 +297,26 @@ export function diveCamera(layout: PathLike, s: number, nextS: number | null): C
   };
 }
 
+/**
+ * O close numa peça (fase 23, `?peca=1`): a câmera do lado da estrada, de frente para a fachada da
+ * peça (o +z dela, virado para a estrada pelo giro do layout), baixa e perto, para a captura
+ * `maquete-peca.png` do laboratório ficar ao lado da régua.
+ */
+export function pieceCamera(
+  layout: PathLike,
+  piece: { x: number; z: number; angle: number; stop: StopKind },
+): CameraFrame {
+  const box = MINIATURE_BOX[piece.stop];
+  const y = layout.pathAt(0).y;
+  return {
+    target: [piece.x, y + box.h * 0.35, piece.z],
+    distance: Math.hypot(box.w, box.h, box.d) * 1.9,
+    tilt: (24 * Math.PI) / 180,
+    yaw: piece.angle,
+    fov: FOLLOW_FOV,
+  };
+}
+
 /** O `s` do próximo nó depois de `s`, se há. */
 export function nextNodeS(nodes: readonly { s: number }[], s: number, eps = 0.5): number | null {
   for (const n of nodes) if (n.s > s + eps) return n.s;

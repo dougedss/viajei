@@ -1,9 +1,9 @@
 import { useEffect, useMemo } from 'react';
 import { useThree, type ThreeEvent } from '@react-three/fiber';
-import type { StopKind } from '@shared/constants.ts';
-import { buildMiniature, type Miniature } from '@/art/stops/index.ts';
+import { MINIATURE_BOX, type Miniature } from '@/art/stops/index.ts';
 import { stepProgress } from '../opening.ts';
 import { heightAt, type HeightField } from './heightfield.ts';
+import { pieceFor } from './piece-for.ts';
 import type { WorldRuntime } from './runtime.ts';
 
 /**
@@ -17,20 +17,17 @@ type Props = {
   runtime: WorldRuntime;
   field: HeightField;
   onTap?: ((stopId: string) => void) | undefined;
+  /**
+   * O catálogo dos cartões-postais publicados neste aparelho (fase 23), pela chave do lugar: a
+   * receita da peça. Sem o lugar no catálogo, a miniatura do tipo.
+   */
+  catalog?: ReadonlyMap<string, unknown> | undefined;
 };
 
-type Placed = { stopId: string; mini: Miniature };
+/** uma peça na cena: a de uma parada (com o toque) ou a de uma cidade de passagem (sem toque) */
+type Placed = { key: string; stopId: string | null; mini: Miniature; landmark: boolean };
 
-/**
- * A peça de cada parada: a do lugar, quando houver (fase 23, os cartões-postais), senão a miniatura
- * do tipo. Hoje a resposta é sempre a miniatura do tipo: esta é a única porta por onde a peça do
- * lugar vai entrar.
- */
-function pieceFor(kind: StopKind, seed: number): Miniature {
-  return buildMiniature(kind, seed);
-}
-
-export function Miniatures({ runtime, field, onTap }: Props) {
+export function Miniatures({ runtime, field, onTap, catalog }: Props) {
   const invalidate = useThree((s) => s.invalidate);
   const layout = runtime.layout;
 
@@ -38,14 +35,45 @@ export function Miniatures({ runtime, field, onTap }: Props) {
     const out: Placed[] = [];
     for (const f of layout.features) {
       if (f.kind !== 'miniature') continue;
-      const mini = pieceFor(f.stop, (layout.seed ^ (f.x * 31) ^ (f.z * 17)) >>> 0);
+      const recipe = f.place_key ? catalog?.get(f.place_key) : null;
+      const { mini, landmark } = pieceFor(
+        f.stop,
+        (layout.seed ^ (f.x * 31) ^ (f.z * 17)) >>> 0,
+        recipe ?? null,
+      );
       mini.group.position.set(f.x, heightAt(field, f.x, f.z) - 0.05, f.z);
       mini.group.rotation.y = f.angle;
       mini.group.userData.stopId = f.stop_id;
-      out.push({ stopId: f.stop_id, mini });
+      mini.group.userData.landmark = landmark;
+      out.push({ key: `stop:${f.stop_id}`, stopId: f.stop_id, mini, landmark });
+    }
+    // o cartão-postal de uma cidade de passagem (D220, fase 23): só com a peça publicada e um piso
+    // para ela; sem pílula e sem toque
+    for (const place of layout.places) {
+      const recipe = place.key && place.piece ? catalog?.get(place.key) : null;
+      if (!recipe || !place.piece) continue;
+      const { mini, landmark } = pieceFor(
+        'city',
+        (layout.seed ^ (place.piece.x * 31) ^ (place.piece.z * 17)) >>> 0,
+        recipe,
+        MINIATURE_BOX.city,
+      );
+      if (!landmark) {
+        mini.dispose();
+        continue;
+      }
+      mini.group.position.set(
+        place.piece.x,
+        heightAt(field, place.piece.x, place.piece.z) - 0.05,
+        place.piece.z,
+      );
+      mini.group.rotation.y = place.piece.angle;
+      mini.group.userData.landmark = true;
+      mini.group.userData.city = place.key;
+      out.push({ key: `city:${place.key ?? ''}`, stopId: null, mini, landmark: true });
     }
     return out;
-  }, [layout, field]);
+  }, [layout, field, catalog]);
 
   useEffect(() => {
     invalidate();
@@ -63,7 +91,10 @@ export function Miniatures({ runtime, field, onTap }: Props) {
         for (const p of placed) {
           let k = 1;
           if (op) {
-            const pin = op.plan.pins.find((x) => x.stop_id === p.stopId);
+            // a peça de uma cidade cresce com o último pino
+            const pin = p.stopId
+              ? op.plan.pins.find((x) => x.stop_id === p.stopId)
+              : op.plan.pins.at(-1);
             const elapsed = runtime.openingElapsed(now);
             const t = pin ? Math.min(1, Math.max(0, (elapsed - pin.at_ms) / 400)) : 1;
             k = stepProgress(op.plan, 'pins', elapsed) > 0 ? t * (1.15 - 0.15 * t) : 0;
@@ -78,18 +109,22 @@ export function Miniatures({ runtime, field, onTap }: Props) {
 
   return (
     <>
-      {placed.map((p) => (
-        <primitive
-          key={p.stopId}
-          object={p.mini.group}
-          onClick={(e: ThreeEvent<MouseEvent>) => {
-            e.stopPropagation();
-            // um toque fora do carro: o modo de perto acaba
-            runtime.leaveClose();
-            onTap?.(p.stopId);
-          }}
-        />
-      ))}
+      {placed.map((p) =>
+        p.stopId ? (
+          <primitive
+            key={p.key}
+            object={p.mini.group}
+            onClick={(e: ThreeEvent<MouseEvent>) => {
+              e.stopPropagation();
+              // um toque fora do carro: o modo de perto acaba
+              runtime.leaveClose();
+              onTap?.(p.stopId ?? '');
+            }}
+          />
+        ) : (
+          <primitive key={p.key} object={p.mini.group} />
+        ),
+      )}
     </>
   );
 }

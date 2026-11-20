@@ -3,6 +3,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useLocation } from 'react-router';
 import { readPalette } from '@/art/palette.ts';
 import { carOf } from '@/features/garage/rules.ts';
+import { cityPlaceKey } from '@shared/landmark-keys.ts';
+import { publishedRecipes, useLandmarkCatalog } from '@/features/landmarks/catalog.ts';
+import { useLandmarkSync } from '@/features/landmarks/useLandmarkSync.ts';
 import { statusOf, type StopStatus } from '@/features/travel-mode/rules.ts';
 import { audio, useSoundPref, writeSoundPref } from '@/lib/audio/index.ts';
 import { db, type Stop } from '@/lib/db/schema.ts';
@@ -14,7 +17,7 @@ import type { Backend } from '@/lib/three/renderer.ts';
 import { useQuality } from '@/lib/three/useQuality.ts';
 import { useSupport } from '@/lib/three/useSupport.ts';
 import { formatStamp } from '@/lib/time/index.ts';
-import { restCamera } from '../camera.ts';
+import { pieceCamera, restCamera } from '../camera.ts';
 import { placeCar } from '../car-position.ts';
 import { convoyCarFor } from '../convoy.ts';
 import { useElementSize } from '../hooks/useElementSize.ts';
@@ -59,15 +62,54 @@ export default function WorldSection(props: WorldSlotProps) {
     if (unavailable) onEventsOwner('card');
   }, [unavailable, onEventsOwner]);
 
+  // o catálogo dos cartões-postais deste aparelho (fase 23): as receitas publicadas vão à cena, e as
+  // cidades de passagem com peça ganham um piso no layout
+  const catalog = useLandmarkCatalog();
+  const recipes = useMemo(() => publishedRecipes(catalog), [catalog]);
+  const cityKeys = useMemo(() => {
+    if (!place) return '';
+    return place.places
+      .flatMap((c) => {
+        const key = cityPlaceKey(c.uf, c.name);
+        return key && recipes.has(key) ? [key] : [];
+      })
+      .sort()
+      .join(',');
+  }, [place, recipes]);
   // o layout só muda quando muda o que o define; `dayState` devolve um array novo a cada render
   const stopsKey = state.stops
-    .map((s) => [s.id, s.kind, s.name, s.lat, s.lng, s.travel_minutes_to_next].join('|'))
+    .map((s) =>
+      [s.id, s.kind, s.name, s.lat, s.lng, s.osm_type, s.osm_id, s.travel_minutes_to_next].join(
+        '|',
+      ),
+    )
     .join(';');
   const layout = useMemo<WorldLayout>(
-    () => buildLayout({ dayId: day.id, stops: state.stops, route, place }),
+    () =>
+      buildLayout({
+        dayId: day.id,
+        stops: state.stops,
+        route,
+        place,
+        cityPieces: new Set(cityKeys ? cityKeys.split(',') : []),
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- as paradas entram pela chave estável; a rota pelo hash
-    [day.id, stopsKey, route?.hash, place],
+    [day.id, stopsKey, route?.hash, place, cityKeys],
   );
+  // quantas peças de lugar a maquete montou (o e2e e o laboratório leem `data-world-landmarks`)
+  const landmarkCount =
+    layout.features.filter(
+      (f) => f.kind === 'miniature' && f.place_key !== null && recipes.has(f.place_key),
+    ).length +
+    layout.places.filter((c) => c.piece !== null && c.key !== null && recipes.has(c.key)).length;
+  // o pedido ao catálogo quando o roteiro do dia está pronto (as paradas, a rota e as cidades lidas)
+  useLandmarkSync({
+    tripId: props.trip.id,
+    stops: state.stops,
+    cities: layout.places,
+    ready:
+      props.routeLoaded && props.routeStatus !== 'loading' && (route === null || place !== null),
+  });
 
   if (unavailable) {
     return <ListView {...props} notice="Maquete indisponível neste aparelho." />;
@@ -83,17 +125,20 @@ export default function WorldSection(props: WorldSlotProps) {
       data-world-car={`${shownCar.model}:${shownCar.color}:${shownCar.finish}:${shownCar.wheels}`}
       data-world-camera={camera.mode}
       data-world-camera-settled={String(camera.settled)}
+      data-world-landmarks={landmarkCount}
     >
-      {size.width > 0 && size.height > 0 && support !== 'pending' ? (
+      {size.width > 0 && size.height > 0 && support !== 'pending' && catalog !== undefined ? (
         <WorldStage
           {...props}
           layout={layout}
           size={size}
           place={place}
+          catalog={recipes}
           reducedMotion={reducedMotion}
           support={support}
           diag={diag}
           nightByUrl={flags.night}
+          pieceByUrl={flags.piece}
           onBackend={setBackend}
           onFail={setFailed}
           onCamera={setCamera}
@@ -119,6 +164,10 @@ type StageProps = WorldSlotProps & {
   diag: boolean;
   /** `?noite=1`: a noite a qualquer hora, sem gravar nada (o e2e e o laboratório) */
   nightByUrl: boolean;
+  /** as receitas publicadas dos cartões-postais, pela chave do lugar (fase 23) */
+  catalog: ReadonlyMap<string, unknown>;
+  /** `?peca=1`: a câmera de repouso vira um close no primeiro cartão-postal (a captura do laboratório) */
+  pieceByUrl: boolean;
   onBackend: (backend: Backend) => void;
   onFail: (reason: string) => void;
   onCamera: (status: CameraStatus) => void;
@@ -156,16 +205,21 @@ function WorldStage(p: StageProps) {
   const carFor = useMemo(() => convoyCarFor(p.profiles), [p.profiles]);
   // o quadro de repouso: o dia inteiro entre a faixa de cima e o que está sobre o pé do palco, pela
   // altura medida (a barra do "Agora" quando ela ainda não foi medida)
-  const rest = useMemo(
-    () =>
-      restCamera(layout, {
-        width: p.size.width,
-        height: p.size.height,
-        hudTop: HUD_TOP,
-        hudBottom: Math.max(NOW_BAR_INSET, p.bottomInset),
-      }),
-    [layout, p.size.width, p.size.height, p.bottomInset],
-  );
+  const rest = useMemo(() => {
+    const whole = restCamera(layout, {
+      width: p.size.width,
+      height: p.size.height,
+      hudTop: HUD_TOP,
+      hudBottom: Math.max(NOW_BAR_INSET, p.bottomInset),
+    });
+    if (!p.pieceByUrl) return whole;
+    // o close no primeiro cartão-postal (fase 23), só pela chave da URL
+    const piece = layout.features.find(
+      (f): f is Extract<typeof f, { kind: 'miniature' }> =>
+        f.kind === 'miniature' && f.place_key !== null && p.catalog.has(f.place_key),
+    );
+    return piece ? pieceCamera(layout, piece) : whole;
+  }, [layout, p.size.width, p.size.height, p.bottomInset, p.pieceByUrl, p.catalog]);
   const [motion] = useState(() => new MotionController(layout.nodes[0]?.s ?? 0, reducedMotion));
   const [runtime] = useState(() => new WorldRuntime(layout, motion, p.night, rest));
   const [backend, setBackend] = useState<Backend | null>(null);
@@ -536,6 +590,7 @@ function WorldStage(p: StageProps) {
           onTapStop={p.onOpenStop}
           convoy={p.convoy}
           carFor={carFor}
+          catalog={p.catalog}
         />
       </WorldCanvas>
       {blur && firstFrame ? (

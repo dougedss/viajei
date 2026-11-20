@@ -2,7 +2,7 @@ import Dexie, { type EntityTable } from 'dexie';
 import type { Place } from '@shared/places-schema.ts';
 import type { Merchant } from '@/lib/nfce/cnpj.ts';
 import type { DayWeather, HourWeather } from '@shared/weather.ts';
-import type { Database } from '@/lib/supabase/database.types.ts';
+import type { Database, Json } from '@/lib/supabase/database.types.ts';
 import type { SyncTable } from './registry.ts';
 
 type Tables = Database['public']['Tables'];
@@ -228,6 +228,27 @@ export type SharedEntry = {
 export type CnpjEntry = Merchant;
 
 /**
+ * O catálogo dos cartões-postais neste aparelho (fase 23): por lugar do app (`place_key`), o que o
+ * servidor disse quando o roteiro ficou pronto. `published` traz a receita (a peça do lugar, montada
+ * sem rede); `check` é a receita gerada que este aparelho desenha e manda conferir; `pending` espera o
+ * servidor; `none` é lugar sem referência (a miniatura do tipo, para sempre). Recalculável: nunca
+ * sincroniza, e a próxima leitura do catálogo a refaz.
+ */
+export type LandmarkEntry = {
+  place_key: string;
+  kind: 'stop' | 'city';
+  landmark_id: string | null;
+  name: string | null;
+  version: number;
+  status: 'published' | 'check' | 'pending' | 'none' | 'capped';
+  recipe: Json | null;
+  /** quem planejou pode refazer (uma vez por lugar), e o pedido em andamento, se houver */
+  can_remake: boolean;
+  remake: { id: string; status: string; options: (Json | null)[] } | null;
+  fetched_at: string;
+};
+
+/**
  * Dexie é a fonte de verdade da UI. Versão 1 com todas as stores do prompt (seção 5.6, mais
  * `notification_prefs` pela correção C11 e `travel_state` do replay). Versão 2 (fase 3): índice
  * simples `trip_day_id` em `stops`, para a lápide de um dia remover as paradas, e a store
@@ -239,8 +260,9 @@ export type CnpjEntry = Merchant;
  * `weather` existe desde a v1, com a chave `trip_day_id`, e só ganhou o tipo (`WeatherEntry`). Versão
  * 5 (fase 24): a store `places`, o cache das buscas de lugares por tipo. Versão 6 (fase 18): as
  * tabelas por pessoa `inbox_addresses` e `received_reservations`, a store `shares` (o que chegou pelo
- * Compartilhar do Android) e o cache `cnpj` (o estabelecimento da nota). Caches recalculáveis
- * (`routes`, `geocode`, `places`, `cnpj`, `travel_state`, `blobs`, `weather`) nunca sincronizam. A
+ * Compartilhar do Android) e o cache `cnpj` (o estabelecimento da nota). Versão 7 (fase 23): o catálogo
+ * dos cartões-postais neste aparelho (`landmarks`). Caches recalculáveis
+ * (`routes`, `geocode`, `places`, `cnpj`, `landmarks`, `travel_state`, `blobs`, `weather`) nunca sincronizam. A
  * `outbox` nunca é apagada sem ter sido enviada; a `uploads` também não, pelo mesmo motivo.
  */
 export class ViajeiDb extends Dexie {
@@ -268,6 +290,7 @@ export class ViajeiDb extends Dexie {
   places!: EntityTable<PlacesEntry, 'key'>;
   shares!: EntityTable<SharedEntry, 'id'>;
   cnpj!: EntityTable<CnpjEntry, 'cnpj'>;
+  landmarks!: EntityTable<LandmarkEntry, 'place_key'>;
   achievements!: EntityTable<Achievement, 'id'>;
   xp_events!: EntityTable<XpEvent, 'id'>;
   outbox!: EntityTable<OutboxOp, 'seq', OutboxInsert>;
@@ -318,6 +341,9 @@ export class ViajeiDb extends Dexie {
       received_reservations: 'id, user_id, status',
       shares: 'id, created_at',
       cnpj: 'cnpj',
+    });
+    this.version(7).stores({
+      landmarks: 'place_key, landmark_id, fetched_at',
     });
   }
 

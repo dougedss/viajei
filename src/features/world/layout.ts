@@ -12,6 +12,7 @@ import type {
 import { indexRoute, projectOntoRoute } from '@/lib/geo/project.ts';
 import { cameraPosition, projectPoint, type Vec3 } from './math.ts';
 import { MINIATURE_BOX, MINIATURE_ROAD_GAP } from '@/art/stops/types.ts';
+import { cityPlaceKey, stopPlaceKey } from '@shared/landmark-keys.ts';
 import { clamp, fbm, lerp, smooth } from './noise.ts';
 import { hashSeed, mulberry32 } from './seed.ts';
 
@@ -83,15 +84,30 @@ export type LayoutFeature =
   | { kind: 'lake'; x: number; z: number; rx: number; rz: number; level: number }
   | { kind: 'coast'; side: -1 | 1; from_s: number; to_s: number; offset: number }
   | { kind: 'vineyard'; x: number; z: number; angle: number; half: number; rowStep: number }
-  /** a peça 3D da parada (a miniatura do tipo), ao lado da estrada, virada para ela (fases 14 e 22) */
-  | { kind: 'miniature'; stop_id: string; stop: StopKind; x: number; z: number; angle: number }
+  /**
+   * a peça 3D da parada, ao lado da estrada, virada para ela (fases 14 e 22): a do lugar quando o
+   * catálogo tem o cartão-postal da `place_key` (fase 23), senão a miniatura do tipo
+   */
+  | {
+      kind: 'miniature';
+      stop_id: string;
+      stop: StopKind;
+      place_key: string | null;
+      x: number;
+      z: number;
+      angle: number;
+    }
   /** quadras de cidade em volta de uma parada de cidade, hotel ou comida (fase 14) */
   | { kind: 'blocks'; x: number; z: number; radius: number; density: number };
 
 /** O piso plano de uma peça: o terreno fica na altura do nó dentro de `r`, e a decoração não entra. */
 export type LayoutPad = { x: number; z: number; r: number; y: number };
 
-/** Uma cidade de passagem (fase 22): o nome na beira da estrada, sem pílula e sem toque. */
+/**
+ * Uma cidade de passagem (fase 22): o nome na beira da estrada, sem pílula e sem toque. Fase 23: com
+ * o cartão-postal dela no catálogo (`cityPieces`), a peça atrás do nome, num piso próprio, na caixa
+ * da cidade; sem lugar para o piso (os pisos das peças, a estrada que volta), fica só o nome.
+ */
 export type LayoutPlace = {
   name: string;
   uf: string;
@@ -101,6 +117,10 @@ export type LayoutPlace = {
   side: -1 | 1;
   /** onde o nome fica ancorado, ao lado da estrada */
   position: Vec3;
+  /** a chave dela no catálogo dos cartões-postais */
+  key: string | null;
+  /** a peça do cartão-postal: onde fica e para onde olha (null: só o nome) */
+  piece: { x: number; z: number; angle: number } | null;
 };
 
 export type LayoutCuriosity = {
@@ -128,6 +148,8 @@ export type LayoutInput = {
   stops: readonly Stop[];
   route: Pick<DayRoute, 'geometry' | 'elevation' | 'legs'> | null;
   place: PlaceReading | null;
+  /** as cidades de passagem que têm cartão-postal publicado no catálogo (as chaves `city:…`), fase 23 */
+  cityPieces?: ReadonlySet<string>;
   /**
    * Até onde o z do caminho vai antes de comprimir (padrão `Z_MAX`, o dia inteiro na tela). O filme
    * da retrospectiva usa mais, porque a câmera sobrevoa a viagem em vez de mostrá-la de uma vez.
@@ -629,6 +651,7 @@ export function buildLayout(input: LayoutInput): WorldLayout {
   // acidentes e peças
   const features: LayoutFeature[] = [];
   const pads: LayoutPad[] = [];
+  const stopById = new Map(stops.map((st) => [st.id, st]));
   for (const node of nodes) {
     const side = node.side;
     const [x, y, z] = node.position;
@@ -639,10 +662,12 @@ export function buildLayout(input: LayoutInput): WorldLayout {
     const zOff = node.touch === 'lake' ? -(box.w / 2 + 1.5) : 0;
     const px = x + side * (roadHalfWidth + MINIATURE_ROAD_GAP + box.d / 2);
     const pz = z + zOff;
+    const stop = stopById.get(node.stop_id);
     features.push({
       kind: 'miniature',
       stop_id: node.stop_id,
       stop: node.kind,
+      place_key: stop ? stopPlaceKey(stop) : null,
       x: px,
       z: pz,
       angle: -side * (Math.PI / 2) + (rng() - 0.5) * 0.2,
@@ -737,10 +762,12 @@ export function buildLayout(input: LayoutInput): WorldLayout {
     totalKm,
     kmToS,
     pathAt,
+    path,
     pads,
     roadHalfWidth,
     firstNodeS,
     lastNodeS,
+    cityPieces: input.cityPieces ?? new Set(),
   });
 
   // terreno: amostras grossas da trilha com o cenário de cada uma
@@ -947,17 +974,26 @@ type PlacesInput = {
   totalKm: number;
   kmToS: (km: number) => number;
   pathAt: (s: number) => PathSample;
-  pads: readonly LayoutPad[];
+  path: readonly PathSample[];
+  /** os pisos das peças; a peça de uma cidade acrescenta o dela */
+  pads: LayoutPad[];
   roadHalfWidth: number;
   firstNodeS: number;
   lastNodeS: number;
+  cityPieces: ReadonlySet<string>;
 };
+
+/** O raio do piso da peça de uma cidade (a caixa da cidade, como o das peças das paradas). */
+const CITY_BOX = MINIATURE_BOX.city;
+const CITY_PAD_R = Math.hypot(CITY_BOX.w, CITY_BOX.d) / 2 + 1.5;
 
 /**
  * Até três cidades de passagem, as mais populosas, nunca no trecho da rota onde há uma parada com
  * coordenada (a pílula dela já diz o lugar). O nome fica no `s` do ponto mais perto do centro do
  * município, do lado de fora da curva, longe dos pisos das peças; quando ali não dá, anda um pouco
- * ao longo do trecho dela.
+ * ao longo do trecho dela. Com o cartão-postal da cidade no catálogo (fase 23), a peça fica atrás do
+ * nome, na caixa da cidade, num piso que não cobre nenhum outro piso nem a estrada que volta; sem um
+ * lugar assim no trecho, a cidade fica só com o nome.
  */
 function pickPlaces(input: PlacesInput): LayoutPlace[] {
   const { reading, axis, stops, totalKm, kmToS, pathAt, pads, roadHalfWidth } = input;
@@ -974,8 +1010,19 @@ function pickPlaces(input: PlacesInput): LayoutPlace[] {
     .sort((a, b) => a.at_m - b.at_m);
   const clear = (x: number, z: number) =>
     pads.every((pad) => Math.hypot(x - pad.x, z - pad.z) > pad.r + 4);
+  // o piso da peça da cidade: fora de todo piso, e a estrada só passa ao lado dele (nenhuma volta do S
+  // cruza o piso: toda amostra do caminho perto dele é do mesmo trecho)
+  const pieceClear = (x: number, z: number, s: number) =>
+    pads.every((pad) => Math.hypot(x - pad.x, z - pad.z) > pad.r + CITY_PAD_R) &&
+    input.path.every(
+      (q) =>
+        Math.hypot(x - q.x, z - q.z) > CITY_PAD_R + roadHalfWidth ||
+        Math.abs(q.s - s) <= CITY_PAD_R * 1.6,
+    );
   const out: LayoutPlace[] = [];
   for (const p of chosen) {
+    const key = cityPlaceKey(p.uf, p.name);
+    const wantPiece = key !== null && input.cityPieces.has(key);
     const km = clamp(axis.kmOffset + p.at_m / 1000, 0, totalKm);
     const s0 = kmToS(km);
     const sFrom = Math.max(
@@ -990,16 +1037,26 @@ function pickPlaces(input: PlacesInput): LayoutPlace[] {
         const q = pathAt(s);
         const side: -1 | 1 = q.x < 0 ? -1 : 1;
         const x = q.x + side * (roadHalfWidth + PLACE_OFFSET);
-        // fora do piso de toda peça e fora do meio do S (onde a estrada cruza)
-        const score = (clear(x, q.z) ? 2 : 0) + (Math.abs(q.x) > 5 ? 1 : 0);
+        // fora do piso de toda peça e fora do meio do S (onde a estrada cruza); com peça, o piso dela
+        const px = q.x + side * (roadHalfWidth + MINIATURE_ROAD_GAP + CITY_BOX.d / 2);
+        const score =
+          (clear(x, q.z) ? 2 : 0) +
+          (Math.abs(q.x) > 5 ? 1 : 0) +
+          (wantPiece && pieceClear(px, q.z, s) ? 4 : 0);
         if (!best || score > best.score) best = { s, score };
-        if (score === 3) break;
+        if (score === (wantPiece ? 7 : 3)) break;
       }
-      if (best?.score === 3) break;
+      if (best?.score === (wantPiece ? 7 : 3)) break;
     }
     const s = best?.s ?? s0;
     const q = pathAt(s);
     const side: -1 | 1 = q.x < 0 ? -1 : 1;
+    let piece: LayoutPlace['piece'] = null;
+    if (wantPiece && best && best.score >= 4) {
+      const px = q.x + side * (roadHalfWidth + MINIATURE_ROAD_GAP + CITY_BOX.d / 2);
+      piece = { x: px, z: q.z, angle: -side * (Math.PI / 2) };
+      pads.push({ x: px, z: q.z, r: CITY_PAD_R, y: q.y });
+    }
     out.push({
       name: p.name,
       uf: p.uf,
@@ -1008,6 +1065,8 @@ function pickPlaces(input: PlacesInput): LayoutPlace[] {
       s,
       side,
       position: [q.x + side * (roadHalfWidth + PLACE_OFFSET), q.y, q.z],
+      key,
+      piece,
     });
   }
   return out;
