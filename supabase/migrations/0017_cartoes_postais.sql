@@ -187,7 +187,7 @@ declare
   v_owner   boolean;
   v_used    integer;
   v_new     integer := 0;
-  v_items   jsonb := '[]';
+  v_items   jsonb := '[]'::jsonb;
   v_place   jsonb;
   v_key     text;
   v_kind    text;
@@ -197,7 +197,7 @@ declare
   v_rm      public.landmark_remakes%rowtype;
   v_state   text;
   v_item    jsonb;
-  v_seen    text[] := '{}';
+  v_seen    text[] := '{}'::text[];
   v_lab     boolean := private.lab_role() is not distinct from 'runner';
 begin
   if v_uid is null or not private.is_trip_member(p_trip) then
