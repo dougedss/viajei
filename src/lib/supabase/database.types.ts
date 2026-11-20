@@ -305,14 +305,14 @@ isOneToOne: false
                   ]
                 },"landmark_jobs": {
                   Row: {
-                    "attempts": number,"code": string | null,"created_at": string,"id": string,"input": Json,"kind": string,"place_key": string,"remake_id": string | null,"requested_by": string | null,"run_after": string,"started_at": string | null,"status": string,"trip_id": string | null,"updated_at": string,"variant": number | null
+                    "attempts": number,"code": string | null,"created_at": string,"id": string,"input": NonNullable<Json>,"kind": string,"place_key": string,"remake_id": string | null,"requested_by": string | null,"run_after": string,"started_at": string | null,"status": string,"trip_id": string | null,"updated_at": string,"variant": number | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "attempts"?: number,"code"?: string | null,"created_at"?: string,"id"?: string,"input": Json,"kind": string,"place_key": string,"remake_id"?: string | null,"requested_by"?: string | null,"run_after"?: string,"started_at"?: string | null,"status"?: string,"trip_id"?: string | null,"updated_at"?: string,"variant"?: number | null
+                    "attempts"?: number,"code"?: string | null,"created_at"?: string,"id"?: string,"input": NonNullable<Json>,"kind": string,"place_key": string,"remake_id"?: string | null,"requested_by"?: string | null,"run_after"?: string,"started_at"?: string | null,"status"?: string,"trip_id"?: string | null,"updated_at"?: string,"variant"?: number | null
                   }
                   Update: {
-                    "attempts"?: number,"code"?: string | null,"created_at"?: string,"id"?: string,"input"?: Json,"kind"?: string,"place_key"?: string,"remake_id"?: string | null,"requested_by"?: string | null,"run_after"?: string,"started_at"?: string | null,"status"?: string,"trip_id"?: string | null,"updated_at"?: string,"variant"?: number | null
+                    "attempts"?: number,"code"?: string | null,"created_at"?: string,"id"?: string,"input"?: NonNullable<Json>,"kind"?: string,"place_key"?: string,"remake_id"?: string | null,"requested_by"?: string | null,"run_after"?: string,"started_at"?: string | null,"status"?: string,"trip_id"?: string | null,"updated_at"?: string,"variant"?: number | null
                   }
                   Relationships: [
                     {
@@ -363,14 +363,14 @@ isOneToOne: false
                   ]
                 },"landmark_remakes": {
                   Row: {
-                    "chosen": number | null,"created_at": string,"decided_at": string | null,"id": string,"landmark_id": string,"options": Json,"requested_by": string | null,"status": string,"trip_id": string | null
+                    "chosen": number | null,"created_at": string,"decided_at": string | null,"id": string,"landmark_id": string,"options": NonNullable<Json>,"requested_by": string | null,"status": string,"trip_id": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "chosen"?: number | null,"created_at"?: string,"decided_at"?: string | null,"id"?: string,"landmark_id": string,"options"?: Json,"requested_by"?: string | null,"status"?: string,"trip_id"?: string | null
+                    "chosen"?: number | null,"created_at"?: string,"decided_at"?: string | null,"id"?: string,"landmark_id": string,"options"?: NonNullable<Json>,"requested_by"?: string | null,"status"?: string,"trip_id"?: string | null
                   }
                   Update: {
-                    "chosen"?: number | null,"created_at"?: string,"decided_at"?: string | null,"id"?: string,"landmark_id"?: string,"options"?: Json,"requested_by"?: string | null,"status"?: string,"trip_id"?: string | null
+                    "chosen"?: number | null,"created_at"?: string,"decided_at"?: string | null,"id"?: string,"landmark_id"?: string,"options"?: NonNullable<Json>,"requested_by"?: string | null,"status"?: string,"trip_id"?: string | null
                   }
                   Relationships: [
                     {
@@ -395,16 +395,18 @@ isOneToOne: false
                   ]
                 },"landmarks": {
                   Row: {
-                    "check_round": number,"created_at": string,"generations": number,"id": string,"key": string,"modeled": Json,"name": string,"published_at": string | null,"recipe": Json | null,"retired_reason": string | null,"sources": Json,"status": string,"updated_at": string,"version": number,"wikidata": string | null
+                    "check_round": number,"created_at": string,"generations": number,"id": string,"key": string,"modeled": NonNullable<Json>,"name": string,"published_at": string | null,"recipe": Json | null,"retired_reason": string | null,"sources": NonNullable<Json>,"status": string,"updated_at": string,"version": number,"wikidata": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "check_round"?: number,"created_at"?: string,"generations"?: number,"id"?: string,"key": string,"modeled"?: Json,"name": string,"published_at"?: string | null,"recipe"?: Json | null,"retired_reason"?: string | null,"sources"?: Json,"status"?: string,"updated_at"?: string,"version"?: number,"wikidata"?: string | null
+                    "check_round"?: number,"created_at"?: string,"generations"?: number,"id"?: string,"key": string,"modeled"?: NonNullable<Json>,"name": string,"published_at"?: string | null,"recipe"?: Json | null,"retired_reason"?: string | null,"sources"?: NonNullable<Json>,"status"?: string,"updated_at"?: string,"version"?: number,"wikidata"?: string | null
                   }
                   Update: {
-                    "check_round"?: number,"created_at"?: string,"generations"?: number,"id"?: string,"key"?: string,"modeled"?: Json,"name"?: string,"published_at"?: string | null,"recipe"?: Json | null,"retired_reason"?: string | null,"sources"?: Json,"status"?: string,"updated_at"?: string,"version"?: number,"wikidata"?: string | null
+                    "check_round"?: number,"created_at"?: string,"generations"?: number,"id"?: string,"key"?: string,"modeled"?: NonNullable<Json>,"name"?: string,"published_at"?: string | null,"recipe"?: Json | null,"retired_reason"?: string | null,"sources"?: NonNullable<Json>,"status"?: string,"updated_at"?: string,"version"?: number,"wikidata"?: string | null
                   }
-                  Relationships: []
+                  Relationships: [
+                    
+                  ]
                 },"notification_prefs": {
                   Row: {
                     "created_at": string,"enabled": boolean,"field_versions": NonNullable<Json>,"id": string,"kinds": NonNullable<Json>,"lead_minutes": number,"morning_time": string,"synced_at": string,"trip_id": string,"updated_at": string,"user_id": string
@@ -800,6 +802,15 @@ isOneToOne: false
 "lab_grant":
 { Args: { "p_email": string,"p_role": string }; Returns: string
                            },
+"lab_mark_horizon":
+{ Args: { "p_trip_id": string }; Returns: undefined
+                           },
+"lab_purge_preview":
+{ Args: { "p_logs_before": string,"p_orphans_before": string,"p_tombstones_before": string,"p_trips_before": string }; Returns: Json
+                           },
+"lab_reset_progress":
+{ Args: Record<PropertyKey, never>; Returns: number
+                           },
 "lab_seed_landmark":
 { Args: { "p_name": string,"p_place_key": string,"p_recipe": Json }; Returns: string
                            },
@@ -832,15 +843,6 @@ isOneToOne: false
                            },
 "landmark_verdict":
 { Args: { "p_landmark": string,"p_recipe": Json,"p_verdict": string,"p_version": number }; Returns: string
-                           },
-"lab_mark_horizon":
-{ Args: { "p_trip_id": string }; Returns: undefined
-                           },
-"lab_purge_preview":
-{ Args: { "p_logs_before": string,"p_orphans_before": string,"p_tombstones_before": string,"p_trips_before": string }; Returns: Json
-                           },
-"lab_reset_progress":
-{ Args: Record<PropertyKey, never>; Returns: number
                            },
 "my_lab_role":
 { Args: Record<PropertyKey, never>; Returns: string

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ESTUFA_CURITIBA } from '@/art/landmarks/samples/estufa-curitiba.ts';
 import type { LandmarkEntry } from '@/lib/db/schema.ts';
-import { remakeState, validChoice } from './remake.ts';
+import { remakeState, validChoice } from './remake-rules.ts';
 
 const entry = (over: Partial<LandmarkEntry> = {}): LandmarkEntry => ({
   place_key: 'osm:w607776738',
