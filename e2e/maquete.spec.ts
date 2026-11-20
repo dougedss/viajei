@@ -199,6 +199,16 @@ test('a tela da viagem monta a maquete do dia inteiro, o toque no carro aproxima
     body: await page.screenshot(),
     contentType: 'image/png',
   });
+  // a câmera da peça pela chave da URL (fase 23, a captura do laboratório): a maquete monta e a
+  // câmera assenta no close do cartão-postal, mesmo sem pílula em cena
+  await page.goto(`${tripUrl}?peca=1`);
+  await expect(maquete).toBeVisible({ timeout: 60_000 });
+  await expect(maquete).toHaveAttribute('data-world-landmarks', '1', { timeout: 60_000 });
+  await expect(maquete).toHaveAttribute('data-world-camera-settled', 'true', { timeout: 90_000 });
+  await test.info().attach('maquete-peca', {
+    body: await page.screenshot(),
+    contentType: 'image/png',
+  });
   await page.goto(tripUrl);
   await expect(maquete).toBeVisible({ timeout: 60_000 });
 

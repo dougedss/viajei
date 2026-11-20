@@ -308,11 +308,13 @@ export function pieceCamera(
 ): CameraFrame {
   const box = MINIATURE_BOX[piece.stop];
   const y = layout.pathAt(0).y;
+  // o alvo abaixo do pé da peça: ela fica na metade de cima do palco, acima do que está sobre o pé
+  // (o cartão da vez, o "Agora"); três quartos, do lado da estrada, longe o bastante para caber inteira
   return {
-    target: [piece.x, y + box.h * 0.35, piece.z],
-    distance: Math.hypot(box.w, box.h, box.d) * 1.9,
-    tilt: (24 * Math.PI) / 180,
-    yaw: piece.angle,
+    target: [piece.x, y - box.h * 0.45, piece.z],
+    distance: Math.hypot(box.w, box.h, box.d) * 3.6,
+    tilt: (30 * Math.PI) / 180,
+    yaw: piece.angle + 0.6,
     fov: FOLLOW_FOV,
   };
 }

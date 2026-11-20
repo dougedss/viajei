@@ -875,8 +875,15 @@ export function appMaquete(
             'o cartão-postal semeado não entrou em cena',
           );
           info.pecas_em_cena = Number(pecas);
-          // a peça de perto, pela chave da URL (a câmera de repouso vira um close nela), ao lado da régua
-          await montar('?peca=1');
+          // a peça de perto, pela chave da URL (a câmera de repouso vira um close nela), ao lado da
+          // régua: com a câmera colada na peça as pílulas podem ficar fora de cena, então aqui não se
+          // espera por uma pílula posta, só pela maquete montada e pela câmera assentada
+          await page.goto(tripUrl(target, '?peca=1'));
+          await page.getByRole('heading', { name: 'Agora' }).waitFor();
+          await world.waitFor({ timeout: WORLD_TIMEOUT });
+          await page
+            .getByText('Montando a maquete…')
+            .waitFor({ state: 'hidden', timeout: WORLD_TIMEOUT });
           await page
             .locator('[data-world-camera-settled="true"]')
             .waitFor({ timeout: WORLD_TIMEOUT });
