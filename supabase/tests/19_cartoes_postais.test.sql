@@ -125,8 +125,9 @@ select is(((select r from r2) ->> 'new')::int, 9, 'só cabem mais nove: 3 + 9 = 
 select is((select count(*)::int from jsonb_array_elements((select r from r2) -> 'items') i where i ->> 'state' = 'capped'), 2,
           'os dois que passam do teto ficam com a miniatura do tipo (capped)');
 select pg_temp.logout();
+-- (na viagem B, sem fila: na A o gatilho do teto dispara antes da chave estrangeira)
 select throws_ok($$insert into public.landmark_jobs (place_key, trip_id, kind, input)
-  values ('geo:lugar-11@-25.011,-49.239', 'e9111111-1111-4111-8111-111111111111', 'build', '{}')$$,
+  values ('geo:lugar-11@-25.011,-49.239', 'e9222222-2222-4222-8222-222222222222', 'build', '{}')$$,
   '23503', null, 'sem o lugar não há job');
 insert into public.landmark_places (place_key, kind) values ('geo:treze@-25.013,-49.239', 'stop');
 select throws_ok($$insert into public.landmark_jobs (place_key, trip_id, kind, input)
