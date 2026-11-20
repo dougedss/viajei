@@ -35,7 +35,7 @@ import { MINIATURE_BOX, type Box, type Miniature } from './types.ts';
  * material fundidas numa só (uma dezena de chamadas de desenho por peça, não centenas). O `seed` só
  * varia o que não muda a caixa: cores e variantes simétricas.
  */
-type Palette = {
+export type Palette = {
   wall: MeshStandardMaterial;
   wall2: MeshStandardMaterial;
   wall3: MeshStandardMaterial;
@@ -76,7 +76,7 @@ type Palette = {
 const flat = (color: number, roughness = 0.9) =>
   new MeshStandardMaterial({ color, roughness, flatShading: true });
 
-function palette(kit: Kit): Palette {
+export function palette(kit: Kit): Palette {
   const own = <T extends Material>(m: T): T => kit.own(m);
   return {
     wall: own(flat(0xf1ebe0)),
@@ -133,7 +133,7 @@ function palette(kit: Kit): Palette {
 }
 
 /** Um gerador determinístico pequeno (o mesmo do mundo), só para cores e variantes. */
-function rng(seed: number): () => number {
+export function rng(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) >>> 0;
@@ -194,7 +194,7 @@ function hip(
 }
 
 /** Um telhado de duas águas: o prisma triangular com a cumeeira ao longo de x, a base em `y`. */
-function gableGeometry(w: number, h: number, d: number): BufferGeometry {
+export function gableGeometry(w: number, h: number, d: number): BufferGeometry {
   const hw = w / 2;
   const hd = d / 2;
   // os vértices repetidos por face, para o sombreamento chapado sair limpo
@@ -781,7 +781,7 @@ function compact(ctx: Ctx): void {
 
 let poolTex: Texture | null = null;
 /** A poça de luz quente: um disco com o brilho caindo do centro para a borda (uma textura para todas). */
-function poolTexture(): Texture {
+export function poolTexture(): Texture {
   poolTex ??= canvasTexture(128, 128, (g, w, h) => {
     const grad = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
     grad.addColorStop(0, 'rgba(255,190,110,1)');
