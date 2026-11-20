@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie';
 import type { Place } from '@shared/places-schema.ts';
+import type { Merchant } from '@/lib/nfce/cnpj.ts';
 import type { DayWeather, HourWeather } from '@shared/weather.ts';
 import type { Database } from '@/lib/supabase/database.types.ts';
 import type { SyncTable } from './registry.ts';
@@ -29,6 +30,8 @@ export type TripDay = LocalRow<Tables['trip_days']['Row']>;
 export type Stop = LocalRow<Tables['stops']['Row']>;
 export type TripTrack = LocalRow<Tables['trip_tracks']['Row']>;
 export type NotificationPref = LocalRow<Tables['notification_prefs']['Row']>;
+export type InboxAddress = LocalRow<Tables['inbox_addresses']['Row']>;
+export type ReceivedReservation = LocalRow<Tables['received_reservations']['Row']>;
 export type Reservation = LocalRow<Tables['reservations']['Row']>;
 export type StopMemory = LocalRow<Tables['stop_memories']['Row']>;
 export type Attachment = LocalRow<Tables['attachments']['Row']>;
@@ -54,6 +57,8 @@ export type RowOf<T extends SyncTable> = {
   stops: Stop;
   trip_tracks: TripTrack;
   notification_prefs: NotificationPref;
+  inbox_addresses: InboxAddress;
+  received_reservations: ReceivedReservation;
   reservations: Reservation;
   stop_memories: StopMemory;
   attachments: Attachment;
@@ -207,6 +212,22 @@ export type GeocodeEntry = { query: string; results: GeocodeResult[]; fetched_at
 export type PlacesEntry = { key: string; places: Place[]; fetched_at: string };
 
 /**
+ * O que chegou pelo Compartilhar do Android (fase 18): o service worker guarda o POST do `share_target`
+ * aqui e a tela "Ler a confirmação" o lê. Só neste aparelho; some quando a leitura o consome.
+ */
+export type SharedEntry = {
+  id: string;
+  title: string | null;
+  text: string | null;
+  url: string | null;
+  files: { name: string; type: string; blob: Blob }[];
+  created_at: string;
+};
+
+/** Cache do estabelecimento por CNPJ (a BrasilAPI, fase 18): uma consulta por emitente, nunca duas. */
+export type CnpjEntry = Merchant;
+
+/**
  * Dexie é a fonte de verdade da UI. Versão 1 com todas as stores do prompt (seção 5.6, mais
  * `notification_prefs` pela correção C11 e `travel_state` do replay). Versão 2 (fase 3): índice
  * simples `trip_day_id` em `stops`, para a lápide de um dia remover as paradas, e a store
@@ -216,8 +237,10 @@ export type PlacesEntry = { key: string; places: Place[]; fetched_at: string };
  * gasto de uma reserva se acha pelo id determinístico, sem índice). Versão 4 (fase 9): `achievements`
  * ganha o índice `trip_id` (as conquistas da viagem, no filme). A fase 11 não sobe a versão: a store
  * `weather` existe desde a v1, com a chave `trip_day_id`, e só ganhou o tipo (`WeatherEntry`). Versão
- * 5 (fase 24): a store `places`, o cache das buscas de lugares por tipo. Caches recalculáveis
- * (`routes`, `geocode`, `places`, `travel_state`, `blobs`, `weather`) nunca sincronizam. A
+ * 5 (fase 24): a store `places`, o cache das buscas de lugares por tipo. Versão 6 (fase 18): as
+ * tabelas por pessoa `inbox_addresses` e `received_reservations`, a store `shares` (o que chegou pelo
+ * Compartilhar do Android) e o cache `cnpj` (o estabelecimento da nota). Caches recalculáveis
+ * (`routes`, `geocode`, `places`, `cnpj`, `travel_state`, `blobs`, `weather`) nunca sincronizam. A
  * `outbox` nunca é apagada sem ter sido enviada; a `uploads` também não, pelo mesmo motivo.
  */
 export class ViajeiDb extends Dexie {
@@ -228,6 +251,8 @@ export class ViajeiDb extends Dexie {
   stops!: EntityTable<Stop, 'id'>;
   trip_tracks!: EntityTable<TripTrack, 'id'>;
   notification_prefs!: EntityTable<NotificationPref, 'id'>;
+  inbox_addresses!: EntityTable<InboxAddress, 'id'>;
+  received_reservations!: EntityTable<ReceivedReservation, 'id'>;
   reservations!: EntityTable<Reservation, 'id'>;
   stop_memories!: EntityTable<StopMemory, 'id'>;
   attachments!: EntityTable<Attachment, 'id'>;
@@ -241,6 +266,8 @@ export class ViajeiDb extends Dexie {
   weather!: EntityTable<WeatherEntry, 'trip_day_id'>;
   geocode!: EntityTable<GeocodeEntry, 'query'>;
   places!: EntityTable<PlacesEntry, 'key'>;
+  shares!: EntityTable<SharedEntry, 'id'>;
+  cnpj!: EntityTable<CnpjEntry, 'cnpj'>;
   achievements!: EntityTable<Achievement, 'id'>;
   xp_events!: EntityTable<XpEvent, 'id'>;
   outbox!: EntityTable<OutboxOp, 'seq', OutboxInsert>;
@@ -284,6 +311,13 @@ export class ViajeiDb extends Dexie {
     });
     this.version(5).stores({
       places: 'key, fetched_at',
+    });
+    this.version(6).stores({
+      attachments: 'id, trip_id, stop_id, reservation_id, expense_id',
+      inbox_addresses: 'id, user_id',
+      received_reservations: 'id, user_id, status',
+      shares: 'id, created_at',
+      cnpj: 'cnpj',
     });
   }
 

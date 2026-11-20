@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { X } from 'lucide-react';
+import { Receipt, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { MEDIA } from '@shared/constants.ts';
 import { Button } from '@/components/ui/Button.tsx';
@@ -21,9 +21,11 @@ import { StarRating } from './StarRating.tsx';
 
 type Props = {
   tripId: string;
-  stop: Pick<Stop, 'id' | 'name'> | null;
+  stop: (Pick<Stop, 'id' | 'name'> & Partial<Pick<Stop, 'kind'>>) | null;
   uid: string;
   onClose: () => void;
+  /** num posto (fase 15), "Fotografar a nota" abre o gasto pela nota (fase 18) */
+  onReceipt?: (() => void) | undefined;
 };
 
 /**
@@ -31,7 +33,7 @@ type Props = {
  * diário da viagem. Offline como tudo: a foto entra na fila e aparece na hora. As missões da parada
  * aparecem no topo, com "Feito".
  */
-export function HowWasItSheet({ tripId, stop, uid, onClose }: Props) {
+export function HowWasItSheet({ tripId, stop, uid, onClose, onReceipt }: Props) {
   return (
     <Sheet
       open={stop !== null}
@@ -39,7 +41,16 @@ export function HowWasItSheet({ tripId, stop, uid, onClose }: Props) {
       title={stop ? `Como foi ${stop.name}?` : ''}
       description="Tudo opcional e por pessoa; fica no diário da viagem."
     >
-      {stop ? <Body key={stop.id} tripId={tripId} stop={stop} uid={uid} onClose={onClose} /> : null}
+      {stop ? (
+        <Body
+          key={stop.id}
+          tripId={tripId}
+          stop={stop}
+          uid={uid}
+          onClose={onClose}
+          onReceipt={onReceipt}
+        />
+      ) : null}
     </Sheet>
   );
 }
@@ -66,7 +77,13 @@ class Drafts {
   }
 }
 
-function Body({ tripId, stop, uid, onClose }: Props & { stop: Pick<Stop, 'id' | 'name'> }) {
+function Body({
+  tripId,
+  stop,
+  uid,
+  onClose,
+  onReceipt,
+}: Props & { stop: NonNullable<Props['stop']> }) {
   const toast = useToast();
   const trip = useTrip(tripId);
   const isOwner = useIsOwner(trip);
@@ -136,6 +153,12 @@ function Body({ tripId, stop, uid, onClose }: Props & { stop: Pick<Stop, 'id' | 
   return (
     <div className="grid max-h-[70dvh] gap-4 overflow-y-auto px-0.5 pb-1">
       <QuestChecks quests={quests} uid={uid} />
+      {onReceipt && stop.kind === 'fuel' ? (
+        <Button variant="secondary" size="md" onClick={onReceipt}>
+          <Receipt className="size-5" aria-hidden="true" />
+          Fotografar a nota
+        </Button>
+      ) : null}
       <StarRating value={rating} onChange={setRating} />
 
       <div className="grid gap-2">

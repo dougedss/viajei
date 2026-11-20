@@ -73,10 +73,20 @@ export const SYNC_TABLES = {
    * lápide da parada levasse tudo, a missão de alguém e o dinheiro gasto sumiriam do aparelho.
    */
   checklist_items: { scope: 'trip', rank: 50, children: [] },
-  /** 55: depois das reservas (50), porque o gasto de uma reserva tem FK para ela e podem subir juntos. */
-  expenses: { scope: 'trip', rank: 55, children: [] },
+  /**
+   * 55: depois das reservas (50), porque o gasto de uma reserva tem FK para ela e podem subir juntos.
+   * A foto da nota (fase 18) é filha do gasto: a lápide dele a leva do aparelho, como a da reserva.
+   */
+  expenses: { scope: 'trip', rank: 55, children: [{ table: 'attachments', fk: 'expense_id' }] },
   /** preferências de aviso: da pessoa (escopo user), uma linha por viagem; chega pelo pull do usuário */
   notification_prefs: { scope: 'user', rank: 25, children: [] },
+  /**
+   * O endereço de e-mail da pessoa (fase 18): o código nasce no banco e só se lê; chega pelo pull do
+   * usuário e nunca ao time.
+   */
+  inbox_addresses: { scope: 'user', rank: 26, children: [] },
+  /** A reserva recebida por e-mail (fase 18), da pessoa: "Pôr nesta viagem" e "Dispensar" sobem pela outbox. */
+  received_reservations: { scope: 'user', rank: 27, children: [] },
   /**
    * Conquistas e XP: somente-anexar, da pessoa (escopo user), por último no push (90). As próprias
    * chegam pelo pull do usuário; as do time, pelo pull da viagem (C6, só as que têm o trip_id dela).

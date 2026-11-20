@@ -1,4 +1,4 @@
-import { Trash2 } from 'lucide-react';
+import { Receipt, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import {
   EXPENSE_CATEGORIES,
@@ -10,13 +10,22 @@ import { Button } from '@/components/ui/Button.tsx';
 import { Sheet } from '@/components/ui/Sheet.tsx';
 import { TextArea } from '@/components/ui/TextArea.tsx';
 import { TextField } from '@/components/ui/TextField.tsx';
+import { FilePickers } from '@/features/media/components/FilePickers.tsx';
+import { MediaThumb } from '@/features/media/components/MediaThumb.tsx';
+import { MediaViewer } from '@/features/media/components/MediaViewer.tsx';
 import { asPersonColor } from '@/features/profile/queries.ts';
+import { joinLabels } from '@/features/reservations/read/to-form.ts';
 import { formatMoney, parseMoney } from '@/features/trips/rules.ts';
 import { cx } from '@/lib/cx.ts';
 import type { Expense, Profile, Stop, Trip, TripDay } from '@/lib/db/schema.ts';
+import { useTripMedia } from '@/lib/media/hooks.ts';
+import type { Staged } from '@/lib/media/stage.ts';
+import { blobUrl, dropUrl } from '@/lib/media/urls.ts';
 import { formatDayShort } from '@/lib/time/index.ts';
 import type { ExpenseValues } from '../actions.ts';
-import { categoryForStop } from '../rules.ts';
+import { receiptMissing, suggestionLine } from '../receipt/to-expense.ts';
+import { useReceipt, type ReceiptStep } from '../receipt/useReceipt.ts';
+import { categoryForStop, clampToTrip } from '../rules.ts';
 
 type Person = Pick<Profile, 'id' | 'name' | 'color'>;
 
@@ -24,11 +33,14 @@ export type ExpenseDraft = {
   date: string;
   stop_id: string | null;
   category: ExpenseCategory;
+  /** veio de "Fotografar a nota" (o posto registrado sozinho, fase 15): a nota em primeiro lugar */
+  receipt?: boolean;
 };
 
 type Props = {
   /** `null` fechada; o rascunho de um gasto novo; ou o gasto para editar */
   open: { draft: ExpenseDraft } | { expense: Expense } | null;
+  tripId: string;
   trip: Pick<Trip, 'start_date' | 'end_date'>;
   days: readonly TripDay[];
   stops: readonly Stop[];
@@ -36,14 +48,25 @@ type Props = {
   team: readonly Person[];
   uid: string;
   onClose: () => void;
-  onSave: (values: ExpenseValues) => void;
+  /** `receipt`: a foto da nota já preparada (e, com rede, já no Storage), para virar anexo do gasto */
+  onSave: (values: ExpenseValues, receipt: Staged | null) => void;
   onRemove?: (expense: Expense) => void;
+};
+
+const STEP_TEXT: Record<ReceiptStep, string> = {
+  preparing: 'Preparando a foto…',
+  qr: 'Lendo o QR code…',
+  merchant: 'Procurando o estabelecimento…',
+  reading: 'Lendo a nota…',
 };
 
 /**
  * O formulário do gasto, numa folha: valor (com `parseMoney`, teclado numérico), categoria, data
  * dentro da viagem, a parada, quem pagou (padrão: quem lança) e observações. O mesmo no "+ Gasto" do
- * Modo Viagem, que já vem com a data do dia, a parada e a categoria pelo tipo dela.
+ * Modo Viagem, que já vem com a data do dia, a parada e a categoria pelo tipo dela. Num gasto novo,
+ * "Fotografar a nota" (fase 18): a foto vira anexo do gasto e o que ela diz (o total, o estabelecimento,
+ * a data, a categoria) entra preenchido, pelo QR da NFC-e sem IA e pela IA no que falta; o que a nota
+ * não diz fica vazio. Num gasto que já existe, a nota aparece e abre no visualizador.
  */
 export function ExpenseSheet(props: Props) {
   const { open, onClose } = props;
@@ -61,6 +84,7 @@ export function ExpenseSheet(props: Props) {
 
 function Body({
   open,
+  tripId,
   trip,
   days,
   stops,
@@ -88,6 +112,22 @@ function Body({
     ? team
     : [...team, { id: paidBy, name: 'Quem pagou (saiu da viagem)', color: 'sunset' }];
 
+  // a nota (fase 18): o que ela deu entra nos campos uma vez, quando a leitura termina; a pessoa
+  // mexe depois (o estado guarda qual nota já entrou: "storing information from previous renders")
+  const receipt = useReceipt({ id: tripId, ...trip });
+  const [applied, setApplied] = useState<string | null>(null);
+  if (receipt.phase.kind === 'done' && applied !== receipt.phase.staged.id) {
+    const s = receipt.phase.suggestion;
+    setApplied(receipt.phase.staged.id);
+    if (s.amount !== null) setAmount(formatMoney(s.amount).replace(/^R\$\s?/, ''));
+    if (s.date) setDate(clampToTrip(s.date, trip));
+    // a categoria do contexto (a parada) vale mais que a palpite da IA
+    if (s.category && !draft?.stop_id) setCategory(s.category);
+    if (s.merchant && notes.trim() === '') setNotes(s.merchant);
+  }
+  const receipts = useTripMedia(tripId, (row) => editing !== null && row.expense_id === editing.id);
+  const [viewing, setViewing] = useState<number | null>(null);
+
   return (
     <form
       className="grid max-h-[72svh] gap-4 overflow-y-auto pb-1"
@@ -105,21 +145,84 @@ function Body({
         };
         setError(next);
         if (value === null || Number.isNaN(value) || value <= 0 || next.date) return;
-        onSave({
-          amount: value,
-          category,
-          date,
-          paid_by: paidBy,
-          stop_id: stopId,
-          notes: notes.trim() === '' ? null : notes.trim().slice(0, 500),
-        });
+        if (receipt.phase.kind === 'working') return;
+        onSave(
+          {
+            amount: value,
+            category,
+            date,
+            paid_by: paidBy,
+            stop_id: stopId,
+            notes: notes.trim() === '' ? null : notes.trim().slice(0, 500),
+          },
+          receipt.phase.kind === 'done' ? receipt.phase.staged : null,
+        );
       }}
     >
+      {editing ? (
+        receipts.length > 0 ? (
+          <div className="flex flex-wrap gap-3" aria-label="A nota">
+            {receipts.map((m, i) => (
+              <MediaThumb
+                key={m.row.id}
+                item={m}
+                label="Abrir a nota"
+                onOpen={() => setViewing(i)}
+              />
+            ))}
+            {viewing !== null ? (
+              <MediaViewer
+                items={receipts}
+                index={viewing}
+                onIndex={setViewing}
+                onClose={() => setViewing(null)}
+              />
+            ) : null}
+          </div>
+        ) : null
+      ) : (
+        <fieldset className="grid gap-2" data-receipt={receipt.phase.kind}>
+          <legend className="text-[15px] font-semibold">A nota</legend>
+          {receipt.phase.kind === 'done' ? (
+            <ReceiptLine
+              phase={receipt.phase}
+              onReset={() => {
+                dropUrl(receipt.phase.kind === 'done' ? receipt.phase.staged.id : '');
+                receipt.reset();
+              }}
+            />
+          ) : receipt.phase.kind === 'working' ? (
+            <p className="text-[14px] text-ink-2" role="status">
+              {STEP_TEXT[receipt.phase.step]}
+            </p>
+          ) : (
+            <>
+              <p className="text-[14px] text-ink-2">
+                Fotografe a nota: o total, o estabelecimento e a data vêm dela, e ela fica anexada
+                ao gasto.
+              </p>
+              <FilePickers
+                mode="photo"
+                remaining={1}
+                onFiles={(files) => {
+                  const file = files[0];
+                  if (file) void receipt.start(file);
+                }}
+              />
+              {receipt.phase.kind === 'error' ? (
+                <p className="text-[14px] font-semibold text-late-ink" role="alert">
+                  {receipt.phase.message}
+                </p>
+              ) : null}
+            </>
+          )}
+        </fieldset>
+      )}
       <TextField
         label="Valor"
         inputMode="decimal"
         placeholder="0,00"
-        autoFocus={!editing}
+        autoFocus={!editing && !draft?.receipt}
         value={amount}
         error={error.amount}
         onChange={(e) => setAmount(e.target.value)}
@@ -214,7 +317,7 @@ function Body({
         onChange={(e) => setNotes(e.target.value)}
       />
       <div className="grid gap-2">
-        <Button type="submit" size="lg">
+        <Button type="submit" size="lg" disabled={receipt.phase.kind === 'working'}>
           Salvar
         </Button>
         {editing && onRemove ? (
@@ -229,5 +332,47 @@ function Body({
         ) : null}
       </div>
     </form>
+  );
+}
+
+/** O que a nota deu: a miniatura, a linha com o total, o lugar e a data, e o que faltou. */
+function ReceiptLine({
+  phase,
+  onReset,
+}: {
+  phase: Extract<ReturnType<typeof useReceipt>['phase'], { kind: 'done' }>;
+  onReset: () => void;
+}) {
+  const line = suggestionLine(phase.suggestion, formatMoney);
+  const missing = receiptMissing(phase.suggestion);
+  return (
+    <div className="flex items-start gap-3 rounded-field bg-paper p-2" data-receipt-read>
+      <img
+        src={blobUrl(phase.staged.id, phase.staged.prepared.blob)}
+        alt=""
+        className="size-20 shrink-0 rounded-[14px] object-cover"
+      />
+      <div className="grid min-w-0 flex-1 gap-1 text-[14px]">
+        <p className="flex items-center gap-1.5 font-semibold">
+          <Receipt className="size-4 text-accent-ink" aria-hidden="true" />
+          {line !== '' ? line : 'Nota anexada'}
+        </p>
+        <p className="text-ink-2">
+          {phase.offline
+            ? 'Sem internet: a foto sobe quando a rede voltar. Preencha o resto.'
+            : missing.length === 0
+              ? 'Confira e salve.'
+              : `A nota não dizia: ${joinLabels(missing)}.`}
+        </p>
+      </div>
+      <button
+        type="button"
+        aria-label="Tirar a foto da nota"
+        onClick={onReset}
+        className="grid size-10 shrink-0 place-items-center rounded-full text-ink-2"
+      >
+        <X className="size-4" aria-hidden="true" />
+      </button>
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 import { FileText, Sparkles, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { READ_MAX_CHARS } from '@shared/read-protocol.ts';
 import { NotFound } from '@/app/NotFound.tsx';
 import { Splash } from '@/app/Splash.tsx';
@@ -13,6 +13,7 @@ import { useTripDays, useTripStops } from '@/features/itinerary/queries.ts';
 import { FilePickers } from '@/features/media/components/FilePickers.tsx';
 import { useTrip, useTripMembers } from '@/features/trips/queries.ts';
 import { useOnline } from '@/lib/db/connectivity.ts';
+import { db } from '@/lib/db/schema.ts';
 import { formatBytes } from '@/lib/media/compress.ts';
 import { kickMedia, MediaError, mediaQueue } from '@/lib/media/index.ts';
 import { useSession } from '@/lib/supabase/session.ts';
@@ -20,7 +21,8 @@ import { addReservationFiles, createReservation } from '../actions.ts';
 import { ReservationForm } from '../components/ReservationForm.tsx';
 import { clearReadDraft, loadReadDraft, saveReadDraft } from '../read/draft.ts';
 import { readErrorCopy } from '../read/messages.ts';
-import { StageError, stageFile, type Staged } from '../read/stage.ts';
+import { StageError, stageFile, type Staged } from '@/lib/media/stage.ts';
+import { shareText } from '../share/parse.ts';
 import { formFromConfirmation, joinLabels, missingLabels } from '../read/to-form.ts';
 import { useReadConfirmation } from '../read/useReadConfirmation.ts';
 
@@ -35,6 +37,8 @@ const fmt = (n: number) => n.toLocaleString('pt-BR');
  */
 export default function LerConfirmacaoPage() {
   const { tripId = '' } = useParams();
+  const [params] = useSearchParams();
+  const shareId = params.get('share');
   const trip = useTrip(tripId);
   const days = useTripDays(tripId);
   const stops = useTripStops(tripId);
@@ -53,20 +57,52 @@ export default function LerConfirmacaoPage() {
   const [stageError, setStageError] = useState<string | null>(null);
   const latest = useRef('');
 
-  // o rascunho do texto, ao abrir e numa pausa da digitação (D138)
+  // o rascunho do texto, ao abrir e numa pausa da digitação (D138); o que chegou pelo Compartilhar do
+  // Android (?share=) entra no lugar do rascunho, e sai do Dexie: foi consumido
   useEffect(() => {
     if (!tripId) return;
-    let alive = true;
-    void loadReadDraft(tripId).then((draft) => {
-      if (!alive) return;
+    // uma função, e não um `let`: o cancelamento vem de outra função (a limpeza do efeito), e o
+    // TypeScript não estreitaria uma variável lida depois de um await
+    const alive = { current: true };
+    const isAlive = () => alive.current;
+    void (async () => {
+      const shared = shareId ? await db.shares.get(shareId) : undefined;
+      const draft = shared ? shareText(shared) : await loadReadDraft(tripId);
+      if (!isAlive()) return;
       latest.current = draft;
       setText(draft);
       setLoaded(true);
-    });
+      if (!shared) return;
+      await db.shares.delete(shared.id);
+      const first = shared.files[0];
+      if (!first) return;
+      setStaging(true);
+      try {
+        const file = new File([first.blob], first.name, { type: first.type });
+        // sem rede o arquivo fica preparado e sobe quando a pessoa tocar em Ler, com sinal
+        const staged = await stageFile(file, tripId).catch((err: unknown) => {
+          if (err instanceof StageError && err.reason === 'offline') {
+            return stageFile(file, tripId, { upload: false });
+          }
+          throw err;
+        });
+        if (isAlive()) setStaged(staged);
+      } catch (err) {
+        if (isAlive()) {
+          setStageError(
+            err instanceof MediaError || err instanceof StageError
+              ? err.message
+              : 'Não deu para preparar o arquivo compartilhado.',
+          );
+        }
+      } finally {
+        if (isAlive()) setStaging(false);
+      }
+    })();
     return () => {
-      alive = false;
+      alive.current = false;
     };
-  }, [tripId]);
+  }, [tripId, shareId]);
   useEffect(() => {
     if (!tripId || !loaded) return;
     const t = setTimeout(() => void saveReadDraft(tripId, text), 300);
@@ -95,6 +131,24 @@ export default function LerConfirmacaoPage() {
     } finally {
       setStaging(false);
     }
+  };
+
+  /** Lê; um anexo que ficou sem subir (chegou sem rede) sobe primeiro. */
+  const readNow = async () => {
+    let attachment = staged;
+    if (attachment && !attachment.uploaded) {
+      setStaging(true);
+      try {
+        attachment = await stageFile(attachment.file, trip.id);
+        setStaged(attachment);
+      } catch (err) {
+        setStageError(err instanceof StageError ? err.message : 'Não deu para enviar o anexo.');
+        return;
+      } finally {
+        setStaging(false);
+      }
+    }
+    await reader.read({ text, attachment: attachment ? { path: attachment.path } : null });
   };
 
   const header = (
@@ -242,12 +296,7 @@ export default function LerConfirmacaoPage() {
           </Button>
         </Card>
       ) : (
-        <Button
-          disabled={!canRead || !online || tooLong}
-          onClick={() =>
-            void reader.read({ text, attachment: staged ? { path: staged.path } : null })
-          }
-        >
+        <Button disabled={!canRead || !online || tooLong} onClick={() => void readNow()}>
           <Sparkles className="size-5" aria-hidden="true" />
           Ler a confirmação
         </Button>

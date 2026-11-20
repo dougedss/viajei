@@ -294,15 +294,16 @@ export default function DetalhesPage() {
       <PushInstallCard trip={trip} />
       <ExpenseSheet
         open={expenseDraft ? { draft: expenseDraft } : null}
+        tripId={trip.id}
         trip={trip}
         days={tripDays}
         stops={stops}
         team={team.flatMap((m) => (m.profile ? [m.profile] : []))}
         uid={uid}
         onClose={() => setExpenseDraft(null)}
-        onSave={(values) => {
+        onSave={(values, receipt) => {
           setExpenseDraft(null);
-          void createExpense(trip.id, uid, values).then((id) => {
+          void createExpense(trip.id, uid, values, receipt).then((id) => {
             void gainXp(uid, 'expense_logged', id, XP_POINTS.expense_logged, null);
             toast.show({
               title: 'Gasto lançado',

@@ -739,15 +739,16 @@ function DayView({
       />
       <ExpenseSheet
         open={expenseDraft ? { draft: expenseDraft } : null}
+        tripId={tripId}
         trip={trip}
         days={tripDays}
         stops={tripStops}
         team={team}
         uid={uid}
         onClose={() => setExpenseDraft(null)}
-        onSave={(values) => {
+        onSave={(values, receipt) => {
           setExpenseDraft(null);
-          void createExpense(tripId, uid, values).then((id) => {
+          void createExpense(tripId, uid, values, receipt).then((id) => {
             void gainXp(uid, 'expense_logged', id, XP_POINTS.expense_logged, null);
             toast.show({
               title: 'Gasto lançado',
@@ -769,6 +770,20 @@ function DayView({
           setMemoryStopId(null);
           setCalmSince(Date.now());
         }}
+        onReceipt={
+          sheetStop
+            ? () => {
+                // a nota do posto (fase 18): a folha "Como foi?" fecha e o gasto abre pela nota
+                setMemoryStopId(null);
+                setExpenseDraft({
+                  date: day.date,
+                  stop_id: sheetStop.id,
+                  category: categoryForStop(sheetStop.kind),
+                  receipt: true,
+                });
+              }
+            : undefined
+        }
       />
       <CelebrationHost
         active={calmSince !== null}

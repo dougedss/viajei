@@ -1,6 +1,7 @@
 import {
   BedDouble,
   Fuel,
+  Paperclip,
   Plus,
   Receipt,
   Ticket,
@@ -25,6 +26,7 @@ import { useTripDays, useTripStops } from '@/features/itinerary/queries.ts';
 import { asPersonColor } from '@/features/profile/queries.ts';
 import { gainXp } from '@/features/progression/xp-gain.ts';
 import { useTripReservations } from '@/features/reservations/queries.ts';
+import { useTripMedia } from '@/lib/media/hooks.ts';
 import { useTrip, useTripMembers } from '@/features/trips/queries.ts';
 import { formatMoney, todayISO } from '@/features/trips/rules.ts';
 import type { Expense, Profile } from '@/lib/db/schema.ts';
@@ -55,6 +57,7 @@ export default function GastosPage() {
   const days = useTripDays(tripId);
   const stops = useTripStops(tripId);
   const expenses = useTripExpenses(tripId);
+  const receipts = useTripMedia(tripId, (row) => row.expense_id !== null);
   const reservations = useTripReservations(tripId) ?? [];
   const members = useTripMembers(tripId);
   const { session } = useSession();
@@ -72,6 +75,7 @@ export default function GastosPage() {
   for (const m of members) if (m.profile) profiles.set(m.profile.id, m.profile);
   const t = totals(expenses);
   const groups = groupByDay(expenses, trip);
+  const withReceipt = new Set(receipts.map((m) => m.row.expense_id));
   const openId = params.get('abrir');
   const opened = expenses.find((e) => e.id === openId) ?? null;
   const creating = params.get('novo') === '1';
@@ -149,6 +153,7 @@ export default function GastosPage() {
                     e.notes ??
                     EXPENSE_CATEGORIES[asCategory(e.category)].label
                   }
+                  receipt={withReceipt.has(e.id)}
                   onOpen={() => setParam('abrir', e.id)}
                 />
               ))}
@@ -159,17 +164,18 @@ export default function GastosPage() {
 
       <ExpenseSheet
         open={sheet}
+        tripId={trip.id}
         trip={trip}
         days={days}
         stops={stops}
         team={team}
         uid={uid}
         onClose={close}
-        onSave={(values) => {
+        onSave={(values, receipt) => {
           close();
           if (opened) void updateExpense(opened.id, values);
           else
-            void createExpense(trip.id, uid, values).then((id) =>
+            void createExpense(trip.id, uid, values, receipt).then((id) =>
               gainXp(uid, 'expense_logged', id, XP_POINTS.expense_logged, null),
             );
         }}
@@ -193,11 +199,14 @@ function ExpenseRow({
   expense,
   payer,
   title,
+  receipt,
   onOpen,
 }: {
   expense: Expense;
   payer: Profile | undefined;
   title: string;
+  /** tem a foto da nota anexada (fase 18) */
+  receipt: boolean;
   onOpen: () => void;
 }) {
   const category = asCategory(expense.category);
@@ -234,6 +243,12 @@ function ExpenseRow({
             </span>
             <span>{EXPENSE_CATEGORIES[category].label}</span>
             {expense.reservation_id ? <span>da reserva</span> : null}
+            {receipt ? (
+              <span className="inline-flex items-center gap-1 text-accent-ink">
+                <Paperclip className="size-3.5" aria-hidden="true" />
+                nota
+              </span>
+            ) : null}
           </span>
         </span>
         <span className="font-num text-[19px] font-semibold">{formatMoney(expense.amount)}</span>

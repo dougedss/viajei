@@ -16,6 +16,8 @@ export type Staged = {
   prepared: Prepared;
   /** o mesmo conteúdo como `File`, para a lista "Anexos a enviar" do formulário */
   file: File;
+  /** o objeto já está no Storage (false: sem rede, a fila o sobe ao salvar; nada é lido dele) */
+  uploaded: boolean;
 };
 
 export type StageErrorReason = 'offline' | 'rule' | 'retry';
@@ -30,10 +32,16 @@ export class StageError extends Error {
 
 const storage = supabaseStorage(supabase);
 
-export async function stageFile(file: File, tripId: string): Promise<Staged> {
+export async function stageFile(
+  file: File,
+  tripId: string,
+  options: { upload?: boolean } = {},
+): Promise<Staged> {
   const prepared = await prepareFile(file, 'reservation');
   const id = uuidV4();
   const path = `${tripId}/${id}.${prepared.ext}`;
+  const asFile = new File([prepared.blob], prepared.filename, { type: prepared.mime });
+  if (options.upload === false) return { id, path, prepared, file: asFile, uploaded: false };
   const out = await storage.upload(path, prepared.blob, prepared.mime);
   if (out.kind === 'network') {
     throw new StageError(
@@ -48,10 +56,5 @@ export async function stageFile(file: File, tripId: string): Promise<Staged> {
       'O servidor não recebeu o anexo agora. Tente de novo em instantes.',
     );
   }
-  return {
-    id,
-    path,
-    prepared,
-    file: new File([prepared.blob], prepared.filename, { type: prepared.mime }),
-  };
+  return { id, path, prepared, file: asFile, uploaded: true };
 }
