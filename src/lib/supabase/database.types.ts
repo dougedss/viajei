@@ -683,7 +683,7 @@ isOneToOne: false
                            },
 "inbox_lookup":
 { Args: { "p_code": string,"p_source_id": string }; Returns: {
-              "email": string,"seen": boolean,"user_id": string
+              "email": string,"lab": boolean,"seen": boolean,"user_id": string
             }[]
                            },
 "inbox_trip_for":

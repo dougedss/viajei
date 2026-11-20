@@ -61,6 +61,7 @@ import { appGaragem } from './app-garagem.ts';
 import { appParadaAuto } from './app-parada.ts';
 import { roadScenarios, ROAD_SCENARIOS } from './app-road.ts';
 import { appConversa } from './app-conversa.ts';
+import { appEmailRecebido } from './app-email.ts';
 import { appImportar } from './app-import.ts';
 import { appMapaClima } from './app-map.ts';
 import { appResync } from './app-resync.ts';
@@ -68,6 +69,7 @@ import { labLighthouse } from './lighthouse.ts';
 import { expurgo } from './purge.ts';
 import { measureConversa } from './measure-conversa.ts';
 import { measureImport } from './measure-import.ts';
+import { measureRead } from './measure-read.ts';
 import { NOT_ARMED, runArmed } from './armed.ts';
 import { prepareRoad, resetRoad } from './road.ts';
 import { ensureTeamMember, kindsOnly, log, sleep, type Session } from './session.ts';
@@ -569,6 +571,11 @@ async function main(): Promise<number> {
   if (argv.includes('--medir-conversa')) {
     return measureConversa(cfg, await signIn(cfg, LAB_USERS.a));
   }
+  // a medição da leitura (fase 18): a confirmação em texto, PDF e print e a nota com QR, uma vez
+  // cada, com arquivos inventados na hora
+  if (argv.includes('--medir-leitura')) {
+    return measureRead(cfg, await signIn(cfg, LAB_USERS.a));
+  }
   // o Lighthouse sozinho (fase 12): a viagem do lab-a preparada pelo laboratório do dia, sem os
   // outros cenários; os relatórios inteiros vão para os artefatos
   if (argv.includes('--medir-desempenho')) {
@@ -928,6 +935,27 @@ async function main(): Promise<number> {
         } else {
           appChecks.push(...ROAD_SCENARIOS.map((s) => skipped(s, 'Sem navegador nesta execução.')));
         }
+        // fase 18: um e-mail de verdade pelo Resend para a caixa do lab-a, e o aviso na assinatura
+        // principal dele; sem o secret no Actions ou sem as chaves no hospedado, pulado com o motivo
+        const email = await appEmailRecebido(
+          {
+            cfg,
+            a,
+            page: app?.page ?? null,
+            apiKey: process.env.RESEND_API_KEY,
+            inbox: { inbox: subs.main.inbox, keys: subs.main.keys },
+            artifactsDir: join(process.cwd(), 'lab-artifacts'),
+          },
+          plan.today,
+        ).catch((err: unknown): Check => ({
+          scenario: 'app_email_recebido',
+          status: 'fail',
+          latency_ms: null,
+          detail: (err instanceof Error ? err.message : String(err)).slice(0, 900),
+          data: {},
+        }));
+        appChecks.push(email);
+        log(`app: app_email_recebido ${email.status} · ${email.detail}`);
         // a retrospectiva por último: exportar o vídeo é o passo mais longo da execução
         if (withApp) {
           const retro = await appRetrospectiva(progress);

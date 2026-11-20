@@ -3,7 +3,7 @@
 -- recebimento, a pasta inbox/ do Storage, o ramo do aviso e o expurgo. E o que já existia continua
 -- valendo: as linhas de hoje entram como entravam.
 begin;
-select plan(75);
+select plan(76);
 
 create function pg_temp.login(p uuid) returns void language plpgsql as $$
 begin
@@ -167,10 +167,13 @@ select throws_ok($$select public.receive_reservation('a8111111-1111-4111-8111-11
 select pg_temp.logout();
 
 -- inbox_lookup: pelo código, só e-mail confirmado, sem distinguir maiúsculas; e se o e-mail já entrou
-select is((select l.user_id || '|' || l.email || '|' || l.seen
+select is((select l.user_id || '|' || l.email || '|' || l.seen || '|' || l.lab
              from public.inbox_lookup((select upper(code) || ' ' from public.inbox_addresses where id = 'a8111111-1111-4111-8111-111111111111'), 'email-1') l),
-          'a8111111-1111-4111-8111-111111111111|g1@teste.local|false',
-          'inbox_lookup acha a dona do código (em qualquer caixa, com espaços), com o e-mail em minúsculas');
+          'a8111111-1111-4111-8111-111111111111|g1@teste.local|false|false',
+          'inbox_lookup acha a dona do código (em qualquer caixa, com espaços), com o e-mail em minúsculas; uma pessoa comum não é do laboratório');
+insert into private.lab_access (user_id, role) values ('a8222222-2222-4222-8222-222222222222', 'runner');
+select is((select l.lab from public.inbox_lookup((select code from public.inbox_addresses where id = 'a8222222-2222-4222-8222-222222222222'), null) l),
+          true, 'a conta de um executor do laboratório vem marcada (a função aceita também o remetente do app para ela)');
 select is((select count(*) from public.inbox_lookup('r-zzzzzz', null)), 0::bigint, 'um código que não existe não acha ninguém');
 select is((select count(*) from public.inbox_lookup((select code from public.inbox_addresses where id = 'a8333333-3333-4333-8333-333333333333'), null)), 0::bigint,
           'e-mail não confirmado não recebe reserva (o remetente não teria com que ser conferido)');

@@ -612,3 +612,9 @@ export const DECLARATIVE_WEB_PUSH = 8030;
  * código antes do `@` em qualquer domínio, então trocar o subdomínio é trocar esta linha.
  */
 export const INBOX_DOMAIN = 'reservas.reitechia.com.br';
+/**
+ * O remetente do app (o do Auth, D11). A função de recebimento o aceita como remetente **só para as
+ * contas do laboratório**: o laboratório envia o e-mail de teste por ele (a exceção da D105, para o
+ * e-mail); para qualquer outra pessoa, só o e-mail da própria conta vale.
+ */
+export const APP_SENDER = 'viajei@reitechia.com.br';

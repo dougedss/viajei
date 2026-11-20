@@ -1,8 +1,18 @@
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { BrowserContext, Locator, Page } from '@playwright/test';
+import {
+  toAiConfirmation,
+  toAiReceipt,
+  type ReadConfirmation,
+  type ReadReceipt,
+} from '../../supabase/functions/_shared/read-protocol.ts';
+import { aiSse } from '../../e2e/helpers/import.ts';
 import { LAB_SCENARIOS, type LabScenario } from '../../src/features/lab/scenarios.ts';
 import { uuidV5 } from '../../src/lib/ids/uuid.ts';
 import { openPeer, signInPage, TIMEOUT, type App } from './app.ts';
+import { addDays } from './arm.ts';
 import { must } from './client.ts';
 import type { Check } from './evaluate.ts';
 import { makePdf, makePng } from './files.ts';
@@ -24,6 +34,8 @@ export const ROAD_SCENARIOS = [
   'app_missoes',
   'app_memoria',
   'app_gastos',
+  'app_ler_confirmacao',
+  'app_nota',
   'app_sair_pendente',
 ] as const satisfies readonly LabScenario[];
 type RoadScenario = (typeof ROAD_SCENARIOS)[number];
@@ -126,6 +138,7 @@ class RoadRun {
     ok: string,
     steps: Steps,
     cleanup?: () => Promise<void>,
+    data: Record<string, unknown> = {},
   ): Promise<Check> {
     const startedAt = Date.now();
     const done: Step[] = [];
@@ -153,7 +166,7 @@ class RoadRun {
       status: failed ? 'fail' : 'pass',
       latency_ms: Date.now() - startedAt,
       detail: failed ? `${failed.step}: ${failed.detail ?? 'não aconteceu'}` : ok,
-      data: { passos: done },
+      data: { ...data, passos: done },
     };
   }
 
@@ -815,6 +828,298 @@ function appSairPendente(r: RoadRun): Promise<Check> {
   );
 }
 
+// ------------------------------------------------------------------ ler a confirmação (fase 18)
+const SP_TODAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' });
+const READ_ROUTE = '**/functions/v1/read-document';
+const BRASILAPI_ROUTE = 'https://brasilapi.com.br/**';
+/** a imagem fixa do e2e: o QR de uma NFC-e com a chave fechando o DV (`e2e/nota.spec.ts`) */
+const NFCE_QR = fileURLToPath(new URL('../../e2e/helpers/fixtures/nfce-qr.png', import.meta.url));
+const CNPJ_NO_QR = '00156225000131';
+
+const valueIs = async (locator: Locator, expected: string, what: string) => {
+  const got = await locator.inputValue();
+  if (got !== expected) throw new Error(`${what}: "${got}" (esperado "${expected}")`);
+};
+
+/**
+ * A pessoa cola o texto e anexa um print; a IA é respondida no navegador (`page.route`, como nos e2e:
+ * a leitura de verdade, uma vez, é a medição `medir-leitura`), e o que se prova aqui é o caminho do
+ * app na produção: o print sobe antes da leitura, o pedido leva o caminho dele, o formulário vem
+ * preenchido e diz o que faltou, e salvar cria a reserva com o print como anexo, no mesmo caminho.
+ */
+function appLerConfirmacao(r: RoadRun): Promise<Check> {
+  const { estrada } = r.ctx.road;
+  const { a } = r.ctx;
+  const page = r.page;
+  const today = SP_TODAY.format(new Date());
+  const lida: ReadConfirmation = {
+    type: 'hotel',
+    name: 'Pousada lida do laboratório',
+    start_at: `${addDays(today, 30)}T16:30`,
+    end_at: `${addDays(today, 31)}T11:00`,
+    confirmation_code: 'LAB-LIDA-1',
+    amount: 480,
+    cancel_policy: 'Grátis até 7 dias antes',
+    cancel_until: addDays(today, 23),
+    phone: '(54) 99123-4567',
+    address: null,
+    booked_via: 'Booking',
+    notes: null,
+  };
+  const data: Record<string, unknown> = {};
+  let request: { kind?: string; trip_id?: string; attachment?: { path?: string } } | null = null;
+  return r.run(
+    'app_ler_confirmacao',
+    'O print subiu antes da leitura, a reserva veio preenchida com o que faltou dito, e salvar a criou com o print anexado no mesmo caminho',
+    [
+      [
+        'a IA respondida no navegador',
+        async () => {
+          await page.route(READ_ROUTE, (route) => {
+            request = route.request().postDataJSON() as typeof request;
+            return route.fulfill({
+              status: 200,
+              headers: { 'content-type': 'text/event-stream' },
+              body: aiSse(JSON.stringify(toAiConfirmation(lida)), { data: lida }),
+            });
+          });
+        },
+      ],
+      [
+        'colar o texto e anexar o print (ele sobe antes da leitura)',
+        async () => {
+          await r.goA(r.trip(estrada.trip, '/reservas/ler'));
+          await page
+            .getByLabel('O texto da confirmação')
+            .fill(
+              `Reserva confirmada! ${lida.name}, código ${lida.confirmation_code ?? ''}, R$ 480.`,
+              {
+                timeout: SLOW,
+              },
+            );
+          const t0 = Date.now();
+          await page.locator('input[type=file][accept*="application/pdf"]').setInputFiles({
+            name: 'print.png',
+            mimeType: 'image/png',
+            buffer: makePng(1170, 2532),
+          });
+          const staged = page.getByRole('list', { name: 'Anexo a ler' });
+          await staged.getByText('print.jpg').waitFor({ timeout: SLOW });
+          data.print_subiu_ms = Date.now() - t0;
+        },
+      ],
+      [
+        'ler: o formulário preenchido, e o que faltou dito',
+        async () => {
+          const t0 = Date.now();
+          await page.getByRole('button', { name: 'Ler a confirmação' }).click();
+          await page.getByText('Reserva lida. Confira e salve.').waitFor({ timeout: SLOW });
+          data.leitura_ms = Date.now() - t0;
+          await page.getByText(/A confirmação não dizia: o endereço\./).waitFor();
+          await valueIs(page.getByLabel('Nome'), lida.name, 'o nome');
+          await valueIs(page.getByLabel('Código de confirmação'), 'LAB-LIDA-1', 'o código');
+          await valueIs(page.getByLabel('Valor'), '480,00', 'o valor');
+          await valueIs(page.getByLabel('Check-in'), addDays(today, 30), 'o check-in');
+          await valueIs(page.getByLabel('Telefone'), '(54) 99123-4567', 'o telefone');
+          await valueIs(page.getByLabel('Endereço'), '', 'o endereço (vazio)');
+          if (request === null) throw new Error('a função não foi chamada');
+          if (request.kind !== 'confirmation' || request.trip_id !== estrada.trip)
+            throw new Error(`o pedido foi ${JSON.stringify({ kind: request.kind })}`);
+          const path = request.attachment?.path ?? '';
+          if (!new RegExp(`^${esc(estrada.trip)}/[0-9a-f-]{36}\\.jpg$`).test(path))
+            throw new Error(`o caminho do anexo no pedido: "${path}"`);
+        },
+      ],
+      [
+        'salvar: a reserva com o print anexado, no mesmo caminho (nada subiu duas vezes)',
+        async () => {
+          await page.getByRole('button', { name: 'Salvar reserva' }).click();
+          await page.getByRole('dialog', { name: lida.name }).waitFor({ timeout: SLOW });
+          const [row] = await until(
+            async () =>
+              must(
+                await a.client
+                  .from('reservations')
+                  .select('id, confirmation_code, amount, phone, booked_via')
+                  .eq('trip_id', estrada.trip)
+                  .eq('name', lida.name)
+                  .is('deleted_at', null),
+                'a reserva lida',
+              ),
+            (rows) => rows.length === 1,
+            'a reserva não chegou ao servidor',
+          );
+          if (!row) throw new Error('sem a reserva');
+          if (row.confirmation_code !== 'LAB-LIDA-1' || Number(row.amount) !== 480)
+            throw new Error(`a reserva chegou com ${JSON.stringify(row)}`);
+          if (row.phone !== '+5554991234567')
+            throw new Error(`o telefone chegou "${String(row.phone)}"`);
+          const [anexo] = await until(
+            async () =>
+              must(
+                await a.client
+                  .from('attachments')
+                  .select('storage_path, kind, mime')
+                  .eq('reservation_id', row.id)
+                  .is('deleted_at', null),
+                'o anexo da reserva',
+              ),
+            (rows) => rows.length === 1,
+            'o print não virou anexo da reserva',
+            60_000,
+          );
+          if (!anexo) throw new Error('sem o anexo');
+          if (anexo.storage_path !== request?.attachment?.path)
+            throw new Error(
+              `o anexo está em ${anexo.storage_path}, e a leitura leu ${String(request?.attachment?.path)}`,
+            );
+          if (anexo.mime !== 'image/jpeg') throw new Error(`o anexo é ${anexo.mime}`);
+        },
+      ],
+    ],
+    () => page.unroute(READ_ROUTE),
+    data,
+  );
+}
+
+// ------------------------------------------------------------------ a nota fotografada (fase 18)
+/**
+ * A foto de uma nota com o QR da NFC-e: o CNPJ sai do QR no aparelho (sem IA), o estabelecimento
+ * vem da BrasilAPI e o total da IA, as duas respondidas no navegador (a BrasilAPI de verdade nunca é
+ * chamada pelo laboratório; a IA, só na medição). O gasto nasce preenchido e com a nota anexada.
+ */
+function appNota(r: RoadRun): Promise<Check> {
+  const { estrada } = r.ctx.road;
+  const { a } = r.ctx;
+  const page = r.page;
+  const today = SP_TODAY.format(new Date());
+  const lida: ReadReceipt = {
+    total: 187.4,
+    merchant: 'POSTO SERRA LTDA',
+    cnpj: CNPJ_NO_QR,
+    date: today,
+    time: '15:42',
+    category: 'fuel',
+    access_key: null,
+  };
+  const data: Record<string, unknown> = {};
+  const cnpjCalls: string[] = [];
+  let request: { kind?: string; trip_id?: string } | null = null;
+  return r.run(
+    'app_nota',
+    'O QR deu o CNPJ no aparelho, a BrasilAPI o estabelecimento e a IA o total; o gasto nasceu preenchido, em Combustível, com a nota anexada',
+    [
+      [
+        'a BrasilAPI e a IA respondidas no navegador',
+        async () => {
+          await page.route(BRASILAPI_ROUTE, (route) => {
+            cnpjCalls.push(route.request().url());
+            return route.fulfill({
+              json: {
+                cnpj: CNPJ_NO_QR,
+                razao_social: 'POSTO DO LABORATORIO LTDA',
+                nome_fantasia: 'POSTO DO LABORATORIO',
+                municipio: 'CANELA',
+                uf: 'RS',
+              },
+            });
+          });
+          await page.route(READ_ROUTE, (route) => {
+            request = route.request().postDataJSON() as typeof request;
+            return route.fulfill({
+              status: 200,
+              headers: { 'content-type': 'text/event-stream' },
+              body: aiSse(JSON.stringify(toAiReceipt(lida)), { data: lida }),
+            });
+          });
+        },
+      ],
+      [
+        'a foto da nota no gasto novo: o QR, a BrasilAPI e a IA',
+        async () => {
+          await r.goA(r.trip(estrada.trip, '/gastos?novo=1'));
+          const sheet = page.getByRole('dialog', { name: 'Novo gasto' });
+          await sheet.waitFor({ timeout: SLOW });
+          const t0 = Date.now();
+          await sheet.locator('input[type=file][multiple]').setInputFiles({
+            name: 'nota.png',
+            mimeType: 'image/png',
+            buffer: readFileSync(NFCE_QR),
+          });
+          await sheet.locator('[data-receipt="done"]').waitFor({ timeout: SLOW });
+          data.nota_lida_ms = Date.now() - t0;
+          const read = await sheet.locator('[data-receipt-read]').innerText();
+          for (const want of ['R$\u00a0187,40', 'Posto do Laboratorio']) {
+            if (!read.replace(/\s/g, '\u00a0').includes(want.replace(/\s/g, '\u00a0')))
+              throw new Error(`a linha da nota diz "${read}" (sem "${want}")`);
+          }
+          await valueIs(sheet.getByLabel('Valor'), '187,40', 'o valor');
+          await valueIs(sheet.getByLabel('Data'), today, 'a data');
+          await valueIs(sheet.getByLabel('Observações'), 'Posto do Laboratorio', 'as observações');
+          const pressed = await sheet
+            .getByRole('button', { name: 'Combustível', exact: true })
+            .getAttribute('aria-pressed');
+          if (pressed !== 'true') throw new Error('a categoria não veio da nota');
+          if (cnpjCalls.length !== 1 || !cnpjCalls[0]?.endsWith(`/api/cnpj/v1/${CNPJ_NO_QR}`))
+            throw new Error(`a BrasilAPI foi chamada ${String(cnpjCalls.length)} vez(es)`);
+          if (request?.kind !== 'receipt' || request.trip_id !== estrada.trip)
+            throw new Error(`o pedido à IA foi ${JSON.stringify(request)}`);
+        },
+      ],
+      [
+        'salvar: o gasto no servidor, e a nota como anexo dele',
+        async () => {
+          const sheet = page.getByRole('dialog', { name: 'Novo gasto' });
+          await sheet.getByRole('button', { name: 'Salvar' }).click();
+          await sheet.waitFor({ state: 'detached' });
+          const row = page.getByRole('button', { name: /Posto do Laboratorio/ });
+          await row.waitFor();
+          if (!(await row.innerText()).includes('nota'))
+            throw new Error('a linha do gasto sem "nota"');
+          const [gasto] = await until(
+            async () =>
+              must(
+                await a.client
+                  .from('expenses')
+                  .select('id, amount, category, date, notes')
+                  .eq('trip_id', estrada.trip)
+                  .eq('notes', 'Posto do Laboratorio')
+                  .is('deleted_at', null),
+                'o gasto da nota',
+              ),
+            (rows) => rows.length === 1,
+            'o gasto não chegou ao servidor',
+          );
+          if (!gasto) throw new Error('sem o gasto');
+          if (gasto.amount !== 187.4 || gasto.category !== 'fuel' || gasto.date !== today)
+            throw new Error(`o gasto chegou com ${JSON.stringify(gasto)}`);
+          const [anexo] = await until(
+            async () =>
+              must(
+                await a.client
+                  .from('attachments')
+                  .select('kind, mime, stop_id, reservation_id')
+                  .eq('expense_id', gasto.id)
+                  .is('deleted_at', null),
+                'a nota do gasto',
+              ),
+            (rows) => rows.length === 1,
+            'a nota não virou anexo do gasto',
+            60_000,
+          );
+          if (anexo?.kind !== 'document' || anexo.mime !== 'image/jpeg')
+            throw new Error(`o anexo chegou como ${JSON.stringify(anexo)}`);
+        },
+      ],
+    ],
+    async () => {
+      await page.unroute(READ_ROUTE);
+      await page.unroute(BRASILAPI_ROUTE);
+    },
+    data,
+  );
+}
+
 const RUNNERS: Record<RoadScenario, (r: RoadRun) => Promise<Check>> = {
   app_listas: appListas,
   app_contatos: appContatos,
@@ -823,6 +1128,8 @@ const RUNNERS: Record<RoadScenario, (r: RoadRun) => Promise<Check>> = {
   app_missoes: appMissoes,
   app_memoria: appMemoria,
   app_gastos: appGastos,
+  app_ler_confirmacao: appLerConfirmacao,
+  app_nota: appNota,
   app_sair_pendente: appSairPendente,
 };
 

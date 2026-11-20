@@ -229,13 +229,16 @@ create policy "caixa de entrada: a dona apaga, sem linha viva" on storage.object
          and not private.inbox_file_is_live(name));
 
 -- ------------------------------------------------------------------ 7. as RPCs da função de recebimento
--- De quem é o código (só pessoa com e-mail confirmado: o remetente é conferido contra ele), e se este
--- e-mail já entrou (o webhook pode repetir).
+-- De quem é o código (só pessoa com e-mail confirmado: o remetente é conferido contra ele), se este
+-- e-mail já entrou (o webhook pode repetir) e se a dona é um executor do laboratório (`lab`): para
+-- essa conta, e só para ela, a função aceita também o remetente do próprio app, porque o laboratório
+-- envia o e-mail de teste pelo domínio de envio do app (a exceção da D105, para o e-mail).
 create function public.inbox_lookup(p_code text, p_source_id text)
-returns table (user_id uuid, email text, seen boolean)
+returns table (user_id uuid, email text, seen boolean, lab boolean)
 language sql stable security definer set search_path = '' as $$
   select a.user_id, lower(u.email),
-         exists (select 1 from public.received_reservations r where r.source_id = p_source_id)
+         exists (select 1 from public.received_reservations r where r.source_id = p_source_id),
+         exists (select 1 from private.lab_access la where la.user_id = a.user_id and la.role = 'runner')
     from public.inbox_addresses a
     join auth.users u on u.id = a.user_id and u.email_confirmed_at is not null
    where a.code = lower(btrim(p_code));

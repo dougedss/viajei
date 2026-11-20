@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MEDIA } from './constants.ts';
+import { APP_SENDER, MEDIA } from './constants.ts';
 import { imageSize } from './image-size.ts';
 import { IMPORT_DEFAULT_VARIANT, IMPORT_VARIANTS } from './import-ai.ts';
 import type { ImportStore, OpenStream } from './import-handler.ts';
@@ -28,7 +28,7 @@ export const RESEND_API = 'https://api.resend.com';
 export const MAX_FILES = 10;
 const RESEND_TIMEOUT_MS = 20_000;
 
-export type InboundOwner = { user_id: string; email: string; seen: boolean };
+export type InboundOwner = { user_id: string; email: string; seen: boolean; lab: boolean };
 export type ReceivedFile = {
   id: string;
   storage_path: string;
@@ -326,8 +326,10 @@ async function process(
     line('no_code');
     return;
   }
-  // a segunda tranca: o remetente é o e-mail da conta; o que falha é descartado em silêncio
-  if (bareEmail(data.from) !== owner.email.toLowerCase()) {
+  // a segunda tranca: o remetente é o e-mail da conta (para a conta do laboratório, também o do
+  // app, que envia o e-mail de teste); o que falha é descartado em silêncio
+  const from = bareEmail(data.from);
+  if (from !== owner.email.toLowerCase() && !(owner.lab && from === APP_SENDER)) {
     line('sender_mismatch');
     return;
   }

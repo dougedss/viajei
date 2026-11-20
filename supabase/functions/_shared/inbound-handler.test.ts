@@ -137,7 +137,7 @@ function harness(
 ) {
   const owner =
     options.owner === undefined
-      ? { user_id: USER, email: 'g1@teste.local', seen: false }
+      ? { user_id: USER, email: 'g1@teste.local', seen: false, lab: false }
       : options.owner;
   const opened: Parameters<ImportStore['open']>[0][] = [];
   const closed: ImportClose[] = [];
@@ -452,8 +452,30 @@ describe('inbound-mail', () => {
     expect(text(h.logs)).not.toContain('outro.com');
   });
 
+  it('a conta do laboratório aceita também o remetente do app (o e-mail de teste); as outras, não', async () => {
+    const lab = harness({
+      owner: { user_id: USER, email: 'lab-a@viajei.invalid', seen: false, lab: true },
+    });
+    await handleInbound(
+      await signed(JSON.stringify(event({ from: 'Viajei <viajei@reitechia.com.br>' }))),
+      lab.deps,
+    );
+    await lab.settle();
+    expect(lab.received).toHaveLength(1);
+    const person = harness();
+    await handleInbound(
+      await signed(JSON.stringify(event({ from: 'Viajei <viajei@reitechia.com.br>' }))),
+      person.deps,
+    );
+    await person.settle();
+    expect(person.received).toEqual([]);
+    expect(text(person.logs)).toContain('status=sender_mismatch');
+  });
+
   it('o mesmo e-mail de novo (o webhook repetiu) não é lido outra vez', async () => {
-    const h = harness({ owner: { user_id: USER, email: 'g1@teste.local', seen: true } });
+    const h = harness({
+      owner: { user_id: USER, email: 'g1@teste.local', seen: true, lab: false },
+    });
     await handleInbound(await signed(JSON.stringify(event())), h.deps);
     await h.settle();
     expect(h.fetched).toEqual([]);

@@ -120,6 +120,21 @@ export const LAB_SCENARIOS = {
     label: 'App · sair com pendência',
     description: '"Sair" com uma foto sem sinal avisa o que se perderia; ficar mantém tudo',
   },
+  app_ler_confirmacao: {
+    label: 'App · ler a confirmação',
+    description:
+      'Cola o texto e anexa um print (a IA respondida no navegador): a reserva vem preenchida, diz o que faltou, e é salva com o anexo no servidor',
+  },
+  app_nota: {
+    label: 'App · a nota fotografada',
+    description:
+      'A foto de uma nota com QR de NFC-e: o CNPJ sai do QR no aparelho, o estabelecimento da BrasilAPI (respondida no navegador), o total da IA (idem); o gasto nasce preenchido e com a nota anexada',
+  },
+  app_email_recebido: {
+    label: 'App · e-mail recebido',
+    description:
+      'Um e-mail de verdade pela API do Resend para o endereço do lab-a, com um PDF: a reserva aparece em Reservas recebidas e o aviso chega pelo push-receiver; sem o secret do Resend ou sem as chaves no hospedado, pulado com o motivo',
+  },
   app_progressao: {
     label: 'App · progressão',
     description:

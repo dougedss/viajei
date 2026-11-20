@@ -23,15 +23,26 @@ name: Laboratório
 #   gh workflow run lab.yml --repo dougedss/viajei --ref fase-11 -f alvo=preview
 # Precisa do secret VERCEL_AUTOMATION_BYPASS_SECRET (Vercel → Settings → Deployment Protection →
 # Protection Bypass for Automation); o segredo vai só na primeira navegação, nunca nos logs.
+# Desde a fase 18, o cenário `app_email_recebido` envia um e-mail de verdade pela API do Resend, do
+# remetente do app para o endereço do lab-a, se o secret RESEND_API_KEY existir no Actions (é do
+# Douglas); sem ele, ou com a função de recebimento ainda sem as chaves, o cenário é pulado com o motivo.
 on:
   schedule:
     - cron: '7 6 * * *'
   workflow_dispatch:
     inputs:
       tarefa:
-        description: 'laboratorio: os cenários de sempre; medir-importacao: a medição do pensamento da IA (D133); medir-conversa: o custo e o tempo de uma conversa e de uma saída de hoje (fase 17); medir-desempenho: só o Lighthouse, com os relatórios; medir-sync: o envio do rack, 3 vezes, com o rastro do motor (fase 13)'
+        description: 'laboratorio: os cenários de sempre; medir-importacao: a medição do pensamento da IA (D133); medir-conversa: o custo e o tempo de uma conversa e de uma saída de hoje (fase 17); medir-leitura: a leitura da confirmação em texto, PDF e print e a da nota, uma vez, com entradas inventadas (fase 18); medir-desempenho: só o Lighthouse, com os relatórios; medir-sync: o envio do rack, 3 vezes, com o rastro do motor (fase 13)'
         type: choice
-        options: [laboratorio, medir-importacao, medir-conversa, medir-desempenho, medir-sync]
+        options:
+          [
+            laboratorio,
+            medir-importacao,
+            medir-conversa,
+            medir-leitura,
+            medir-desempenho,
+            medir-sync,
+          ]
         default: laboratorio
       alvo:
         description: 'Onde o navegador abre o app: a produção ou o preview da branch escolhida acima (D106)'
@@ -79,6 +90,8 @@ jobs:
           LAB_ALVO: ${{ inputs.alvo || 'producao' }}
           LAB_BRANCH: ${{ github.ref_name }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          # opcional (fase 18): sem ele, o cenário do e-mail é pulado com o motivo
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
 
       # sempre: além dos prints das falhas e dos relatórios das medições, a captura da maquete com
       # as miniaturas (fase 14), para o Douglas ver
