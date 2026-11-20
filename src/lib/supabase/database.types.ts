@@ -33,14 +33,14 @@ isOneToOne: false
                   ]
                 },"ai_imports": {
                   Row: {
-                    "created_at": string,"error": string | null,"finished_at": string | null,"id": string,"input_chars": number,"input_tokens": number | null,"kind": string,"model": string,"output_tokens": number | null,"status": string,"trip_id": string | null,"user_id": string
+                    "created_at": string,"error": string | null,"finished_at": string | null,"id": string,"input_bytes": number,"input_chars": number,"input_tokens": number | null,"kind": string,"model": string,"output_tokens": number | null,"status": string,"trip_id": string | null,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"input_chars": number,"input_tokens"?: number | null,"kind"?: string,"model": string,"output_tokens"?: number | null,"status"?: string,"trip_id"?: string | null,"user_id"?: string
+                    "created_at"?: string,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"input_bytes"?: number,"input_chars": number,"input_tokens"?: number | null,"kind"?: string,"model": string,"output_tokens"?: number | null,"status"?: string,"trip_id"?: string | null,"user_id"?: string
                   }
                   Update: {
-                    "created_at"?: string,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"input_chars"?: number,"input_tokens"?: number | null,"kind"?: string,"model"?: string,"output_tokens"?: number | null,"status"?: string,"trip_id"?: string | null,"user_id"?: string
+                    "created_at"?: string,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"input_bytes"?: number,"input_chars"?: number,"input_tokens"?: number | null,"kind"?: string,"model"?: string,"output_tokens"?: number | null,"status"?: string,"trip_id"?: string | null,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -59,14 +59,14 @@ isOneToOne: false
                   ]
                 },"attachments": {
                   Row: {
-                    "created_at": string,"created_by": string,"deleted_at": string | null,"field_versions": NonNullable<Json>,"filename": string,"height": number | null,"id": string,"kind": string,"mime": string,"placeholder": string | null,"reservation_id": string | null,"size_bytes": number,"stop_id": string | null,"storage_path": string,"synced_at": string,"trip_id": string,"updated_at": string,"width": number | null
+                    "created_at": string,"created_by": string,"deleted_at": string | null,"expense_id": string | null,"field_versions": NonNullable<Json>,"filename": string,"height": number | null,"id": string,"kind": string,"mime": string,"placeholder": string | null,"reservation_id": string | null,"size_bytes": number,"stop_id": string | null,"storage_path": string,"synced_at": string,"trip_id": string,"updated_at": string,"width": number | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"created_by": string,"deleted_at"?: string | null,"field_versions"?: NonNullable<Json>,"filename": string,"height"?: number | null,"id": string,"kind": string,"mime": string,"placeholder"?: string | null,"reservation_id"?: string | null,"size_bytes": number,"stop_id"?: string | null,"storage_path": string,"synced_at": string,"trip_id": string,"updated_at": string,"width"?: number | null
+                    "created_at"?: string,"created_by": string,"deleted_at"?: string | null,"expense_id"?: string | null,"field_versions"?: NonNullable<Json>,"filename": string,"height"?: number | null,"id": string,"kind": string,"mime": string,"placeholder"?: string | null,"reservation_id"?: string | null,"size_bytes": number,"stop_id"?: string | null,"storage_path": string,"synced_at": string,"trip_id": string,"updated_at": string,"width"?: number | null
                   }
                   Update: {
-                    "created_at"?: string,"created_by"?: string,"deleted_at"?: string | null,"field_versions"?: NonNullable<Json>,"filename"?: string,"height"?: number | null,"id"?: string,"kind"?: string,"mime"?: string,"placeholder"?: string | null,"reservation_id"?: string | null,"size_bytes"?: number,"stop_id"?: string | null,"storage_path"?: string,"synced_at"?: string,"trip_id"?: string,"updated_at"?: string,"width"?: number | null
+                    "created_at"?: string,"created_by"?: string,"deleted_at"?: string | null,"expense_id"?: string | null,"field_versions"?: NonNullable<Json>,"filename"?: string,"height"?: number | null,"id"?: string,"kind"?: string,"mime"?: string,"placeholder"?: string | null,"reservation_id"?: string | null,"size_bytes"?: number,"stop_id"?: string | null,"storage_path"?: string,"synced_at"?: string,"trip_id"?: string,"updated_at"?: string,"width"?: number | null
                   }
                   Relationships: [
                     {
@@ -75,6 +75,12 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "profiles"
       referencedColumns: ["id"]
+    },{
+      foreignKeyName: "attachments_expense_id_trip_id_fkey"
+      columns: ["expense_id","trip_id"]
+isOneToOne: false
+      referencedRelation: "expenses"
+      referencedColumns: ["id","trip_id"]
     },{
       foreignKeyName: "attachments_reservation_id_trip_id_fkey"
       columns: ["reservation_id","trip_id"]
@@ -217,6 +223,32 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"inbox_addresses": {
+                  Row: {
+                    "code": string,"created_at": string,"field_versions": NonNullable<Json>,"id": string,"synced_at": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "code": string,"created_at"?: string,"field_versions"?: NonNullable<Json>,"id": string,"synced_at": string,"updated_at": string,"user_id": string
+                  }
+                  Update: {
+                    "code"?: string,"created_at"?: string,"field_versions"?: NonNullable<Json>,"id"?: string,"synced_at"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "inbox_addresses_id_fkey"
+      columns: ["id"]
+isOneToOne: true
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "inbox_addresses_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"lab_checks": {
                   Row: {
                     "data": NonNullable<Json>,"detail": string | null,"latency_ms": number | null,"run_id": string,"scenario": string,"status": string
@@ -351,6 +383,38 @@ isOneToOne: false
                   Relationships: [
                     {
       foreignKeyName: "push_subscriptions_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"received_reservations": {
+                  Row: {
+                    "address": string | null,"ai_import_id": string | null,"amount": number | null,"booked_via": string | null,"cancel_policy": string | null,"cancel_until": string | null,"confirmation_code": string | null,"created_at": string,"end_at": string | null,"field_versions": NonNullable<Json>,"files": NonNullable<Json>,"id": string,"name": string,"notes": string | null,"phone": string | null,"placed_reservation_id": string | null,"placed_trip_id": string | null,"received_at": string,"source": string,"source_id": string | null,"start_at": string | null,"status": string,"synced_at": string,"type": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "address"?: string | null,"ai_import_id"?: string | null,"amount"?: number | null,"booked_via"?: string | null,"cancel_policy"?: string | null,"cancel_until"?: string | null,"confirmation_code"?: string | null,"created_at"?: string,"end_at"?: string | null,"field_versions"?: NonNullable<Json>,"files"?: NonNullable<Json>,"id"?: string,"name": string,"notes"?: string | null,"phone"?: string | null,"placed_reservation_id"?: string | null,"placed_trip_id"?: string | null,"received_at"?: string,"source"?: string,"source_id"?: string | null,"start_at"?: string | null,"status"?: string,"synced_at": string,"type": string,"updated_at": string,"user_id": string
+                  }
+                  Update: {
+                    "address"?: string | null,"ai_import_id"?: string | null,"amount"?: number | null,"booked_via"?: string | null,"cancel_policy"?: string | null,"cancel_until"?: string | null,"confirmation_code"?: string | null,"created_at"?: string,"end_at"?: string | null,"field_versions"?: NonNullable<Json>,"files"?: NonNullable<Json>,"id"?: string,"name"?: string,"notes"?: string | null,"phone"?: string | null,"placed_reservation_id"?: string | null,"placed_trip_id"?: string | null,"received_at"?: string,"source"?: string,"source_id"?: string | null,"start_at"?: string | null,"status"?: string,"synced_at"?: string,"type"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "received_reservations_ai_import_id_fkey"
+      columns: ["ai_import_id"]
+isOneToOne: false
+      referencedRelation: "ai_imports"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "received_reservations_placed_trip_id_fkey"
+      columns: ["placed_trip_id"]
+isOneToOne: false
+      referencedRelation: "trips"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "received_reservations_user_id_fkey"
       columns: ["user_id"]
 isOneToOne: false
       referencedRelation: "profiles"
@@ -617,6 +681,14 @@ isOneToOne: false
 "edge_call":
 { Args: { "p_fn": string,"p_limit": number }; Returns: number
                            },
+"inbox_lookup":
+{ Args: { "p_code": string,"p_source_id": string }; Returns: {
+              "email": string,"seen": boolean,"user_id": string
+            }[]
+                           },
+"inbox_trip_for":
+{ Args: { "p_end": string,"p_start": string,"p_user": string }; Returns: string
+                           },
 "lab_diagnostics":
 { Args: { "p_since": string }; Returns: Json
                            },
@@ -645,6 +717,9 @@ isOneToOne: false
                            },
 "purge":
 { Args: { "p_dry_run": boolean,"p_logs_before": string,"p_orphans_before": string,"p_tombstones_before": string,"p_trips_before": string }; Returns: Json
+                           },
+"receive_reservation":
+{ Args: { "p_ai_import_id": string,"p_files": Json,"p_reservation": Json,"p_source_id": string,"p_trip": string,"p_user": string }; Returns: Json
                            },
 "sync_pull":
 { Args: { "p_since": string,"p_trip_id": string }; Returns: Json

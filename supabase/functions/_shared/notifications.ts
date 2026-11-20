@@ -39,6 +39,9 @@ export const notificationDataSchema = z.looseObject({
   reservation_name: z.string().nullish(),
   reservation_type: z.string().nullish(),
   cancel_until: z.string().nullish(),
+  /** reserva recebida por e-mail (fase 18): a reserva na viagem, quando as datas a acharam */
+  reservation_id: z.string().nullish(),
+  received_status: z.string().nullish(),
   /** véspera: itens de "antes" e da mala ainda sem marcar */
   before_left: z.number().nullish(),
   pack_left: z.number().nullish(),
@@ -289,6 +292,22 @@ export function notificationText(
         ttlSeconds: 12 * 3600,
         topic: null,
       };
+    case 'reservation_received': {
+      // a confirmação encaminhada por e-mail virou reserva (fase 18): o nome que a leitura achou, sem
+      // artigo (D43); já na viagem quando as datas a acharam, senão em Reservas recebidas
+      const name = data.reservation_name?.trim();
+      return {
+        title: name ? `Chegou a reserva: ${name}` : 'Chegou uma reserva',
+        body: data.trip_name
+          ? `Já está em ${data.trip_name}`
+          : 'Em Reservas recebidas, para pôr numa viagem',
+        tag: `received:${ref}`,
+        actions: [],
+        appBadge: null,
+        ttlSeconds: 6 * 3600,
+        topic: null,
+      };
+    }
   }
 }
 
@@ -296,13 +315,21 @@ export function notificationText(
  * Caminho que o aviso abre: a tela da viagem (o mapa, `/viagens/:id`, desde a fase 14; a rota antiga
  * `/viagem` continua redirecionando os avisos que já foram); o prazo de cancelamento abre a própria
  * reserva; a véspera com itens faltando abre a lista que falta (antes primeiro); a retrospectiva
- * pronta abre o filme da viagem.
+ * pronta abre o filme da viagem; a reserva recebida (fase 18) abre a reserva na viagem ou a lista de
+ * viagens, onde ficam as Reservas recebidas.
  */
 export function navigatePath(
   row: Pick<ClaimedNotification, 'kind' | 'ref' | 'trip_id'> & {
-    data?: Pick<NotificationData, 'before_left' | 'pack_left'>;
+    data?: Pick<NotificationData, 'before_left' | 'pack_left' | 'reservation_id'>;
   },
 ): string {
+  // a reserva recebida (fase 18): a reserva na viagem, ou a lista de viagens com Reservas recebidas
+  if (row.kind === 'reservation_received') {
+    const reservationId = row.data?.reservation_id;
+    return row.trip_id && reservationId
+      ? `/viagens/${row.trip_id}/reservas?abrir=${encodeURIComponent(reservationId)}`
+      : '/viagens?recebidas=1';
+  }
   if (!row.trip_id) return '/';
   if (row.kind === 'cancel_deadline') {
     return `/viagens/${row.trip_id}/reservas?abrir=${encodeURIComponent(row.ref)}`;

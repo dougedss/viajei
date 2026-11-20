@@ -570,6 +570,13 @@ export const NOTIFICATION_KINDS = {
     phase: 9,
     available: true,
   },
+  reservation_received: {
+    label: 'Reserva recebida',
+    description: 'Quando uma confirmação encaminhada por e-mail chega',
+    on: true,
+    phase: 18,
+    available: true,
+  },
 } as const;
 export type NotificationKind = keyof typeof NOTIFICATION_KINDS;
 export const NOTIFICATION_KIND_KEYS = Object.keys(NOTIFICATION_KINDS) as [

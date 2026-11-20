@@ -210,6 +210,26 @@ describe('texto dos avisos', () => {
     expect(retro(1, 1).body).toBe('1 dia, 1 parada');
   });
 
+  it('reserva recebida por e-mail: o nome da leitura, e onde ela foi parar (fase 18)', () => {
+    const placed = notificationText(
+      'reservation_received',
+      {
+        reservation_name: 'Vila Suzana Parque Hotel',
+        trip_name: 'Serra',
+        received_status: 'placed',
+      },
+      'rr-1',
+    );
+    expect(placed.title).toBe('Chegou a reserva: Vila Suzana Parque Hotel');
+    expect(placed.body).toBe('Já está em Serra');
+    expect(placed.tag).toBe('received:rr-1');
+    expect(placed.actions).toEqual([]);
+    expect(placed.appBadge).toBeNull();
+    const inbox = notificationText('reservation_received', { received_status: 'received' }, 'rr-2');
+    expect(inbox.title).toBe('Chegou uma reserva');
+    expect(inbox.body).toBe('Em Reservas recebidas, para pôr numa viagem');
+  });
+
   it('dia da semana sem fuso', () => {
     expect(weekdayName('2026-12-11')).toBe('sexta');
     expect(weekdayName('2026-12-13')).toBe('domingo');
@@ -295,6 +315,28 @@ describe('payload único', () => {
     expect(payload(3, 2)).toBe(`/viagens/${TRIP}/checklists?aba=antes`);
     expect(payload(0, 2)).toBe(`/viagens/${TRIP}/checklists?aba=mala`);
     expect(payload(0, 0)).toBe(`/viagens/${TRIP}`);
+  });
+
+  it('a reserva recebida abre a reserva na viagem, ou a lista de viagens (fase 18)', () => {
+    const placed = buildPushPayload(
+      {
+        kind: 'reservation_received',
+        ref: 'rr-1',
+        trip_id: TRIP,
+        stop_id: null,
+        data: { reservation_name: 'Pousada', trip_name: 'Serra', reservation_id: 'r-abc' },
+      },
+      'https://viajei-mauve.vercel.app',
+    );
+    expect(placed.notification.navigate).toBe(
+      `https://viajei-mauve.vercel.app/viagens/${TRIP}/reservas?abrir=r-abc`,
+    );
+    const inbox = buildPushPayload(
+      { kind: 'reservation_received', ref: 'rr-2', trip_id: null, stop_id: null, data: {} },
+      'https://viajei-mauve.vercel.app',
+    );
+    expect(inbox.notification.navigate).toBe('https://viajei-mauve.vercel.app/viagens?recebidas=1');
+    expect(inbox.notification.data.navigate).toBe('/viagens?recebidas=1');
   });
 
   it('a retrospectiva pronta abre o filme da viagem', () => {
