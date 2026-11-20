@@ -136,8 +136,13 @@ const isNullableText = (field: unknown): field is NullableText =>
   field.options[0] instanceof z.ZodString &&
   field.options[1] instanceof z.ZodNull;
 
-/** O objeto do arquivo com cada texto opcional trocado pelo `blank`; o resto fica igual. */
-function withBlanks<S extends z.ZodRawShape>(schema: z.ZodObject<S>): z.ZodObject<WithBlanks<S>> {
+/**
+ * O objeto do arquivo com cada texto opcional trocado pelo `blank`; o resto fica igual. A leitura da
+ * confirmação e da nota (fase 18, `read-protocol.ts`) deriva os schemas da IA dela pelo mesmo caminho.
+ */
+export function withBlanks<S extends z.ZodRawShape>(
+  schema: z.ZodObject<S>,
+): z.ZodObject<WithBlanks<S>> {
   const shape = Object.fromEntries(
     Object.entries(schema.shape).map(([key, field]) => [
       key,

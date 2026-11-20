@@ -71,12 +71,16 @@ export type ImportStore = {
   isLab(): Promise<boolean>;
   /** a viagem já chegou ao servidor? (criada sem sinal pode ainda não ter subido) */
   tripOnServer(tripId: string): Promise<boolean>;
-  /** `kind`: para que foi a leitura (0015); sem ele, a importação */
+  /**
+   * `kind`: para que foi a leitura (0015, 0016); sem ele, a importação. `input_bytes`: os bytes dos
+   * anexos lidos (a confirmação e a nota, fase 18); sem ele, zero.
+   */
   open(row: {
     trip_id: string | null;
     input_chars: number;
     model: string;
-    kind?: 'import' | 'plan' | 'today';
+    kind?: 'import' | 'plan' | 'today' | 'confirmation' | 'receipt';
+    input_bytes?: number;
   }): Promise<string>;
   close(id: string, row: ImportClose): Promise<void>;
 };

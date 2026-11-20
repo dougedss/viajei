@@ -692,7 +692,7 @@ function DayView({
       <StopSheet
         stop={openStop}
         tripId={tripId}
-        day={{ id: dayId, index: Math.max(0, dayIndex) }}
+        day={{ id: dayId, index: Math.max(0, dayIndex), date: day.date }}
         position={openStopIndex >= 0 ? openStopIndex + 1 : null}
         weather={{ entry: forecast, updatedAt: weather.updatedAt }}
         onClose={() => setOpenStopId(null)}

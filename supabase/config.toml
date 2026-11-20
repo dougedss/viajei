@@ -451,6 +451,16 @@ enabled = true
 verify_jwt = true
 entrypoint = "./functions/find-places/index.ts"
 
+# read-document (fase 18) lê a confirmação de uma reserva (o texto colado, ou o PDF ou o print que a
+# fila já subiu ao Storage) e a foto de uma nota, com a IA, e devolve a reserva ou o gasto preenchidos
+# em SSE, com o mesmo esqueleto da import-itinerary (como o usuário, RLS vale, o anexo lido do bucket
+# com o JWT da pessoa, a ANTHROPIC_API_KEY só nos secrets). Limites: 20 confirmações e 30 notas por
+# pessoa em 24 h.
+[functions.read-document]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/read-document/index.ts"
+
 # purge é o expurgo diário: o pg_cron a chama às 4h de São Paulo com a chave secreta no apikey, como
 # a send-notifications, e a função aceita também o JWT de um executor do laboratório, só para o
 # dry_run (`withSupabase({ auth: ['secret', 'user'] })` confere os dois). A chave secreta não é um

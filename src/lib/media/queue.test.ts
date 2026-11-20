@@ -2,7 +2,7 @@ import { Blob as NodeBlob } from 'node:buffer';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { mutate } from '@/lib/db/mutate.ts';
 import { db } from '@/lib/db/schema.ts';
-import { makeStop, makeTrip, TRIP_ID, UID } from '@/test/factories.ts';
+import { makeExpense, makeStop, makeTrip, TRIP_ID, UID } from '@/test/factories.ts';
 import type { Prepared } from './prepare.ts';
 import { MAX_ATTEMPTS, MediaQueue } from './queue.ts';
 import type { MediaStorage, RemoveOutcome, UploadOutcome } from './storage.ts';
@@ -153,6 +153,41 @@ describe('fila de envio', () => {
     await queue.enqueueUpload(photo(), target, UID);
     await queue.drain();
     expect(storage.uploads).toHaveLength(0);
+  });
+
+  it('com o id já definido, o envio acha o objeto no lugar e grava a linha (a leitura da confirmação, fase 18)', async () => {
+    const given = 'c0ffee00-0000-4000-8000-000000000018';
+    const id = await queue.enqueueUpload(photo(), target, UID, given);
+    expect(id).toBe(given);
+    storage.next = [{ kind: 'exists' }];
+    await queue.drain();
+    expect(storage.uploads.map((u) => u.path)).toEqual([`${TRIP_ID}/${given}.jpg`]);
+    expect((await db.attachments.get(given))?.storage_path).toBe(`${TRIP_ID}/${given}.jpg`);
+  });
+
+  it('a foto da nota é anexo do gasto (fase 18): sobe enquanto o gasto vive, e é descartada com ele', async () => {
+    const expense = makeExpense({ synced_at: null });
+    await db.expenses.put(expense);
+    const receipt = { ...photo(), kind: 'document' as const, placeholder: null };
+    const sent = await queue.enqueueUpload(
+      receipt,
+      { tripId: TRIP_ID, stopId: null, reservationId: null, expenseId: expense.id },
+      UID,
+    );
+    await queue.drain();
+    expect((await db.attachments.get(sent))?.expense_id).toBe(expense.id);
+    expect((await db.attachments.get(sent))?.kind).toBe('document');
+
+    await db.expenses.update(expense.id, { deleted_at: '2026-12-11T14:00:00Z' });
+    const dropped = await queue.enqueueUpload(
+      receipt,
+      { tripId: TRIP_ID, stopId: null, reservationId: null, expenseId: expense.id },
+      UID,
+    );
+    const result = await queue.drain();
+    expect(result.dropped).toBe(1);
+    expect(await db.uploads.get(dropped)).toBeUndefined();
+    expect(await db.attachments.get(dropped)).toBeUndefined();
   });
 
   it('a parada sumiu antes do envio: o envio é descartado', async () => {

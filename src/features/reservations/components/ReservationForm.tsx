@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { FileText, X } from 'lucide-react';
+import { ExternalLink, FileText, X } from 'lucide-react';
 import { useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { RESERVATION_TYPE_KEYS, RESERVATION_TYPES } from '@shared/constants.ts';
@@ -10,6 +10,7 @@ import { FilePickers } from '@/features/media/components/FilePickers.tsx';
 import { MediaThumb } from '@/features/media/components/MediaThumb.tsx';
 import type { Reservation, Stop, TripDay } from '@/lib/db/schema.ts';
 import type { MediaItem } from '@/lib/media/hooks.ts';
+import { bookingSearchUrl } from '@/lib/links/hotels.ts';
 import { formatBytes } from '@/lib/media/compress.ts';
 import { formatDayShort, hhmm } from '@/lib/time/index.ts';
 import {
@@ -23,11 +24,17 @@ import { ReservationTypeIcon } from './ReservationTypeIcon.tsx';
 
 type Props = {
   reservation?: Reservation;
+  /** uma reserva nova já preenchida (a confirmação lida, fase 18) */
+  initial?: ReservationFormInput;
+  /** arquivos já escolhidos (o anexo que a leitura usou) */
+  initialFiles?: readonly File[];
   days: readonly TripDay[];
   stops: readonly Stop[];
   /** anexos já gravados (ao editar) */
   media: readonly MediaItem[];
   onRemoveMedia: (item: MediaItem) => void;
+  /** quantas pessoas viajam: "Procurar hotel perto de" busca para o time (padrão 2) */
+  adults?: number;
   submitLabel: string;
   onSubmit: (values: ReservationFormValues, files: File[]) => Promise<void>;
 };
@@ -43,25 +50,39 @@ const selectClass =
  */
 export function ReservationForm({
   reservation,
+  initial,
+  initialFiles,
   days,
   stops,
   media,
   onRemoveMedia,
+  adults = 2,
   submitLabel,
   onSubmit,
 }: Props) {
   const form = useForm<ReservationFormInput, unknown, ReservationFormValues>({
     resolver: zodResolver(reservationFormSchema),
-    defaultValues: reservation ? fromReservation(reservation) : EMPTY_RESERVATION,
+    defaultValues: reservation ? fromReservation(reservation) : (initial ?? EMPTY_RESERVATION),
   });
   const { errors, isSubmitting } = form.formState;
   const type = useWatch({ control: form.control, name: 'type' });
   const cancelUntil = useWatch({ control: form.control, name: 'cancel_until' });
   const link = useWatch({ control: form.control, name: 'link' });
-  const [files, setFiles] = useState<File[]>([]);
+  const code = useWatch({ control: form.control, name: 'confirmation_code' });
+  const [files, setFiles] = useState<File[]>(() => [...(initialFiles ?? [])]);
 
   const dayById = new Map(days.map((d) => [d.id, d]));
   const hotel = type === 'hotel';
+  // uma hospedagem ainda sem código, ligada a uma parada: ainda não há reserva, só a vontade de
+  // dormir perto dali. O link abre a busca do Booking com o lugar e a noite daquele dia (fase 18).
+  const hotelSearch = (() => {
+    if (reservation || !hotel || code.trim() !== '' || !link.startsWith('stop:')) return null;
+    const stop = stops.find((s) => s.id === link.slice(5));
+    const day = stop ? dayById.get(stop.trip_day_id) : undefined;
+    if (!stop || !day) return null;
+    const url = bookingSearchUrl({ place: stop.address ?? stop.name, checkin: day.date, adults });
+    return url ? { url, name: stop.name } : null;
+  })();
 
   // escolher a parada sugere o início pelo dia e horário dela, se ainda estiver vazio
   const onLink = (value: string) => {
@@ -152,6 +173,17 @@ export function ReservationForm({
         <p className="text-[14px] text-ink-2">
           Ligada a uma parada, a reserva aparece no "Agora" quando vocês estiverem chegando.
         </p>
+        {hotelSearch ? (
+          <a
+            href={hotelSearch.url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-12 w-fit items-center gap-2 text-[15px] font-semibold text-accent-ink"
+          >
+            <ExternalLink className="size-4" aria-hidden="true" />
+            Procurar hotel perto de {hotelSearch.name}
+          </a>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-[1.4fr_1fr] gap-3">

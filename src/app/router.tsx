@@ -101,6 +101,12 @@ export const router = createBrowserRouter([
                 lazy: page(() => import('@/features/reservations/routes/ReservaFormPage.tsx')),
               },
               {
+                // "Ler a confirmação" (fase 18): colar o e-mail ou anexar o voucher, e a reserva
+                // vem preenchida para a pessoa revisar e salvar
+                path: '/viagens/:tripId/reservas/ler',
+                lazy: page(() => import('@/features/reservations/routes/LerConfirmacaoPage.tsx')),
+              },
+              {
                 path: '/viagens/:tripId/reservas/:reservationId/editar',
                 lazy: page(() => import('@/features/reservations/routes/ReservaFormPage.tsx')),
               },

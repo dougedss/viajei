@@ -191,6 +191,7 @@ export function makeAttachment(over: Partial<Attachment> = {}): Attachment {
     trip_id: TRIP_ID,
     reservation_id: null,
     stop_id: kind === 'photo' ? '00000001-0000-4000-8000-000000000000' : null,
+    expense_id: null,
     kind,
     storage_path: `${TRIP_ID}/${id}.${ext}`,
     filename: `arquivo.${ext}`,

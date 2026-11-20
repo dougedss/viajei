@@ -1,4 +1,4 @@
-import { Plus, Ticket } from 'lucide-react';
+import { Plus, Sparkles, Ticket } from 'lucide-react';
 import { useSearchParams, useParams } from 'react-router';
 import { NotFound } from '@/app/NotFound.tsx';
 import { Splash } from '@/app/Splash.tsx';
@@ -58,10 +58,16 @@ export default function ReservasPage() {
         eyebrow={<span className="label-caps text-accent-ink">{trip.name}</span>}
         actions={
           reservations.length > 0 ? (
-            <ButtonLink to={`/viagens/${trip.id}/reservas/nova`} size="sm">
-              <Plus className="size-4" aria-hidden="true" />
-              Nova
-            </ButtonLink>
+            <>
+              <ButtonLink to={`/viagens/${trip.id}/reservas/ler`} size="sm" variant="secondary">
+                <Sparkles className="size-4" aria-hidden="true" />
+                Ler
+              </ButtonLink>
+              <ButtonLink to={`/viagens/${trip.id}/reservas/nova`} size="sm">
+                <Plus className="size-4" aria-hidden="true" />
+                Nova
+              </ButtonLink>
+            </>
           ) : undefined
         }
       />
@@ -70,12 +76,18 @@ export default function ReservasPage() {
         <EmptyState
           icon={Ticket}
           title="Nenhuma reserva ainda"
-          text="Hotel, ingresso, restaurante: o código, o telefone e o voucher ficam aqui e abrem sem sinal, no balcão."
+          text="Cole o e-mail da reserva ou anexe o voucher, e ela vem preenchida. O código, o telefone e o voucher abrem sem sinal, no balcão."
           action={
-            <ButtonLink to={`/viagens/${trip.id}/reservas/nova`} size="md">
-              <Plus className="size-5" aria-hidden="true" />
-              Adicionar reserva
-            </ButtonLink>
+            <div className="grid w-full gap-2">
+              <ButtonLink to={`/viagens/${trip.id}/reservas/ler`} size="md">
+                <Sparkles className="size-5" aria-hidden="true" />
+                Ler a confirmação
+              </ButtonLink>
+              <ButtonLink to={`/viagens/${trip.id}/reservas/nova`} size="md" variant="secondary">
+                <Plus className="size-5" aria-hidden="true" />
+                Adicionar reserva
+              </ButtonLink>
+            </div>
           }
         />
       ) : (

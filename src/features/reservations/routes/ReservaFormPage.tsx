@@ -1,14 +1,16 @@
-import { Trash2 } from 'lucide-react';
+import { Sparkles, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { NotFound } from '@/app/NotFound.tsx';
 import { Splash } from '@/app/Splash.tsx';
 import { Button } from '@/components/ui/Button.tsx';
+import { ButtonLink } from '@/components/ui/ButtonLink.tsx';
+import { Card } from '@/components/ui/Card.tsx';
 import { PageHeader } from '@/components/ui/PageHeader.tsx';
 import { Sheet } from '@/components/ui/Sheet.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { useTripDays, useTripStops } from '@/features/itinerary/queries.ts';
-import { useIsOwner, useTrip } from '@/features/trips/queries.ts';
+import { useIsOwner, useTrip, useTripMembers } from '@/features/trips/queries.ts';
 import { removeMedia } from '@/lib/media/actions.ts';
 import { useSession } from '@/lib/supabase/session.ts';
 import {
@@ -29,6 +31,7 @@ export default function ReservaFormPage() {
   const stops = useTripStops(tripId);
   const reservation = useReservation(reservationId ?? '');
   const media = useReservationMedia(tripId, reservationId ?? null);
+  const members = useTripMembers(tripId);
   const { session } = useSession();
   const isOwner = useIsOwner(trip);
   const navigate = useNavigate();
@@ -41,6 +44,7 @@ export default function ReservaFormPage() {
   }
   if (trip === null || (editing && !reservation)) return <NotFound />;
   const list = `/viagens/${trip.id}/reservas`;
+  const adults = Math.max(1, members.filter((m) => m.member.status === 'accepted').length);
 
   return (
     <div className="grid gap-5">
@@ -49,11 +53,23 @@ export default function ReservaFormPage() {
         title={editing ? 'Editar reserva' : 'Nova reserva'}
         eyebrow={<span className="label-caps text-accent-ink">{trip.name}</span>}
       />
+      {!editing ? (
+        <Card className="flex flex-wrap items-center justify-between gap-3">
+          <p className="min-w-0 flex-1 text-[15px] text-ink-2">
+            Tem a confirmação? Cole o e-mail ou anexe o voucher, e a reserva vem preenchida.
+          </p>
+          <ButtonLink to={`${list}/ler`} size="md" variant="secondary">
+            <Sparkles className="size-5" aria-hidden="true" />
+            Ler a confirmação
+          </ButtonLink>
+        </Card>
+      ) : null}
       <ReservationForm
         {...(reservation ? { reservation } : {})}
         days={days}
         stops={stops}
         media={media}
+        adults={adults}
         onRemoveMedia={(item) => {
           void removeMedia(item, uid, isOwner).then(() =>
             toast.show({ title: 'Anexo tirado', kind: 'info' }),

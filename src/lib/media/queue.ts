@@ -50,6 +50,8 @@ export type UploadTarget = {
   tripId: string;
   stopId: string | null;
   reservationId: string | null;
+  /** a foto da nota é anexo do gasto (fase 18) */
+  expenseId?: string | null;
 };
 
 export class MediaQueue {
@@ -60,10 +62,18 @@ export class MediaQueue {
     this.#deps = deps;
   }
 
-  /** Põe na fila o que `prepareFile` devolveu; devolve o id do anexo, que já é o definitivo. */
-  async enqueueUpload(prepared: Prepared, target: UploadTarget, uid: string): Promise<string> {
+  /**
+   * Põe na fila o que `prepareFile` devolveu; devolve o id do anexo, que já é o definitivo. Com `id`,
+   * o anexo já tem nome: a leitura da confirmação e da nota (fase 18) sobe o arquivo antes, para a IA
+   * o ler do Storage, e o envio daqui encontra o objeto ("já existe" conta como enviado, D78).
+   */
+  async enqueueUpload(
+    prepared: Prepared,
+    target: UploadTarget,
+    uid: string,
+    id: string = uuidV4(),
+  ): Promise<string> {
     const { db, now } = this.#deps;
-    const id = uuidV4();
     const at = new Date(now()).toISOString();
     const path = `${target.tripId}/${id}.${prepared.ext}`;
     const row: AttachmentDraft = {
@@ -71,6 +81,7 @@ export class MediaQueue {
       trip_id: target.tripId,
       reservation_id: target.reservationId,
       stop_id: target.stopId,
+      expense_id: target.expenseId ?? null,
       kind: prepared.kind,
       storage_path: path,
       filename: prepared.filename,
@@ -208,6 +219,10 @@ export class MediaQueue {
     if (job.row.reservation_id) {
       const r = await db.reservations.get(job.row.reservation_id);
       return r?.deleted_at === null;
+    }
+    if (job.row.expense_id) {
+      const e = await db.expenses.get(job.row.expense_id);
+      return e?.deleted_at === null;
     }
     return false;
   }

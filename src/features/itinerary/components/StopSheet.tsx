@@ -1,5 +1,6 @@
-import { ListOrdered } from 'lucide-react';
+import { BedDouble, ListOrdered } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { isDepartureKind } from '@shared/constants.ts';
 import { ButtonLink } from '@/components/ui/ButtonLink.tsx';
 import { Sheet } from '@/components/ui/Sheet.tsx';
 import { StopForecast } from '@/features/weather/components/StopForecast.tsx';
@@ -7,6 +8,8 @@ import { WeatherCredit } from '@/features/weather/components/WeatherCredit.tsx';
 import type { Stop, WeatherEntry } from '@/lib/db/schema.ts';
 import { stopForecast } from '@/features/weather/rules.ts';
 import { OSM_ATTRIBUTION } from '@/lib/geocode/nominatim.ts';
+import { bookingSearchUrl } from '@/lib/links/hotels.ts';
+import { buttonClasses } from '@/components/ui/button-styles.ts';
 import { hhmm } from '@/lib/time/index.ts';
 import { autoLine, isAutoStop } from '../rules.ts';
 import { kindLabel, stopRole } from '../stop-kinds.ts';
@@ -17,13 +20,14 @@ import { NavLinks } from './StopCard.tsx';
  * a linha da lista): nome, tipo, dia e posição, horário, "fecha às", endereço, a previsão no horário,
  * Google Maps e Waze, "Ver no roteiro". Quem abre pode acrescentar ações (Chegamos!, "+ Gasto").
  * A parada que se registrou sozinha (fase 15) diz isso, com as horas medidas, e o crédito do
- * OpenStreetMap quando o nome e o endereço vieram de lá.
+ * OpenStreetMap quando o nome e o endereço vieram de lá. Com a data do dia, "Procurar hotel perto
+ * de" abre a busca do Booking para a noite daquele dia (fase 18): um link, sem API.
  */
 type Props = {
   stop: Stop | null;
   tripId: string;
-  /** o dia da parada e a posição dela na lista do dia (1 é a primeira) */
-  day: { id: string; index: number } | null;
+  /** o dia da parada (a data, quando quem abre a tem) e a posição dela na lista do dia (1 é a primeira) */
+  day: { id: string; index: number; date?: string } | null;
   position: number | null;
   weather: { entry: WeatherEntry | undefined; updatedAt: string | null };
   onClose: () => void;
@@ -33,6 +37,10 @@ type Props = {
 
 export function StopSheet({ stop, tripId, day, position, weather, onClose, actions }: Props) {
   const forecast = stop ? stopForecast(weather.entry, stop.id) : null;
+  const hotelUrl =
+    stop && day?.date && !isDepartureKind(stop.kind)
+      ? bookingSearchUrl({ place: stop.address ?? stop.name, checkin: day.date })
+      : null;
   return (
     <Sheet
       open={stop !== null}
@@ -67,6 +75,17 @@ export function StopSheet({ stop, tripId, day, position, weather, onClose, actio
             <ListOrdered className="size-5" aria-hidden="true" />
             Ver no roteiro
           </ButtonLink>
+          {hotelUrl ? (
+            <a
+              href={hotelUrl}
+              target="_blank"
+              rel="noreferrer"
+              className={buttonClasses('secondary', 'md')}
+            >
+              <BedDouble className="size-5" aria-hidden="true" />
+              Procurar hotel perto de {stop.name}
+            </a>
+          ) : null}
           {forecast ? <WeatherCredit updatedAt={weather.updatedAt} /> : null}
           {isAutoStop(stop) && stop.address ? (
             <p className="text-[13px] text-ink-2" data-osm-credit>
