@@ -1,23 +1,28 @@
 import { z } from 'zod';
 import { APP_USER_AGENT } from './constants.ts';
+import { GEOAPIFY_PLACES_URL } from './places-handler.ts';
 
 /**
  * As fontes públicas de um cartão-postal (fase 23), com `fetch` injetado (o Vitest liga fixtures):
- *  - **Nominatim** (nominatim.openstreetmap.org): o objeto do OSM da parada (`/lookup` com as
- *    `extratags`, que trazem o item do Wikidata, e o contorno em planta), a busca pelo nome perto de
- *    uma coordenada (`/search`) e a busca de uma cidade. A política de uso (conferida em 20/11/2026):
- *    no máximo 1 pedido por segundo, um User-Agent que identifique a aplicação, resultados em cache
- *    (o catálogo é o cache: um lugar é identificado uma vez na vida do app).
+ *  - **O OpenStreetMap pela Geoapify** (a mesma chave e a mesma conta da `find-places`, D226): a
+ *    geocodificação por nome perto de uma coordenada (`/v1/geocode/search`), **o detalhe de um lugar**
+ *    (`/v2/place-details?features=details`: o objeto do OSM, as tags com o `wikidata`, a planta em
+ *    GeoJSON) e os lugares ao redor (`/v2/places`, os POIs com as tags do OSM). O Nominatim público
+ *    ficou de fora do servidor porque **recusa o ambiente das Edge Functions com 403** (conferido no log
+ *    da função em 20/11/2026; do Mac, o mesmo código passa): ele continua no aparelho (D207, D229). A
+ *    chave vai no cabeçalho `x-api-key`, nunca na URL nem no log.
  *  - **Wikidata** (`Special:EntityData/Q….json` e `wbsearchentities`): a imagem (P18), a categoria do
  *    Commons (P373), a coordenada (P625) e as medidas quando há (P2048 altura, P2049 largura, P2043
  *    comprimento).
  *  - **Commons** (a Action API): os arquivos de uma categoria e o `imageinfo` com a URL da miniatura
  *    de 1.568 px e o `extmetadata` (a licença, o autor, o crédito). **Só licença livre** entra como
  *    referência; o autor, a licença e a URL ficam no registro da peça, nunca na tela.
- * Todas as chamadas em série, com o User-Agent do app, `Accept-Encoding: gzip` (o Deno negocia) e
+ * Todas as chamadas em série, com o User-Agent do app (o Wikimedia recusa agentes genéricos),
  * `maxlag=5` nas da Action API (ninguém espera por elas). Nenhum pixel das fotos vai além da IA.
  */
-export const NOMINATIM_URL = 'https://nominatim.openstreetmap.org';
+export const GEOAPIFY_GEOCODE_URL = 'https://api.geoapify.com/v1/geocode/search';
+export const GEOAPIFY_DETAILS_URL = 'https://api.geoapify.com/v2/place-details';
+export { GEOAPIFY_PLACES_URL };
 export const WIKIDATA_URL = 'https://www.wikidata.org';
 export const COMMONS_API_URL = 'https://commons.wikimedia.org/w/api.php';
 /** A largura da miniatura que a IA vê (o lado maior que a API da Anthropic usa sem reduzir). */
@@ -25,13 +30,16 @@ export const PHOTO_WIDTH = 1568;
 export const PHOTO_MAX_BYTES = 3_000_000;
 export const MAX_PHOTOS = 3;
 const TIMEOUT_MS = 12_000;
-/** O intervalo mínimo entre dois pedidos ao Nominatim (a política: 1 por segundo). */
-export const NOMINATIM_GAP_MS = 1_100;
+/** O intervalo entre duas chamadas à Geoapify (o plano gratuito aceita 5 por segundo). */
+export const GEOAPIFY_GAP_MS = 250;
+/** As categorias da Places que podem ser um cartão-postal perto do lugar. */
+export const AROUND_CATEGORIES =
+  'tourism,heritage,religion,natural,leisure.park,entertainment,building.historic';
 
 export type SourceFetch = typeof fetch;
 
 export class SourceError extends Error {
-  readonly source: 'nominatim' | 'wikidata' | 'commons';
+  readonly source: 'geoapify' | 'wikidata' | 'commons';
   readonly status: number;
   constructor(source: SourceError['source'], status: number, detail: string) {
     super(detail);
@@ -65,11 +73,12 @@ async function getJson<T>(
   source: SourceError['source'],
   url: string,
   schema: z.ZodType<T>,
+  headers: Record<string, string> = {},
 ): Promise<T> {
   let res: Response;
   try {
     res = await fetchFn(url, {
-      headers: { 'User-Agent': APP_USER_AGENT, Accept: 'application/json' },
+      headers: { 'User-Agent': APP_USER_AGENT, Accept: 'application/json', ...headers },
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch (err) {
@@ -81,27 +90,16 @@ async function getJson<T>(
   return parsed.data;
 }
 
-// ------------------------------------------------------------------ Nominatim
-const nominatimPlaceSchema = z.object({
-  osm_type: z.enum(['node', 'way', 'relation']),
-  osm_id: z.number().int(),
-  lat: z.string(),
-  lon: z.string(),
-  name: z.string().optional(),
-  display_name: z.string().optional(),
-  category: z.string().optional(),
-  type: z.string().optional(),
-  addresstype: z.string().optional(),
-  boundingbox: z.array(z.string()).length(4).optional(),
-  extratags: z.record(z.string(), z.string()).nullable().optional(),
-  geojson: z.object({ type: z.string(), coordinates: z.unknown() }).optional(),
-});
+// ------------------------------------------------------------------ o OSM pela Geoapify
 export type OsmPlace = {
-  osm_type: 'node' | 'way' | 'relation';
-  osm_id: number;
+  /** o id do lugar na Geoapify (para o detalhe e para refazer) */
+  place_id: string | null;
+  osm_type: 'node' | 'way' | 'relation' | null;
+  osm_id: number | null;
   name: string;
   lat: number;
   lng: number;
+  /** a classe e o tipo do OSM, pelas categorias da Geoapify (`leisure`, `park`) */
   category: string;
   type: string;
   wikidata: string | null;
@@ -109,11 +107,83 @@ export type OsmPlace = {
   height_m: number | null;
   /** o contorno em planta (o anel de fora de um `Polygon`), em [lng, lat] */
   outline: [number, number][] | null;
+  /** [sul, norte, oeste, leste] */
   bbox: [number, number, number, number] | null;
 };
 
+const bboxSchema = z.object({
+  lon1: z.number(),
+  lat1: z.number(),
+  lon2: z.number(),
+  lat2: z.number(),
+});
+const geocodeSchema = z.object({
+  results: z.array(
+    z.object({
+      place_id: z.string(),
+      name: z.string().optional(),
+      formatted: z.string().optional(),
+      lat: z.number(),
+      lon: z.number(),
+      bbox: bboxSchema.optional(),
+      category: z.string().optional(),
+      result_type: z.string().optional(),
+    }),
+  ),
+});
+const rawSchema = z.looseObject({
+  osm_id: z.number().optional(),
+  osm_type: z.string().optional(),
+  wikidata: z.string().optional(),
+  wikipedia: z.string().optional(),
+  height: z.union([z.string(), z.number()]).optional(),
+  name: z.string().optional(),
+});
+const featureSchema = z.object({
+  geometry: z.object({ type: z.string(), coordinates: z.unknown() }).nullable().optional(),
+  properties: z.object({
+    place_id: z.string().optional(),
+    feature_type: z.string().optional(),
+    name: z.string().optional(),
+    formatted: z.string().optional(),
+    lat: z.number(),
+    lon: z.number(),
+    categories: z.array(z.string()).optional(),
+    wiki_and_media: z
+      .object({ wikidata: z.string().optional(), wikipedia: z.string().optional() })
+      .optional(),
+    datasource: z.object({ raw: rawSchema.optional() }).optional(),
+  }),
+});
+const collectionSchema = z.object({ features: z.array(featureSchema) });
+
+const OSM_TYPE: Record<string, 'node' | 'way' | 'relation'> = {
+  n: 'node',
+  w: 'way',
+  r: 'relation',
+  node: 'node',
+  way: 'way',
+  relation: 'relation',
+};
+
+/** `['leisure', 'leisure.park']` → a classe `leisure` e o tipo `park`. */
+export function categoryOf(
+  categories: readonly string[] | undefined,
+  single?: string,
+): {
+  category: string;
+  type: string;
+} {
+  const list = categories && categories.length > 0 ? categories : single ? [single] : [];
+  // a de mais níveis; no empate, a última da lista (a Geoapify põe a mais específica no fim)
+  const depth = (c: string) => c.split('.').length;
+  const deepest = list.reduce((best, c) => (depth(c) >= depth(best) ? c : best), list[0] ?? '');
+  const parts = deepest.split('.');
+  return { category: parts[0] ?? '', type: parts.at(-1) ?? '' };
+}
+
 function outlineOf(
-  geojson: { type: string; coordinates: unknown } | undefined,
+  geojson: { type: string; coordinates: unknown } | null | undefined,
 ): [number, number][] | null {
   if (!geojson) return null;
   const ring =
@@ -129,72 +199,129 @@ function outlineOf(
   return pts.length >= 4 ? pts : null;
 }
 
-function toPlace(raw: z.infer<typeof nominatimPlaceSchema>): OsmPlace {
-  const tags = raw.extratags ?? {};
-  const height = Number.parseFloat((tags.height ?? '').replace(',', '.'));
-  const bb = raw.boundingbox?.map(Number);
+function placeOf(f: z.infer<typeof featureSchema>): OsmPlace {
+  const p = f.properties;
+  const raw = p.datasource?.raw ?? {};
+  const height = Number.parseFloat(String(raw.height ?? '').replace(',', '.'));
+  const { category, type } = categoryOf(p.categories);
+  const wikidata = p.wiki_and_media?.wikidata ?? raw.wikidata ?? null;
   return {
-    osm_type: raw.osm_type,
-    osm_id: raw.osm_id,
-    name: raw.name ?? (raw.display_name ?? '').split(',')[0]?.trim() ?? '',
-    lat: Number.parseFloat(raw.lat),
-    lng: Number.parseFloat(raw.lon),
-    category: raw.category ?? '',
-    type: raw.type ?? '',
-    wikidata: tags.wikidata && /^Q\d{1,12}$/.test(tags.wikidata) ? tags.wikidata : null,
-    wikipedia: tags.wikipedia ?? null,
+    place_id: p.place_id ?? null,
+    osm_type: raw.osm_type ? (OSM_TYPE[raw.osm_type] ?? null) : null,
+    osm_id: typeof raw.osm_id === 'number' ? raw.osm_id : null,
+    name: p.name ?? raw.name ?? (p.formatted ?? '').split(',')[0]?.trim() ?? '',
+    lat: p.lat,
+    lng: p.lon,
+    category,
+    type,
+    wikidata: wikidata && /^Q\d{1,12}$/.test(wikidata) ? wikidata : null,
+    wikipedia: p.wiki_and_media?.wikipedia ?? raw.wikipedia ?? null,
     height_m: Number.isFinite(height) && height > 0 ? height : null,
-    outline: outlineOf(raw.geojson),
-    bbox:
-      bb?.length === 4 && bb.every(Number.isFinite)
-        ? [bb[0] ?? 0, bb[1] ?? 0, bb[2] ?? 0, bb[3] ?? 0]
-        : null,
+    outline: outlineOf(f.geometry),
+    bbox: null,
   };
 }
 
-const OSM_LETTER = { node: 'N', way: 'W', relation: 'R' } as const;
+const auth = (key: string) => ({ 'x-api-key': key });
 
-/** O objeto do OSM pelo id, com as `extratags` e o contorno em planta. */
-export async function lookupOsm(
+/** Um resultado da geocodificação: o lugar pelo nome, sem as tags (o detalhe as traz). */
+export type GeoHit = {
+  place_id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  category: string;
+  type: string;
+  kind: string;
+  bbox: [number, number, number, number] | null;
+};
+
+/**
+ * A busca pelo nome: perto de uma coordenada (a caixa de `km`, com a proximidade como viés) ou solta;
+ * `type: 'city'` para um município. Até `limit` resultados.
+ */
+export async function geocodeSearch(
   fetchFn: SourceFetch,
-  type: 'node' | 'way' | 'relation',
-  id: number,
-): Promise<OsmPlace | null> {
-  const url = `${NOMINATIM_URL}/lookup?osm_ids=${OSM_LETTER[type]}${String(id)}&format=jsonv2&extratags=1&polygon_geojson=1&namedetails=1`;
-  const rows = await getJson(fetchFn, 'nominatim', url, z.array(nominatimPlaceSchema));
-  return rows[0] ? toPlace(rows[0]) : null;
+  key: string,
+  text: string,
+  near: { lat: number; lng: number; km?: number } | null,
+  limit = 5,
+  type?: 'city',
+): Promise<GeoHit[]> {
+  const params = new URLSearchParams({ text, limit: String(limit), lang: 'pt', format: 'json' });
+  if (near) {
+    params.set('bias', `proximity:${String(near.lng)},${String(near.lat)}`);
+    params.set(
+      'filter',
+      `circle:${String(near.lng)},${String(near.lat)},${String(Math.round((near.km ?? 5) * 1000))}`,
+    );
+  }
+  if (type) params.set('type', type);
+  const data = await getJson(
+    fetchFn,
+    'geoapify',
+    `${GEOAPIFY_GEOCODE_URL}?${params.toString()}`,
+    geocodeSchema,
+    auth(key),
+  );
+  return data.results.map((r) => {
+    const { category, type: t } = categoryOf(undefined, r.category);
+    return {
+      place_id: r.place_id,
+      name: r.name ?? (r.formatted ?? '').split(',')[0]?.trim() ?? '',
+      lat: r.lat,
+      lng: r.lon,
+      category,
+      type: t,
+      kind: r.result_type ?? '',
+      bbox: r.bbox ? [r.bbox.lat1, r.bbox.lat2, r.bbox.lon1, r.bbox.lon2] : null,
+    };
+  });
 }
 
-/** A busca pelo nome, perto de uma coordenada (a caixa de ~5 km) ou solta, até `limit` resultados. */
-export async function searchOsm(
+/** O detalhe de um lugar: o objeto do OSM, as tags (o `wikidata`, a altura) e a planta. */
+export async function placeDetails(
   fetchFn: SourceFetch,
-  query: string,
-  near: { lat: number; lng: number; km?: number } | null,
-  limit = 6,
+  key: string,
+  placeId: string,
+): Promise<OsmPlace | null> {
+  const params = new URLSearchParams({ id: placeId, features: 'details', lang: 'pt' });
+  const data = await getJson(
+    fetchFn,
+    'geoapify',
+    `${GEOAPIFY_DETAILS_URL}?${params.toString()}`,
+    collectionSchema,
+    auth(key),
+  );
+  const f = data.features.find((x) => x.properties.feature_type === 'details') ?? data.features[0];
+  if (!f) return null;
+  const place = placeOf(f);
+  return { ...place, place_id: place.place_id ?? placeId };
+}
+
+/** Os lugares ao redor que podem ser um cartão-postal (os POIs da Places, com as tags do OSM). */
+export async function placesAround(
+  fetchFn: SourceFetch,
+  key: string,
+  center: { lat: number; lng: number },
+  radiusM: number,
+  limit = 12,
 ): Promise<OsmPlace[]> {
   const params = new URLSearchParams({
-    q: query,
-    format: 'jsonv2',
-    extratags: '1',
-    polygon_geojson: '1',
+    categories: AROUND_CATEGORIES,
+    filter: `circle:${String(center.lng)},${String(center.lat)},${String(Math.round(radiusM))}`,
+    bias: `proximity:${String(center.lng)},${String(center.lat)}`,
     limit: String(limit),
-    'accept-language': 'pt-BR,pt',
+    lang: 'pt',
   });
-  if (near) {
-    const d = (near.km ?? 5) / 111;
-    params.set(
-      'viewbox',
-      [near.lng - d, near.lat + d, near.lng + d, near.lat - d].map((v) => v.toFixed(4)).join(','),
-    );
-    params.set('bounded', '1');
-  }
-  const rows = await getJson(
+  const data = await getJson(
     fetchFn,
-    'nominatim',
-    `${NOMINATIM_URL}/search?${params.toString()}`,
-    z.array(nominatimPlaceSchema),
+    'geoapify',
+    `${GEOAPIFY_PLACES_URL}?${params.toString()}`,
+    collectionSchema,
+    auth(key),
   );
-  return rows.map(toPlace);
+  return data.features.map(placeOf).filter((p) => p.name !== '');
 }
 
 /** A distância em metros entre duas coordenadas. */
@@ -543,7 +670,12 @@ export function sourcesRecord(input: {
   wikidata: string | null;
   photos: readonly CommonsPhoto[];
   outline: 'osm' | 'none';
-  modeled: { osm_type: string; osm_id: number; name: string } | null;
+  modeled: {
+    osm_type: string | null;
+    osm_id: number | null;
+    name: string;
+    place_id?: string | null;
+  } | null;
 }) {
   return {
     wikidata: input.wikidata,

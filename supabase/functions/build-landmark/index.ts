@@ -12,7 +12,8 @@ declare const EdgeRuntime: { waitUntil(work: Promise<unknown>): void };
  * cabeçalho `apikey`: `withSupabase({ auth: 'secret' })` recusa qualquer outra chamada e entrega o
  * client do servidor (o molde da `send-notifications`, D37). O poder dele é o das RPCs da 0017
  * (`landmark_claim`, `landmark_identified`, `landmark_store`, `landmark_fail`) e o registro em
- * `ai_imports` em nome de quem pediu (D128); nada das tabelas da viagem. Um job por chamada: responde
+ * `ai_imports` em nome de quem pediu (D128); nada das tabelas da viagem. O OSM pela Geoapify (a mesma
+ * `GEOAPIFY_API_KEY` da `find-places`; o Nominatim público recusa este ambiente, D268). Um job por chamada: responde
  * na hora e trabalha em segundo plano, dentro do relógio da função. Nada da pessoa em log.
  */
 let client: Anthropic | null = null;
@@ -75,6 +76,7 @@ export default {
         },
       },
       fetch: (input, init) => fetch(input, init),
+      geoapifyKey: Deno.env.get('GEOAPIFY_API_KEY') || undefined,
       ai: (params, options) =>
         anthropic().beta.messages.create(params, { signal: options.signal, maxRetries: 1 }),
       log: (line) => console.log(line),
