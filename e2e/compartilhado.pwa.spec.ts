@@ -19,8 +19,15 @@ async function entrar(page: Page, email: string) {
   await expect(page.getByRole('heading', { name: 'Suas viagens' })).toBeVisible();
 }
 
-const SHARE_FORM = `(async ([text, title, pngBase64]) => {
-  const bytes = Uint8Array.from(atob(pngBase64), (c) => c.charCodeAt(0));
+/**
+ * O POST que o Android faria, montado na página: um formulário `multipart` com o título, o texto e o
+ * print, enviado por `form.submit()`. Uma IIFE em string com os dados embutidos, como as outras do
+ * repositório (o e2e não tem a lib DOM): o `page.evaluate` com uma string só avalia a expressão, e
+ * uma função em string **não é chamada**.
+ */
+const shareForm = (share: { text: string; title: string; pngBase64: string }) => `(() => {
+  const share = ${JSON.stringify(share)};
+  const bytes = Uint8Array.from(atob(share.pngBase64), (c) => c.charCodeAt(0));
   const file = new File([bytes], 'voucher.png', { type: 'image/png' });
   const form = document.createElement('form');
   form.method = 'POST';
@@ -33,8 +40,8 @@ const SHARE_FORM = `(async ([text, title, pngBase64]) => {
     input.value = value;
     form.appendChild(input);
   };
-  add('title', title);
-  add('text', text);
+  add('title', share.title);
+  add('text', share.text);
   const files = document.createElement('input');
   files.type = 'file';
   files.name = 'files';
@@ -44,7 +51,7 @@ const SHARE_FORM = `(async ([text, title, pngBase64]) => {
   form.appendChild(files);
   document.body.appendChild(form);
   form.submit();
-})`;
+})()`;
 
 test('o POST do share_target chega ao service worker e cai em "Ler a confirmação" com o texto e o arquivo', async ({
   page,
@@ -65,11 +72,13 @@ test('o POST do share_target chega ao service worker e cai em "Ler a confirmaç�
   await expect.poll(() => page.evaluate('navigator.serviceWorker.controller !== null')).toBe(true);
 
   // o que o Gmail mandaria: o assunto, o texto e o print
-  await page.evaluate(SHARE_FORM, [
-    'Reserva confirmada: Pousada Compartilhada, código SHR-1',
-    'Fwd: Sua reserva',
-    makePng(600, 400).toString('base64'),
-  ]);
+  await page.evaluate(
+    shareForm({
+      text: 'Reserva confirmada: Pousada Compartilhada, código SHR-1',
+      title: 'Fwd: Sua reserva',
+      pngBase64: makePng(600, 400).toString('base64'),
+    }),
+  );
   // uma viagem futura só: a tela vai direto para a leitura dela, com o compartilhado
   await page.waitForURL(/\/reservas\/ler\?share=/, { timeout: 30_000 });
   expect(page.url()).toContain(`${tripUrl}/reservas/ler?share=`);

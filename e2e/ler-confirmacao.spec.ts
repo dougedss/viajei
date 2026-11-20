@@ -108,23 +108,31 @@ test('colar e anexar: a reserva vem preenchida, o vazio é dito, e o print vira 
   await expect(uploaded).toBeVisible({ timeout: 30_000 });
   const id = (await uploaded.getAttribute('data-media')) ?? '';
   expect(`${tripId}/${id}.jpg`).toBe(readPath);
-  expect(await linhas('attachments', `id=eq.${id}&select=kind,mime,reservation_id`)).toHaveLength(
-    1,
-  );
-  const reservas = await linhas(
-    'reservations',
-    `trip_id=eq.${tripId}&select=name,confirmation_code,amount,booked_via,phone,address`,
-  );
-  expect(reservas).toEqual([
-    {
-      name: 'Pousada Laboratório da Serra',
-      confirmation_code: 'LAB-7Q2X',
-      amount: 480,
-      booked_via: 'Booking',
-      phone: '+5554991234567',
-      address: null,
-    },
-  ]);
+  // o arquivo já subiu; a linha e a reserva chegam ao servidor pelo sync, logo depois
+  await expect
+    .poll(() => linhas('attachments', `id=eq.${id}&select=kind,mime,reservation_id`), {
+      timeout: 20_000,
+    })
+    .toHaveLength(1);
+  await expect
+    .poll(
+      () =>
+        linhas(
+          'reservations',
+          `trip_id=eq.${tripId}&select=name,confirmation_code,amount,booked_via,phone,address`,
+        ),
+      { timeout: 20_000 },
+    )
+    .toEqual([
+      {
+        name: 'Pousada Laboratório da Serra',
+        confirmation_code: 'LAB-7Q2X',
+        amount: 480,
+        booked_via: 'Booking',
+        phone: '+5554991234567',
+        address: null,
+      },
+    ]);
 });
 
 test('sem texto nem anexo o botão não liga; "Procurar hotel perto de" aparece na hospedagem sem código', async ({
