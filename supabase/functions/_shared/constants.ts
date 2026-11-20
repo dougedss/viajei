@@ -604,3 +604,11 @@ export const NOTIFICATION_DEFAULTS = {
 export const LEAD_MINUTE_OPTIONS = [5, 10, 15, 30, 60] as const;
 /** Formato do payload declarativo (WebKit): o valor mágico que liga a leitura sem JavaScript. */
 export const DECLARATIVE_WEB_PUSH = 8030;
+
+/**
+ * O domínio do endereço de e-mail de cada pessoa (fase 18): `<código>@reservas.reitechia.com.br`, o
+ * subdomínio de recebimento do domínio que o app já usa para enviar (decisão do Douglas de 15/11; o
+ * MX e o recebimento no Resend são dele). O app só mostra o endereço; a função de recebimento lê o
+ * código antes do `@` em qualquer domínio, então trocar o subdomínio é trocar esta linha.
+ */
+export const INBOX_DOMAIN = 'reservas.reitechia.com.br';

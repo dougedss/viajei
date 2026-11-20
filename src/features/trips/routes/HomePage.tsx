@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/ui/EmptyState.tsx';
 import { useToast } from '@/components/ui/toast-context.ts';
 import { IntakeField } from '@/features/intake/components/IntakeField.tsx';
 import { InstallCard } from '@/features/pwa/components/InstallCard.tsx';
+import { ReceivedSection } from '@/features/reservations/received/components/ReceivedSection.tsx';
 import { useAcceptInvite, useDeclineInvite } from '../actions.ts';
 import { TripCard } from '../components/TripCard.tsx';
 import { usePendingInvites, useTrips } from '../queries.ts';
@@ -47,6 +48,8 @@ export default function HomePage() {
   return (
     <div className="grid gap-6">
       <InstallCard />
+      {/* o que chegou por e-mail e ainda não tem viagem (fase 18): a tela mais aberta mostra primeiro */}
+      <ReceivedSection />
 
       {invites.data && invites.data.length > 0 ? (
         <section className="grid gap-3" aria-labelledby="h-convites">

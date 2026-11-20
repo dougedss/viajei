@@ -12,6 +12,8 @@ import { useTripMedia, useTripMediaPrefetch } from '@/lib/media/hooks.ts';
 import { formatDayShort } from '@/lib/time/index.ts';
 import { ReservationCard } from '../components/ReservationCard.tsx';
 import { ReservationSheet } from '../components/ReservationSheet.tsx';
+import { InboxAddressCard } from '../received/components/InboxAddressCard.tsx';
+import { ReceivedSection } from '../received/components/ReceivedSection.tsx';
 import { countByReservation, useTripReservations } from '../queries.ts';
 import { groupReservations, makeContext } from '../rules.ts';
 
@@ -72,6 +74,8 @@ export default function ReservasPage() {
         }
       />
 
+      <ReceivedSection tripId={trip.id} />
+
       {groups.length === 0 ? (
         <EmptyState
           icon={Ticket}
@@ -114,6 +118,8 @@ export default function ReservasPage() {
           </section>
         ))
       )}
+
+      <InboxAddressCard />
 
       <ReservationSheet
         reservation={open}

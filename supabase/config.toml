@@ -461,6 +461,16 @@ enabled = true
 verify_jwt = true
 entrypoint = "./functions/read-document/index.ts"
 
+# inbound-mail (fase 18) recebe o webhook `email.received` do Resend: um e-mail encaminhado para
+# <código>@reservas.… vira uma reserva. Quem autentica é a assinatura svix do webhook, conferida pela
+# função sobre o corpo bruto com RESEND_WEBHOOK_SECRET (sem a chave, responde `no_source`), então o JWT
+# da plataforma fica desligado. O conteúdo e os anexos vêm pela API do Resend (RESEND_API_KEY); a
+# escrita no banco é só pelas RPCs estreitas da 0016, com a chave do servidor que o ambiente dá.
+[functions.inbound-mail]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/inbound-mail/index.ts"
+
 # purge é o expurgo diário: o pg_cron a chama às 4h de São Paulo com a chave secreta no apikey, como
 # a send-notifications, e a função aceita também o JWT de um executor do laboratório, só para o
 # dry_run (`withSupabase({ auth: ['secret', 'user'] })` confere os dois). A chave secreta não é um
