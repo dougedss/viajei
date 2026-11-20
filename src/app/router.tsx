@@ -107,6 +107,12 @@ export const router = createBrowserRouter([
                 lazy: page(() => import('@/features/reservations/routes/LerConfirmacaoPage.tsx')),
               },
               {
+                // o Compartilhar do Android (fase 18): o service worker guardou o conteúdo e
+                // redirecionou para aqui; a tela pergunta de qual viagem é
+                path: '/compartilhado',
+                lazy: page(() => import('@/features/reservations/routes/CompartilhadoPage.tsx')),
+              },
+              {
                 path: '/viagens/:tripId/reservas/:reservationId/editar',
                 lazy: page(() => import('@/features/reservations/routes/ReservaFormPage.tsx')),
               },

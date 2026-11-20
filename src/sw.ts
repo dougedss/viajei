@@ -16,6 +16,8 @@ import {
 } from '@/features/notifications/push-payload.ts';
 import { applyNotificationAction, pushNow, resubscribe } from './sw/actions.ts';
 import { drainMediaInBackground } from './sw/media.ts';
+import { handleShareTarget } from './sw/share.ts';
+import { SHARE_PATH } from '@/features/reservations/share/parse.ts';
 import { OSM_TILE_ORIGIN, TILE_CACHE } from '@/lib/map/tiles.ts';
 import { MEDIA_SYNC_TAG } from '@/lib/media/types.ts';
 
@@ -32,6 +34,15 @@ cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
 
 registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html')));
+
+// O Compartilhar do Android (fase 18): o `share_target` do manifest faz um POST multipart para
+// `/compartilhado`, que só chega aqui; o conteúdo vai para o Dexie e a resposta é um redirecionamento
+// para a tela, que pergunta de qual viagem é e cai em "Ler a confirmação".
+registerRoute(
+  ({ url, request }) => request.method === 'POST' && url.pathname === SHARE_PATH,
+  ({ request }) => handleShareTarget(request),
+  'POST',
+);
 
 // Os tiles do OSM que a pessoa já viu, para o mapa abrir sem sinal (nunca baixados antes, pela
 // política do OSM). Até a fase 11 esta rota nunca gravou um tile: sem `cacheWillUpdate`, o Workbox só

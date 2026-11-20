@@ -85,6 +85,20 @@ export default defineConfig({
         background_color: '#F4F4F2',
         theme_color: '#F4F4F2',
         categories: ['travel', 'navigation'],
+        // Compartilhar → Viajei, no Android (fase 18): o Gmail ou o Booking mandam o e-mail, o PDF ou
+        // o print num POST multipart para o service worker (src/sw/share.ts). No iPhone não existe
+        // share_target para PWA (WebKit 194593, NEW em 20/11/2026): lá o caminho é o e-mail.
+        share_target: {
+          action: '/compartilhado',
+          method: 'POST',
+          enctype: 'multipart/form-data',
+          params: {
+            title: 'title',
+            text: 'text',
+            url: 'url',
+            files: [{ name: 'files', accept: ['image/*', 'application/pdf'] }],
+          },
+        },
       },
       injectManifest: {
         // mjs e wasm: o worker e os módulos do pdf.js, para o PDF da reserva abrir sem sinal
