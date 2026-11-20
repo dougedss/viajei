@@ -481,6 +481,23 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/purge/index.ts"
 
+# landmarks (fase 23) confere um cartão-postal gerado: o aparelho de quem pediu desenha a peça e manda
+# as capturas; a função compara com as fotos de referência (a IA) e publica, ajusta ou rejeita. Roda
+# como a pessoa (verify_jwt ligado, a cota pela edge_call); as RPCs estreitas da 0017 com a chave do
+# servidor. A ANTHROPIC_API_KEY só nos secrets.
+[functions.landmarks]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/landmarks/index.ts"
+
+# build-landmark (fase 23) é o trabalhador da fila dos cartões-postais: o pg_cron o chama a cada minuto,
+# só quando há fila, com a chave secreta no cabeçalho apikey, e `withSupabase({ auth: 'secret' })`
+# valida (o molde da send-notifications); não há usuário, então o JWT da plataforma fica desligado.
+[functions.build-landmark]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/build-landmark/index.ts"
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

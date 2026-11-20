@@ -618,3 +618,11 @@ export const INBOX_DOMAIN = 'reservas.reitechia.com.br';
  * e-mail); para qualquer outra pessoa, só o e-mail da própria conta vale.
  */
 export const APP_SENDER = 'viajei@reitechia.com.br';
+
+/**
+ * O User-Agent do app nas chamadas do servidor a serviços públicos (fase 23): o Wikimedia recusa
+ * agentes genéricos (403) e pede um contato; o Nominatim pede um agente que identifique a aplicação.
+ * O contato é o repositório público (decisão da fase 23; o Douglas pode trocar pelo e-mail do app).
+ * Nenhum e-mail pessoal.
+ */
+export const APP_USER_AGENT = 'Viajei/0.23 (https://github.com/dougedss/viajei)';
