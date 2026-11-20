@@ -23,6 +23,7 @@ import { createExpense } from '@/features/expenses/actions.ts';
 import { ExpenseSheet, type ExpenseDraft } from '@/features/expenses/components/ExpenseSheet.tsx';
 import { categoryForStop } from '@/features/expenses/rules.ts';
 import { StopSheet } from '@/features/itinerary/components/StopSheet.tsx';
+import { RemakeAction } from '@/features/landmarks/components/RemakeAction.tsx';
 import { useDayStops, useTripDays, useTripStops } from '@/features/itinerary/queries.ts';
 import { useDayRoute } from '@/features/itinerary/route.ts';
 import { legsByStop } from '@/features/itinerary/rules.ts';
@@ -699,6 +700,8 @@ function DayView({
         actions={
           openStop ? (
             <div className="flex flex-wrap gap-2">
+              {/* refazer o cartão-postal do lugar (fase 23): só quem planejou, uma vez por lugar */}
+              <RemakeAction stop={openStop} tripId={tripId} isOwner={trip.owner_id === uid} />
               {active && state.arriveAvailable && state.next?.id === openStop.id ? (
                 <Button
                   size="md"
