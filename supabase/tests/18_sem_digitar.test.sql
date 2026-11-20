@@ -202,6 +202,8 @@ select public.receive_reservation(
   '[{"id":"e8900000-0000-4000-8000-000000000001","storage_path":"inbox/a8111111-1111-4111-8111-111111111111/e8900000-0000-4000-8000-000000000001.pdf",
      "filename":"voucher.pdf","mime":"application/pdf","size_bytes":1000,"width":null,"height":null}]'::jsonb,
   'email-1', null) as r;
+-- a tabela temporária é do superusuário; a pessoa (`login`) lê o id dela mais abaixo
+grant select on rr to authenticated;
 select is((select r ->> 'duplicate' from rr), 'false', 'a primeira vez grava');
 select is((select status || '|' || name || '|' || confirmation_code || '|' || amount::text || '|' || jsonb_array_length(files)::text
              from public.received_reservations where id = (select (r ->> 'received_id')::uuid from rr)),
