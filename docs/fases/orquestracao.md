@@ -522,6 +522,110 @@ Ubuntu, nenhum cenário rodou) e 13/11 (`app_parada_auto` e `app_clima`). É a 3
   junto com este relatório, o plano modificado e `docs/ideias/2026-11-15-quero-ir-num-cafe-colonial.md`.
 
 ### Sessão
+- **Aberta pelo Douglas às 21h46 de 15/11** (00h46 UTC de 16/11) num chat novo do VS Code, `session_id`
+  `061393b9-23af-4872-9d05-096269acd917`, com o prompt de colar do orquestrador, pela autorização antecipada
+  da seção 2. **No Opus 5.5** (as 770 respostas). Uma sessão só, sem resumo automático de contexto, em
+  duas sentadas: a noite de 15 para 16/11 (até o commit `fbed2f2` às 07h33 de 16/11) e a manhã de 20/11
+  (o fechamento, até o resumo final às 08h47 UTC). A conta pela transcrição: 770 respostas, 1,15 M tokens
+  de saída, 444 M de cache lido, 5,50 M de cache criado; sem o JSON do `claude -p`, o custo em dinheiro não
+  foi medido.
+- **Os commits:** 15 entre 22h01 de 15/11 e 07h33 de 16/11, todos sem coautoria: 3.0 (`81e6b8f`), 3.5
+  (`0bf186a`), 3.1, 3.2, 3.3, 3.4, 3.6 e `fase 24: as opções vêm do mapa` (`54f7378`, 22h48), depois um de
+  CI (`b20b5c0`), dois do que a CI mostrou (`891669a`, `d1eb161`), um do laboratório da produção
+  (`aa0cbcd`, a cena para de desenhar quando a câmera chega), um de números (`5a22f98`, D237) e a correção
+  da medição (`fbed2f2`, D238).
+- **Os pushes na branch:** seis, pela regra do push em lote: `b20b5c0` (CI 43788674571 vermelha: 61 de 65,
+  o modo de perto no SwiftShader, o `tela.spec` à noite, o axe nos cartões), `891669a` (CI 43791561969
+  vermelha: 62 de 65, a câmera que não chegava perto, o contraste das sugestões, o CLS com o relógio de
+  mentira), `d1eb161` (CI 43793793985 **verde** na segunda tentativa: a primeira cruzou a meia-noite de São
+  Paulo nos e2e de GPS, a armadilha registrada), `aa0cbcd` (CI 43830276646 verde), `5a22f98` (CI 43839885190
+  verde) e `fbed2f2` (CI 43849871077 verde, 16/11 10h33 UTC). Testes: 1.261 Vitest em 136 arquivos, 493
+  pgTAP, 66 Playwright.
+- **No hospedado:** a `find-places` (v1, depois republicada com a correção da D238 em 20/11; a lista do CLI
+  mostra v3) e a `plan-trip` (v3), pelo CLI com a lista explícita das duas; nenhuma migration, nenhum
+  secret pela sessão. **A `GEOAPIFY_API_KEY` o Douglas cadastrou na manhã de 16/11**, depois do laboratório
+  da produção (a D237 registra "ainda não existe"); ele colou a chave no chat de 15/11, e a sessão
+  recomendou gerar outra.
+- **O laboratório do preview, uma vez** (`d1eb161`, run 43797405990, 03h18–03h57 UTC de 16/11, índice de
+  CPU 2.715): 35 verdes, 3 pulados (prazo, retrospectiva, e o `app_conversa` com o motivo `no_source`: a
+  chave ainda não existia), **nenhum vermelho**; a captura `maquete-perto.png` ainda igual ao repouso
+  (corrigido em `aa0cbcd`).
+- **O merge** por fast-forward em dois passos: `aa0cbcd` na `main` às 08h39 UTC de 16/11 (CI 43832997456
+  verde) e `5a22f98` às 09h46 UTC (CI 43842732968 verde). **O laboratório da produção, uma vez**
+  (`aa0cbcd`, run 43834440413, 08h50–09h24 UTC): 33 verdes, 5 pulados (véspera, prazo, retrospectiva;
+  `app_conversa` por `no_source`; `app_clima` com o Open-Meteo fora), **nenhum vermelho**; a
+  `maquete-perto.png` enfim de perto; Lighthouse 94–98 / 100 / 100.
+- **A medição com leituras reais:** a primeira (run 43848591567, 16/11 10h24 UTC, em `5a22f98`, disparada
+  pelo Douglas com a chave) **vermelha pelo que ela cobra** (a busca funcionou, US$ 0,056 em 5 leituras e 9
+  buscas, mas faltaram o Torten Paradies nas opções, `amenity=cafe` com `cuisine=…regional` e sem
+  "colonial" no nome, e o Bioparque nas sugestões, atrás de vinte bustos e casas mais perto); a correção
+  `fbed2f2` (D238: a `cuisine` do OSM na resposta da função, a busca pela cozinha, os marcos em busca
+  própria, os memoriais fora) teve a CI verde em 16/11 e **a sessão parou antes de publicar e medir de
+  novo**. Em 20/11, retomada pelo Douglas: a `find-places` republicada às 08h43 UTC, a `main` levada a
+  `fbed2f2` (deploy da Vercel às 08h44 UTC) e **a segunda medição verde** (run 44705028598, 08h45–08h46
+  UTC: em Pomerode, 4 opções com o Torten Paradies e o Mahlzeit; 6 sugestões com o Bioparque Zoo Pomerode,
+  dois museus e um mirante; US$ 0,0525 em 5 leituras, 16 buscas; as duas medições, US$ 0,109, dentro do
+  teto de US$ 0,25).
+- **Os agendados** de 16, 17, 18 e 19/11 (em `5a22f98`) terminaram com sucesso; o de 16/11, o primeiro com a
+  chave, teve o `app_conversa` verde com a Geoapify de verdade (6 opções em 2,3 s, 6 sugestões desligadas).
+- **O resumo final** às 08h47 UTC de 20/11. A sessão deixou esta seção em branco (preenchida pelo orquestrador
+  às 09h08 UTC de 20/11 pelos registros do GitHub e pela transcrição) e não apagou a `origin/fase-24`.
+
+### Portão de saída (conferido às 09h08 UTC de 20/11 pelo orquestrador, a pedido do Douglas: "proxima")
+- ponta da `main` = `fbed2f2`, com o commit `fase 24: as opções vêm do mapa` (`54f7378`): sim.
+- CI verde nesse sha na branch: sim (43849871077). CI da `main` nesse sha: verde (run 44704864787). Laboratório do preview
+  uma vez e da produção uma vez, verdes: sim. A medição: duas, a segunda verde pela regra (a primeira
+  vermelha por um defeito que a CI passou a cobrir).
+- `docs/decisoes.md` com a seção "Fase 24 · As opções vêm do mapa", D224 a D238 sem buraco: sim. A D235 diz o
+  que mudou na D29, na D207 e na D208, e as três têm a linha "Revista na fase 24"; a D223 também. **As D da
+  próxima fase começam na D239.** Nenhuma migration (a próxima continua sendo a `0016`). Prompt mestre na
+  v10, com a 9.5 (`find-places`) e a tabela "(24)". `teste-final.md` com o 1.29.
+- `docs/fases/fase-24.md`, este relatório, o plano e `docs/ideias/2026-11-15-quero-ir-num-cafe-colonial.md`
+  commitados: sim (`git status` limpo fora de `.claude/`). Memória do projeto com o fechamento de 20/11,
+  o estado, os números e as armadilhas: sim (pela sessão). Resumo final: sim.
+- **O que ficou (para a 3.0 da próxima fase):** apagar a `origin/fase-24`; ler a CI da `main` em `fbed2f2`
+  se ainda não tiver terminado; ler o agendado de 20/11, o primeiro com a correção da medição; um pedido
+  sem tipo de lugar ("Serra Gaúcha em dezembro") dá opções genéricas em volta da área (visto na medição,
+  sem correção; para a 23 ou uma correção própria).
+- **Pendências só do Douglas:** gerar outra chave na Geoapify e cadastrá-la de novo (a cadastrada passou pelo
+  chat); a linha `GEOAPIFY_API_KEY=` no `.env.example` (a permissão deste Mac impede as sessões de ler
+  `.env*`; **não conferi** se a linha está lá); o `.claude/` fora do git; o `progressao.spec` (D167); a
+  migration de `trips.car_*` (liberada a partir de ~21/11, com o `--dry-run` lido); o Supabase local de
+  15/11; a instância do Overpass (o app não depende mais dele); o `pnpm audit` (D163).
+
+## Fase 18 · Reservas e gastos sem digitar
+
+### Portão de entrada (aberto às 09h08 UTC de 20/11, a pedido do Douglas: "proxima")
+- fase 24 na `main`: sim, `fbed2f2`, a ponta. CI da `main` nesse sha: verde (run 44704864787). Laboratório da produção:
+  verde (run 43834440413, em `aa0cbcd`); a segunda medição verde em `fbed2f2` (run 44705028598).
+- `docs/decisoes.md` com a seção da fase 24: sim, D224 a D238. **As D da fase 18 começam na D239.** A
+  migration `0016` é desta fase, provavelmente (o tipo de aviso novo, o `kind` novo em `ai_imports`, o
+  código do endereço por pessoa, a reserva recebida, o anexo do gasto); no hospedado, funções novas e
+  republicadas; **os secrets novos (`RESEND_API_KEY` para as funções, `RESEND_WEBHOOK_SECRET`), o MX na
+  GoDaddy e o webhook no Resend são do Douglas.**
+- memória do projeto atualizada depois da fase 24: sim (pela sessão), completada pelo orquestrador (o
+  parágrafo da fase 18).
+- dependência (17 → 18): satisfeita. A 18 é a próxima pela ordem confirmada em 15/11 (24 → 18 → 23 → 19 →
+  20 → 21).
+- `docs/fases/fase-18.md` escrito às 09h08 UTC de 20/11 pelo orquestrador, a partir do plano (a fase 18 com a
+  decisão do e-mail de 15/11), das D76 a D90, D93 a D107, D127 a D140, D11, D130, D224 a D238, da memória,
+  da documentação pública do Resend (o recebimento: o MX pelo painel, o evento `email.received` só com
+  metadados, o conteúdo e os anexos pela API, a assinatura svix, o Free com recebimento e 1 webhook), da
+  BrasilAPI (conferida com uma chamada real) e da Anthropic (PDF e imagem como `document` e `image`), e de
+  um levantamento do código em `fbed2f2` (reservas, gastos, anexos e a fila, o motor da importação, as
+  funções sem JWT e o admin, os avisos e o `due_notifications`, o perfil e o sync por pessoa, o manifest,
+  os testes e o laboratório). **Marcado como não conferido** pelo orquestrador, para a sessão conferir:
+  o layout da chave da NFC-e, o limite da BrasilAPI, o estado do WebKit 194593, o `BarcodeDetector` no
+  Safari, o tamanho máximo de anexo no Resend. Com a 3.0 (a CI da `main`, o agendado, a `fase-24` remota, a
+  `0016`), a leitura da confirmação (colar e anexar; a função sobre o motor da importação que lê o anexo do
+  Storage), "Procurar hotel perto de", o `share_target` no Android, o e-mail encaminhado (o código por
+  pessoa, a função `inbound-mail` com a assinatura e RPCs estreitas, Reservas recebidas por pessoa, o aviso
+  por um ramo do `due_notifications`), a nota (a foto como anexo do gasto, o QR da NFC-e e a BrasilAPI), os
+  testes, três cenários novos e a medição `medir-leitura`, a documentação (D77, D78, D87 e D101 revistas;
+  prompt mestre v11). Fora do git até o commit de fechamento da fase, junto com este relatório.
+
+### Sessão
 _(a abrir pelo Douglas num chat novo; a preencher no próximo passo)_
+
 
 

@@ -31,6 +31,7 @@ ficam na pasta como registro; tudo o que eles pedem está aqui.
 | iPhone F (fase 16) | em casa, com outra pessoa do time no aparelho dela | 1.26 | 25 min |
 | iPhone G (fase 17) | em casa, com a conversa do WhatsApp da viagem; a saída de hoje na rua | 1.27 | 35 min |
 | iPhone H (fase 22) | em casa e no carro, no Safari sem instalar e no app instalado, de dia e depois das 18:30 | 1.28 | 25 min |
+| iPhone I (fase 18) | em casa, com um e-mail de confirmação de verdade e uma nota fiscal com QR na mão | 1.30 | 30 min |
 
 **Total: umas 8 h no iPhone e 3 h 15 no Android**, perto de 11 h em três dias seguidos, mais os
 toques com hora marcada. A sentada C pode ficar para depois do Android.
@@ -100,7 +101,10 @@ Um agente automático roda todo dia às 3h07 na produção, e no preview de cada
   principal e o offline num WebKit com o perfil do iPhone 15, e confere contraste, alvos de toque e
   nomes de botão;
 - a parada que se registra sozinha (fase 15), com uma trilha forjada: o lab-a e o lab-b no mesmo
-  "carro", 9 min a 80 m da estrada, uma parada só no servidor, Posto, com o nome e as horas (D188).
+  "carro", 9 min a 80 m da estrada, uma parada só no servidor, Posto, com o nome e as horas (D188);
+- a confirmação lida (colar e anexar) e a nota fotografada, com a IA e a BrasilAPI respondidas no
+  navegador, e um e-mail de verdade pelo Resend até a reserva recebida e o aviso no push-receiver,
+  quando o secret existe (fase 18, D251).
 
 Por isso este roteiro fica com o que só um aparelho de verdade prova: a entrega do push pela Apple
 e pelo FCM, com o app fechado e o celular bloqueado; o selo no ícone; os botões da notificação no
@@ -868,6 +872,35 @@ navegador) e no laboratório (o Chromium de verdade, com a Geoapify de verdade p
 
 Anotações:
 
+### 1.30 Reservas e gastos sem digitar · 30 min (fase 18) · sem prova até a viagem
+
+Como o 1.24 a 1.29, fica como documentação até a viagem (D239 a D252). A leitura (texto, PDF e print),
+o endereço de e-mail, a função de recebimento, as recebidas, o aviso, o QR da NFC-e e a nota anexada
+estão provados na CI (Vitest, pgTAP, as funções com tudo de mentira e os e2e, com a IA e a BrasilAPI
+respondidas no navegador), no laboratório e na medição; o que falta é um celular de verdade, um e-mail
+de verdade e uma nota de papel.
+
+- [ ] **Colar e anexar.** Em Reservas › "Ler a confirmação", cole o texto de um e-mail de confirmação
+  de verdade e anexe o print da tela; "Ler a confirmação": a reserva vem preenchida, a tela diz o que a
+  confirmação não dizia, e nada foi inventado (compare campo a campo com o e-mail). Salve: o print está
+  na reserva, e abre em modo avião. O mesmo com um PDF de voucher.
+- [ ] **O e-mail encaminhado, de verdade.** Copie o endereço em Reservas › "Encaminhar um e-mail
+  para…" e, do Mail do iPhone, encaminhe uma confirmação de verdade **da conta com que você entrou no
+  app**. Em até uns 2 min: o aviso "Chegou a reserva: <nome>" no celular bloqueado, e a reserva na
+  viagem cujas datas a contêm, ou em "Reservas recebidas" (ponha numa viagem num toque; o anexo vem
+  junto). Encaminhe de outra conta: nada chega (é a regra, não um defeito).
+- [ ] **A nota com QR.** Num gasto novo, "Fotografar a nota" numa NFC-e de papel (um posto ou um
+  mercado): o estabelecimento aparece pelo CNPJ do QR, o total e a data pela foto; confira contra o
+  papel e confirme. A nota está na folha do gasto e abre em modo avião. Uma nota **sem** QR (um recibo
+  de cartão): a IA lê o que dá; o que não está na nota fica vazio.
+- [ ] **"Procurar hotel perto de".** Numa hospedagem nova ligada a uma parada, sem código: o link abre o
+  Booking com o lugar e a noite certa.
+- [ ] **O VoiceOver nos botões novos.** "Ler a confirmação", o campo do texto, "Anexo a ler" e "Tirar",
+  o cartão do endereço com "Copiar", a seção "Reservas recebidas" com "Pôr nesta viagem" e "Dispensar",
+  "Fotografar a nota" e "Abrir a nota".
+
+Anotações:
+
 ## Parte 2 · Android
 
 O mesmo percurso, mais curto: aqui está só o que muda no Android, e no fim o resto, item a item,
@@ -1070,6 +1103,11 @@ Anotações:
 - [ ] **As opções vêm do mapa (fase 24), o mesmo do 1.29** no Android: ditar o pedido pelo teclado do
   Google, tocar nas opções e nas sugestões com o dedo, o Chegamos! em casa de verdade, a porcentagem
   numa ida e volta, e o TalkBack nos cartões, nas sugestões e na escolha do local.
+- [ ] **Reservas e gastos sem digitar (fase 18), o mesmo do 1.30** no Android, mais o que só ele tem:
+  no Gmail, Compartilhar › Viajei com um e-mail de confirmação (e, no Booking, Compartilhar a reserva):
+  a tela pergunta de qual viagem é e cai em "Ler a confirmação" com o texto e o anexo no lugar; a foto
+  da nota com a câmera do Android (o QR lido pelo `BarcodeDetector` do Chrome); e o TalkBack nos botões
+  novos.
 
 Anotações:
 
