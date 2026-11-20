@@ -103,9 +103,9 @@ declare
   v_alphabet constant text := '23456789abcdefghjkmnpqrstuvwxyz';
   v_bytes bytea;
   v_code  text;
-  v_i     integer;
   v_b     integer;
 begin
+  -- o laço `for` declara a própria variável (declará-la fora seria sombreá-la: o lint do banco acusa)
   loop
     v_code := 'r-';
     while char_length(v_code) < 8 loop
