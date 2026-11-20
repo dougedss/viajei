@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { BrowserContext, Locator, Page } from '@playwright/test';
 import {
   toAiConfirmation,
@@ -832,8 +831,8 @@ function appSairPendente(r: RoadRun): Promise<Check> {
 const SP_TODAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' });
 const READ_ROUTE = '**/functions/v1/read-document';
 const BRASILAPI_ROUTE = 'https://brasilapi.com.br/**';
-/** a imagem fixa do e2e: o QR de uma NFC-e com a chave fechando o DV (`e2e/nota.spec.ts`) */
-const NFCE_QR = fileURLToPath(new URL('../../e2e/helpers/fixtures/nfce-qr.png', import.meta.url));
+/** a imagem fixa do e2e: o QR de uma NFC-e com a chave fechando o DV (`e2e/nota.spec.ts`); pela raiz */
+const NFCE_QR = join(process.cwd(), 'e2e/helpers/fixtures/nfce-qr.png');
 const CNPJ_NO_QR = '00156225000131';
 
 const valueIs = async (locator: Locator, expected: string, what: string) => {
