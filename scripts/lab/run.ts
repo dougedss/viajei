@@ -70,6 +70,7 @@ import { expurgo } from './purge.ts';
 import { measureConversa } from './measure-conversa.ts';
 import { measureImport } from './measure-import.ts';
 import { measureRead } from './measure-read.ts';
+import { measureLandmark, seedLabLandmark } from './measure-landmark.ts';
 import { NOT_ARMED, runArmed } from './armed.ts';
 import { prepareRoad, resetRoad } from './road.ts';
 import { ensureTeamMember, kindsOnly, log, sleep, type Session } from './session.ts';
@@ -576,6 +577,10 @@ async function main(): Promise<number> {
   if (argv.includes('--medir-leitura')) {
     return measureRead(cfg, await signIn(cfg, LAB_USERS.a));
   }
+  // a medição do cartão-postal (fase 23): a geração de verdade do lugar da régua, uma vez
+  if (argv.includes('--medir-cartao-postal')) {
+    return measureLandmark(cfg, await signIn(cfg, LAB_USERS.a), { opus: argv.includes('--opus') });
+  }
   // só o e-mail recebido (fase 18): um e-mail de verdade pelo Resend até a recebida e o aviso, sem os
   // outros cenários e sem navegador; uma assinatura do lab-a no receptor, criada e apagada aqui
   if (argv.includes('--email')) {
@@ -918,7 +923,10 @@ async function main(): Promise<number> {
               : skipped('app_reabrir', 'Depende do Partiu! na notificação.'),
           );
           appChecks.push(await appExtras(app));
-          appChecks.push(await appMaquete(app));
+          // o cartão-postal semeado (fase 23): a estufa à mão, publicada, no lugar do destino do
+          // laboratório (um lugar do laboratório, nunca um de verdade), pelo gerador simulado: custo zero
+          const seeded = await seedLabLandmark(a);
+          appChecks.push(await appMaquete(app, seeded));
           log(`app: ${appChecks.map((c) => `${c.scenario} ${c.status}`).join(', ')}`);
         } else if (app) {
           appChecks.push(

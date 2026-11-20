@@ -1,4 +1,4 @@
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   chromium,
@@ -12,6 +12,7 @@ import {
 import { ROLAGEM_LATERAL } from '../../src/features/lab/guards.ts';
 import type { LabScenario } from '../../src/features/lab/scenarios.ts';
 import type { Check } from './evaluate.ts';
+import { consoleReport, failureDetail } from './page-errors.ts';
 
 /**
  * O teste manual, simulado num navegador de verdade (Chromium, perfil de Android) contra o app
@@ -56,7 +57,7 @@ export type App = {
   errors: () => string[];
 };
 
-type Step = { step: string; ok: boolean; ms: number; detail?: string };
+type Step = { step: string; ok: boolean; ms: number; detail?: string; erros?: string[] };
 
 /**
  * As tarefas longas da thread principal (50 ms ou mais), desde que a página abriu: é o que diz se o
@@ -347,11 +348,28 @@ export async function runSteps(
       await run();
       done.push({ step, ok: true, ms: Date.now() - t0 });
     } catch (err) {
-      const message = (err instanceof Error ? err.message : String(err)).split('\n')[0] ?? '';
-      done.push({ step, ok: false, ms: Date.now() - t0, detail: message.slice(0, 900) });
+      const message = err instanceof Error ? err.message : String(err);
+      // o que a página disse (fase 23, 3.0): a tela de erro do app, se apareceu, e os erros dela
+      const routeError = await app.page
+        .locator('[data-route-error]')
+        .first()
+        .getAttribute('data-route-error', { timeout: 500 })
+        .catch(() => null);
+      const erros = app.errors();
+      done.push({
+        step,
+        ok: false,
+        ms: Date.now() - t0,
+        detail: failureDetail(message, routeError).slice(0, 900),
+        ...(erros.length > 0 ? { erros } : {}),
+      });
       await app.page
         .screenshot({ path: join(app.target.artifactsDir, `${scenario}.png`), fullPage: true })
         .catch(() => undefined);
+      await writeFile(
+        join(app.target.artifactsDir, `${scenario}-console.txt`),
+        consoleReport({ scenario, step, routeError, errors: erros }),
+      ).catch(() => undefined);
       break;
     }
   }
@@ -785,9 +803,12 @@ const PILULAS_SOB_A_BARRA = `(() => {
  * começou o movimento, e o "Rever o dia" voltar prova que ele terminou. Motor, tempos, capturas e
  * estados da câmera ficam em `data` e nos artefatos.
  */
-export function appMaquete(app: App): Promise<Check> {
+export function appMaquete(
+  app: App,
+  seeded: { ok: boolean; detail: string } | null = null,
+): Promise<Check> {
   const { page, target } = app;
-  const info: Record<string, unknown> = {};
+  const info: Record<string, unknown> = { peca_semeada: seeded?.ok ?? false };
   const world = page.locator('[data-world="webgl2"], [data-world="webgpu"]');
   const hud = page.locator('[data-world-hud]');
   const shot = (name: string) =>
@@ -840,6 +861,29 @@ export function appMaquete(app: App): Promise<Check> {
           // a captura da maquete de dia, com as peças e as pílulas, para o Douglas ver ao lado do
           // esboço (o artefato sobe sempre, não só na falha)
           await shot('maquete.png');
+        },
+      ],
+      [
+        'o cartão-postal semeado está em cena no lugar da peça do tipo (fase 23)',
+        async () => {
+          if (!seeded?.ok)
+            throw new Error(`a peça não foi semeada: ${seeded?.detail ?? 'sem semeadura'}`);
+          // o catálogo chega pelo pedido que a maquete faz ao abrir; a peça conta no palco
+          const pecas = await until(
+            () => world.getAttribute('data-world-landmarks'),
+            (v) => v === '1',
+            'o cartão-postal semeado não entrou em cena',
+          );
+          info.pecas_em_cena = Number(pecas);
+          // a peça de perto, pela chave da URL (a câmera de repouso vira um close nela), ao lado da régua
+          await montar('?peca=1');
+          await page
+            .locator('[data-world-camera-settled="true"]')
+            .waitFor({ timeout: WORLD_TIMEOUT });
+          await page.waitForTimeout(1_500);
+          await shot('maquete-peca.png');
+          await montar();
+          await hud.locator('[data-pill]:not([hidden])').first().waitFor();
         },
       ],
       [
@@ -940,7 +984,13 @@ export function appMaquete(app: App): Promise<Check> {
             (n) => n === total,
             `pílulas fora de cena à noite (de ${String(total)})`,
           );
-          // a noite entra em 1,5 s de transição
+          // a noite entra em 1,5 s de transição; a peça do lugar acende como as do tipo
+          if (seeded?.ok)
+            await until(
+              () => world.getAttribute('data-world-landmarks'),
+              (v) => v === '1',
+              'a peça sumiu à noite',
+            );
           await page.waitForTimeout(2_500);
           await shot('maquete-noite.png');
         },

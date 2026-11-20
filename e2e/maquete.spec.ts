@@ -4,6 +4,7 @@ import { dateInSaoPaulo } from './helpers/dates.ts';
 import { atualizar, inserir } from './helpers/db.ts';
 import { uuidV4, uuidV5 } from './helpers/ids.ts';
 import { criarUsuario } from './helpers/users.ts';
+import { ESTUFA_CURITIBA } from '../src/art/landmarks/samples/estufa-curitiba.ts';
 
 const SENHA = 'viajei123';
 
@@ -47,6 +48,41 @@ async function viagemComParadas(page: Page): Promise<string> {
   return tripUrl;
 }
 
+/**
+ * O cartão-postal semeado (fase 23): o Parque ganha uma coordenada (a chave do lugar nasce dela) e o
+ * catálogo do servidor ganha a estufa escrita à mão, publicada, apontando para essa chave, pela API
+ * do teste (o que o gerador faria). A maquete deve montá-la no lugar da miniatura do tipo.
+ */
+async function semearCartaoPostal(tripId: string): Promise<void> {
+  const landmarkId = uuidV4();
+  await atualizar('stops', `trip_id=eq.${tripId}&name=eq.Parque`, {
+    lat: -25.4428,
+    lng: -49.2392,
+    updated_at: new Date().toISOString(),
+  });
+  await inserir('landmarks', [
+    {
+      id: landmarkId,
+      key: `lab:e2e-${landmarkId.slice(0, 8)}`,
+      name: 'Estufa do teste',
+      recipe: ESTUFA_CURITIBA,
+      version: 1,
+      status: 'published',
+      generations: 1,
+      published_at: new Date().toISOString(),
+      sources: { lab: true },
+    },
+  ]);
+  await inserir('landmark_places', [
+    {
+      place_key: 'geo:parque@-25.443,-49.239',
+      kind: 'stop',
+      landmark_id: landmarkId,
+      status: 'linked',
+    },
+  ]);
+}
+
 /** A âncora do carro, em px do palco: o HUD a põe onde o carro está, pelo laço da cena. */
 const ANCORA_DO_CARRO = `(() => {
   const el = document.querySelector('[data-world-car-anchor]');
@@ -79,11 +115,17 @@ test('a tela da viagem monta a maquete do dia inteiro, o toque no carro aproxima
   test.setTimeout(240_000);
   await entrar(page, 'dono@viajei.local');
   const tripUrl = await viagemComParadas(page);
+  await semearCartaoPostal(tripUrl.split('/').pop() ?? '');
+  // a coordenada do Parque chega pelo sync ao abrir; o catálogo, pelo pedido que a maquete faz
+  await page.goto('/viagens');
+  await expect(page.getByRole('heading', { name: 'Suas viagens' })).toBeVisible();
 
   await page.goto(tripUrl);
   await expect(page.getByRole('heading', { name: 'Agora' })).toBeVisible();
   const maquete = page.locator('[data-world="webgl2"], [data-world="webgpu"]');
   await expect(maquete).toBeVisible({ timeout: 60_000 });
+  // o cartão-postal semeado toma o lugar da miniatura do tipo (fase 23): a peça montada conta no palco
+  await expect(maquete).toHaveAttribute('data-world-landmarks', '1', { timeout: 60_000 });
   // o 3D é decorativo: o canvas fica escondido do leitor de tela
   await expect(page.locator('[aria-hidden="true"] canvas')).toHaveCount(1);
   // o dia inteiro na tela (fase 22): depois da abertura, uma pílula por parada em cena, a do Parque
@@ -150,6 +192,8 @@ test('a tela da viagem monta a maquete do dia inteiro, o toque no carro aproxima
   await expect
     .poll(() => page.locator('[data-pill]:not([hidden])').count(), { timeout: 60_000 })
     .toBe(2);
+  // a peça do lugar também à noite (as janelas e a poça acendem por emissão, como as do tipo)
+  await expect(maquete).toHaveAttribute('data-world-landmarks', '1', { timeout: 60_000 });
   await page.waitForTimeout(2_000);
   await test.info().attach('maquete-noite', {
     body: await page.screenshot(),
