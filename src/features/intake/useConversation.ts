@@ -230,7 +230,7 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
         importId: session.current.phase.kind === 'arriving' ? session.current.phase.id : null,
         partial: false,
         checked: { removed: [], unchecked: [], missing: prepared.missing.map((n) => n.name) },
-        plan: { suggestions: built.suggestions, schedule: built.schedule },
+        plan: { suggestions: built.suggestions, schedule: built.schedule, osm: built.osm },
       },
     );
     await saveReview(NEW_TRIP_KEY, stored);

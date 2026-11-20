@@ -1,12 +1,16 @@
 import { isRouteErrorResponse, useRouteError } from 'react-router';
 import { Button } from '@/components/ui/Button.tsx';
 import { Wordmark } from '@/components/ui/Wordmark.tsx';
+import { routeErrorName } from './route-error-name.ts';
 
 export function RouteError() {
   const error = useRouteError();
   const notFound = isRouteErrorResponse(error) && error.status === 404;
   return (
-    <main className="grid min-h-full place-content-center gap-4 bg-paper py-10 safe-x text-center">
+    <main
+      className="grid min-h-full place-content-center gap-4 bg-paper py-10 safe-x text-center"
+      data-route-error={routeErrorName(error)}
+    >
       <Wordmark className="text-[40px]" />
       <h1 className="font-num text-[28px] font-semibold">
         {notFound ? 'Página não encontrada' : 'Algo deu errado por aqui'}

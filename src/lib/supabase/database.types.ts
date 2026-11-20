@@ -303,6 +303,108 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"landmark_jobs": {
+                  Row: {
+                    "attempts": number,"code": string | null,"created_at": string,"id": string,"input": Json,"kind": string,"place_key": string,"remake_id": string | null,"requested_by": string | null,"run_after": string,"started_at": string | null,"status": string,"trip_id": string | null,"updated_at": string,"variant": number | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "attempts"?: number,"code"?: string | null,"created_at"?: string,"id"?: string,"input": Json,"kind": string,"place_key": string,"remake_id"?: string | null,"requested_by"?: string | null,"run_after"?: string,"started_at"?: string | null,"status"?: string,"trip_id"?: string | null,"updated_at"?: string,"variant"?: number | null
+                  }
+                  Update: {
+                    "attempts"?: number,"code"?: string | null,"created_at"?: string,"id"?: string,"input"?: Json,"kind"?: string,"place_key"?: string,"remake_id"?: string | null,"requested_by"?: string | null,"run_after"?: string,"started_at"?: string | null,"status"?: string,"trip_id"?: string | null,"updated_at"?: string,"variant"?: number | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "landmark_jobs_place_key_fkey"
+      columns: ["place_key"]
+isOneToOne: false
+      referencedRelation: "landmark_places"
+      referencedColumns: ["place_key"]
+    },{
+      foreignKeyName: "landmark_jobs_remake_id_fkey"
+      columns: ["remake_id"]
+isOneToOne: false
+      referencedRelation: "landmark_remakes"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "landmark_jobs_requested_by_fkey"
+      columns: ["requested_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "landmark_jobs_trip_id_fkey"
+      columns: ["trip_id"]
+isOneToOne: false
+      referencedRelation: "trips"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"landmark_places": {
+                  Row: {
+                    "code": string | null,"created_at": string,"kind": string,"landmark_id": string | null,"place_key": string,"status": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "code"?: string | null,"created_at"?: string,"kind": string,"landmark_id"?: string | null,"place_key": string,"status"?: string,"updated_at"?: string
+                  }
+                  Update: {
+                    "code"?: string | null,"created_at"?: string,"kind"?: string,"landmark_id"?: string | null,"place_key"?: string,"status"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "landmark_places_landmark_id_fkey"
+      columns: ["landmark_id"]
+isOneToOne: false
+      referencedRelation: "landmarks"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"landmark_remakes": {
+                  Row: {
+                    "chosen": number | null,"created_at": string,"decided_at": string | null,"id": string,"landmark_id": string,"options": Json,"requested_by": string | null,"status": string,"trip_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "chosen"?: number | null,"created_at"?: string,"decided_at"?: string | null,"id"?: string,"landmark_id": string,"options"?: Json,"requested_by"?: string | null,"status"?: string,"trip_id"?: string | null
+                  }
+                  Update: {
+                    "chosen"?: number | null,"created_at"?: string,"decided_at"?: string | null,"id"?: string,"landmark_id"?: string,"options"?: Json,"requested_by"?: string | null,"status"?: string,"trip_id"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "landmark_remakes_landmark_id_fkey"
+      columns: ["landmark_id"]
+isOneToOne: true
+      referencedRelation: "landmarks"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "landmark_remakes_requested_by_fkey"
+      columns: ["requested_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "landmark_remakes_trip_id_fkey"
+      columns: ["trip_id"]
+isOneToOne: false
+      referencedRelation: "trips"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"landmarks": {
+                  Row: {
+                    "check_round": number,"created_at": string,"generations": number,"id": string,"key": string,"modeled": Json,"name": string,"published_at": string | null,"recipe": Json | null,"retired_reason": string | null,"sources": Json,"status": string,"updated_at": string,"version": number,"wikidata": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "check_round"?: number,"created_at"?: string,"generations"?: number,"id"?: string,"key": string,"modeled"?: Json,"name": string,"published_at"?: string | null,"recipe"?: Json | null,"retired_reason"?: string | null,"sources"?: Json,"status"?: string,"updated_at"?: string,"version"?: number,"wikidata"?: string | null
+                  }
+                  Update: {
+                    "check_round"?: number,"created_at"?: string,"generations"?: number,"id"?: string,"key"?: string,"modeled"?: Json,"name"?: string,"published_at"?: string | null,"recipe"?: Json | null,"retired_reason"?: string | null,"sources"?: Json,"status"?: string,"updated_at"?: string,"version"?: number,"wikidata"?: string | null
+                  }
+                  Relationships: []
                 },"notification_prefs": {
                   Row: {
                     "created_at": string,"enabled": boolean,"field_versions": NonNullable<Json>,"id": string,"kinds": NonNullable<Json>,"lead_minutes": number,"morning_time": string,"synced_at": string,"trip_id": string,"updated_at": string,"user_id": string
@@ -493,14 +595,14 @@ isOneToOne: false
                   ]
                 },"stops": {
                   Row: {
-                    "address": string | null,"closes_at": string | null,"created_at": string,"deleted_at": string | null,"departed_at": string | null,"done_at": string | null,"done_by": string | null,"field_versions": NonNullable<Json>,"id": string,"kind": string,"lat": number | null,"lng": number | null,"name": string,"notes": string | null,"position": string,"skipped": boolean,"source": string,"synced_at": string,"time": string | null,"travel_minutes_to_next": number | null,"trip_day_id": string,"trip_id": string,"updated_at": string,"url": string | null
+                    "address": string | null,"closes_at": string | null,"created_at": string,"deleted_at": string | null,"departed_at": string | null,"done_at": string | null,"done_by": string | null,"field_versions": NonNullable<Json>,"id": string,"kind": string,"lat": number | null,"lng": number | null,"name": string,"notes": string | null,"osm_id": number | null,"osm_type": string | null,"position": string,"skipped": boolean,"source": string,"synced_at": string,"time": string | null,"travel_minutes_to_next": number | null,"trip_day_id": string,"trip_id": string,"updated_at": string,"url": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "address"?: string | null,"closes_at"?: string | null,"created_at"?: string,"deleted_at"?: string | null,"departed_at"?: string | null,"done_at"?: string | null,"done_by"?: string | null,"field_versions"?: NonNullable<Json>,"id": string,"kind": string,"lat"?: number | null,"lng"?: number | null,"name": string,"notes"?: string | null,"position": string,"skipped"?: boolean,"source"?: string,"synced_at": string,"time"?: string | null,"travel_minutes_to_next"?: number | null,"trip_day_id": string,"trip_id": string,"updated_at": string,"url"?: string | null
+                    "address"?: string | null,"closes_at"?: string | null,"created_at"?: string,"deleted_at"?: string | null,"departed_at"?: string | null,"done_at"?: string | null,"done_by"?: string | null,"field_versions"?: NonNullable<Json>,"id": string,"kind": string,"lat"?: number | null,"lng"?: number | null,"name": string,"notes"?: string | null,"osm_id"?: number | null,"osm_type"?: string | null,"position": string,"skipped"?: boolean,"source"?: string,"synced_at": string,"time"?: string | null,"travel_minutes_to_next"?: number | null,"trip_day_id": string,"trip_id": string,"updated_at": string,"url"?: string | null
                   }
                   Update: {
-                    "address"?: string | null,"closes_at"?: string | null,"created_at"?: string,"deleted_at"?: string | null,"departed_at"?: string | null,"done_at"?: string | null,"done_by"?: string | null,"field_versions"?: NonNullable<Json>,"id"?: string,"kind"?: string,"lat"?: number | null,"lng"?: number | null,"name"?: string,"notes"?: string | null,"position"?: string,"skipped"?: boolean,"source"?: string,"synced_at"?: string,"time"?: string | null,"travel_minutes_to_next"?: number | null,"trip_day_id"?: string,"trip_id"?: string,"updated_at"?: string,"url"?: string | null
+                    "address"?: string | null,"closes_at"?: string | null,"created_at"?: string,"deleted_at"?: string | null,"departed_at"?: string | null,"done_at"?: string | null,"done_by"?: string | null,"field_versions"?: NonNullable<Json>,"id"?: string,"kind"?: string,"lat"?: number | null,"lng"?: number | null,"name"?: string,"notes"?: string | null,"osm_id"?: number | null,"osm_type"?: string | null,"position"?: string,"skipped"?: boolean,"source"?: string,"synced_at"?: string,"time"?: string | null,"travel_minutes_to_next"?: number | null,"trip_day_id"?: string,"trip_id"?: string,"updated_at"?: string,"url"?: string | null
                   }
                   Relationships: [
                     {
@@ -697,6 +799,39 @@ isOneToOne: false
                            },
 "lab_grant":
 { Args: { "p_email": string,"p_role": string }; Returns: string
+                           },
+"lab_seed_landmark":
+{ Args: { "p_name": string,"p_place_key": string,"p_recipe": Json }; Returns: string
+                           },
+"landmark_check_target":
+{ Args: { "p_landmark": string,"p_user": string }; Returns: Json
+                           },
+"landmark_choose":
+{ Args: { "p_choice": number,"p_remake": string }; Returns: Json
+                           },
+"landmark_claim":
+{ Args: { "p_now"?: string }; Returns: Json
+                           },
+"landmark_fail":
+{ Args: { "p_code": string,"p_job": string,"p_retry": boolean }; Returns: undefined
+                           },
+"landmark_identified":
+{ Args: { "p_job": string,"p_key": string,"p_modeled": Json,"p_name": string,"p_wikidata": string }; Returns: Json
+                           },
+"landmark_remake":
+{ Args: { "p_landmark": string,"p_trip": string }; Returns: string
+                           },
+"landmark_retire":
+{ Args: { "p_landmark": string,"p_reason": string }; Returns: undefined
+                           },
+"landmark_store":
+{ Args: { "p_job": string,"p_modeled": Json,"p_recipe": Json,"p_sources": Json }; Returns: Json
+                           },
+"landmark_sync":
+{ Args: { "p_places": Json,"p_trip": string }; Returns: Json
+                           },
+"landmark_verdict":
+{ Args: { "p_landmark": string,"p_recipe": Json,"p_verdict": string,"p_version": number }; Returns: string
                            },
 "lab_mark_horizon":
 { Args: { "p_trip_id": string }; Returns: undefined

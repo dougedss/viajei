@@ -181,7 +181,14 @@ export type Assembled = {
   schedule: Schedule;
   /** as chaves de cada ponto do dia, na ordem, com o tipo e o lugar (para refazer os horários) */
   points: Record<string, ScheduleStop[]>;
+  /**
+   * o objeto do OpenStreetMap de cada lugar escolhido, pela chave da revisão (fase 23): é por ele que
+   * o cartão-postal do lugar se acha no catálogo. Até a fase 23 ele se perdia aqui.
+   */
+  osm: Record<string, OsmRef>;
 };
+
+export type OsmRef = { type: 'node' | 'way' | 'relation'; id: number };
 
 const plusDays = (date: string, n: number) =>
   new Date(Date.parse(`${date}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
@@ -318,6 +325,7 @@ export function assemble(input: AssembleInput): Assembled {
   const legs: Record<string, number> = {};
   const points: Record<string, ScheduleStop[]> = {};
   const suggestions: Assembled['suggestions'] = {};
+  const osm: Assembled['osm'] = {};
   // a rota real liga os pontos ligados de saída: a origem, as escolhas na ordem e a volta
   const routed: string[] = [];
   slots.forEach((day, d) => {
@@ -329,6 +337,7 @@ export function assemble(input: AssembleInput): Assembled {
       }
       if (slot.suggestion) suggestions[key] = slot.suggestion;
       else if (Number.isFinite(slot.pick.place.lat)) routed.push(key);
+      if (slot.pick.place.osm) osm[key] = slot.pick.place.osm;
       return {
         key,
         kind: slot.pick.kind,
@@ -406,6 +415,7 @@ export function assemble(input: AssembleInput): Assembled {
     suggestions,
     schedule,
     points,
+    osm,
   };
 }
 

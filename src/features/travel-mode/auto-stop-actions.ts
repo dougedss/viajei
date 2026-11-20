@@ -114,6 +114,8 @@ export async function registerAutoStop(input: {
     address: place?.address ?? null,
     lat: start.center.lat,
     lng: start.center.lng,
+    osm_type: null,
+    osm_id: null,
     travel_minutes_to_next: null,
     notes: null,
     url: null,

@@ -114,6 +114,8 @@ export function makeStop(over: Partial<Stop> = {}): Stop {
     address: null,
     lat: null,
     lng: null,
+    osm_type: null,
+    osm_id: null,
     travel_minutes_to_next: null,
     notes: null,
     url: null,

@@ -45,6 +45,8 @@ export type ReviewStop = Keyed<ImportStop> & {
    * ligar. `night`: onde dormir, no fim de um dia que não é o último
    */
   suggestion?: { detour: number; city: string | null; night: boolean } | null;
+  /** o objeto do OpenStreetMap do lugar escolhido na conversa (fase 23): vai para a parada */
+  osm?: { type: 'node' | 'way' | 'relation'; id: number } | null;
 };
 export type ReviewDay = {
   date: string;
@@ -323,6 +325,8 @@ export function planImport(review: Review, existing: Existing, ctx: PlanContext)
         address: s.address,
         lat: s.lat,
         lng: s.lng,
+        osm_type: s.osm?.type ?? null,
+        osm_id: s.osm?.id ?? null,
         travel_minutes_to_next: s.travel_minutes_to_next,
         notes: s.notes,
         url: s.url,

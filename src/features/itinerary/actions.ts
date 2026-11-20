@@ -110,6 +110,9 @@ export async function createStop(
     trip_day_id: tripDayId,
     position: positionAtEnd(siblings.map((s) => s.position)),
     ...stopColumns(values),
+    // a parada escrita à mão não tem o objeto do OSM (fase 23: só a conversa o traz)
+    osm_type: null,
+    osm_id: null,
     departed_at: null,
     done_at: null,
     done_by: null,
@@ -123,7 +126,16 @@ export async function createStop(
 }
 
 export async function updateStop(stopId: string, values: StopFormValues): Promise<void> {
-  await mutate.patch('stops', stopId, stopColumns(values));
+  // outro lugar (o nome ou a coordenada mudou): o objeto do OSM da conversa já não é o dele, e o
+  // cartão-postal se acha pelo nome e pela coordenada (fase 23)
+  const before = await db.stops.get(stopId);
+  const moved =
+    !!before?.osm_type &&
+    (before.name !== values.name || before.lat !== values.lat || before.lng !== values.lng);
+  await mutate.patch('stops', stopId, {
+    ...stopColumns(values),
+    ...(moved ? { osm_type: null, osm_id: null } : {}),
+  });
 }
 
 /**

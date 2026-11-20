@@ -33,6 +33,8 @@ export async function newTripReview(
     plan?: {
       suggestions: Record<string, NonNullable<ReviewStop['suggestion']>>;
       schedule: Schedule;
+      /** o objeto do OSM de cada lugar escolhido, pela chave da revisão (fase 23) */
+      osm?: Record<string, NonNullable<ReviewStop['osm']>>;
     };
   },
 ): Promise<StoredReview> {
@@ -61,9 +63,14 @@ export async function newTripReview(
           ...d,
           stops: d.stops.map((s) => {
             const suggestion = options.plan?.suggestions[s.key] ?? null;
+            const osm = options.plan?.osm?.[s.key] ?? null;
             const located =
               s.geo?.status === 'found' && s.geo.via === 'file'
-                ? { ...s, geo: { status: 'found' as const, label: OSM_LABEL, via: 'osm' as const } }
+                ? {
+                    ...s,
+                    geo: { status: 'found' as const, label: OSM_LABEL, via: 'osm' as const },
+                    osm,
+                  }
                 : s;
             // a regra de ouro: a sugestão nasce desligada, e só a pessoa a liga
             return suggestion ? { ...located, suggestion, include: false } : located;
