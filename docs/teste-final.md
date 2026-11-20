@@ -901,6 +901,32 @@ de verdade e uma nota de papel.
 
 Anotações:
 
+### 1.31 Os cartões-postais · 20 min (fase 23) · sem prova até a viagem
+
+Como o 1.24 a 1.30, fica como documentação até a viagem (D254 a D267). O vocabulário, o construtor, a
+estufa à mão, o catálogo, a fila, a conferência pelo aparelho e o refazer estão provados na CI
+(Vitest, pgTAP, as funções com tudo de mentira e o e2e com a peça semeada), no laboratório (a peça
+semeada em cena, de dia e de noite, e a captura) e na medição (a geração de verdade do Jardim
+Botânico); o que falta é um celular de verdade numa viagem de verdade.
+
+- [ ] **A peça de um lugar real.** Numa viagem criada pela conversa com um lugar conhecido (o Jardim
+  Botânico de Curitiba, ou outro com foto na Wikipédia), com a rota calculada e internet: minutos
+  depois, abra a maquete do dia; a parada aparece como o lugar, não como a miniatura do tipo, de dia
+  e à noite (depois das 18:30, ou com a noite da maquete), e o toque nela abre a folha. Em modo avião
+  a peça continua.
+- [ ] **O lugar sem referência.** O hotel e o restaurante da mesma viagem continuam com a miniatura do
+  tipo, sem aviso.
+- [ ] **A cidade de passagem.** Numa rota que passa por uma cidade com cartão-postal conhecido, a
+  peça aparece atrás do nome dela na beira da estrada, sem pílula e sem toque (ou só o nome, se o
+  servidor não a conferiu: não é defeito).
+- [ ] **Refazer a peça.** Na folha da parada, "Refazer a peça" (só quem planejou): minutos depois,
+  "Escolher a peça" mostra as três desenhadas; escolha uma; a maquete e a do outro celular do time
+  mostram a escolhida. O botão não volta (uma vez por lugar).
+- [ ] **O VoiceOver** em "Refazer a peça", "Escolher a peça" e na folha de escolher (as três opções
+  e "Ficar com esta").
+
+Anotações:
+
 ## Parte 2 · Android
 
 O mesmo percurso, mais curto: aqui está só o que muda no Android, e no fim o resto, item a item,
@@ -1108,6 +1134,7 @@ Anotações:
   a tela pergunta de qual viagem é e cai em "Ler a confirmação" com o texto e o anexo no lugar; a foto
   da nota com a câmera do Android (o QR lido pelo `BarcodeDetector` do Chrome); e o TalkBack nos botões
   novos.
+- [ ] **Os cartões-postais (fase 23), o mesmo do 1.31** no Android, com o TalkBack na folha de escolher.
 
 Anotações:
 
