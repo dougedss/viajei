@@ -31,14 +31,19 @@ const iso = (d: Date) => format(d, 'yyyy-MM-dd');
 const plusDays = (date: string, n: number) => iso(addDays(parseISO(date), n));
 const br = (date: string) => date.split('-').reverse().slice(0, 2).join('/');
 
-/** A origem mais recente da pessoa: a da viagem dela que começou por último e tem origem. */
+/**
+ * A origem mais recente da pessoa: a da viagem dela **criada ou editada por último** (`updated_at`)
+ * que tem origem. Até a fase 24 era a viagem com a data de início mais distante (`start_date`): a
+ * viagem de dezembro ganhava da viagem recém-criada, e a conversa de 21/11 saiu de Papanduva com a
+ * pessoa em Major Vieira (fase 25, D271). A origem de uma viagem futura não diz onde a pessoa está.
+ */
 export function lastOrigin(
-  trips: readonly Pick<Trip, 'origin' | 'start_date' | 'deleted_at' | 'owner_id'>[],
+  trips: readonly Pick<Trip, 'origin' | 'updated_at' | 'deleted_at' | 'owner_id'>[],
   uid: string,
 ): string | null {
   const withOrigin = trips
     .filter((t) => t.deleted_at === null && t.owner_id === uid && t.origin?.trim())
-    .sort((a, b) => b.start_date.localeCompare(a.start_date));
+    .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
   return withOrigin[0]?.origin?.trim() ?? null;
 }
 

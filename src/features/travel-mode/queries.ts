@@ -57,6 +57,19 @@ export function useGeoConsent(): GeoConsent {
   );
 }
 
+/**
+ * A resposta à pergunta de posição, lida uma vez (a conversa, fase 25, D271): `granted`, `declined`
+ * (disse "agora não" nas últimas 24 h) ou `unasked` (ainda não foi perguntado, ou o "agora não" venceu).
+ */
+export async function readGeoConsent(): Promise<'granted' | 'declined' | 'unasked'> {
+  const asked = await db.sync_state.get(askKeys.geoAsked);
+  if (asked?.value === 'granted') return 'granted';
+  const declined = await db.sync_state.get(askKeys.geoDeclinedAt);
+  return declined !== undefined && Date.now() - Number(declined.value) < DECLINE_MS
+    ? 'declined'
+    : 'unasked';
+}
+
 export async function grantGeo(): Promise<void> {
   await db.sync_state.put({ key: askKeys.geoAsked, value: 'granted' });
 }

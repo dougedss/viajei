@@ -21,7 +21,10 @@ import { CheckedNotice, NoPlaceNotice } from '../components/CheckedNotice.tsx';
 import { MapAttribution, OptionsStep } from '../components/OptionsStep.tsx';
 import { hasPlace } from '../assemble.ts';
 import { CheckingStep } from '../components/CheckingStep.tsx';
+import { OriginLine } from '../components/OriginLine.tsx';
+import { PositionStep } from '../components/PositionStep.tsx';
 import { QuestionsStep } from '../components/QuestionsStep.tsx';
+import { originLabelOf } from '../conversation.ts';
 import { planErrorCopy } from '../messages.ts';
 import { startOf, type IntakeBack } from '../start.ts';
 import { useConversation } from '../useConversation.ts';
@@ -104,7 +107,13 @@ export default function CriarViagemPage() {
   const header = (
     <PageHeader
       back="/viagens"
-      title={imp.stored ? 'Revisar a viagem' : talk.conv ? 'Montando a viagem' : 'Lendo o roteiro'}
+      title={
+        imp.stored
+          ? 'Revisar a viagem'
+          : talk.conv || talk.stage.kind !== 'idle'
+            ? 'Montando a viagem'
+            : 'Lendo o roteiro'
+      }
       eyebrow={
         <span className="label-caps text-accent-ink">
           {name ? `Nova viagem · ${name}` : 'Nova viagem'}
@@ -147,10 +156,19 @@ export default function CriarViagemPage() {
   // a conversa e a saída de hoje, antes da revisão
   if (talk.conv || talk.stage.kind !== 'idle') {
     const stage = talk.stage;
+    // "Saindo de X · mudar" (fase 25, D271), nas perguntas e nas opções
+    const origin = talk.conv ? (
+      <OriginLine label={originLabelOf(talk.conv)} onChange={(o) => void talk.setOrigin(o)} />
+    ) : null;
     return (
       <div className="grid gap-5">
         {header}
-        {stage.kind === 'error' ? (
+        {stage.kind === 'consent' ? (
+          <PositionStep
+            onAllow={() => void talk.allowPosition()}
+            onDecline={() => void talk.declinePosition()}
+          />
+        ) : stage.kind === 'error' ? (
           <ConversationError
             copy={planErrorCopy(stage.phase, stage.step, new Date())}
             onRetry={() =>
@@ -165,6 +183,7 @@ export default function CriarViagemPage() {
             questions={talk.conv.questions}
             answers={talk.conv.answers}
             misread={talk.conv.misread ?? {}}
+            origin={origin}
             onAnswer={talk.answer}
             onSubmit={() => void talk.search()}
             onBack={() => void toList()}
@@ -174,6 +193,7 @@ export default function CriarViagemPage() {
         ) : stage.kind === 'choosing' && talk.conv?.map ? (
           <OptionsStep
             map={talk.conv.map}
+            origin={origin}
             onToggle={talk.toggle}
             onPick={talk.pick}
             onMore={talk.more}

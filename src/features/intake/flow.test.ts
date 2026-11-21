@@ -174,6 +174,51 @@ describe('a conversa nova: as opções do mapa (fase 24)', () => {
     expect(stage.groups[0]?.status).toBe('no_source');
   });
 
+  it('com a posição permitida, a origem é onde a pessoa está, também numa viagem (fase 25, D271)', async () => {
+    const { d, requests } = deps();
+    const stage = await searchMap(
+      input({
+        intent: intent(),
+        context: {
+          origin: 'Major Vieira, SC',
+          position: { lat: -26.37, lng: -50.33 },
+          place: 'Major Vieira, SC',
+        },
+        center: { lat: -26.3712, lng: -50.3268 },
+        questions: [
+          { text: 'Até quanto tempo de carro?', options: ['1 hora', '2 horas'], topic: 'reach' },
+        ],
+        answers: ['2 horas'],
+      }),
+      d,
+    );
+    expect(stage.origin).toEqual({ label: 'Major Vieira, SC', at: [-50.3268, -26.3712] });
+    // a busca em volta de onde ela está (arredondada a uns 1 km), não da viagem de dezembro
+    expect(requests[0]?.area).toMatchObject({ type: 'circle', lng: -50.33, lat: -26.37 });
+  });
+
+  it('a origem dita no pedido, ou escrita no "mudar", vale acima da posição', async () => {
+    const { d } = deps();
+    const withPosition = {
+      context: {
+        origin: 'Major Vieira, SC',
+        position: { lat: -26.37, lng: -50.33 },
+        place: 'Major Vieira, SC',
+      },
+      center: { lat: -26.3712, lng: -50.3268 },
+    };
+    const said = await searchMap(
+      input({ ...withPosition, intent: intent({ area: 'Pomerode', origin: 'Papanduva, SC' }) }),
+      d,
+    );
+    expect(said.origin).toEqual({ label: 'Papanduva, SC', at: [-50.144, -26.37] });
+    const changed = await searchMap(
+      input({ ...withPosition, intent: intent({ area: 'Pomerode' }), originOverride: 'Papanduva' }),
+      d,
+    );
+    expect(changed.origin).toEqual({ label: 'Papanduva', at: [-50.144, -26.37] });
+  });
+
   it('sem origem, sem área e sem posição: não há onde procurar', async () => {
     const { d } = deps();
     const stage = await searchMap(input({ intent: intent() }), d);

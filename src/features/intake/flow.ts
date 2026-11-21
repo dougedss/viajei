@@ -96,8 +96,10 @@ export type SearchInput = {
   questions: readonly PlanQuestion[];
   answers: readonly string[];
   context: Pick<PlanContext, 'origin' | 'position' | 'place'>;
-  /** a posição na saída de hoje (só com a permissão do mapa), ou a origem de antes, geocodificada */
+  /** o ponto de referência: a posição (com a permissão), ou a origem de antes, geocodificada */
   center: { lat: number; lng: number } | null;
+  /** "mudar" em "Saindo de X" (fase 25): a origem que a pessoa escreveu vale acima de tudo */
+  originOverride?: string | null;
 };
 type Pick<T, K extends keyof T> = { [P in K]: T[P] };
 
@@ -180,11 +182,14 @@ export async function searchMap(input: SearchInput, deps: FlowDeps): Promise<Map
     origin: null,
   };
   const byTopic = answersByTopic(input.questions, input.answers);
+  // de onde se sai (fase 25, D271): o que a pessoa disse (no "mudar", no pedido ou na resposta) vale
+  // sempre; senão, onde ela está (a posição, nos dois caminhos, com a cidade do reverso); senão a
+  // origem de antes. A posição é o ponto de referência de tudo nesta conversa.
+  const said = input.originOverride?.trim() || intent.origin || byTopic.origin || null;
+  const position = !said && input.context.position ? input.center : null;
   const originLabel =
-    intent.origin ?? byTopic.origin ?? input.context.origin ?? input.context.place;
-  // a posição vale na saída de hoje; numa viagem, sai-se da origem
-  const position = input.kind === 'today' && input.context.position ? input.center : null;
-  const originHit = position ? null : await first(deps, originLabel);
+    said ?? (position ? (input.context.place ?? 'onde vocês estão') : input.context.origin);
+  const originHit = position || !originLabel ? null : await first(deps, originLabel);
   const originAt = position ? at(position) : originHit ? at(originHit) : null;
   const origin = originAt && originLabel ? { label: originLabel, at: originAt } : null;
 

@@ -73,21 +73,56 @@ describe('o cabeçalho da viagem nova', () => {
     ).toBeNull();
   });
 
-  it('a última origem é a da viagem da pessoa que começou por último', () => {
+  it('a última origem é a da viagem da pessoa criada ou editada por último, não a que começa por último (fase 25)', () => {
+    const at = (day: string) => `2026-11-${day}T10:00:00.000Z`;
     const trips = [
-      makeTrip({ id: 'a', start_date: '2026-01-10', origin: 'Lages', owner_id: UID }),
-      makeTrip({ id: 'b', start_date: '2026-06-01', origin: 'Papanduva/SC', owner_id: UID }),
-      makeTrip({ id: 'c', start_date: '2026-09-01', origin: null, owner_id: UID }),
-      makeTrip({ id: 'd', start_date: '2026-10-01', origin: 'De outra pessoa', owner_id: 'x' }),
+      makeTrip({
+        id: 'a',
+        start_date: '2026-01-10',
+        updated_at: at('01'),
+        origin: 'Lages',
+        owner_id: UID,
+      }),
+      // a viagem de dezembro, criada antes: a data de início mais distante não manda mais
+      makeTrip({
+        id: 'b',
+        start_date: '2026-12-11',
+        updated_at: at('10'),
+        origin: 'Papanduva/SC',
+        owner_id: UID,
+      }),
+      // a viagem recém-criada, de amanhã, saindo de onde a pessoa está
+      makeTrip({
+        id: 'f',
+        start_date: '2026-11-22',
+        updated_at: at('21'),
+        origin: 'Major Vieira, SC',
+        owner_id: UID,
+      }),
+      makeTrip({
+        id: 'c',
+        start_date: '2026-09-01',
+        updated_at: at('25'),
+        origin: null,
+        owner_id: UID,
+      }),
+      makeTrip({
+        id: 'd',
+        start_date: '2026-10-01',
+        updated_at: at('26'),
+        origin: 'De outra pessoa',
+        owner_id: 'x',
+      }),
       makeTrip({
         id: 'e',
         start_date: '2026-11-01',
+        updated_at: at('27'),
         origin: 'Excluída',
         owner_id: UID,
-        deleted_at: '2026-11-02T00:00:00Z',
+        deleted_at: '2026-11-28T00:00:00Z',
       }),
     ];
-    expect(lastOrigin(trips, UID)).toBe('Papanduva/SC');
+    expect(lastOrigin(trips, UID)).toBe('Major Vieira, SC');
     expect(lastOrigin([], UID)).toBeNull();
   });
 

@@ -6,7 +6,7 @@ import type {
   PlanRequest,
 } from '@shared/plan-protocol.ts';
 import { db } from '@/lib/db/schema.ts';
-import type { MapStage, Prepared } from './flow.ts';
+import { answersByTopic, type MapStage, type Prepared } from './flow.ts';
 import type { LatLng } from './named.ts';
 import { reachOf, readReach } from './reach.ts';
 import { ORIGIN_QUESTION } from './today.ts';
@@ -43,8 +43,29 @@ export type Conversation = {
    * é uma pergunta nova (o teto de três é das perguntas)
    */
   misread?: Record<number, number>;
+  /** "mudar" em "Saindo de X" (fase 25, D271): a origem que a pessoa escreveu vale acima de tudo */
+  origin_override?: string | null;
   started_at: string;
 };
+
+/**
+ * De onde saem, como a tela mostra antes das opções ("Saindo de Major Vieira, SC"; fase 25, D271): o
+ * que a pessoa escreveu (no "mudar", no pedido ou na resposta), senão onde ela está (a posição, com a
+ * cidade do reverso), senão a origem de antes. Null quando a conversa ainda vai perguntar.
+ */
+export function originLabelOf(
+  c: Pick<Conversation, 'origin_override' | 'intent' | 'questions' | 'answers' | 'context' | 'map'>,
+): string | null {
+  const said =
+    c.origin_override?.trim() ||
+    c.intent?.origin ||
+    answersByTopic(c.questions, c.answers).origin ||
+    null;
+  if (said) return said;
+  if (c.map?.origin) return c.map.origin.label;
+  if (c.context.position) return c.context.place ?? 'onde vocês estão';
+  return c.context.origin;
+}
 
 /** "Tenho 2 perguntas antes de montar." A regra 16: diz antes quantas são. */
 export function questionsLead(count: number): string {

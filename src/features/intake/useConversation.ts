@@ -38,6 +38,7 @@ import {
   type FlowDeps,
   type MapStage,
 } from './flow.ts';
+import { declineGeo, grantGeo, readGeoConsent } from '@/features/travel-mode/queries.ts';
 import { gatherContext } from './gather.ts';
 import { unreadReach } from './reach.ts';
 import { todayQuestions } from './today.ts';
@@ -61,6 +62,8 @@ const errorPhase = (code: ErrorPhase['code'], retryAt: string | null = null): Er
 
 export type ConversationStage =
   | { kind: 'idle' }
+  /** a pergunta de posição (fase 25, D271): uma vez por aparelho, antes de ler o aparelho */
+  | { kind: 'consent' }
   /** lendo o aparelho (a posição, o tempo) */
   | { kind: 'gathering' }
   /** a IA lendo o pedido e pensando no que perguntar */
@@ -95,6 +98,8 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
   const session = useRef<ImportSession>(IDLE);
   const abort = useRef<AbortController | null>(null);
   const mounted = useRef(false);
+  /** a conversa que espera a resposta à pergunta de posição (fase 25) */
+  const pendingStart = useRef<{ kind: 'plan' | 'today'; text: string } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -190,6 +195,7 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
         answers: c.answers,
         context: c.context,
         center: c.center,
+        originOverride: c.origin_override ?? null,
       },
       deps((done, total) => setStage({ kind: 'searching', done, total })),
     );
@@ -262,15 +268,15 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
     await write(next);
   };
 
-  return {
-    loaded,
-    conv,
-    stage,
-    /** Começa: lê o aparelho, e pergunta (a IA, na conversa; o app, na saída de hoje). */
-    start: async (kind: 'plan' | 'today', text: string) => {
-      if (!uid) return;
-      setStage({ kind: 'gathering' });
-      const gathered = await gatherContext(kind, uid);
+  /**
+   * Lê o aparelho e pergunta (a IA, na conversa; o app, na saída de hoje). `prompt`: a pessoa acabou de
+   * tocar em "Usar posição", e o navegador pode perguntar agora (fase 25, D271).
+   */
+  const begin = async (kind: 'plan' | 'today', text: string, prompt: boolean) => {
+    if (!uid) return;
+    setStage({ kind: 'gathering' });
+    const gathered = await gatherContext(kind, uid, { prompt });
+    {
       const base: Conversation = {
         kind,
         text,
@@ -307,6 +313,48 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
       // nada a perguntar: busca direto
       if (questions.length === 0) await search(next);
       else setStage({ kind: 'answering' });
+    }
+  };
+
+  /** A resposta à pergunta de posição: a mesma do mapa (D48), guardada por aparelho; depois, a conversa. */
+  const resume = async (allow: boolean) => {
+    const p = pendingStart.current;
+    pendingStart.current = null;
+    await (allow ? grantGeo() : declineGeo());
+    if (p) await begin(p.kind, p.text, allow);
+  };
+
+  return {
+    loaded,
+    conv,
+    stage,
+    /**
+     * Começa: com o consentimento de posição ainda não dado neste aparelho (nem recusado nas últimas
+     * 24 h), a pergunta de posição vem antes (fase 25, D271); senão, lê o aparelho e pergunta.
+     */
+    start: async (kind: 'plan' | 'today', text: string) => {
+      if (!uid) return;
+      setStage({ kind: 'gathering' });
+      if ((await readGeoConsent()) === 'unasked') {
+        pendingStart.current = { kind, text };
+        setStage({ kind: 'consent' });
+        return;
+      }
+      await begin(kind, text, false);
+    },
+    allowPosition: () => resume(true),
+    declinePosition: () => resume(false),
+    /** "mudar" em "Saindo de X": a origem escrita vale acima de tudo; nas opções, busca de novo. */
+    setOrigin: async (origin: string) => {
+      if (!conv) return;
+      const next: Conversation = {
+        ...conv,
+        origin_override: origin.trim() || null,
+        map: null,
+        prepared: null,
+      };
+      if (conv.map) await search(next);
+      else await keep(next);
     },
     answer: (index: number, value: string) => {
       if (!conv) return;

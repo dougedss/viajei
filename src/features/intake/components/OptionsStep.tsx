@@ -1,5 +1,5 @@
 import { Check, MapPin, Route, Search } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { StopKind } from '@shared/constants.ts';
 import { GEOAPIFY_ATTRIBUTION } from '@shared/places-schema.ts';
 import { Button } from '@/components/ui/Button.tsx';
@@ -15,6 +15,8 @@ import { aboutMinutes, reachLabel, type MapOption } from '../search.ts';
 
 type Props = {
   map: MapStage;
+  /** "Saindo de Major Vieira, SC · mudar" (fase 25, D271), antes das opções */
+  origin?: ReactNode;
   onToggle: (id: string) => void;
   onPick: (named: number, pick: number | 'skip') => void;
   onMore: (group: number) => void;
@@ -321,6 +323,7 @@ export function OptionsStep(props: Props) {
           ? 'Estes lugares existem no mapa. Escolha para onde ir.'
           : 'Para onde vocês vão?'}
       </p>
+      {props.origin}
       {map.named.map((entry, i) => (
         <Named key={`${entry.named.name}-${String(i)}`} entry={entry} index={i} props={props} />
       ))}
