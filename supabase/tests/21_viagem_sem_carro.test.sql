@@ -35,9 +35,10 @@ select is(pg_temp.push1('{"seq":1,"table":"trips","id":"eb111111-1111-4111-8111-
           'applied|', 'o upsert de um app antigo, com as colunas do carro, é aplicado: as chaves são ignoradas');
 select is((select name || '|' || origin from public.trips where id = 'eb111111-1111-4111-8111-111111111111'),
           'Serra|Papanduva/SC', 'e a viagem nasce com o resto');
--- e o patch só do carro: nada a mudar além do carimbo, e nenhum erro
+-- e o patch só do carro: nenhuma coluna a mudar, então volta stale, sem erro (no aparelho, stale sai da
+-- fila como applied, seção 5.2 do prompt mestre: o app antigo não fica com a operação presa)
 select is(pg_temp.push1('{"seq":2,"table":"trips","id":"eb111111-1111-4111-8111-111111111111","op":"patch","values":{"car_color":"grape"},"versions":{"car_color":"2026-11-21T10:05:00Z"},"updated_at":"2026-11-21T10:05:00Z"}'),
-          'applied|', 'o patch de um app antigo só no carro da viagem é aplicado sem erro');
+          'stale|', 'o patch de um app antigo só no carro da viagem volta stale, sem erro');
 select pg_temp.logout();
 
 select * from finish();
