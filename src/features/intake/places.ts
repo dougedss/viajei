@@ -294,21 +294,26 @@ export function searchFor(want: Pick<PlanWant, 'words' | 'kind'>): PlaceSearch {
 }
 
 /**
- * As vontades num texto, sem IA (a saída de hoje, D208): cada tipo da tabela que aparece nele, na
- * ordem da tabela, no máximo dois. "quero sair hoje para um café colonial" → café colonial.
+ * As vontades num texto, sem IA (a saída de hoje, D208): cada tipo da tabela que aparece nele, **na
+ * ordem em que a pessoa escreveu** (fase 25, D277: "ver uma cachoeira e depois tomar um café" lista a
+ * cachoeira antes; até a fase 24 a ordem era a da tabela, e o café vinha antes), no máximo dois.
+ * "quero sair hoje para um café colonial" → café colonial.
  */
 export function wantsInText(text: string): PlanWant[] {
   const t = plain(text);
-  const out: PlanWant[] = [];
+  const found: { row: TypeRow; at: number }[] = [];
   for (const row of PLACE_TYPES) {
-    if (!row.match.test(t)) continue;
+    const m = row.match.exec(t);
+    if (!m) continue;
     // "café colonial" já cobre "café"; "parque temático" já cobre "parque"
-    if (row.key === 'cafe' && out.some((w) => w.words === 'café colonial')) continue;
-    if (row.key === 'parque' && out.some((w) => w.words === 'parque de diversões')) continue;
-    out.push({ words: row.label, kind: row.kind });
-    if (out.length === 2) break;
+    if (row.key === 'cafe' && found.some((f) => f.row.key === 'cafe_colonial')) continue;
+    if (row.key === 'parque' && found.some((f) => f.row.key === 'tematico')) continue;
+    found.push({ row, at: m.index });
   }
-  return out;
+  return found
+    .sort((a, b) => a.at - b.at)
+    .slice(0, 2)
+    .map(({ row }) => ({ words: row.label, kind: row.kind }));
 }
 
 // --------------------------------------------------------------- o que vale a pena no caminho

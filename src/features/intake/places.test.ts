@@ -78,6 +78,29 @@ describe('a tabela de tipos (fase 24): a tabela, não a IA, decide a categoria',
     expect(wantsInText('quero sair hoje')).toEqual([]);
   });
 
+  it('a saída de hoje na ordem do texto (fase 25, D277): os pedidos 6 e 9 da bateria de 20/11', () => {
+    // 9: "quero sair hoje a tarde, ver uma cachoeira e depois tomar um cafe" listava o café antes
+    expect(
+      wantsInText('quero sair hoje a tarde, ver uma cachoeira e depois tomar um cafe').map(
+        (w) => w.words,
+      ),
+    ).toEqual(['cascata', 'café']);
+    // 6: "bora numa caxoeira dps comer um xis" (a grafia a IA lê; aqui, o texto como a tabela o entende)
+    expect(wantsInText('bora numa cachoeira dps comer um xis').map((w) => w.words)).toEqual([
+      'cascata',
+      'restaurante',
+    ]);
+    // a ordem da tabela ainda decide o que cobre o quê: café colonial cobre café
+    expect(wantsInText('um café e depois um café colonial').map((w) => w.words)).toEqual([
+      'café colonial',
+    ]);
+    // e o teto de dois continua: o primeiro e o segundo do texto
+    expect(wantsInText('mirante, depois praia e por fim um museu').map((w) => w.words)).toEqual([
+      'mirante',
+      'praia',
+    ]);
+  });
+
   it('as sugestões: os marcos mais o que a pessoa gosta, e o clássico de turismo, em duas buscas', () => {
     const { landmarks, classic, liked } = suggestionCategories(
       ['wineries', 'no_dirt_road'],
