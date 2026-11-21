@@ -929,7 +929,7 @@ Anotações:
 
 ### 1.32 As correções da conversa · 15 min (fase 25) · sem prova até a viagem
 
-Como o 1.24 a 1.31, fica como documentação até a viagem (D270 a D281). A posição na conversa, a origem
+Como o 1.24 a 1.31, fica como documentação até a viagem (D270 a D283). A posição na conversa, a origem
 à vista, o campo que não se apaga, o tempo lido inteiro, a resposta não entendida, as opções pela hora,
 a cidade conferida e os três estados estão provados na CI (Vitest, pgTAP, a função com entrada fixa e o
 `conversa.spec`) e na medição com pedidos de leigo; o que falta é um celular de verdade.
