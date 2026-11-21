@@ -1,4 +1,4 @@
-# Melhorias depois da fase 12: as fases 13 a 24
+# Melhorias depois da fase 12: as fases 13 a 29
 
 As anotações do Douglas de 08/11/2026 (o caderno com o desenho do mapa e o print da tela do mapa),
 organizadas em fases. Cada fase ganha o próprio `docs/fases/fase-N.md` quando chegar a vez dela,
@@ -38,6 +38,26 @@ entrada do app, e o dono do app a achou ruim ("ainda está ruim o principal do a
 depender da escolha de lugares que a 24 constrói. Ordem proposta pelo orquestrador em 15/11 à noite e
 confirmada pelo Douglas na mesma noite: 24 → 18 → 23 → 19 → 20 → 21.
 
+A 25 e a 26 chegaram pelo balcão em 20/11 (`docs/ideias/2026-11-20-o-passeio-um-passo-de-cada-vez.md`),
+depois de um uso real do Douglas e de uma bateria de dez pedidos de leigo na produção: "almoçar em Mafra"
+buscou em Portugal, "vou pra Joinville" na França, e as opções de dois lugares vêm lado a lado, todas
+medidas de casa. Em 21/11 o balcão fechou mais duas ideias, que completam e em parte substituem a de 20/11
+(`docs/ideias/2026-11-21-a-pesquisa-e-o-roteiro-refeitos.md` e `docs/ideias/2026-11-21-o-mapa-por-trechos.md`):
+**a pesquisa e a montagem do roteiro são a prioridade do app** ("devemos gastar o tempo e dinheiro que for
+nela para deixar quase perfeita"); a fonte de lugares passa a ser o Google Places; a IA planeja a busca com
+ferramentas e o app julga (a tabela de tipos sai); o GPS entra na conversa; nada some em silêncio; o chat
+continua depois do roteiro pronto; uma bateria de pedidos de leigo mede a qualidade fora do deploy; e a
+maquete mostra um trecho até o objetivo por vez. O orquestrador reviu as fases 25 e 26 e encaixou três
+novas em 21/11, pela recomendação do balcão: a **25** fica com as correções que não dependem da fonte de
+lugares (o campo livre, o tempo lido, a resposta não entendida, as opções coerentes, a ordem do texto) e
+ganha o GPS na conversa com a origem à vista e "nada some em silêncio"; a **27** é a fundação nova (a fonte
+e o planejador: o Google atrás de uma função nossa, a IA com ferramentas, o app julgando, a bateria no
+laboratório); a **26** (o passeio um passo de cada vez) passa a ser construída sobre a 27; a **28** é o mapa
+por trechos, independente da busca; a **29** é o chat que continua depois do roteiro pronto. A ordem
+recomendada pelo balcão e adotada pelo orquestrador, pela decisão 1 de 21/11: 23 → 25 → 27 → 26 → 28 →
+29 → 19 → 20 → 21. **A confirmação é do Douglas**, a cada "próxima"; a 25 ficou escrita e à espera em
+21/11, a pedido dele, até estes ajustes chegarem.
+
 | Fase | Entrega | Depende de | Tamanho |
 |---|---|---|---|
 | 13 | Correções: o mapa sobre a folha, a rolagem horizontal, o que o teste do Douglas achar | 12 | pequena |
@@ -49,14 +69,20 @@ confirmada pelo Douglas na mesma noite: 24 → 18 → 23 → 19 → 20 → 21.
 | 24 | As opções vêm do mapa: a conversa devolve a vontade, a pessoa escolhe entre lugares reais, o caminho vem como sugestão desligada; a chegada em casa e a ida e volta no modo viagem | 17, 15 | grande |
 | 18 | Reservas e gastos sem digitar: ler a confirmação (colada, anexada ou encaminhada por e-mail) e a nota | 17 | média |
 | 23 | Os cartões-postais: a parada é o lugar, a cidade de passagem na beira da estrada; o catálogo que cresce por viagem | 22, 24 | grande |
+| 25 | Correções da conversa: o campo livre que não se apaga, o tempo lido inteiro, a resposta não entendida perguntada de novo, as opções coerentes com o pedido e a hora, a saída de hoje na ordem do texto, a cidade conferida (nunca outro país em silêncio); o GPS na conversa, com a origem à vista e editável; nada some em silêncio, e o texto só fala do que existe | 24 | pequena |
+| 27 | A fonte e o planejador: o Google Places atrás de uma função nossa (a nota, o horário, "em Canoinhas" dentro da cidade), a IA planejando a busca com ferramentas e o app julgando (a tabela de tipos sai); a bateria de pedidos de leigo no laboratório, fora do deploy | 25 | grande |
+| 26 | O passeio um passo de cada vez, sobre o planejador: a tela mostra um passo por vez, o tempo do passeio todo à vista, a hora do dia na conta, o lugar da pessoa e a cidade de destino como paradas | 27 | grande |
+| 28 | O mapa por trechos: a maquete mostra um trecho até o objetivo por vez, e a volta só ao chegar; o indicador "ida · volta"; a cidade de passagem é a que a estrada atravessa | 22, 24 (o objetivo dito vem da 26; antes dela, a regra de reserva) | média a grande |
+| 29 | O chat que continua depois do roteiro pronto: dúvidas, sugestões e ajustes, cada mudança como um cartão com "Aplicar" | 27, 26 | média |
 | 19 | O gerador de carros: o perfil paramétrico capaz de descrever carros de verdade | 16 | grande |
 | 20 | O seu carro: marca, modelo e ano viram o carro da maquete, com cache e aviso | 19 | grande |
 | 21 | O banco conectado (opcional): os gastos pelo Open Finance, por um agregador, com contrato | 18 | média |
 
 ## O que não dá como foi pedido, e o que dá
 
-Quatro pedidos esbarram em limites de fora do app. O plano usa a melhor alternativa de cada um, e
-o Douglas confirmou as quatro em 08/11.
+Quatro pedidos esbarram em limites de fora do app, e a ideia de 20/11 trouxe mais dois. O plano usa a
+melhor alternativa de cada um: o Douglas confirmou os quatro primeiros em 08/11, e os dois de 20/11
+seguem a decisão 5 dele daquele dia (na dúvida, o app pergunta e não afirma o que não sabe).
 
 1. **Registrar paradas com o app fechado.** Um PWA não recebe posição com o app fechado, nem no
    iPhone nem no Android: a API de geolocalização só funciona com a página ativa, e não existe
@@ -86,6 +112,35 @@ o Douglas confirmou as quatro em 08/11.
    medidas e de fotos de referência da internet. **Como o GTA faz com os carros dele:** qualquer um
    reconhece o modelo pelos traços, mas não há logotipo, nome de marca nem réplica. O resultado é
    o seu carro na linguagem do Viajei, feito com carinho.
+5. **"O melhor café que tiver".** O mapa de hoje não tem nota de avaliação: a resposta da Places da
+   Geoapify (a documentação pública, lida em 21/11) traz nome, endereço, cidade, coordenada, categorias,
+   distância e `place_id`, nenhum campo de nota, de avaliações ou de popularidade, e o único ordenador
+   é a proximidade (`bias`). **Revisto em 21/11 (decisão 3 daquele dia):** a fonte passa a ser o Google
+   Places, que traz a nota e o número de avaliações; com ela, "o melhor" passa a ter resposta, e o app
+   diz o critério (fase 27). Até lá, o app diz na tela que não sabe qual é o melhor, em vez de fingir
+   que escolheu.
+6. **Regiões que não são um lugar do mapa** ("Litoral", "Serra", "Vale Europeu"). Um geocodificador
+   devolve qualquer coisa com esse nome: no teste de 20/11, "Litoral" foi para Camarões, "Vale
+   Europeu" é uma padaria em Indaial e "Serra catarinense" um parque industrial em Lages; com o viés
+   pela localização, "litoral" ainda vira um bairro de Tramandaí. O que dá (fases 25, 27 e 26): nunca
+   oferecer região como resposta; oferecer cidades e tipos de passeio que existem ao alcance; e, se a
+   pessoa escrever uma região, perguntar a cidade.
+7. **Os termos do Google Places** (lidos pelo balcão em 21/11: os termos de serviço de 26/08/2026 e os
+   específicos de 28/10/2026). Eles proíbem guardar nomes, endereços e avaliações ("copy and save
+   business names, addresses, or user reviews", 3.2.3 a-iii) e usar o conteúdo com um mapa que não é
+   do Google (14.2; o mapa 2D do app é Leaflet com o OpenStreetMap); o `place_id` pode ser guardado
+   (§3) e a coordenada por até 30 dias (14.3); o balcão não achou exceção para app fechado, gratuito ou
+   de pesquisa; os termos preveem a suspensão do acesso (seção 5). **A decisão 4 de 21/11 é do Douglas
+   e está reafirmada:** o roteiro guarda o nome e o endereço do lugar, como hoje, e os termos não
+   entram na conta enquanto o app é um estudo fechado ("é apenas um teste de app"). As sessões seguem
+   isso e não reabrem. O que dá, sem custo: guardar sempre o `place_id` junto do lugar, para o caminho
+   de ficar dentro dos termos continuar aberto se o app um dia abrir ao público (sugestão do balcão,
+   não conversada).
+8. **"A feirinha" não está em mapa nenhum**, nem no Google, e o dia e a hora de uma feira ou de um
+   evento não vêm de mapa. O que dá (fase 27): a IA oferece os candidatos que achou (o mercado público,
+   a praça) e pergunta, ou a pessoa aponta o local ("Escolher o local"); o pedido nunca some. A busca
+   na web (a ferramenta da Anthropic, US$ 10 por mil buscas, pela leitura do balcão) fica como último
+   recurso, fora do caminho principal, com a fonte na tela e a pessoa confirmando.
 
 ---
 
@@ -603,6 +658,365 @@ medido, o registro do limite legal.
 
 ---
 
+## Fase 25 · Correções da conversa
+
+O que quebra a conversa hoje para um leigo e **não depende da fonte de lugares**, antes da fundação nova
+da 27. Nasceu da bateria de 20/11 (`docs/ideias/2026-11-20-o-passeio-um-passo-de-cada-vez.md`: dez
+pedidos escritos como uma pessoa leiga escreveria, pela tela da produção, saindo de Papanduva/SC) e foi
+revista em 21/11 com `docs/ideias/2026-11-21-a-pesquisa-e-o-roteiro-refeitos.md`: "1 hora e meia"
+digitado no campo livre virou " e meia" (o campo se apagou ao passar por "1 hora") e a busca foi a
+200 km; "1:30 no máximo" não foi lido e a busca foi a 120 km, em silêncio; a quem volta antes do almoço
+o app ofereceu "3 horas" de carro; "almoçar em Mafra" buscou em Mafra, **Portugal**; a saída de hoje
+listou o café antes da cachoeira; e, no pedido de 21/11 ("feirinha, café e cortar o cabelo em
+Canoinhas"), **a origem saiu como Papanduva** (a pessoa estava em Major Vieira: a conversa não lê a
+posição, e `lastOrigin` devolve a viagem com a data de início mais distante) e **a feirinha e o salão
+sumiram em silêncio**, mas o título do dia, a nota do café, a lista e uma missão falaram deles como se
+estivessem lá. As regras do Douglas: **a localização de quem pede decide o que faz sentido**; **na
+dúvida, o app pergunta e não afirma o que não sabe**; **nada some em silêncio, e o texto só fala do que
+existe**.
+
+**O que entra** (o levantamento é de 21/11, em `e64ee9d`; o prompt confere na hora)
+
+- **25.1 O GPS na conversa, a origem à vista, o `lastOrigin` consertado** (decisões 2 e 8 de 21/11).
+  Hoje `gatherContext` (`intake/gather.ts`) só lê a posição na saída de hoje, e a conversa não pede a
+  permissão (uma nota da D176). Passa a pedir ali, com uma frase e um toque ("Usar onde vocês estão"),
+  pela mesma pergunta do app e do navegador que o mapa usa (D48, D176); com a posição, ela é **o ponto
+  de referência de tudo** (a origem, o viés da cidade dita, os tempos de carro), arredondada a uns 1 km
+  no que sai do aparelho (D208, D228). **"Saindo de Major Vieira · mudar"** fica à vista e editável
+  antes das opções. Sem posição, vale a origem **da viagem mais recente** (hoje `lastOrigin`, em
+  `features/import/new-trip.ts`, ordena por `start_date` e devolve a viagem futura: a de dezembro) e a
+  pergunta na dúvida.
+- **25.2 O campo livre que não se apaga.** `QuestionsStep.tsx`, `value={chosen ? '' : answer}`: quando o
+  texto digitado fica igual a uma opção, o campo esvazia e o resto da digitação vira a resposta. O que a
+  pessoa digita nunca se apaga por coincidir com uma opção.
+- **25.3 O tempo lido inteiro.** `hoursOf` (`flow.ts`): a tabela da ideia de 20/11, medida rodando a
+  função, vira um caso de teste por linha ("1:30" e "hora e meia" não lidos; "1 hora e meia" e "1 hora e
+  30 minutos" dão 1 h, porque a alternativa `h` da expressão casa antes de `hora`). E **uma regra só para
+  o alcance**: hoje `reachOfAnswer` (`flow.ts`) e `reachOf` (`today.ts`, que manda "2h" e "duas horas"
+  para a manhã) leem a mesma resposta com regras diferentes, e há dois raios padrão.
+- **25.4 A resposta não entendida se pergunta de novo.** Hoje vira o raio padrão em silêncio (120 ou
+  200 km). A tela diz que não entendeu e pergunta de novo, com as opções; perguntar de novo não é uma
+  pergunta nova para o teto de três (decisão 6 de 08/11).
+- **25.5 As opções nunca contradizem o pedido nem a hora.** O prompt do `ask` fixa "1 hora", "2 horas",
+  "3 horas" (`PLAN_ASK_SYSTEM_PROMPT`); `todayQuestions` (`today.ts`) oferece "A manhã" à tarde e não
+  tem "a tarde". As opções da IA combinam com o pedido, e as do app com a hora de agora; as opções de
+  "para onde" são coisas que o app localiza, nunca nome de região ("Litoral" foi para Camarões).
+- **25.6 A saída de hoje na ordem do texto.** `wantsInText` (`places.ts`) devolve as vontades na ordem
+  da tabela; passa a ser a ordem em que a pessoa escreveu.
+- **25.7 A cidade conferida, nunca outro país em silêncio.** Na forma mínima, porque a fonte muda na 27:
+  a cidade e a área ditas são geocodificadas com o viés do ponto de referência (um `viewbox` **sem**
+  `bounded`, que o balcão conferiu resolver Mafra/SC e Joinville/SC), **conferidas pela distância** (um
+  resultado em outro país ou além do alcance máximo da D228 nunca é usado em silêncio) e, na dúvida,
+  **perguntadas** na tela ("Mafra, SC, a cerca de 1 h?", com os candidatos e "Nenhum destes"), no molde
+  da D229. A 27 herda a regra ("o app julga") sobre o que o Google devolver.
+- **25.8 Nada some em silêncio, e o texto só fala do que existe** (decisão 8 de 21/11). Cada coisa que a
+  pessoa pediu termina num de três estados, visível na tela: **escolhida**, **pendente** (a busca não
+  achou: "Escolher o local", que a revisão já tem, ou uma pergunta) ou **tirada pela pessoa**. A leitura
+  que escreve a viagem (`PLAN_WRITE_SYSTEM_PROMPT`, `assemble.ts`) recebe só o que entrou de fato e as
+  pendências marcadas, e **não escreve título, nota, lista nem missão sobre o que não está no roteiro**:
+  no teste de Canoinhas, a viagem só com o café não pode se chamar "Café e feirinha" nem ter a "sacola
+  para as compras da feirinha".
+
+**Sai desta fase (21/11):** o que era remendo da tabela de tipos e da Geoapify (o nome que casa sem ser
+o tipo, os tipos que faltam, a busca pelo nome no "não achei"): a 27 tira a tabela do caminho e troca a
+fonte. Nada da 26 (a tela um passo de cada vez, o tempo do passeio todo) nem da 27 (o Google, as
+ferramentas) entra aqui.
+
+**O que pede de fora.** A `plan-trip` republicada (os prompts do `ask` e da escrita; o schema do `ask`
+não muda), compatível com o app da produção durante a troca (D225). Nenhuma migration (a conversa mora
+no aparelho; a forma da viagem não muda). Nenhuma chave nova. A permissão de posição pedida na conversa é
+a mesma do mapa. IA: só o que a prova gastar (abaixo). Nada do Douglas.
+
+Testes: Vitest de cada correção (a tabela do tempo, linha a linha; a regra única de alcance; a origem pela
+posição e pela viagem mais recente; a cidade com o viés e a conferência pela distância, com respostas
+fixas do Nominatim para "mafra", "joinville" e "litoral"; a ordem das vontades no texto; os três estados
+de cada coisa pedida; a escrita só sobre o que entrou); o teste da função com entrada fixa (as opções
+coerentes; o prompt da escrita com as pendências); e2e `nova-viagem.spec` com a posição concedida no
+navegador (a origem à vista e editável), o campo livre digitado inteiro, a resposta não entendida
+perguntada de novo, a pergunta da cidade com dois candidatos e o pedido com uma coisa que a busca não
+acha terminando em "pendente"; **a prova é com pedidos de leigo** (decisão 7 de 20/11): o
+`medir-conversa` ganha, uma vez, "amanha quero almoçar em mafra e depois ir numa cachoeira", "vou pra
+joinville sabado, queria parar pra tomar um cafe no caminho", o pedido de 20/11 do Douglas respondendo
+"1:30 no maximo" e o de Canoinhas ("iria na feirinha, tomar um cafe e levar a minha mulher cortar o
+cabelo, tudo isso em canoinhas sc"), cobrando nenhuma opção fora do Brasil, o tempo lido, e a viagem de
+Canoinhas sem título, nota, lista ou missão sobre a feirinha e o salão; teto de custo. Decisões: uma D
+para cada defeito, com a causa (como a 13); a D176 (a conversa pede a posição), a D208, a D203 (a origem
+de antes), a D225, a D228 e a D231 (a escrita só sobre o que existe) recebem o que mudou.
+
+**Decidido em 20/11:** a localização de quem pede decide o que faz sentido (4); na dúvida, o app pergunta
+e não afirma o que não sabe (5); os defeitos puros viram uma correção curta, na frente da fase grande (6);
+a prova é com pedidos de leigo (7). **Decidido em 21/11:** o GPS entra na conversa e em toda etapa em que
+ajudar (2); a origem à vista e editável, nada some em silêncio e o texto só fala do que existe (8).
+
+---
+
+## Fase 27 · A fonte e o planejador
+
+A fundação nova da pesquisa e da montagem do roteiro, que o Douglas pôs como **a prioridade do app**
+(21/11: "Essa parte da pesquisa e montar o roteiro deveria ser a melhor do nosso app e devemos gastar o
+tempo e dinheiro que for nela para deixar quase perfeita"; sobre o de hoje: "Nada de imersão para o
+usuário, apenas frustração"). O diagnóstico do balcão, que ele aceitou: **o problema não é o modelo da
+IA**. Nos onze pedidos de leigo de 20 e 21/11 a IA leu certo os tipos e a cidade, inclusive com erro de
+digitação. O que falha é o que fica entre a IA e a tela: um tradutor escrito à mão (a tabela de tipos,
+D227), um círculo único de busca (D228) e um mapa pobre em comércio de cidade pequena. No pedido de 21/11
+("feirinha, café e cortar o cabelo em Canoinhas"), a tabela derrubou duas das três vontades por
+construção ("cortar o cabelo" virou atração turística com "cortar" ou "cabelo" no nome), o café veio num
+círculo de 30 km ("não faz sentido, totalmente longe"), e o OpenStreetMap tinha 1 cabeleireiro em
+Canoinhas onde o Google Maps lista mais de 40 (a Geoapify usa o OpenStreetMap como fonte, pela
+documentação dela). Ideia fechada no balcão em 21/11 (`docs/ideias/2026-11-21-a-pesquisa-e-o-roteiro-refeitos.md`).
+
+**O que entra**
+
+- **A fonte de lugares é o Google Places** (decisão 3): a **Places API (New)**, atrás de uma função nossa,
+  com a chave no servidor (regra 9), no molde da `find-places` (D226: o contrato comum, o handler sem
+  rede testado com `fetch` injetado, a chave só no cabeçalho, `no_source` sem a chave, a cota pela
+  `edge_call`). O que os cartões ganham: **a nota e o número de avaliações**, o horário e o "aberto nesse
+  horário", o lugar fechado de vez; a tela diz que o dado vem do Google Maps, como hoje diz do
+  OpenStreetMap e da Geoapify. **"Em Canoinhas" é dentro da cidade** (a área restrita da busca), e só
+  abre para os vizinhos quando não acha, dizendo (revê a D228: o círculo de 30 km). **O horário entra na
+  conta do passeio**: o app avisa quando o roteiro chega antes de abrir ou depois de fechar. **O roteiro
+  guarda o lugar inteiro**, como hoje (o nome, o endereço, a coordenada), **mais o `place_id` do Google**
+  (uma coluna nova na parada, ao lado de `osm_type`/`osm_id` da 23): a decisão 4 do Douglas, registrada
+  em "O que não dá" (item 7), **não se reabre**. A `find-places` de hoje (a Geoapify) pode continuar
+  servindo as sugestões de natureza e turismo, onde o OpenStreetMap é bom, até a medição dizer o
+  contrário; o que fica dela é do levantamento do prompt.
+- **A IA planeja a busca com ferramentas, e o app julga** (decisão 5; "Gostei do app julga"). A tabela de
+  tipos e o filtro por palavra do nome **saem do caminho principal**. A IA recebe o pedido e o contexto
+  (onde a pessoa está, a hora, o dia da semana, os gostos) e usa **ferramentas nossas, executadas pela
+  função**: **procurar lugares** (o que se quer, com as palavras da pessoa, e onde: dentro de uma cidade,
+  perto de um ponto, no caminho entre dois pontos), **localizar um nome** (o lugar que ela nomeou) e **o
+  tempo de carro** entre dois pontos. Ela devolve **o passeio em passos**: a ordem, a relação de cada
+  passo com o anterior, os candidatos de cada passo, **o que não achou** e **as perguntas quando tem
+  dúvida** (a cidade, a ordem, "onde fica a feirinha?"). **O app julga:** só vale candidato que voltou de
+  uma ferramenta nesta conversa, e a função confere cada identificador; a IA continua sem inventar lugar,
+  coordenada nem horário; a regra de ouro (D232) e "a IA escreve e não escolhe" (D231) continuam: nada
+  entra no roteiro sem a pessoa escolher. O laço é curto e tem teto de chamadas; o modelo é o de hoje
+  (`claude-sonnet-5-5`, `IMPORT_MODEL`), até a bateria dizer outra coisa. A relação entre os passos deixa
+  de ser uma tabela de regras do app e vira o "onde" da ferramenta de procurar: é o que a 26 usa.
+- **A bateria de pedidos de leigo, no laboratório, fora do deploy** (decisão 6): **10 pedidos por rodada,
+  sempre diferentes entre si**, os resultados **guardados** em `lab_runs` (o painel `/lab`) "para sempre
+  ir melhorando e analisá-los", **nunca como portão da CI** ("não pode ser atrelado ao deploy, para não
+  deixar ainda mais demorado"). Por pedido: o texto, o que a IA leu, o que as ferramentas devolveram, o
+  que ficou pendente, o roteiro que saiu, o tempo e o custo, e o resultado de cada cobrança. As
+  cobranças (sugestão do balcão, não conversada): as que valem para qualquer pedido (nada fora do alcance
+  dito, nada que suma sem aviso, a ordem dita mantida, a cidade certa, cada coisa pedida com um desfecho)
+  mais uma leitura da IA que julga o roteiro contra o pedido. Os onze pedidos de 20 e 21/11 são o
+  primeiro material. **Em aberto, para o Douglas:** os 10 pedidos são novos a cada rodada ou fixos
+  (recomendação do balcão: novos, com os que falharam voltando até passar).
+
+**O que pede de fora.** **Do Douglas, antes de abrir a fase:** uma conta do Google Cloud com faturamento,
+a Places API (New) ligada e a chave em `supabase secrets` (o nome se decide no prompt; o balcão não criou
+nada). **Custo do Google** (a página oficial de preços, lida pelo balcão em 21/11): Text Search Pro
+US$ 32 por mil, com 5.000 grátis por mês; com nota e horário (Enterprise), US$ 35 por mil, com 1.000
+grátis; Place Details Essentials US$ 5 por mil, com 10.000 grátis; estimativa do balcão, não medida: uma
+conversa com três buscas sai por cerca de US$ 0,10 depois da faixa grátis. **Custo da IA:** o laço com
+ferramentas gasta mais leituras que hoje, não medido; as cotas por pessoa (20 perguntas e 10 roteiros em
+24 h, D206) precisam de revisão. **Migration:** provável, para o `place_id` na parada (a conferir). **A
+conferir pelo orquestrador ao escrever o prompt:** a forma do pedido da Places API (New) (a busca por texto
+com a área preferida e a restrita, a busca ao longo de uma rota, os campos por faixa de preço), o tempo
+máximo de uma Edge Function para o laço, e o uso de ferramentas com saída estruturada no modelo de hoje.
+
+**O que não dá, e o que dá.** Os termos do Google e a decisão 4 (item 7 de "O que não dá"); "a feirinha"
+e o dia de uma feira (item 8); **as ferramentas de IA do próprio Google** ("Maps Experience agent tools",
+um serviço MCP) existem, com termos que proíbem extrair os lugares da resposta e preço não confirmado:
+ficam anotadas como alternativa, porque o roteiro precisa do lugar estruturado, que as nossas ferramentas
+sobre a Places API dão.
+
+**Se precisar cortar em duas:** primeiro **a fonte** (o Google atrás da função, os cartões com nota e
+horário, "em Canoinhas" dentro da cidade, o `place_id` na parada, a atribuição), com a conversa de hoje
+por cima; depois **o planejador** com as ferramentas e a bateria. Uma fase só se a chave existir ao abrir.
+
+Testes: Vitest da função com o Google de mentira (a busca numa cidade, perto de um ponto, no caminho; os
+campos; a chave nunca na URL nem no log), do julgamento do app (o candidato que não veio de ferramenta é
+recusado; o identificador conferido), do laço com teto, dos passos e das perguntas nas saídas fixas da IA,
+do `place_id` na parada; o teste da função com entrada fixa, como a 17 e a 24; e2e com a IA e o Google
+respondidos no navegador: o pedido de Canoinhas termina com o café escolhido, o salão escolhido e a
+feirinha pendente com a pergunta; laboratório: a tarefa da bateria (10 pedidos, com teto de custo por
+rodada) e o painel para ler o histórico; uma medição real da conversa de Canoinhas, uma vez, com o custo
+do Google e da IA. Decisões: a fonte (a D226 recebe o que mudou), a tabela que sai (D227), onde se
+procura (D228), a vontade que vira um plano com ferramentas (D225), o caminho e a escrita sobre os fatos
+das ferramentas (D230, D231), o julgamento, a bateria, o `place_id`, as cotas, os custos medidos, o
+registro dos termos e da decisão 4.
+
+**Decidido em 21/11:** a pesquisa e a montagem do roteiro são a prioridade (1); a fonte é o Google Places,
+com as avaliações e o horário (3); o roteiro guarda o nome e o endereço, e os termos não entram na conta
+(4, reafirmada); a IA planeja com ferramentas e o app julga (5); a bateria: 10 pedidos, diferentes,
+guardados, fora do deploy (6); "em Canoinhas" dentro da cidade (8).
+
+---
+
+## Fase 26 · O passeio um passo de cada vez (sobre o planejador)
+
+Um passeio é uma **sequência**, e a conversa passa a montá-lo **um passo de cada vez**. A pessoa escreve
+do jeito que fala ("quero ir numa cachoeira e depois tomar um café"); o planejador da 27 lê os passos na
+ordem em que ela disse e, se ela não disse a ordem, **pergunta**. A tela mostra **só as opções do primeiro
+passo**; escolhida a cachoeira, as opções do café são buscadas **em volta dela e no caminho de volta**, e
+cada cartão diz quanto aquilo acrescenta ao passeio, não a distância de casa. O tempo que a pessoa tem
+vale para o **passeio todo** (a estrada mais o tempo nos lugares), fica à vista o tempo inteiro, e o que
+não cabe aparece marcado, não escondido. Nasceu de um uso real do Douglas em 20/11 ("gostaria de amanha
+visitar uma cachueira e passar em cafe (melhor que tiver) e voltar para casa", "1:30 no maximo"): as
+cachoeiras e os cafés vieram lado a lado, todos medidos de casa; com a cachoeira marcada, os seis cafés
+da tela ficavam de 72 a 106 km dela. Nas palavras dele: "dependendo da escolha onde vou por primeiro ele
+deveria influenciar na segunda opção que seria o café, então nem deveria mostrar"; "se eu não passasse na
+pesquisa quando eu iria no café, deveria perguntar qual seria a ordem". Ideia fechada em 20/11
+(`docs/ideias/2026-11-20-o-passeio-um-passo-de-cada-vez.md`) e **mantida em 21/11, construída sobre a
+27**: a ordem, a relação de cada passo e a pergunta da ordem passam a vir do planejador; a relação entre
+os passos é o "onde" da ferramenta de procurar lugares, não uma tabela de regras do app.
+
+**O que entra** (os itens 1 a 5 da ideia de 20/11, sobre o planejador)
+
+- **A tela um passo de cada vez** ("1 de 2 · A cachoeira"): só os candidatos do passo da vez; os do
+  seguinte não aparecem antes da escolha do anterior. Escolhido um passo, o planejador busca o seguinte
+  pela relação dele (perto do anterior; no caminho entre o anterior e o próximo ponto fixo: casa, o
+  destino, um lugar já escolhido; perto de casa; numa cidade; sem relação dita, em volta do anterior e no
+  caminho de volta). **Cada cartão diz o que o lugar acrescenta ao passeio** ("a 10 min da Cachoeira
+  Wiegand", "+15 min de estrada"), como "cerca de" (D228). Voltar um passo desfaz as escolhas seguintes,
+  e a tela avisa. A ordem final é a dos passos; o caminho mais curto (D230) só ordena o que ficou sem
+  ordem. Uma escolha por passo, com "Mais um" para quem quiser dois cafés, é suposição do balcão: o
+  prompt decide e registra.
+- **O tempo é o do passeio todo** ("Quanto tempo vocês têm?", com opções que combinam com o pedido: a
+  manhã, a tarde, o dia, ou em horas), no lugar de "até quanto tempo de carro?"; o app faz a conta (a
+  estrada de ida, entre os lugares e de volta, pela rota ou pela estimativa da D228, mais a permanência
+  de cada um pela D232, mais o horário do lugar pelo Google). **O total fica à vista** ("O passeio dá
+  cerca de 4 h 10: 2 h 40 de estrada e 1 h 30 nos lugares"), ao lado do tempo que a pessoa disse; a
+  opção que estoura aparece **marcada**; se nada couber, a tela diz e oferece mais tempo ou outra escolha
+  no passo anterior. Até 3 perguntas, ditas antes (decisão 6 de 08/11); a da ordem conta; a prioridade
+  quando passarem de três é decisão do prompt (a suposição do balcão: quando, o tempo, a ordem).
+- **"Aqui perto", "na cidade", "pertinho" são alcance de minutos, não de horas**, a partir do ponto de
+  referência da 25. A quem não sabe para onde ir, o app oferece o que existe ao alcance (tipos de
+  passeio e cidades de verdade), nunca nome de região.
+- **O que a pessoa disse não some** (sobre os três estados da 25): o lugar que só ela conhece ("a casa da
+  minha mãe em Mafra") vira uma parada sem coordenada com "Escolher o local"; a cidade de destino ("vou
+  pra Joinville") entra como parada, e "no caminho" é o caminho até ela; a hora do dia dita ("café da
+  manhã", "à noite", "antes do almoço") vai para os horários e para a conta, e se a conta não fecha
+  ("voltar antes do almoço" com a padaria às 13:25, como no teste 7 de 20/11), a tela avisa antes de
+  criar a viagem. **"O melhor café"** ordena pela nota do Google e diz o critério (a 27).
+
+**O que pede de fora.** A `plan-trip` (ou a função do planejador da 27) republicada, compatível com o app
+no ar (D225: acrescentar é compatível; renomear ou tirar não é). IA: as leituras do planejador por passo
+(a 27 mede). Nenhuma migration, pela leitura do balcão (a conversa mora no aparelho), a conferir. Nenhuma
+chave nova. Nada do Douglas. O objetivo do dia que esta fase lê (o destino dito, o que é "no caminho") é o
+que a 28 usa para dividir o mapa em trechos.
+
+**Se precisar cortar em duas:** primeiro a tela um passo de cada vez sobre os passos do planejador;
+depois o tempo do passeio todo (a pergunta, a conta, a marca do que estoura e o aviso antes de criar a
+viagem) e a hora do dia nos horários.
+
+Testes: Vitest (a busca do passo seguinte pela relação; a conta do passeio e a marca do que estoura; a
+ordem dos passos mantida; o caminho mais curto só no que ficou sem ordem; o lugar sem coordenada e a
+cidade de destino na montagem; o aviso da conta que não fecha); a função com entrada fixa (os passos, as
+relações, a ordem dita e a pergunta da ordem nas saídas da IA); e2e com o planejador e o Google
+respondidos no navegador (dois passos: o segundo só aparece depois da escolha do primeiro e as opções dele
+mudam com ela; a pergunta da ordem; o total à vista e a opção marcada); laboratório: a bateria da 27
+ganha as cobranças desta fase (as opções do segundo passo perto da escolha do primeiro; a ordem dita
+mantida na revisão; o tempo estourado avisado; a casa da mãe como parada). Decisões: a tela um passo de
+cada vez, o tempo do passeio todo, a hora do dia, o lugar da pessoa como parada; **a D228 e a D230
+recebem o que mudou**, do jeito da D221 com a D175, a D177 e a D178; a seção 2 do prompt mestre ganha a
+regra do perguntar na dúvida ao lado da do não-preencher.
+
+**Decidido em 20/11:** cada escolha influencia a seguinte, e as opções do passo seguinte não aparecem
+antes (1); a ordem se lê quando dita e se pergunta quando não dita (2); o tempo perguntado é o do passeio
+todo, e o app faz a conta (3). **Em 21/11 (item 7 da ideia principal):** o passeio um passo de cada vez
+continua valendo, construído sobre o planejador e o Google.
+
+---
+
+## Fase 28 · O mapa por trechos
+
+Hoje a maquete é uma tira só, com as paradas do dia em ordem, de baixo para cima. Numa ida e volta, a
+casa aparece embaixo, na saída, e de novo em cima, na chegada, como se fossem dois lugares. O Douglas,
+vendo a própria viagem em 21/11: "não faz sentido a rota sair do meu local e lá em cima mostrar meu local
+novamente. Fica estranho meu ponto estar em dois locais diferentes do mapa". A proposta dele: **o mapa
+mostra um trecho por vez, até o objetivo**. "Quando eu saísse de Major Vieira, deveria aparecer a rota
+até Curitiba como objetivo e as paradas; quando eu chegasse em Curitiba ele iria completar e mostraria no
+mapa a volta de Curitiba para Major." Com um trecho por vez, embaixo é de onde se sai e em cima é para
+onde se vai; num dia sem volta nada muda. O mesmo print mostrou **"Monte Castelo" duas vezes na maquete,
+sem a rota passar lá** (o ponto mais perto fica a 9 km do centro): a regra da D220 dá a cada amostra de
+2 km o município mais populoso a até 12 km (`CITY_RADIUS_M`), não o que a estrada atravessa, e a ida e a
+volta são dois trechos de amostras, então o mesmo nome entrou duas vezes ("a gente nem passa por Monte
+Castelo, como ele está supondo"). Ideia fechada em 21/11 (`docs/ideias/2026-11-21-o-mapa-por-trechos.md`).
+É independente da busca.
+
+**O que entra**
+
+- **O dia vira trechos, e o mapa mostra o trecho da vez.** Um **objetivo** é o destino que a pessoa disse
+  ("vou pra Curitiba"); o que fica antes dele é **parada do trecho**; a volta para casa é sempre o último
+  trecho; um dia pode ter mais de um objetivo. **"Cachoeira e depois café" é um objetivo só** (a cachoeira;
+  o café é parada da volta): o mapa não fica picado em trechos curtos. **Quando o app não sabe o objetivo**
+  (viagem antiga ou importada): num dia que termina onde começou, divide só a ida e a volta, no ponto
+  mais longe de casa; num dia que não volta, um trecho só. A maquete, a câmera de repouso (D216) e as
+  pílulas mostram **o trecho inteiro até o objetivo**: de onde se sai embaixo, o objetivo em cima, as
+  paradas do trecho no caminho (`layout.ts`, `camera.ts`).
+- **A troca de trecho.** No **"Chegamos!" do objetivo**, depois do "Como foi?", o trecho se completa e o
+  mapa passa ao seguinte. **Um indicador pequeno "ida · volta"** no topo (ou "1 de 3" quando há mais)
+  espia outro trecho com um toque; o trecho feito continua visível como feito. **O "Rever o dia"** toca os
+  trechos em sequência. **A barra de progresso fala do trecho** ("até Curitiba"), com o total do dia menor
+  ao lado. A projeção com piso (D234) passa a projetar dentro do trecho: a mesma estrada deixa de
+  aparecer duas vezes na mesma projeção.
+- **As cidades de passagem** (revê a D220): a cidade de passagem é **a que a estrada atravessa**, não a
+  mais populosa num raio de 12 km; **nunca repetida** no mesmo trecho. A peça da cidade (D258, D265)
+  segue o nome.
+
+**O que pede de fora.** Nada de servidor, de IA nem de chave. **Migration:** só se o objetivo for guardado
+na parada; se for sempre derivado (do que a conversa disse, guardado no rascunho, ou da regra de
+reserva), não precisa: a conferir. Nada que só o Douglas resolva.
+
+**O que não dá, e o que dá.** A viagem antiga não diz qual parada é o objetivo: vale a regra de reserva;
+nas viagens novas, o objetivo vem da conversa (a 26). O trecho feito some da tela principal: o indicador
+e o "Rever o dia" o trazem de volta.
+
+Testes: Vitest da divisão em trechos (com o objetivo dito; pela regra de reserva; o dia sem volta como
+um trecho só; cachoeira e café), do layout de um trecho (a origem embaixo, o objetivo em cima, a casa uma
+vez só), das cidades de passagem (a que a estrada atravessa; nunca repetida; o caso de Monte Castelo e
+Major Vieira com a rota do teste de 21/11), da projeção dentro do trecho; e2e no molde do
+`ida-e-volta.spec`: sair de casa mostra a ida; o "Chegamos!" do objetivo troca para a volta; o indicador
+espia o outro trecho; a barra fala do trecho; laboratório: o `app_maquete` com uma viagem de ida e volta,
+com as capturas dos dois trechos. Decisões: os trechos e o objetivo, a regra de reserva, a troca, o
+indicador, a barra, a cidade que a estrada atravessa; **a D215, a D216, a D217, a D220, a D233, a D234, a
+D258 e a D265 recebem o que mudou**, e **a decisão 1 de 15/11** ("deve aparecer o mapa inteiro do dia da
+viagem") passa a valer como **"o trecho inteiro até o objetivo"**; a seção 6.1 do prompt mestre.
+
+**Decidido em 21/11 (o mapa):** o mapa mostra um trecho até o objetivo por vez, e a volta só aparece ao
+chegar (1); o objetivo é o destino que a pessoa disse, o resto é parada do trecho, a volta é o último
+trecho (2); cachoeira e café: um objetivo, e o café é parada da volta (3); o mapa troca no "Chegamos!" do
+objetivo, depois do "Como foi?" (4); o indicador "ida · volta", a barra do trecho e a cidade que a estrada
+atravessa (5).
+
+---
+
+## Fase 29 · O chat que continua
+
+O Douglas (21/11): "mesmo após o roteiro estar montado, ainda deixar o chat para o user, para ele ir
+podendo tirar dúvidas, sugestões e ir ajustando seu roteiro". A mesma IA da 27, com as mesmas
+ferramentas, mais a leitura da viagem. Três usos: **dúvidas** ("o café abre domingo?"), **sugestões** ("o
+que tem perto do mirante?") e **ajustes** ("troca o café por uma padaria", "sai às 9", "tira a segunda
+parada"). Ideia fechada em 21/11 (item 5 de `docs/ideias/2026-11-21-a-pesquisa-e-o-roteiro-refeitos.md`).
+
+**O que entra**
+
+- **O chat na viagem**, depois do roteiro pronto, com a leitura da viagem como dado (os dias, as paradas,
+  os horários, as reservas que a IA pode citar) e as ferramentas da 27 (procurar lugares, localizar um
+  nome, o tempo de carro).
+- **Cada mudança proposta aparece como um cartão com "Aplicar"**: nada muda sem o toque, e há desfazer. É
+  o mesmo "o app julga": a proposta vale só com lugares que voltaram das ferramentas; a IA escreve e não
+  escolhe (D231); nada entra na rota sem a pessoa (D232). Uma troca de parada, um horário novo e uma
+  parada tirada passam pelas mesmas peças da revisão e do `reschedule` (D232).
+- **Só com rede.** Onde mora o histórico do chat (só no aparelho, ou sincronizado com o time) é do
+  levantamento do prompt; a cota por pessoa é própria.
+
+**O que pede de fora.** IA: leituras a mais por viagem, com cota própria e teto medido. Migration:
+provável, para o histórico, se ele sincronizar (a conferir). Nenhuma chave nova. Nada do Douglas.
+
+Testes: Vitest (as propostas da IA viram cartões; nada muda sem "Aplicar"; o desfazer; a proposta com um
+lugar que não veio de ferramenta é recusada); a função com entrada fixa; e2e: o chat depois do roteiro
+propõe uma troca, e ela só acontece no "Aplicar"; laboratório: uma conversa de ajuste na bateria da 27,
+com o custo. Decisões: o chat, o cartão com "Aplicar", o histórico, a cota; a 4.8 e a 9.4 do prompt
+mestre.
+
+**Decidido em 21/11:** o chat continua depois do roteiro pronto (7); o cartão com "Aplicar" (8).
+
+---
+
 ## Fase 19 · O gerador de carros
 
 A base das fases 20 e do "carro grande" da 14. Hoje há cinco perfis escritos à mão (`src/art/cars/
@@ -716,6 +1130,25 @@ consentimento, o mínimo de dado, o casamento.
   do dia; a seção 12 do prompt mestre ganha a 24 na vez dela; a regra do não-preencher ganha o seu
   exemplo maior: a pessoa diz o que quer e escolhe entre lugares reais, nunca desfaz um roteiro
   adivinhado.
+- **Com as fases 25 e 26 (20/11):** a D225 (a vontade ganha os passos, as relações e a ordem dita), a
+  D228 (onde se procura: em volta da escolha anterior e no caminho; o tempo do passeio todo no lugar do
+  raio de ida; uma ou mais por passo, conforme a 26 decidir) e a D230 (o caminho mais curto só ordena o
+  que ficou sem ordem) recebem o que a 26 registra, do jeito da D221 com a D175, a D177 e a D178; a D227
+  (a tabela de tipos: os que faltam, a palavra que nomeia o lugar) e a D208 (a saída de hoje: as opções
+  pela hora, as vontades na ordem do texto) recebem o que a 25 e a 26 mudam; a seção 12 do prompt mestre
+  ganha as duas na vez da primeira; a seção 2 ganha, ao lado da regra do não-preencher, **a regra do
+  perguntar na dúvida** (decisão 5 de 20/11: o app pergunta e não afirma o que não sabe), pela 26.
+  Nenhum desses documentos muda antes da fase que o toca.
+- **Com as fases 25, 27, 26, 28 e 29 (21/11):** a D176 (a conversa passa a pedir a posição), a D203 e a
+  D208 (a origem de antes, as opções pela hora) pela 25; a D226 (a fonte), a D227 (a tabela sai), a
+  D228 ("em tal cidade" é dentro da cidade; as opções com nota e horário), a D225 (a vontade vira um
+  plano com ferramentas), a D230 e a D231 (o caminho e a escrita sobre os fatos das ferramentas) pela
+  27 e pela 26, do jeito da D221; a D215, a D216, a D217, a D220 (a cidade que a estrada atravessa), a
+  D233, a D234, a D258 e a D265 pela 28, e **a decisão 1 de 15/11 passa a valer como "o trecho inteiro
+  até o objetivo"**; no prompt mestre, a 6.1 (o trecho) pela 28, a 9.5 (a fonte) e uma seção do
+  planejador pela 27, a 4.8 e a 9.4 (o chat que continua) pela 29, a seção 2 (a regra do perguntar na
+  dúvida) pela 26, e a seção 12 ganha as cinco na vez da primeira. Nenhum desses documentos muda antes
+  da fase que o toca.
 
 ## O que o Douglas decidiu em 08/11/2026
 
@@ -799,3 +1232,110 @@ No balcão de ideias, sobre o café colonial (`docs/ideias/2026-11-15-quero-ir-n
 
 O orquestrador encaixou a ideia como a **fase 24** na noite de 15/11, com a 22 fechada, e abriu o portão
 dela na mesma noite, a pedido do Douglas (`docs/fases/fase-24.md`).
+
+## O que o Douglas decidiu em 20/11/2026
+
+No balcão de ideias, sobre o passeio um passo de cada vez
+(`docs/ideias/2026-11-20-o-passeio-um-passo-de-cada-vez.md`), depois de um uso real dele na produção
+("gostaria de amanha visitar uma cachueira e passar em cafe (melhor que tiver) e voltar para casa") e
+de uma bateria de dez pedidos de leigo:
+
+1. **Cada escolha influencia a seguinte, e as opções do passo seguinte não aparecem antes.** "Dependendo
+   da escolha onde vou por primeiro ele deveria influenciar na segunda opção que seria o café, então nem
+   deveria mostrar. Pois talvez eu escolha uma cachoeira e um café muito longe um do outro, aí a rota
+   fica horrível."
+2. **A ordem se lê quando dita e se pergunta quando não dita.** "Se eu não passasse na pesquisa quando eu
+   iria no café, deveria perguntar qual seria a ordem, para poder fazer as perguntas, e cada lugar
+   influencia o outro." A forma da pergunta ("O que vem primeiro?", com "Tanto faz") foi recomendação do
+   balcão.
+3. **O tempo perguntado é o do passeio todo, e o app faz a conta.** Recomendação do balcão: um leigo pensa
+   "tenho a tarde", e dois lugares a 1 h 30 de casa em direções opostas cabem no raio e não cabem na
+   tarde.
+4. **A localização de quem pede decide o que faz sentido.** "Se falo que quero ir amanhã em uma padaria
+   aqui perto, não vai ser longe em outro estado e muito menos em Portugal."
+5. **Na dúvida, o app pergunta e não afirma o que não sabe.** "Se ficar em dúvida, deve perguntar e não
+   afirmar algo que não sabe." Vale para a cidade, para o tempo e para qualquer resposta que ele não
+   entendeu.
+6. **Os defeitos puros viram uma correção curta, na frente da fase grande.** Recomendação do balcão.
+7. **A prova é com pedidos de leigo.** "Textos bem simples, como realmente uma pessoa leiga iria fazer."
+
+Sobre as decisões 2, 3 e 6: o balcão apresentou as três recomendações e o Douglas respondeu "Aceito
+sugestões"; o balcão leu isso como aceite das três, e a leitura é dele. **Descartado** com ele: manter
+as listas juntas e só reordenar a segunda depois da primeira escolha; o app decidir a ordem sozinho
+quando ela não foi dita; perguntar "até quanto tempo de carro?" como raio de ida por lugar; resolver a
+cidade só com `countrycodes=br`.
+
+O que essas decisões mudam: a **D225** (a vontade ganha os passos, as relações e a ordem dita), a
+**D228** (onde se procura e o tempo do passeio todo) e a **D230** (o caminho mais curto só ordena o que
+ficou sem ordem), na fase 26; a **D227** (a tabela de tipos) e a **D208** (a saída de hoje) de leve, nas
+fases 25 e 26; a **seção 2 do prompt mestre** ganha a regra do perguntar na dúvida, pela 26. O
+orquestrador encaixou a ideia como as fases 25 e 26 (a tabela "A ordem") na noite de 20/11, com a fase
+23 em andamento; nenhuma das duas começa antes do Douglas pedir, e a posição delas antes da 19 espera a
+palavra dele.
+
+## O que o Douglas decidiu em 21/11/2026
+
+No balcão de ideias, de manhã, sobre a pesquisa e a montagem do roteiro
+(`docs/ideias/2026-11-21-a-pesquisa-e-o-roteiro-refeitos.md`), depois de mais um pedido real dele na
+produção ("iria na feirinha, tomar um cafe e levar a minha mulher cortar o cabelo, tudo isso em
+canoinhas sc": a feirinha e o salão sumiram, o café veio longe, e a origem saiu como Papanduva quando ele
+estava em Major Vieira):
+
+1. **A pesquisa e a montagem do roteiro são a prioridade do app**, com o tempo e o dinheiro que for
+   preciso. "Essa parte da pesquisa e montar o roteiro deveria ser a melhor do nosso app e devemos
+   gastar o tempo e dinheiro que for nela para deixar quase perfeita." Sobre o de hoje: "Nada de imersão
+   para o usuário, apenas frustração."
+2. **O GPS entra na conversa e em toda etapa em que ajudar.** "Deve usar no momento que está montando o
+   roteiro e todas as outras etapas que achar necessário, não devemos poupar recurso."
+3. **A fonte é o Google Places**, com as avaliações e o horário. "Acho que o melhor é Google Places"; "é
+   confiável e mais atualizado".
+4. **O roteiro guarda o nome e o endereço do lugar, como hoje, e os termos do Google não entram na
+   conta.** O balcão leu os termos e disse que eles proíbem isso (o item 7 de "O que não dá"). Ele
+   respondeu: "como é um app de pesquisa e desenvolvimento, não tem problema, é apenas para nós usar,
+   veja que não tem nada cobrando e ele é fechado". E reafirmou: "não levar em consideração os termos,
+   apenas vamos usar o recurso e pronto para nosso estudo de app fechado. Isso está sendo apenas um
+   teste de app." **As sessões seguem esta decisão e não a reabrem.**
+5. **A IA planeja com ferramentas e o app julga.** A tabela de tipos sai (revê a D227). "Gostei do app
+   julga."
+6. **A bateria:** 10 pedidos por rodada, diferentes, resultados guardados, fora do deploy ("não pode
+   ser atrelado ao deploy, para não deixar ainda mais demorado"; "para sempre ir melhorando e
+   analisá-los").
+7. **O chat continua depois do roteiro pronto.** "Mesmo após o roteiro estar montado, ainda deixar o
+   chat para o user, para ele ir podendo tirar dúvidas, sugestões e ir ajustando seu roteiro."
+8. **As sugestões do balcão estão aceitas** ("aceito sugestões", duas vezes): a origem à vista e
+   editável; "em Canoinhas" dentro da cidade; nada some em silêncio; o texto só fala do que existe; o
+   cartão com "Aplicar" no chat.
+
+No mesmo dia, sobre o mapa por trechos (`docs/ideias/2026-11-21-o-mapa-por-trechos.md`), a partir de um
+print da viagem que ele criou ("não faz sentido a rota sair do meu local e lá em cima mostrar meu local
+novamente"; "a gente nem passa por Monte Castelo, como ele está supondo"):
+
+9. **O mapa mostra um trecho até o objetivo por vez**, e a volta só aparece ao chegar. Ideia dele.
+10. **O objetivo é o destino que a pessoa disse**; o resto é parada do trecho; a volta para casa é o
+    último trecho. Recomendação do balcão.
+11. **Cachoeira e café: um objetivo, e o café é parada da volta.** Recomendação do balcão.
+12. **O mapa troca no "Chegamos!" do objetivo**, depois do "Como foi?". Como ele descreveu.
+13. **O indicador "ida · volta", a barra do trecho e a cidade que a estrada atravessa.** Sugestões do
+    balcão ("aceito sugestões dessa também").
+
+**Descartado** com ele: trocar o modelo da IA (o Sonnet 5.5 entendeu os pedidos; um modelo maior
+alimentaria o mesmo funil); um índice próprio de lugares com dados abertos (Overture, Foursquare aberto),
+que o balcão recomendou primeiro e fica como reserva se o Google deixar de servir; guardar só a referência
+do Google e pedir permissão ao Google antes (saíram pela decisão 4); um robô raspando o Google Maps; uma
+bateria de 50 a 100 pedidos como portão do deploy (ele reduziu para 10 e tirou do deploy); o dia inteiro
+numa tira quando o dia tem volta (a decisão 1 de 15/11 passa a valer como "o trecho inteiro até o
+objetivo"); cada lugar escolhido como um objetivo.
+
+**Em aberto, para ele:** os 10 pedidos da bateria são novos a cada rodada ou são 10 fixos? O balcão leu
+"sempre um diferente do outro" como os dois e recomenda novos a cada rodada, com os que falharam
+voltando até passar. **Pendência só dele, antes da fase 27:** a conta do Google Cloud com faturamento, a
+Places API (New) ligada e a chave em `supabase secrets`.
+
+O que essas decisões mudam: a **D176**, a **D203** e a **D208** (a conversa pede a posição; a origem à
+vista; as opções pela hora), na fase 25; a **D226**, a **D227**, a **D228**, a **D225**, a **D230** e a
+**D231** (a fonte, a tabela que sai, onde se procura, a vontade que vira plano, o caminho e a escrita
+sobre os fatos), nas fases 27 e 26; a **D215**, a **D216**, a **D217**, a **D220**, a **D233**, a **D234**,
+a **D258** e a **D265** e **a decisão 1 de 15/11**, na fase 28. O orquestrador reviu as fases 25 e 26 e
+encaixou as 27, 28 e 29 (a tabela "A ordem") em 21/11 de manhã, com a 23 fechada e a 25 escrita e à espera
+destes ajustes, a pedido do Douglas; nenhuma fase começa antes dele pedir, e a ordem se confirma a cada
+"próxima".

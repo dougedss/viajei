@@ -927,6 +927,38 @@ Botânico); o que falta é um celular de verdade numa viagem de verdade.
 
 Anotações:
 
+### 1.32 As correções da conversa · 15 min (fase 25) · sem prova até a viagem
+
+Como o 1.24 a 1.31, fica como documentação até a viagem (D270 a D281). A posição na conversa, a origem
+à vista, o campo que não se apaga, o tempo lido inteiro, a resposta não entendida, as opções pela hora,
+a cidade conferida e os três estados estão provados na CI (Vitest, pgTAP, a função com entrada fixa e o
+`conversa.spec`) e na medição com pedidos de leigo; o que falta é um celular de verdade.
+
+- [ ] **A frase da posição.** Num celular que nunca permitiu a posição no app, escreva "quero ir num
+  café amanhã" e toque em Montar a viagem: antes de qualquer pergunta, o cartão "Posso usar a posição
+  do celular para saber de onde vocês saem?"; "Usar posição" abre a pergunta do iPhone/Android uma vez;
+  depois, "Saindo de <a sua cidade> · mudar" aparece nas perguntas e nas opções, e as opções são
+  medidas de onde você está. "mudar" abre o campo da origem e a busca roda de novo dali.
+- [ ] **"Agora não".** Noutro celular (ou depois de "Sair da conta"), "Agora não": a conversa segue
+  pela origem da sua viagem mais recente, sem insistir, e o cartão não volta por 24 h.
+- [ ] **O campo livre.** Na pergunta do tempo, digite "1 hora e meia" letra a letra: o campo mostra o
+  texto inteiro o tempo todo (ao passar por "1 hora" a pílula marca e o campo não se apaga).
+- [ ] **A resposta não entendida.** Responda "aqui perto mesmo, na cidade": a tela diz que não entendeu
+  e pede em horas, com o texto no campo; responda de novo com algo sem tempo: só as opções ficam.
+- [ ] **A cidade conferida.** "amanha quero almoçar em mafra e depois ir numa cachoeira": as opções
+  vêm de Mafra, Santa Catarina (a cidade dos cartões e "de Mafra" no título da lista), sem pergunta;
+  "quero ir num café em Bom Jardim": a pergunta "Há mais de um “Bom Jardim” no mapa" com as
+  cidades e a distância, e a busca só depois da escolha.
+- [ ] **Nada some em silêncio.** "iria na feirinha, tomar um cafe e cortar o cabelo em Canoinhas": a
+  feirinha e o salão aparecem como pendentes ("Fica pendente: entra na viagem sem local"), o resumo
+  diz "1 sem escolha · 2 pendentes"; "Tirar da viagem" o salão (e Desfazer); escolha um café; a revisão
+  mostra a feirinha sem local e o aviso; a viagem criada tem o café e a feirinha (sem local), e o nome
+  da viagem, o título do dia, as notas, as listas e as missões não falam da feirinha nem do salão como
+  se estivessem lá.
+- [ ] **O VoiceOver** no cartão da posição, em "mudar", na pergunta da cidade e no resumo dos estados.
+
+Anotações:
+
 ## Parte 2 · Android
 
 O mesmo percurso, mais curto: aqui está só o que muda no Android, e no fim o resto, item a item,

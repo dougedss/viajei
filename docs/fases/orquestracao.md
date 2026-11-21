@@ -650,7 +650,109 @@ _(preenchido pelo orquestrador em 20/11, ~19h50 UTC, a partir do transcript, do 
 - `docs/fases/fase-23.md` escrito às ~19h50 UTC de 20/11 pelo orquestrador, a partir do plano (a fase 23 e as decisões 2 a 6 e 8 de 15/11), da ideia `2026-11-15-mapa-do-dia-inteiro.md` (a estufa como régua; o artifact com `img/m-jardim.jpg` e a `modelScene`), das D66, D67, D178, D207, D214 a D238, D242, D245, D252, D253, da memória, de **uma chamada real a cada serviço** (o Nominatim: `lookup` com `extratags` e `polygon_geojson` do Jardim Botânico → `Q94923` e a planta com 63 pontos; a estufa é outro objeto do OSM, `way 261127581`, sem `wikidata`; o Wikidata: `Special:EntityData/Q94923.json` com P18, P625 e P373, sem medidas; o Commons: `imageinfo` com `extmetadata` (`LicenseShortName`, `Artist`, `Credit`, `LicenseUrl`…) e `categorymembers`), da política de User-Agent do Wikimedia (403 para agentes genéricos; requisições em série; `maxlag`), da documentação da Anthropic (visão: formatos, 10 MB, `url`, ⌈w/28⌉×⌈h/28⌉ tokens, 1.568 px; saída estruturada: `output_config.format`, sem `oneOf`, sem min/max, 16 uniões por pedido; preços de 20/11: Sonnet 5.5 US$ 2/10, Opus 5.5 US$ 4/20, Fable 5.2 US$ 8/40) e de um levantamento do código em `8e3e89c` (`art/stops`, `Miniatures.tsx`, `layout.ts`, `props-builder.ts`, `nominatim.ts`, `places-schema.ts`, `structured-schema.ts`, o `app_maquete`, o `lab.yml`). **Marcado como não conferido:** a política de uso do Nominatim para chamadas do servidor, se o buscador da API da Anthropic aceita o `thumburl` do Commons, o tempo máximo de uma Edge Function, a lei 9.610/98, o artifact da ideia. Com a 3.0 (o `RouteError` do `app_maquete`, o console no artefato, o agendado, o pedido sem tipo, a `0017` e a `0018`), o vocabulário da receita e o construtor com a estufa à mão como régua (o corte natural se a fase precisar ser quebrada), a peça na maquete e a da cidade de passagem, a função `landmarks` e o trabalhador `build-landmark` pelo cron (identificar no OSM e no Wikidata, as fotos do Commons só com licença livre, a receita pela IA, a conferência pelo aparelho), refazer com escolha obrigatória e tirar do ar, os testes, o `app_maquete` com a peça semeada e a medição `medir-cartao-postal` (teto US$ 3,00), a documentação (D178, D219 e D220 revistas; prompt mestre v12). Fora do git até o commit de fechamento da fase, junto com este relatório.
 
 ### Sessão
+- **Chat do VS Code aberto pelo Douglas**, `session_id` `428d8338-b259-48d1-8995-269e381cbf45`, das 19h52 UTC de 20/11 ao
+  resumo final às 01h45 UTC de 21/11 (o chat continuou aberto: às 08h08 UTC ainda respondia a ele). Pela transcrição:
+  **174 mensagens no Fable 5.1 e 187 no Opus 5.5** (começou no Fable, contra a regra de 08/11; o Douglas trocou para o
+  Opus no fim, pela memória da sessão), 9 mensagens do Douglas, 596 mil tokens de saída, 149,6 M lidos do cache, 2,6 M
+  criados; 8 chamadas de Bash com `git commit` e 11 com `git push`. **17 commits** na `main`, de `d7ddb7d` (a 3.0) a
+  `e64ee9d`, com o de fechamento `c69d503` `fase 23: os cartões-postais`. Sem o JSON do `claude -p`, o custo em dinheiro
+  não foi medido.
+- **CI:** vermelha em `c69d503` (44816699384), `f14a238` (44817085343), `ccc3cc6` (44817568018) e `f911c99`
+  (44818663863): o prettier do README, o lint do banco, o Vitest da CI sem as variáveis, o pgTAP 19 (D255, D266, D267);
+  verde em `c48da00` (44820905918), `2ac2447` (44833058916), `9decb4d` (44841300328), `c163ed5` (44845021869) e
+  `e64ee9d` (44850204130); na `main`, 44846622801 (`c163ed5`) e 44851988176 (`e64ee9d`, 01h45 UTC).
+- **Laboratórios e medição:** o preview em `c48da00` (44825825962, 22h04 UTC) **39 de 41** (o `app_maquete` corrigido
+  e o `app_missoes` não reproduzido, D268); a primeira medição (44825846647) caiu por um 522 do Cloudflare na API do
+  Supabase; um laboratório cancelado (44835376096, `2ac2447`); **a medição (44843680151, `9decb4d`, 00h26 UTC) verde:
+  a peça do Jardim Botânico publicada (v1, 19 formas), conferência `ok`, US$ 0,093**; **o da produção (44847796028,
+  `c163ed5`, 01h03 UTC) 37 verdes, nenhum vermelho, 5 medidos sem cobrança.** Toda a IA da fase: US$ 0,13 do teto de
+  3,00 (D267).
+- **No hospedado:** a `0017_cartoes_postais` e a `0018_fila_resiliente` aplicadas com o `--dry-run` lido; `landmarks`
+  v4 e `build-landmark` v4; o cron `viajei-build-landmark`; nenhum secret; o User-Agent `Viajei/0.23
+  (https://github.com/dougedss/viajei)` (D263). **A retirada de `trips.car_*` não aconteceu:** a `0018` virou a fila
+  resiliente e a retirada passou a ser a `0019` (D268), que fica para a 25.
+- **Desvios de regra:** a sessão começou no Fable 5.1 (a regra é o Opus 5.5); o Nominatim público recusou as Edge
+  Functions e o OSM do servidor passou para a Geoapify (D268, dentro da chave que já existia); durante o laboratório do
+  preview alguém com a viagem real abriu o app no preview e enfileirou sete lugares reais (US$ 0,014, D268). O que a
+  sessão não conferiu: a causa do `RouteError` da produção (D254), o vermelho do `app_missoes` no preview, o corpo do
+  erro do hotel e de Caxias do Sul (provável `maxlag`).
+
+- **20/11 à noite (00h40 UTC de 21/11), com a sessão em andamento** (a `fase-23` em `9decb4d`, CI
+  44841300328 e laboratório do preview 44843680151 verdes, ainda sem merge; `docs/decisoes.md` até a
+  D269 na branch): o balcão de ideias fechou com o Douglas
+  `docs/ideias/2026-11-20-o-passeio-um-passo-de-cada-vez.md` (um uso real dele e uma bateria de dez
+  pedidos de leigo na produção: "em Mafra" foi para Portugal, "pra Joinville" para a França, "Litoral"
+  para Camarões; o campo livre que se apaga; "1:30" não lido e o raio padrão em silêncio) e pediu ao
+  orquestrador o encaixe no plano, sem mexer no prompt da 23 nem abrir fase. O plano ganhou as **fases 25
+  (Correções da conversa, pequena, depende da 24) e 26 (O passeio um passo de cada vez, grande, depende
+  da 24 e da 25)**, os itens 5 e 6 de "O que não dá" (a nota de avaliação, que a Places da Geoapify não
+  tem, conferido na documentação em 21/11; as regiões que não são lugar do mapa), as sete decisões dele
+  de 20/11 e o que elas mudam na D225, na D228 e na D230 (de leve na D227 e na D208). A ordem
+  23 → 25 → 26 → 19 → 20 → 21 é a recomendação do balcão, adotada à espera da palavra do Douglas. O
+  plano, este relatório e a ideia ficam fora do git até um commit de fechamento (o da 23, se a sessão os
+  incluir; senão o da fase seguinte), como em 15/11.
+
+### Portão de saída (conferido às ~08h10 UTC de 21/11 pelo orquestrador, a pedido do Douglas: "proxima")
+- a ponta da `fase-23` está na `origin/main`: sim, `e64ee9d`, com o commit `fase 23: os cartões-postais` (`c69d503`) e
+  o dos números (`e64ee9d`); a branch remota `fase-23` ainda existe (não é da 25: o Douglas ou a sessão da 23 a apagam).
+- CI verde no sha da `main` (44851988176); o laboratório da produção verde (44847796028, em `c163ed5`; o `e64ee9d`
+  só mudou duas linhas de `decisoes.md`): sim.
+- `docs/decisoes.md` tem a seção "Fase 23 · Os cartões-postais (20/11/2026)", D254 a D269, em sequência: sim.
+  `docs/fases/fase-23.md` e `docs/fases/orquestracao.md` commitados em `c69d503`: sim (a nota do encaixe de 20/11,
+  acima, ficou fora do git, como o plano e a ideia).
+- a memória do projeto atualizada depois do fim: sim (`viajei-projeto.md` às 01h26 UTC, "Fechamento da fase 23");
+  a linha do `MEMORY.md` ficou com o orquestrador.
+- o resumo final (01h45 UTC): o sha, o que mudou, os dois laboratórios e a medição, as D254 a D269, o que mudou na
+  D178, na D219 e na D220, as armadilhas (o `--yes`/`--read-only` do Supabase em modo agente, o Node 18 do PATH, a
+  Vercel sem deployments no GitHub, a guarda do SDK para `max_tokens` alto sem stream), o que ficou sem prova (a peça
+  de um lugar real num aparelho, a cidade de passagem com peça, o Refazer, o leitor de tela na folha).
+- **Pendências do Douglas:** o `.env.example` (modificado, não lido); o User-Agent, se quiser trocar; tirar uma peça
+  do ar (`landmark_retire`); apagar a branch remota `fase-23`; o commit dos quatro documentos fora do git (a sessão da
+  23 ofereceu às 08h08 UTC; senão, a 25 os commita no fechamento); a pasta `.claude/`.
+- **O que fica para a 25 (a 3.0 dela):** o agendado de 21/11 (ainda não tinha rodado às 08h10 UTC); a `0019`
+  (`trips.car_*`); o pedido sem tipo de lugar (D238, D254: "é a conversa").
+
+## Fase 25 · Correções da conversa
+
+### Portão de entrada (aberto às ~08h30 UTC de 21/11, a pedido do Douglas: "proxima"; refeito às ~09h17 UTC de 21/11 com os ajustes dele)
+- fase 24 na `main`: sim (D224 a D238, desde 16/11); a 23 fechada em `e64ee9d`. A dependência (24 → 25) está
+  satisfeita. **A ordem, depois dos ajustes de 21/11: 23 → 25 → 27 → 26 → 28 → 29 → 19 → 20 → 21**, a
+  recomendação do balcão adotada pelo orquestrador (a decisão 1 de 21/11: a pesquisa e o roteiro são a
+  prioridade); a confirmação é do Douglas, a cada "próxima".
+- `docs/decisoes.md` até a D269. **As D da fase 25 começam na D270.** A próxima migration é a **`0019`**
+  (`trips.car_*` fora, D199 e D268), autorizada com a leitura e o `--dry-run`; nenhuma outra migration (a conversa
+  mora no aparelho); o Dexie na v7; a `plan-trip` republicada (os prompts do `ask` e da escrita); **nenhum secret
+  novo** (a chave do Google é da 27 e do Douglas).
+- memória do projeto atualizada depois da fase 23: sim (pela sessão, às 01h26 UTC), completada pelo orquestrador (os
+  parágrafos da 25 e dos ajustes de 21/11).
+- **Os ajustes de 21/11** chegaram pelo texto do balcão colado pelo Douglas: duas ideias fechadas de manhã
+  (`docs/ideias/2026-11-21-a-pesquisa-e-o-roteiro-refeitos.md`, que completa e em parte substitui a de 20/11, e
+  `docs/ideias/2026-11-21-o-mapa-por-trechos.md`). O plano ganhou as **fases 27 (A fonte e o planejador), 28 (O mapa
+  por trechos) e 29 (O chat que continua)**, as 25 e 26 revistas, os itens 7 e 8 de "O que não dá" (os termos do
+  Google e a decisão 4 do Douglas, que ninguém reabre; "a feirinha"), o item 5 revisto (a nota vem com o Google), a
+  seção "O que o Douglas decidiu em 21/11/2026" (as oito decisões da pesquisa e as cinco do mapa, o descartado, o
+  que muda na D176, D203, D208, D225, D226, D227, D228, D230, D231 e na D215, D216, D217, D220, D233, D234, D258, D265
+  e na decisão 1 de 15/11). **O que mudou na 25:** saem o nome que casa sem ser o tipo e os tipos que faltam (remendos
+  da tabela e da Geoapify, que a 27 troca); entram o GPS na conversa com a origem à vista e editável e o conserto do
+  `lastOrigin` (3.1), e "nada some em silêncio; o texto só fala do que existe" (3.8: os três estados de cada coisa
+  pedida; o bloco `<pendentes>` e a proibição no prompt da escrita); a cidade conferida fica na forma mínima (3.7); a
+  medição ganha o pedido de Canoinhas. **Em aberto, para o Douglas:** os 10 pedidos da bateria (fase 27) são novos a
+  cada rodada ou fixos (a recomendação do balcão: novos). **Pendência só dele, antes da 27:** a conta do Google
+  Cloud com faturamento, a Places API (New) ligada e a chave em `supabase secrets`.
+- `docs/fases/fase-25.md` escrito às ~08h30 UTC e **reescrito às ~09h17 UTC** de 21/11 pelo orquestrador, a partir do
+  plano (a fase 25 revista; as decisões 4 a 7 de 20/11 e 2 e 8 de 21/11), das ideias de 20 e 21/11, das D48, D176,
+  D199, D203, D208, D225 a D232, D238, D254, D267 a D269, da memória e de um levantamento do código em `e64ee9d`
+  (`flow.ts`, `nominatim.ts`, `QuestionsStep.tsx`, `OptionsStep.tsx`, `today.ts`, `places.ts`, `plan-ai.ts`,
+  `plan-protocol.ts`, `gather.ts`, `new-trip.ts` (`lastOrigin` ordena por `start_date` decrescente: conferido),
+  `useConversation.ts`, `conversation.ts`, `nova-viagem.spec.ts`, `measure-conversa.ts`). **Marcado como não
+  conferido:** a documentação do Nominatim (`viewbox` sem `bounded` como preferência; a política para apps de usuário
+  final) e as chamadas do balcão (não repetidas); a versão da `plan-trip` no hospedado; os campos de `Trip` para "a
+  viagem mais recente"; como os e2e do mapa dão o consentimento do app. Fora do git até o commit de fechamento da
+  fase, junto com este relatório, o plano e as três ideias.
+
+### Sessão
 _(a abrir pelo Douglas num chat novo; a preencher no próximo passo)_
 
-
-
+- **21/11, ~08h50 UTC, antes de abrir o chat:** o Douglas pediu para **esperar**: "estamos definindo mais uns ajustes e vou esperar para iniciar o 25; talvez alguma coisa do 25 vai ser alterado, e você ajusta as demandas todas de uma vez". O `fase-25.md` fica escrito e **não deve ser colado** até ele trazer os ajustes; o orquestrador então revisa o plano (as fases 25 e 26) e o prompt numa passada só, e refaz este portão se mudar.
+- **21/11, ~09h17 UTC:** os ajustes chegaram (as duas ideias de 21/11, acima). O plano foi revisto e o `fase-25.md`
+  reescrito numa passada só; **a 25 está pronta para abrir quando o Douglas pedir**; nenhuma fase foi aberta.
