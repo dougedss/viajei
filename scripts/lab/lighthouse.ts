@@ -229,7 +229,13 @@ export async function labLighthouse(ctx: LighthouseContext, today: string): Prom
     await page.goto(`${ctx.appUrl}/viagens`);
     await page.getByRole('textbox', { name: INTAKE_LABEL }).fill('quero sair hoje');
     await page.getByRole('button', { name: 'Montar a viagem' }).click();
-    await page.getByText(/^Tenho \d perguntas? antes de montar\.$/).waitFor({ timeout: 30_000 });
+    // a pergunta de posição da conversa (fase 25, D271) num navegador novo: "Agora não", e a conversa
+    // segue pela origem conhecida até as perguntas
+    const lead = page.getByText(/^Tenho \d perguntas? antes de montar\.$/);
+    const ask = page.getByRole('region', { name: 'Usar a posição do celular' });
+    await lead.or(ask).first().waitFor({ timeout: 30_000 });
+    if (await ask.isVisible()) await ask.getByRole('button', { name: 'Agora não' }).click();
+    await lead.waitFor({ timeout: 30_000 });
     // as telas de quem entrou: com o service worker e o precache, que é como elas abrem de verdade
     // (só se chega a elas depois de entrar, e entrar já instalou o app); a meta vale aqui
     const session = routes.filter((x) => x.session);
