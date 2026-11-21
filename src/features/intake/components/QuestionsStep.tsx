@@ -12,7 +12,7 @@ type Props = {
   questions: readonly PlanQuestion[];
   answers: readonly string[];
   /** quantas vezes a resposta de cada pergunta não foi entendida (fase 25, D274), pelo índice */
-  misread?: Readonly<Record<number, number>>;
+  misread?: Readonly<Record<number, number>> | undefined;
   /** "Saindo de Major Vieira, SC · mudar" (fase 25, D271), antes das perguntas */
   origin?: ReactNode;
   onAnswer: (index: number, value: string) => void;

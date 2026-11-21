@@ -40,6 +40,7 @@ import {
 } from './flow.ts';
 import { declineGeo, grantGeo, readGeoConsent } from '@/features/travel-mode/queries.ts';
 import { gatherContext } from './gather.ts';
+import { placeKey, type PlaceHit } from './locate.ts';
 import { unreadReach } from './reach.ts';
 import { todayQuestions } from './today.ts';
 
@@ -134,7 +135,7 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
   /** A rede da conversa: a busca por tipo pela função, o Nominatim pela fila, a rota pela função. */
   const deps = (onProgress?: FlowDeps['onProgress']): FlowDeps => ({
     findPlaces,
-    geocode: (q) => geocode(q),
+    geocode: (q, bias) => geocode(q, undefined, bias),
     searchNear: (q, center, radiusKm) => searchNear(q, center, radiusKm),
     route: (waypoints: LngLat[]) => requestRoute(waypoints).catch(() => null),
     ...(onProgress ? { onProgress } : {}),
@@ -196,6 +197,7 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
         context: c.context,
         center: c.center,
         originOverride: c.origin_override ?? null,
+        places: c.places ?? {},
       },
       deps((done, total) => setStage({ kind: 'searching', done, total })),
     );
@@ -355,6 +357,11 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
       };
       if (conv.map) await search(next);
       else await keep(next);
+    },
+    /** A cidade escolhida na pergunta da cidade (D276): guardada pela chave do dito; a busca roda então. */
+    choosePlace: async (said: string, hit: PlaceHit) => {
+      if (!conv) return;
+      await search({ ...conv, places: { ...(conv.places ?? {}), [placeKey(said)]: hit } });
     },
     answer: (index: number, value: string) => {
       if (!conv) return;

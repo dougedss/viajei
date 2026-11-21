@@ -194,6 +194,7 @@ export default function CriarViagemPage() {
           <OptionsStep
             map={talk.conv.map}
             origin={origin}
+            onPlace={(said, hit) => void talk.choosePlace(said, hit)}
             onToggle={talk.toggle}
             onPick={talk.pick}
             onMore={talk.more}

@@ -10,6 +10,7 @@ import { KIND_TEXT } from '@/features/itinerary/stop-kinds.ts';
 import { cx } from '@/lib/cx.ts';
 import { OSM_ATTRIBUTION } from '@/lib/geocode/nominatim.ts';
 import { canBuild, type MapStage, type NamedEntry, type OptionGroup } from '../flow.ts';
+import type { PlaceHit, PlaceQuestion } from '../locate.ts';
 import { openingText } from '../opening.ts';
 import { aboutMinutes, reachLabel, type MapOption } from '../search.ts';
 
@@ -17,6 +18,8 @@ type Props = {
   map: MapStage;
   /** "Saindo de Major Vieira, SC · mudar" (fase 25, D271), antes das opções */
   origin?: ReactNode;
+  /** a cidade escolhida na pergunta da cidade (fase 25, D276) */
+  onPlace: (said: string, hit: PlaceHit) => void;
   onToggle: (id: string) => void;
   onPick: (named: number, pick: number | 'skip') => void;
   onMore: (group: number) => void;
@@ -204,6 +207,71 @@ function Group({
   );
 }
 
+/**
+ * A pergunta da cidade (fase 25, D276), no molde de "Escolher o local" da D229: a cidade dita tem mais
+ * de um candidato plausível, ou só candidatos longe (outro país, além do alcance), e a busca só roda
+ * depois da escolha. "Nenhum destes" volta ao texto. Nunca outro país em silêncio.
+ */
+function PlaceAsk({
+  ask,
+  onPlace,
+  onBack,
+}: {
+  ask: PlaceQuestion;
+  onPlace: Props['onPlace'];
+  onBack: () => void;
+}) {
+  const where = ask.role === 'origin' ? 'de onde vocês saem' : 'para onde vocês vão';
+  return (
+    <section
+      className="grid gap-2"
+      aria-label={`Escolher o local de ${ask.said}`}
+      data-place-ask={ask.far ? 'far' : 'choice'}
+    >
+      <h2 className="label-caps text-accent-ink">
+        Escolher o local ({String(ask.options.length)})
+      </h2>
+      <p className="text-[15px]">
+        {ask.far
+          ? `Não achei “${ask.said}” perto de vocês. É um destes, ${where}?`
+          : `Há mais de um “${ask.said}” no mapa. Qual é o de vocês, ${where}?`}
+      </p>
+      <div role="radiogroup" className="grid gap-2" aria-label={ask.said}>
+        {ask.options.map((o) => (
+          <button
+            key={`${o.address}-${String(o.lat)}`}
+            type="button"
+            role="radio"
+            aria-checked={false}
+            onClick={() => onPlace(ask.said, o)}
+            className="grid min-h-14 gap-0.5 rounded-[16px] bg-card px-3 py-2 text-left shadow-[inset_0_0_0_1px_var(--color-line)]"
+          >
+            <span className="text-[16px] font-semibold">
+              {o.name}
+              {o.minutes !== null ? (
+                <span className="font-normal text-ink-2">
+                  {' '}
+                  · a {aboutMinutes(o.minutes)} de carro
+                </span>
+              ) : null}
+            </span>
+            <span className="text-[13px] break-words text-ink-2">{o.address}</span>
+          </button>
+        ))}
+        <button
+          type="button"
+          role="radio"
+          aria-checked={false}
+          onClick={onBack}
+          className="min-h-12 rounded-[16px] px-3 text-left text-[15px] font-semibold text-ink-2"
+        >
+          Nenhum destes
+        </button>
+      </div>
+    </section>
+  );
+}
+
 /** Um lugar que a pessoa nomeou: o que o mapa achou, a escolha entre os candidatos, ou "não achei". */
 function Named({ entry, index, props }: { entry: NamedEntry; index: number; props: Props }) {
   const s = entry.state;
@@ -303,6 +371,20 @@ export function OptionsStep(props: Props) {
     (n) => n.state.kind === 'found' || (n.state.kind === 'choice' && typeof n.pick === 'number'),
   ).length;
   const total = chosen + named;
+  if (map.ask) {
+    return (
+      <div className="grid gap-5" data-options="ask">
+        <p className="font-num text-[22px] leading-tight font-semibold">
+          Antes de procurar no mapa:
+        </p>
+        {props.origin}
+        <PlaceAsk ask={map.ask} onPlace={props.onPlace} onBack={props.onBack} />
+        <Button variant="ghost" size="md" onClick={props.onBack}>
+          Voltar ao texto
+        </Button>
+      </div>
+    );
+  }
   if (map.nowhere) {
     return (
       <Card className="grid gap-3" role="status" data-options="nowhere">

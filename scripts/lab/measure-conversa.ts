@@ -1,5 +1,5 @@
 import { appendFile } from 'node:fs/promises';
-import type { LngLat } from '../../supabase/functions/_shared/geo.ts';
+import { viewboxAround, type LngLat } from '../../supabase/functions/_shared/geo.ts';
 import {
   placesErrorSchema,
   placesResponseSchema,
@@ -119,22 +119,17 @@ function labDeps(
       }
       return placesResponseSchema.parse(json).places;
     },
-    geocode: (q) => {
+    geocode: (q, bias) => {
       const url = new URL('https://nominatim.openstreetmap.org/search');
       url.searchParams.set('q', q);
+      // o viés (fase 25, D276): a área preferida em volta de onde se sai, sem `bounded`
+      if (bias) url.searchParams.set('viewbox', viewboxAround(bias.near, bias.radiusKm));
       return nominatim(url);
     },
     searchNear: (q, center, radiusKm) => {
       const url = new URL('https://nominatim.openstreetmap.org/search');
-      const dLat = radiusKm / 111;
-      const dLng = radiusKm / (111 * Math.max(0.2, Math.cos((center.lat * Math.PI) / 180)));
       url.searchParams.set('q', q);
-      url.searchParams.set(
-        'viewbox',
-        [center.lng - dLng, center.lat + dLat, center.lng + dLng, center.lat - dLat]
-          .map((n) => n.toFixed(4))
-          .join(','),
-      );
+      url.searchParams.set('viewbox', viewboxAround(center, radiusKm));
       url.searchParams.set('bounded', '1');
       return nominatim(url);
     },

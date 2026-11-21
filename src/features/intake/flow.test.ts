@@ -11,6 +11,7 @@ import {
   searchMap,
   toggleChoice,
   type FlowDeps,
+  type GeoBias,
   type SearchInput,
 } from './flow.ts';
 import type { SearchResult } from './named.ts';
@@ -50,6 +51,22 @@ const POMERODE: SearchResult = {
   address: 'Pomerode, SC',
   lat: -26.74,
   lng: -49.177,
+  category: 'place',
+  type: 'town',
+};
+const MAFRA_PT: SearchResult = {
+  name: 'Mafra',
+  address: 'Mafra, Lisboa, Portugal',
+  lat: 38.9369,
+  lng: -9.3312,
+  category: 'place',
+  type: 'town',
+};
+const MAFRA_SC: SearchResult = {
+  name: 'Mafra',
+  address: 'Mafra, Santa Catarina, Brasil',
+  lat: -26.1116,
+  lng: -49.8054,
   category: 'place',
   type: 'town',
 };
@@ -217,6 +234,54 @@ describe('a conversa nova: as opções do mapa (fase 24)', () => {
       d,
     );
     expect(changed.origin).toEqual({ label: 'Papanduva', at: [-50.144, -26.37] });
+  });
+
+  it('a cidade dita vai ao geocodificador com o viés da origem; "mafra" com Portugal em 1º vira Mafra/SC, sem pergunta (fase 25, D276)', async () => {
+    const biases: (GeoBias | undefined)[] = [];
+    const { d, requests } = deps({
+      geocode: (q, bias) => {
+        biases.push(bias);
+        if (/papanduva/i.test(q)) return Promise.resolve([PAPANDUVA]);
+        if (/mafra/i.test(q)) return Promise.resolve([MAFRA_PT, MAFRA_SC]);
+        return Promise.resolve([]);
+      },
+    });
+    const stage = await searchMap(
+      input({
+        intent: intent({
+          area: 'Mafra',
+          origin: 'Papanduva, SC',
+          wants: [{ words: 'almoçar', kind: 'food' }],
+        }),
+      }),
+      d,
+    );
+    expect(stage.ask ?? null).toBeNull();
+    expect(stage.groups[0]?.centerLabel).toBe('Mafra');
+    // a busca em volta da Mafra de Santa Catarina, não da de Lisboa
+    expect(requests[0]?.area).toMatchObject({ type: 'circle', lng: -49.81, lat: -26.11 });
+    // a origem sem viés (não há posição); a cidade com o viés da origem resolvida, no alcance máximo
+    expect(biases[0]).toBeUndefined();
+    expect(biases[1]).toEqual({ near: { lat: -26.37, lng: -50.144 }, radiusKm: 400 });
+  });
+
+  it('só candidatos longe, ou dois plausíveis: a pergunta na tela antes da busca; a escolha guardada resolve', async () => {
+    const { d, requests } = deps({
+      geocode: (q) =>
+        Promise.resolve(/papanduva/i.test(q) ? [PAPANDUVA] : /mafra/i.test(q) ? [MAFRA_PT] : []),
+    });
+    const base = input({ intent: intent({ area: 'Mafra', origin: 'Papanduva, SC' }) });
+    const asked = await searchMap(base, d);
+    expect(asked.ask).toMatchObject({ said: 'Mafra', role: 'area', far: true });
+    expect(asked.ask?.options.map((o) => o.address)).toEqual(['Mafra, Lisboa, Portugal']);
+    expect(asked.ask?.options[0]?.minutes).toBeGreaterThan(100 * 60);
+    expect(asked.groups).toEqual([]);
+    expect(requests).toHaveLength(0);
+    // a pessoa escolheu: a busca roda em volta do que ela escolheu, sem perguntar de novo
+    const hit = asked.ask?.options[0];
+    const chosen = await searchMap({ ...base, places: hit ? { mafra: hit } : {} }, d);
+    expect(chosen.ask ?? null).toBeNull();
+    expect(chosen.groups[0]?.center).toEqual([-9.3312, 38.9369]);
   });
 
   it('sem origem, sem área e sem posição: não há onde procurar', async () => {

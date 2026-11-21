@@ -7,6 +7,7 @@ import type {
 } from '@shared/plan-protocol.ts';
 import { db } from '@/lib/db/schema.ts';
 import { answersByTopic, type MapStage, type Prepared } from './flow.ts';
+import type { PlaceHit } from './locate.ts';
 import type { LatLng } from './named.ts';
 import { reachOf, readReach } from './reach.ts';
 import { ORIGIN_QUESTION } from './today.ts';
@@ -45,6 +46,8 @@ export type Conversation = {
   misread?: Record<number, number>;
   /** "mudar" em "Saindo de X" (fase 25, D271): a origem que a pessoa escreveu vale acima de tudo */
   origin_override?: string | null;
+  /** as cidades escolhidas na pergunta da cidade (fase 25, D276), pela chave do que foi dito */
+  places?: Record<string, PlaceHit>;
   started_at: string;
 };
 

@@ -12,6 +12,7 @@ import type {
   QuestionTopic,
 } from '../../../supabase/functions/_shared/plan-protocol.ts';
 import { placesForAi, type Legs, type PlacePick } from './assemble.ts';
+import { placeKey, resolvePlace, type PlaceHit, type PlaceQuestion } from './locate.ts';
 import { confirmNamed, type NamedState, type SearchResult } from './named.ts';
 import {
   CLASSIC_CATEGORIES,
@@ -27,6 +28,7 @@ import {
   corridorArea,
   cuisineRequest,
   DESTINATION_RADIUS_M,
+  MAX_RADIUS_KM,
   nightOptions,
   OPTIONS_SHOWN,
   optionsFor,
@@ -70,12 +72,21 @@ export type MapStage = {
   chosen: string[];
   /** não deu para saber onde procurar (sem origem, sem área e sem posição) */
   nowhere: boolean;
+  /**
+   * a cidade dita precisa de escolha antes da busca (fase 25, D276): mais de um candidato plausível,
+   * ou só candidatos longe (outro país); a busca só roda depois da escolha
+   */
+  ask?: PlaceQuestion | null;
 };
+
+/** O viés de uma busca pelo nome: a área preferida em volta de um ponto (D276). */
+export type GeoBias = { near: { lat: number; lng: number }; radiusKm: number };
 
 export type FlowDeps = {
   /** a `find-places`; o erro traz o `code` (`no_source`, `offline`, `daily_limit`…) */
   findPlaces: (request: PlacesRequest) => Promise<Place[]>;
-  geocode: (query: string) => Promise<SearchResult[]>;
+  /** o Nominatim pelo nome; com o viés, a área preferida (um `viewbox` sem `bounded`) */
+  geocode: (query: string, bias?: GeoBias) => Promise<SearchResult[]>;
   searchNear: (
     query: string,
     center: { lat: number; lng: number },
@@ -100,6 +111,8 @@ export type SearchInput = {
   center: { lat: number; lng: number } | null;
   /** "mudar" em "Saindo de X" (fase 25): a origem que a pessoa escreveu vale acima de tudo */
   originOverride?: string | null;
+  /** as cidades que a pessoa escolheu na pergunta da cidade (D276), pela chave do que disse */
+  places?: Readonly<Record<string, PlaceHit>>;
 };
 type Pick<T, K extends keyof T> = { [P in K]: T[P] };
 
@@ -125,11 +138,34 @@ export function answersByTopic(
 }
 
 const at = (r: { lat: number; lng: number }): LngLat => [r.lng, r.lat];
-const first = async (deps: FlowDeps, q: string | null) => {
-  if (!q) return null;
-  const hit = (await deps.geocode(q).catch(() => []))[0];
-  return hit ?? null;
-};
+
+/**
+ * A cidade (ou a origem) dita, conferida (fase 25, D276): a escolha que a pessoa já fez vale; senão o
+ * geocodificador, com o viés do ponto de referência, e `resolvePlace` decide: um plausível é o lugar;
+ * mais de um, ou só candidatos longe, vira a pergunta na tela; nada, null (como `first()` fazia).
+ */
+async function locate(
+  deps: FlowDeps,
+  said: string | null,
+  role: PlaceQuestion['role'],
+  reference: LngLat | null,
+  chosen: Readonly<Record<string, PlaceHit>> | undefined,
+): Promise<{ hit: PlaceHit | null; ask: PlaceQuestion | null }> {
+  if (!said) return { hit: null, ask: null };
+  const picked = chosen?.[placeKey(said)];
+  if (picked) return { hit: picked, ask: null };
+  const bias = reference
+    ? { near: { lat: reference[1], lng: reference[0] }, radiusKm: MAX_RADIUS_KM }
+    : undefined;
+  const results = await deps.geocode(said, bias).catch(() => []);
+  const resolved = resolvePlace(results, reference);
+  if (resolved.kind === 'found') return { hit: resolved.hit, ask: null };
+  if (resolved.kind === 'none') return { hit: null, ask: null };
+  return {
+    hit: null,
+    ask: { said, role, options: resolved.options, far: resolved.kind === 'far' },
+  };
+}
 
 const statusOf = (err: unknown): GroupStatus => {
   const code = (err as { code?: string } | null)?.code;
@@ -189,12 +225,33 @@ export async function searchMap(input: SearchInput, deps: FlowDeps): Promise<Map
   const position = !said && input.context.position ? input.center : null;
   const originLabel =
     said ?? (position ? (input.context.place ?? 'onde vocês estão') : input.context.origin);
-  const originHit = position || !originLabel ? null : await first(deps, originLabel);
-  const originAt = position ? at(position) : originHit ? at(originHit) : null;
+  const empty = { origin: null, groups: [], named: [], chosen: [], nowhere: false };
+  // a origem pelo nome, conferida com o viés da posição (quando há); a cidade dita, com o viés da
+  // origem já resolvida (D276): nunca outro país em silêncio
+  const originFound =
+    position || !originLabel
+      ? { hit: null, ask: null }
+      : await locate(
+          deps,
+          originLabel,
+          'origin',
+          input.context.position ? at(input.context.position) : null,
+          input.places,
+        );
+  if (originFound.ask) return { ...empty, ask: originFound.ask };
+  const originAt = position ? at(position) : originFound.hit ? at(originFound.hit) : null;
   const origin = originAt && originLabel ? { label: originLabel, at: originAt } : null;
 
   const areaLabel = intent.area ?? byTopic.area ?? null;
-  const areaHit = await first(deps, areaLabel);
+  const areaFound = await locate(
+    deps,
+    areaLabel,
+    'area',
+    originAt ?? (input.center ? at(input.center) : null),
+    input.places,
+  );
+  if (areaFound.ask) return { ...empty, origin, ask: areaFound.ask };
+  const areaHit = areaFound.hit;
   // o alcance, numa regra só (fase 25, `reach.ts`): o que a IA leu do pedido, ou a resposta à pergunta
   const read = byTopic.reach ? readReach(byTopic.reach) : null;
   const reach = {
@@ -205,7 +262,7 @@ export async function searchMap(input: SearchInput, deps: FlowDeps): Promise<Map
   const centerLabel = areaHit ? areaLabel : originLabel;
   const radiusKm = areaHit ? AREA_RADIUS_KM : radiusFor(input.kind, reach);
   const from = originAt ?? center;
-  if (!center || !from) return { origin, groups: [], named: [], chosen: [], nowhere: true };
+  if (!center || !from) return { ...empty, origin, nowhere: true };
 
   const wants: PlanWant[] = [...intent.wants];
   const named: NamedEntry[] = [];

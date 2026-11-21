@@ -1,3 +1,4 @@
+import { viewboxAround } from '@shared/geo.ts';
 import { db, type GeocodeEntry, type GeocodeResult } from '@/lib/db/schema.ts';
 
 /**
@@ -65,6 +66,8 @@ async function fetchNominatim(
   query: string,
   signal?: AbortSignal,
   viewbox?: string,
+  /** com o `viewbox`: `true` o torna um filtro (nada de fora); `false`, só uma preferência (D276) */
+  bounded = true,
 ): Promise<GeocodeResult[]> {
   const url = new URL(ENDPOINT);
   url.searchParams.set('q', query);
@@ -73,7 +76,7 @@ async function fetchNominatim(
   url.searchParams.set('accept-language', 'pt-BR');
   if (viewbox) {
     url.searchParams.set('viewbox', viewbox);
-    url.searchParams.set('bounded', '1');
+    if (bounded) url.searchParams.set('bounded', '1');
   }
   const res = await fetch(url, { signal: signal ?? null, headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`Nominatim ${res.status}`);
@@ -81,13 +84,32 @@ async function fetchNominatim(
   return rows.map(toResult).filter((r): r is GeocodeResult => r !== null);
 }
 
-/** Resultados para uma consulta: do cache quando existe, senão da rede (e aí entram no cache). */
-export async function geocode(query: string, signal?: AbortSignal): Promise<GeocodeResult[]> {
-  const key = normalizeQuery(query);
-  if (key.length < 3) return [];
+/**
+ * O viés de uma busca pelo nome (fase 25, D276): a área preferida em volta de onde a pessoa está (ou de
+ * onde sai), que o Nominatim usa para ordenar ("boost"), sem excluir o resto. É o que faz "mafra" ser
+ * Mafra/SC antes de Mafra/Lisboa para quem está em Santa Catarina.
+ */
+export type GeoBias = { near: { lat: number; lng: number }; radiusKm: number };
+
+/**
+ * Resultados para uma consulta: do cache quando existe, senão da rede (e aí entram no cache). Com o
+ * viés, a chave do cache leva o ponto de referência arredondado a uma casa (uns 10 km): a mesma
+ * consulta de dois lugares diferentes não cai na mesma entrada, e as entradas de antes (sem viés)
+ * continuam valendo para quem não o passa.
+ */
+export async function geocode(
+  query: string,
+  signal?: AbortSignal,
+  bias?: GeoBias,
+): Promise<GeocodeResult[]> {
+  const q = normalizeQuery(query);
+  if (q.length < 3) return [];
+  const key = bias ? `bias:${bias.near.lat.toFixed(1)},${bias.near.lng.toFixed(1)}:${q}` : q;
   const cached = await db.geocode.get(key);
   if (cached) return cached.results;
-  const results = await throttled(() => fetchNominatim(key, signal));
+  const results = await throttled(() =>
+    fetchNominatim(q, signal, bias ? viewboxAround(bias.near, bias.radiusKm) : undefined, false),
+  );
   const entry: GeocodeEntry = { query: key, results, fetched_at: new Date().toISOString() };
   await db.geocode.put(entry);
   return results;
@@ -106,15 +128,10 @@ export async function searchNear(
 ): Promise<GeocodeResult[]> {
   const q = normalizeQuery(query);
   if (q.length < 3) return [];
-  const dLat = radiusKm / 111;
-  const dLng = radiusKm / (111 * Math.max(0.2, Math.cos((center.lat * Math.PI) / 180)));
-  const viewbox = [center.lng - dLng, center.lat + dLat, center.lng + dLng, center.lat - dLat]
-    .map((n) => n.toFixed(4))
-    .join(',');
   const key = `near:${center.lat.toFixed(1)},${center.lng.toFixed(1)},${String(radiusKm)}:${q}`;
   const cached = await db.geocode.get(key);
   if (cached) return cached.results;
-  const results = await throttled(() => fetchNominatim(q, signal, viewbox));
+  const results = await throttled(() => fetchNominatim(q, signal, viewboxAround(center, radiusKm)));
   await db.geocode.put({ query: key, results, fetched_at: new Date().toISOString() });
   return results;
 }

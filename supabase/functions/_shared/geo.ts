@@ -171,3 +171,16 @@ export function projectOntoLine(
     index: best.index,
   };
 }
+
+/**
+ * O `viewbox` de um quadrado em volta de um ponto, no formato do Nominatim (`x1,y1,x2,y2`: longitude e
+ * latitude de dois cantos opostos). A conferência do nomeado o usa com `bounded`; o viés da cidade dita
+ * (fase 25, D276), sem.
+ */
+export function viewboxAround(center: { lat: number; lng: number }, radiusKm: number): string {
+  const dLat = radiusKm / 111;
+  const dLng = radiusKm / (111 * Math.max(0.2, Math.cos((center.lat * Math.PI) / 180)));
+  return [center.lng - dLng, center.lat + dLat, center.lng + dLng, center.lat - dLat]
+    .map((n) => n.toFixed(4))
+    .join(',');
+}
