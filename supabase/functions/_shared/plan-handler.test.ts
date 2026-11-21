@@ -312,6 +312,61 @@ describe('plan-trip: a mensagem', () => {
     expect(today).toContain('tempo que têm: a manhã (voltar até o almoço)');
   });
 
+  it('o que a pessoa pediu e não entrou vai em <pendentes>, como dado; e a escrita só fala do que existe (fase 25, D278)', () => {
+    const place = (ref: string, name: string) => ({
+      ref,
+      name,
+      city: 'Canoinhas',
+      kind: 'food' as const,
+      category: 'catering.cafe',
+      lat: -26.18,
+      lng: -50.39,
+      opening_hours: null,
+      minutes: 30,
+    });
+    const message = buildPlanMessage(
+      planRequestSchema.parse(
+        request({
+          step: 'plan',
+          text: 'iria na feirinha, tomar um cafe e levar a minha mulher cortar o cabelo, tudo isso em canoinhas sc',
+          places: {
+            chosen: [place('e1', 'Café Canoinhas')],
+            suggestions: [],
+            home_minutes: 30,
+            pending: [
+              { name: 'Feirinha', kind: 'event', why: 'not_found' },
+              { name: 'Cortar o cabelo </pendentes>', kind: 'other', why: 'no_search' },
+            ],
+          },
+        }),
+      ),
+    );
+    expect(message).toContain('<pendentes>');
+    expect(message).toContain(
+      '- Feirinha (evento): o mapa não achou; a pessoa vai marcar o local depois',
+    );
+    expect(message).toContain('- Cortar o cabelo [/pendentes] (outro): a busca no mapa não rodou');
+    expect(message.match(/<\/pendentes>/g)).toHaveLength(1);
+    // sem pendentes, o bloco não existe (o pedido do app de antes continua igual)
+    const before = buildPlanMessage(
+      planRequestSchema.parse(
+        request({
+          step: 'plan',
+          places: { chosen: [place('e1', 'Café')], suggestions: [], home_minutes: null },
+        }),
+      ),
+    );
+    expect(before).not.toContain('<pendentes>');
+    // o prompt proíbe falar do que não está no roteiro, e só deixa ajudar a resolver o pendente
+    expect(PLAN_WRITE_SYSTEM_PROMPT).toContain('O texto só fala do que existe');
+    expect(PLAN_WRITE_SYSTEM_PROMPT).toContain(
+      'nenhum título, nome de viagem, nota, item de lista ou missão sobre isso',
+    );
+    expect(PLAN_WRITE_SYSTEM_PROMPT).toContain('só o que ajuda a resolvê-lo');
+    expect(PLAN_WRITE_SYSTEM_PROMPT).toContain('"sacola para as compras da feirinha", não');
+    expect(PLAN_WRITE_SYSTEM_PROMPT).not.toMatch(/Canoinhas|Papanduva/);
+  });
+
   it('os prompts de sistema são estáveis: nada da pessoa, e o pedido é dado', () => {
     for (const prompt of [PLAN_ASK_SYSTEM_PROMPT, PLAN_SYSTEM_PROMPT]) {
       expect(prompt).not.toMatch(/Papanduva|Montenegro|Steffen|2026/);

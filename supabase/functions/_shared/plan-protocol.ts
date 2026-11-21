@@ -154,6 +154,23 @@ export const planPlaceSchema = z.object({
 export type PlanPlace = z.infer<typeof planPlaceSchema>;
 export const MAX_CHOSEN = 10;
 export const MAX_SUGGESTIONS = 12;
+
+/**
+ * O que a pessoa pediu e não entrou no roteiro (fase 25, D278), como dado para a leitura que escreve:
+ * o mapa não achou (`not_found`), a busca no mapa não rodou (`no_search`), ou ela ainda vai marcar o
+ * local (`unplaced`). Nada some em silêncio: a viagem nasce com uma parada sem local para cada um, e a
+ * IA só pode escrever sobre eles o que ajuda a resolvê-los.
+ */
+export const PENDING_WHYS = ['not_found', 'no_search', 'unplaced'] as const;
+export type PendingWhy = (typeof PENDING_WHYS)[number];
+export const planPendingSchema = z.object({
+  /** as palavras da pessoa ("feirinha", "cortar o cabelo") ou o nome que ela disse */
+  name: z.string().min(1).max(120),
+  kind: z.enum(STOP_KIND_KEYS),
+  why: z.enum(PENDING_WHYS),
+});
+export type PlanPending = z.infer<typeof planPendingSchema>;
+
 export const planPlacesSchema = z.object({
   /** o que a pessoa escolheu e o que ela nomeou, na ordem do caminho */
   chosen: z.array(planPlaceSchema).min(1).max(MAX_CHOSEN),
@@ -161,6 +178,11 @@ export const planPlacesSchema = z.object({
   suggestions: z.array(planPlaceSchema).max(MAX_SUGGESTIONS),
   /** de carro, do último lugar de volta a casa (a rota); null sem volta ou sem rota */
   home_minutes: z.number().int().min(0).max(1440).nullable(),
+  /** o que ela pediu e não entrou (fase 25): opcional, o app de antes não manda */
+  pending: z
+    .array(planPendingSchema)
+    .max(MAX_WANTS + MAX_NAMED)
+    .optional(),
 });
 export type PlanPlaces = z.infer<typeof planPlacesSchema>;
 

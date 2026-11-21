@@ -197,6 +197,7 @@ export default function CriarViagemPage() {
             onPlace={(said, hit) => void talk.choosePlace(said, hit)}
             onToggle={talk.toggle}
             onPick={talk.pick}
+            onRemove={talk.remove}
             onMore={talk.more}
             onWider={(g) => void talk.wider(g)}
             onByType={(n) => void talk.byType(n)}

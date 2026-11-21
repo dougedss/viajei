@@ -6,6 +6,7 @@ import type {
   PlanContext,
   PlanIntent,
   PlanNamed,
+  PlanPending,
   PlanPlaces,
   PlanQuestion,
   PlanWant,
@@ -58,10 +59,19 @@ export type OptionGroup = {
   options: MapOption[];
   /** quantas a tela mostra ("Mais opções" mostra as seguintes) */
   shown: number;
+  /** a pessoa tirou esta vontade da viagem (fase 25, D278): "Tirar", com desfazer */
+  removed?: boolean;
 };
 
-/** Um lugar que a pessoa nomeou: o que o mapa achou, e a escolha dela quando há mais de um. */
-export type NamedEntry = { named: PlanNamed; state: NamedState; pick: number | 'skip' | null };
+/**
+ * Um lugar que a pessoa nomeou: o que o mapa achou, e a escolha dela quando há mais de um. `skip`:
+ * nenhum dos candidatos (fica pendente, sem local); `remove`: ela o tirou da viagem (fase 25).
+ */
+export type NamedEntry = {
+  named: PlanNamed;
+  state: NamedState;
+  pick: number | 'skip' | 'remove' | null;
+};
 
 export type MapStage = {
   /** de onde sai e para onde volta: a origem dita, a de antes ou a posição */
@@ -309,7 +319,7 @@ export function toggleChoice(stage: MapStage, id: string): MapStage {
     : [...stage.chosen, id];
   return { ...stage, chosen };
 }
-export function pickNamed(stage: MapStage, index: number, pick: number | 'skip'): MapStage {
+export function pickNamed(stage: MapStage, index: number, pick: NamedEntry['pick']): MapStage {
   return { ...stage, named: stage.named.map((n, i) => (i === index ? { ...n, pick } : n)) };
 }
 export function showMore(stage: MapStage, group: number): MapStage {
@@ -379,9 +389,91 @@ export function picksOf(stage: MapStage): PlacePick[] {
   return [...named, ...chosen];
 }
 
-/** Os nomeados que ficaram sem lugar no mapa: entram na viagem sem coordenada, e a tela diz. */
-export function missingNamed(stage: MapStage): PlanNamed[] {
-  return stage.named.flatMap((n, i) => (namedPlace(n, i) ? [] : [n.named]));
+// ------------------------------------------------------------ os três estados (fase 25, D278)
+/**
+ * Cada coisa que a pessoa pediu (cada vontade e cada nomeado) termina num de três estados, visível na
+ * tela: **escolhida** (um lugar do mapa entrou), **pendente** (o mapa não achou, ou ela ainda vai marcar
+ * o local: entra na viagem sem coordenada, e a revisão procura de novo) ou **tirada** por ela. Uma
+ * vontade com opções em que ela não escolheu nada é "sem escolha": a tela diz, e a viagem não a leva.
+ * Nada some em silêncio.
+ */
+export type Fate = 'chosen' | 'unchosen' | 'pending' | 'removed';
+
+export function groupFate(group: OptionGroup, chosen: readonly string[]): Fate {
+  if (group.removed) return 'removed';
+  if (group.status !== 'ok' || group.options.length === 0) return 'pending';
+  return group.options.some((o) => chosen.includes(o.place.id)) ? 'chosen' : 'unchosen';
+}
+
+export function namedFate(entry: NamedEntry, i: number): Fate {
+  if (entry.pick === 'remove') return 'removed';
+  return namedPlace(entry, i) ? 'chosen' : 'pending';
+}
+
+/** "Tirar" uma vontade da viagem (ou desfazer): o grupo fica, marcado; nada some em silêncio. */
+export function removeWant(stage: MapStage, group: number, removed: boolean): MapStage {
+  return {
+    ...stage,
+    groups: stage.groups.map((g, i) => (i === group ? { ...g, removed } : g)),
+  };
+}
+
+const capital = (s: string) => s.charAt(0).toLocaleUpperCase('pt-BR') + s.slice(1);
+
+/**
+ * O que ficou pendente: os nomeados sem lugar no mapa (a D229) e, desde a fase 25, as vontades sem
+ * opção que a pessoa não tirou. Entram na viagem sem coordenada, e a tela diz.
+ */
+export function pendingOf(stage: MapStage): PlanNamed[] {
+  const named = stage.named.flatMap((n, i) => (namedFate(n, i) === 'pending' ? [n.named] : []));
+  const wants = stage.groups.flatMap((g) =>
+    groupFate(g, stage.chosen) === 'pending'
+      ? [{ name: capital(g.label), city: g.centerLabel, kind: g.search.kind }]
+      : [],
+  );
+  return [...named, ...wants];
+}
+
+/** Os pendentes como dado para a leitura que escreve: o nome, o tipo e por quê. */
+export function pendingForAi(stage: MapStage): PlanPending[] {
+  const named = stage.named.flatMap((n, i): PlanPending[] => {
+    if (namedFate(n, i) !== 'pending') return [];
+    const why =
+      n.state.kind === 'none' ? 'not_found' : n.state.kind === 'offline' ? 'no_search' : 'unplaced';
+    return [{ name: n.named.name, kind: n.named.kind, why }];
+  });
+  const wants = stage.groups.flatMap((g): PlanPending[] =>
+    groupFate(g, stage.chosen) === 'pending'
+      ? [
+          {
+            name: capital(g.label),
+            kind: g.search.kind,
+            why: g.status === 'none' || g.status === 'ok' ? 'not_found' : 'no_search',
+          },
+        ]
+      : [],
+  );
+  return [...named, ...wants];
+}
+
+/** O resumo antes de seguir ("2 escolhidos · 1 pendente: Feirinha"): cada coisa pedida, num estado. */
+export function summaryOf(stage: MapStage): {
+  chosen: number;
+  unchosen: string[];
+  pending: string[];
+  removed: string[];
+} {
+  const fates = [
+    ...stage.named.map((n, i) => [namedFate(n, i), n.named.name] as const),
+    ...stage.groups.map((g) => [groupFate(g, stage.chosen), capital(g.label)] as const),
+  ];
+  const of = (fate: Fate) => fates.filter(([f]) => f === fate).map(([, name]) => name);
+  return {
+    chosen: picksOf(stage).length,
+    unchosen: of('unchosen'),
+    pending: of('pending'),
+    removed: of('removed'),
+  };
 }
 
 /** Dá para seguir: pelo menos um lugar escolhido, ou um nomeado decidido. */
@@ -485,8 +577,8 @@ export async function prepare(
     chosenFractions,
     suggestions,
     legs,
-    places: placesForAi(picks, suggestions, legs, origin !== null),
-    missing: missingNamed(stage),
+    places: placesForAi(picks, suggestions, legs, origin !== null, pendingForAi(stage)),
+    missing: pendingOf(stage),
     destination,
     routed: route !== null,
   };

@@ -9,7 +9,14 @@ import { StopKindIcon } from '@/features/itinerary/components/StopKindIcon.tsx';
 import { KIND_TEXT } from '@/features/itinerary/stop-kinds.ts';
 import { cx } from '@/lib/cx.ts';
 import { OSM_ATTRIBUTION } from '@/lib/geocode/nominatim.ts';
-import { canBuild, type MapStage, type NamedEntry, type OptionGroup } from '../flow.ts';
+import {
+  canBuild,
+  groupFate,
+  summaryOf,
+  type MapStage,
+  type NamedEntry,
+  type OptionGroup,
+} from '../flow.ts';
 import type { PlaceHit, PlaceQuestion } from '../locate.ts';
 import { openingText } from '../opening.ts';
 import { aboutMinutes, reachLabel, type MapOption } from '../search.ts';
@@ -21,7 +28,9 @@ type Props = {
   /** a cidade escolhida na pergunta da cidade (fase 25, D276) */
   onPlace: (said: string, hit: PlaceHit) => void;
   onToggle: (id: string) => void;
-  onPick: (named: number, pick: number | 'skip') => void;
+  onPick: (named: number, pick: NamedEntry['pick']) => void;
+  /** "Tirar" uma vontade da viagem, e o desfazer (fase 25, D278) */
+  onRemove: (group: number, removed: boolean) => void;
   onMore: (group: number) => void;
   onWider: (group: number) => void;
   onByType: (named: number) => void;
@@ -145,10 +154,31 @@ function Group({
   const where = group.centerLabel ? ` de ${group.centerLabel}` : '';
   const reach = `a até ${reachLabel(group.radiusKm)}${where}`;
   const title = group.label.charAt(0).toLocaleUpperCase('pt-BR') + group.label.slice(1);
+  const fate = groupFate(group, chosen);
+  // o estado de cada vontade fica à vista (fase 25, D278): escolhida, sem escolha, pendente ou tirada
+  const remove = (
+    <Button size="md" variant="ghost" onClick={() => props.onRemove(index, true)}>
+      Tirar da viagem
+    </Button>
+  );
   return (
-    <section className="grid gap-2" aria-label={title} data-option-group={group.status}>
+    <section
+      className="grid gap-2"
+      aria-label={title}
+      data-option-group={group.status}
+      data-fate={fate}
+    >
       <h2 className="label-caps text-accent-ink">{title}</h2>
-      {group.status === 'ok' ? (
+      {fate === 'removed' ? (
+        <Card className="grid gap-2" role="status">
+          <p className="text-[15px] text-ink-2">
+            Tirado da viagem: {group.label}. A viagem não leva isso.
+          </p>
+          <Button size="md" variant="secondary" onClick={() => props.onRemove(index, false)}>
+            Desfazer
+          </Button>
+        </Card>
+      ) : group.status === 'ok' ? (
         <>
           <p className="text-[14px] text-ink-2">
             {plural(group.options.length, 'opção', 'opções')} no mapa {reach}. Escolha uma ou mais.
@@ -170,7 +200,10 @@ function Group({
       ) : group.status === 'none' ? (
         <Card className="grid gap-3" role="status">
           <p className="text-[15px]">
-            Não achei {group.label} {reach}.
+            Não achei {group.label} {reach}.{' '}
+            <span className="text-ink-2">
+              Fica pendente: entra na viagem sem local, e a revisão procura de novo.
+            </span>
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
             {group.radiusKm < 400 ? (
@@ -178,9 +211,7 @@ function Group({
                 Procurar mais longe
               </Button>
             ) : null}
-            <Button size="md" variant="ghost" onClick={props.onBack}>
-              Mudar o pedido
-            </Button>
+            {remove}
           </div>
         </Card>
       ) : (
@@ -193,13 +224,19 @@ function Group({
                 : group.status === 'no_source'
                   ? 'Não deu para buscar no mapa pelo tipo agora.'
                   : 'O mapa não respondeu agora.'}{' '}
-            Dá para procurar pelo nome do lugar.
+            Dá para procurar pelo nome do lugar.{' '}
+            <span className="text-ink-2">
+              Sem isso, fica pendente: entra na viagem sem local, e a revisão procura de novo.
+            </span>
           </p>
-          {group.status === 'offline' || group.status === 'failed' ? (
-            <Button size="md" variant="secondary" onClick={() => props.onWider(index)}>
-              Tentar de novo
-            </Button>
-          ) : null}
+          <div className="grid gap-2 sm:grid-cols-2">
+            {group.status === 'offline' || group.status === 'failed' ? (
+              <Button size="md" variant="secondary" onClick={() => props.onWider(index)}>
+                Tentar de novo
+              </Button>
+            ) : null}
+            {remove}
+          </div>
           <ByName kind={group.search.kind} onByName={props.onByName} />
         </Card>
       )}
@@ -276,6 +313,16 @@ function PlaceAsk({
 function Named({ entry, index, props }: { entry: NamedEntry; index: number; props: Props }) {
   const s = entry.state;
   const said = entry.named.name;
+  if (entry.pick === 'remove') {
+    return (
+      <Card className="grid gap-2" role="status" data-named="removed">
+        <p className="text-[15px] text-ink-2">Tirado da viagem: “{said}”.</p>
+        <Button size="md" variant="secondary" onClick={() => props.onPick(index, null)}>
+          Desfazer
+        </Button>
+      </Card>
+    );
+  }
   if (s.kind === 'found') {
     return (
       <Card className="grid gap-1" data-named="found">
@@ -339,19 +386,17 @@ function Named({ entry, index, props }: { entry: NamedEntry; index: number; prop
       <p className="text-[15px]">
         {s.kind === 'offline'
           ? `O mapa não respondeu para procurar “${said}”.`
-          : `Não achei “${said}” no mapa.`}
+          : `Não achei “${said}” no mapa.`}{' '}
+        <span className="text-ink-2">
+          Fica pendente: entra na viagem sem local, e a revisão procura de novo.
+        </span>
       </p>
       <div className="grid gap-2 sm:grid-cols-2">
         <Button size="md" variant="secondary" onClick={() => props.onByType(index)}>
           Procurar pelo tipo
         </Button>
-        <Button
-          size="md"
-          variant="ghost"
-          aria-pressed={entry.pick === 'skip'}
-          onClick={() => props.onPick(index, 'skip')}
-        >
-          Seguir sem o local
+        <Button size="md" variant="ghost" onClick={() => props.onPick(index, 'remove')}>
+          Tirar da viagem
         </Button>
       </div>
     </Card>
@@ -366,11 +411,22 @@ function Named({ entry, index, props }: { entry: NamedEntry; index: number; prop
  */
 export function OptionsStep(props: Props) {
   const { map } = props;
-  const chosen = map.chosen.length;
-  const named = map.named.filter(
-    (n) => n.state.kind === 'found' || (n.state.kind === 'choice' && typeof n.pick === 'number'),
-  ).length;
-  const total = chosen + named;
+  const summary = summaryOf(map);
+  const total = summary.chosen;
+  const summaryText = [
+    plural(summary.chosen, 'escolhido', 'escolhidos'),
+    summary.unchosen.length > 0
+      ? `${plural(summary.unchosen.length, 'sem escolha', 'sem escolha')}: ${summary.unchosen.join(', ')}`
+      : null,
+    summary.pending.length > 0
+      ? `${plural(summary.pending.length, 'pendente', 'pendentes')}: ${summary.pending.join(', ')}`
+      : null,
+    summary.removed.length > 0
+      ? `${plural(summary.removed.length, 'tirado', 'tirados')}: ${summary.removed.join(', ')}`
+      : null,
+  ]
+    .filter((x): x is string => x !== null)
+    .join(' · ');
   if (map.ask) {
     return (
       <div className="grid gap-5" data-options="ask">
@@ -419,6 +475,11 @@ export function OptionsStep(props: Props) {
         />
       ))}
       <div className="grid gap-2">
+        {map.groups.length + map.named.length > 0 ? (
+          <p className="text-[14px] text-ink-2" data-summary>
+            {summaryText}
+          </p>
+        ) : null}
         <Button disabled={!canBuild(map)} onClick={props.onBuild}>
           <Route className="size-5" aria-hidden="true" />
           {total > 1 ? `Traçar o caminho por ${String(total)} lugares` : 'Traçar o caminho'}

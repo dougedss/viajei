@@ -31,12 +31,14 @@ import {
   nightsNear,
   pickNamed,
   prepare,
+  removeWant,
   searchMap,
   showMore,
   toggleChoice,
   widen,
   type FlowDeps,
   type MapStage,
+  type NamedEntry,
 } from './flow.ts';
 import { declineGeo, grantGeo, readGeoConsent } from '@/features/travel-mode/queries.ts';
 import { gatherContext } from './gather.ts';
@@ -371,7 +373,9 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
     /** As respostas dadas: as opções do mapa. */
     search: () => (conv ? search(conv) : Promise.resolve()),
     toggle: (id: string) => setMap((m) => toggleChoice(m, id)),
-    pick: (index: number, pick: number | 'skip') => setMap((m) => pickNamed(m, index, pick)),
+    pick: (index: number, pick: NamedEntry['pick']) => setMap((m) => pickNamed(m, index, pick)),
+    /** "Tirar da viagem" uma vontade sem opção, e o desfazer (fase 25, D278). */
+    remove: (group: number, removed: boolean) => setMap((m) => removeWant(m, group, removed)),
     more: (group: number) => setMap((m) => showMore(m, group)),
     /** "Procurar mais longe": a mesma busca com o dobro do raio. */
     wider: async (group: number) => {

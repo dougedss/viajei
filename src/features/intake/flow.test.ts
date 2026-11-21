@@ -4,14 +4,18 @@ import { EMPTY_INTENT, type PlanIntent } from '@shared/plan-protocol.ts';
 import {
   answersByTopic,
   canBuild,
-  missingNamed,
+  pendingForAi,
+  pendingOf,
   pickNamed,
   picksOf,
   prepare,
+  removeWant,
   searchMap,
+  summaryOf,
   toggleChoice,
   type FlowDeps,
   type GeoBias,
+  type NamedEntry,
   type SearchInput,
 } from './flow.ts';
 import type { SearchResult } from './named.ts';
@@ -347,12 +351,97 @@ describe('a conversa nova: a escolha e o caminho', () => {
     };
     expect(canBuild(stage)).toBe(false);
     expect(canBuild(pickNamed(stage, 0, 'skip'))).toBe(true);
-    expect(missingNamed(pickNamed(stage, 0, 'skip'))).toEqual([
+    expect(pendingOf(pickNamed(stage, 0, 'skip'))).toEqual([
       { name: 'Bioparque', city: null, kind: 'nature' },
     ]);
     expect(picksOf(pickNamed(stage, 0, 1)).map((p) => [p.ref, p.place.name])).toEqual([
       ['n1', 'B'],
       ['e1', 'Torten Paradies Café Colonial'],
+    ]);
+  });
+
+  it('os três estados (fase 25, D278): a vontade sem opção fica pendente, "Tirar" a tira, e o resumo diz', async () => {
+    const { d } = deps({
+      findPlaces: (r) =>
+        // o café tem opções; a feirinha e o salão, nenhuma
+        Promise.resolve(r.categories.includes('catering.cafe') ? [TORTEN, MAHLZEIT] : []),
+    });
+    const stage = await searchMap(
+      input({
+        intent: intent({
+          area: 'Pomerode',
+          origin: 'Papanduva, SC',
+          wants: [
+            { words: 'feirinha', kind: 'event' },
+            { words: 'café', kind: 'food' },
+            { words: 'cortar o cabelo', kind: 'other' },
+          ],
+        }),
+      }),
+      d,
+    );
+    expect(stage.groups.map((g) => g.status)).toEqual(['none', 'ok', 'none']);
+    // nada escolhido ainda: o café é "sem escolha", os outros dois pendentes
+    expect(summaryOf(stage)).toEqual({
+      chosen: 0,
+      unchosen: ['Café'],
+      pending: ['Feirinha', 'Cortar o cabelo'],
+      removed: [],
+    });
+    expect(pendingOf(stage)).toEqual([
+      { name: 'Feirinha', city: 'Pomerode', kind: 'event' },
+      { name: 'Cortar o cabelo', city: 'Pomerode', kind: 'other' },
+    ]);
+    // o café escolhido; o salão tirado pela pessoa
+    const decided = removeWant(toggleChoice(stage, 'torten'), 2, true);
+    expect(summaryOf(decided)).toEqual({
+      chosen: 1,
+      unchosen: [],
+      pending: ['Feirinha'],
+      removed: ['Cortar o cabelo'],
+    });
+    expect(pendingForAi(decided)).toEqual([{ name: 'Feirinha', kind: 'event', why: 'not_found' }]);
+    // e o desfazer
+    expect(summaryOf(removeWant(decided, 2, false)).pending).toEqual([
+      'Feirinha',
+      'Cortar o cabelo',
+    ]);
+    // o caminho leva o pendente como parada sem lugar e como dado para a IA
+    const prepared = await prepare(decided, { interests: [], learned: [] }, d);
+    expect(prepared.missing).toEqual([{ name: 'Feirinha', city: 'Pomerode', kind: 'event' }]);
+    expect(prepared.places.pending).toEqual([
+      { name: 'Feirinha', kind: 'event', why: 'not_found' },
+    ]);
+  });
+
+  it('o nomeado sem lugar fica pendente; "Nenhum destes" também; tirado, sai (fase 25)', () => {
+    const none = (pick: NamedEntry['pick']) => ({
+      named: { name: 'Feirinha de Canoinhas', city: 'Canoinhas', kind: 'event' as const },
+      state: { kind: 'none' as const },
+      pick,
+    });
+    const base = { origin: null, groups: [], chosen: [], nowhere: false };
+    expect(summaryOf({ ...base, named: [none(null)] }).pending).toEqual(['Feirinha de Canoinhas']);
+    expect(pendingForAi({ ...base, named: [none(null)] })).toEqual([
+      { name: 'Feirinha de Canoinhas', kind: 'event', why: 'not_found' },
+    ]);
+    expect(summaryOf({ ...base, named: [none('remove')] })).toMatchObject({
+      pending: [],
+      removed: ['Feirinha de Canoinhas'],
+    });
+    const choice = {
+      named: { name: 'Bioparque', city: null, kind: 'nature' as const },
+      state: {
+        kind: 'choice' as const,
+        options: [
+          { name: 'A', address: 'a', lat: 0, lng: 0 },
+          { name: 'B', address: 'b', lat: 1, lng: 1 },
+        ],
+      },
+      pick: 'skip' as const,
+    };
+    expect(pendingForAi({ ...base, named: [choice] })).toEqual([
+      { name: 'Bioparque', kind: 'nature', why: 'unplaced' },
     ]);
   });
 

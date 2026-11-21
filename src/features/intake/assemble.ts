@@ -5,6 +5,7 @@ import type { ImportData, ImportStop } from '../../../supabase/functions/_shared
 import type { Place } from '../../../supabase/functions/_shared/places-schema.ts';
 import type {
   PlanNamed,
+  PlanPending,
   PlanPlace,
   PlanPlaces,
   PlanWrite,
@@ -62,17 +63,23 @@ const legMinutes = (legs: Legs | null, i: number): number | null => {
   return s === undefined ? null : Math.max(5, Math.round(s / 60 / 5) * 5);
 };
 
-/** O que vai para a leitura que escreve: as escolhas com o tempo de carro e as sugestões com o desvio. */
+/**
+ * O que vai para a leitura que escreve: as escolhas com o tempo de carro, as sugestões com o desvio e,
+ * desde a fase 25 (D278), o que a pessoa pediu e não entrou, como dado, para a IA não escrever sobre
+ * isso como se estivesse no roteiro.
+ */
 export function placesForAi(
   chosen: readonly PlacePick[],
   suggestions: readonly (PlacePick & { detour: number })[],
   legs: Legs | null,
   home: boolean,
+  pending: readonly PlanPending[] = [],
 ): PlanPlaces {
   return {
     chosen: chosen.map((p, i) => placeForAi(p, legMinutes(legs, i))),
     suggestions: suggestions.map((s) => placeForAi(s, s.detour)),
     home_minutes: home ? legMinutes(legs, chosen.length) : null,
+    ...(pending.length > 0 ? { pending: [...pending] } : {}),
   };
 }
 

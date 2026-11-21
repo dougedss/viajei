@@ -214,6 +214,12 @@ describe('a viagem nasce do que foi escolhido', () => {
       [{ duration_s: 7_500 }, { duration_s: 7_200 }],
       true,
     );
+    // sem pendentes, nada a mais (o app de antes continua lendo o mesmo pedido)
+    expect(places).not.toHaveProperty('pending');
+    expect(
+      placesForAi([TORTEN], [], null, true, [{ name: 'Feirinha', kind: 'event', why: 'not_found' }])
+        .pending,
+    ).toEqual([{ name: 'Feirinha', kind: 'event', why: 'not_found' }]);
     expect(places).toEqual({
       chosen: [
         {
