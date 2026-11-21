@@ -1811,6 +1811,8 @@ Os laboratórios são os da seção 1 do prompt da fase: um no preview, depois d
 - **A CI:** verde na `fase-23` em `c48da00`, `2ac2447` e `9decb4d` (D268, D269); os vermelhos antes disso estão na D255 e na D266 (o prettier do README, o lint do banco, o Vitest da CI sem as variáveis, o pgTAP 19 com o gatilho antes da FK).
 - **O hospedado:** a 0017 e a 0018 aplicadas com o `--dry-run` lido; a `build-landmark` e a `landmarks` publicadas e republicadas a cada correção (D268, D269). Nenhum secret criado nem trocado.
 - **O laboratório do preview** (run 44825825962): 39 de 41, os dois vermelhos na D268.
+- **O merge:** a `main` de `8e3e89c` para `c163ed5` em fast-forward, com a CI verde no sha na branch (44845021869) e na `main` (44846622801); a Vercel serviu o código da fase antes do laboratório (conferido no bundle da `ViagemPage`).
+- **O laboratório da produção** (run 44847796028, `c163ed5`, 21/11 ~01h UTC): **37 cenários verdes, nenhum vermelho**; cinco medidos sem cobrança (três avisos ainda não vencidos, o Open-Meteo que não respondeu, o Lighthouse com a máquina lenta, índice de CPU 2.477). O `app_maquete` passou com a peça semeada em cena e o close `maquete-peca.png` mostra a estufa no lugar da miniatura do Mirante. **O `app_missoes`, vermelho no preview, passou** (11 s); a causa daquele vermelho segue não conferida.
 - **A medição** (run 44843680151, no preview, Sonnet 5.5, 21/11 00h26 UTC): **verde, a peça do Jardim Botânico publicada (v1, 19 formas)**. A geração em si levou 23,5 s no trabalhador (o log da função); da fila à peça, 377 s, quase tudo a espera pelo cron e pelo job atrás da fila; a conferência pelo aparelho, 33 s, veredito `ok`. O custo, pelos preços do `import-lab.ts`:
 
   | chamada | tokens entrada | tokens saída | US$ |
