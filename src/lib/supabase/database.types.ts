@@ -713,14 +713,14 @@ isOneToOne: false
                   ]
                 },"trips": {
                   Row: {
-                    "budget": number | null,"car_accessories": (string)[],"car_color": string,"car_model": string,"created_at": string,"deleted_at": string | null,"end_date": string,"field_versions": NonNullable<Json>,"id": string,"name": string,"notes": string | null,"origin": string | null,"owner_id": string,"start_date": string,"synced_at": string,"updated_at": string
+                    "budget": number | null,"created_at": string,"deleted_at": string | null,"end_date": string,"field_versions": NonNullable<Json>,"id": string,"name": string,"notes": string | null,"origin": string | null,"owner_id": string,"start_date": string,"synced_at": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "budget"?: number | null,"car_accessories"?: (string)[],"car_color"?: string,"car_model"?: string,"created_at"?: string,"deleted_at"?: string | null,"end_date": string,"field_versions"?: NonNullable<Json>,"id": string,"name": string,"notes"?: string | null,"origin"?: string | null,"owner_id": string,"start_date": string,"synced_at": string,"updated_at": string
+                    "budget"?: number | null,"created_at"?: string,"deleted_at"?: string | null,"end_date": string,"field_versions"?: NonNullable<Json>,"id": string,"name": string,"notes"?: string | null,"origin"?: string | null,"owner_id": string,"start_date": string,"synced_at": string,"updated_at": string
                   }
                   Update: {
-                    "budget"?: number | null,"car_accessories"?: (string)[],"car_color"?: string,"car_model"?: string,"created_at"?: string,"deleted_at"?: string | null,"end_date"?: string,"field_versions"?: NonNullable<Json>,"id"?: string,"name"?: string,"notes"?: string | null,"origin"?: string | null,"owner_id"?: string,"start_date"?: string,"synced_at"?: string,"updated_at"?: string
+                    "budget"?: number | null,"created_at"?: string,"deleted_at"?: string | null,"end_date"?: string,"field_versions"?: NonNullable<Json>,"id"?: string,"name"?: string,"notes"?: string | null,"origin"?: string | null,"owner_id"?: string,"start_date"?: string,"synced_at"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     {

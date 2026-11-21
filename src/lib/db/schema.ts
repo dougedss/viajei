@@ -16,14 +16,8 @@ export type LocalRow<T extends { field_versions: unknown; synced_at: string }> =
   'field_versions' | 'synced_at'
 > & { synced_at: string | null };
 
-/**
- * A viagem no aparelho. As colunas `car_*` ainda existem no banco (um PWA antigo em cache pode
- * gravá-las; uma migration depois as tira), mas o carro é da pessoa desde a fase 16: o client novo
- * não as lê nem as escreve, e o tipo não as tem.
- */
-export type Trip = LocalRow<
-  Omit<Tables['trips']['Row'], 'car_model' | 'car_color' | 'car_accessories'>
->;
+/** A viagem no aparelho. O carro é da pessoa (fase 16); as colunas `car_*` de `trips` saíram na 0019 (fase 25). */
+export type Trip = LocalRow<Tables['trips']['Row']>;
 export type TripMember = LocalRow<Tables['trip_members']['Row']>;
 export type Profile = LocalRow<Tables['profiles']['Row']>;
 export type TripDay = LocalRow<Tables['trip_days']['Row']>;

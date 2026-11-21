@@ -1,5 +1,5 @@
 begin;
-select plan(27);
+select plan(22);
 
 create function pg_temp.login(p uuid) returns void language plpgsql as $$
 begin
@@ -49,27 +49,19 @@ select throws_ok($$update public.profiles set car_wheels = 'aro 22' where id = '
 select throws_ok($$update public.profiles set notify_lead_minutes = 3 where id = 'c4444444-4444-4444-8444-444444444444'$$,
                  '23514', null, 'antecedência abaixo de 5 min é recusada, como em notification_prefs');
 
--- ------------------------------------------------------------------ a cópia (0014, uma vez)
-insert into public.trips (id, owner_id, name, start_date, end_date, car_model, car_color, car_accessories, updated_at, deleted_at)
+-- ------------------------------------------------------------------ as viagens (a cópia da 0014 saiu na 0019)
+-- As colunas car_* de trips e a private.copy_trip_cars() saíram na 0019 (fase 25): o bloco que provava
+-- a cópia de uma vez saiu daqui (eram 5 asserts), e as viagens ficam só para os pulls e o Realtime.
+insert into public.trips (id, owner_id, name, start_date, end_date, updated_at, deleted_at)
 values
- ('c9111111-1111-4111-8111-111111111111', 'c1111111-1111-4111-8111-111111111111', 'Antiga', '2026-10-01', '2026-10-03', 'suv', 'sky', '{}', now(), null),
- ('c9222222-2222-4222-8222-222222222222', 'c1111111-1111-4111-8111-111111111111', 'Serra', '2026-12-11', '2026-12-14', 'pickup', 'mist', '{rack,bike}', now(), null),
- ('c9333333-3333-4333-8333-333333333333', 'c1111111-1111-4111-8111-111111111111', 'Excluída', '2027-01-10', '2027-01-12', 'kombi', 'night', '{}', now(), now()),
- ('c9444444-4444-4444-8444-444444444444', 'c3333333-3333-4333-8333-333333333333', 'Dourada', '2026-11-20', '2026-11-21', 'sedan', 'gold', '{hubcaps}', now(), null);
+ ('c9111111-1111-4111-8111-111111111111', 'c1111111-1111-4111-8111-111111111111', 'Antiga', '2026-10-01', '2026-10-03', now(), null),
+ ('c9222222-2222-4222-8222-222222222222', 'c1111111-1111-4111-8111-111111111111', 'Serra', '2026-12-11', '2026-12-14', now(), null),
+ ('c9333333-3333-4333-8333-333333333333', 'c1111111-1111-4111-8111-111111111111', 'Excluída', '2027-01-10', '2027-01-12', now(), now()),
+ ('c9444444-4444-4444-8444-444444444444', 'c3333333-3333-4333-8333-333333333333', 'Dourada', '2026-11-20', '2026-11-21', now(), null);
 insert into public.trip_members (id, trip_id, user_id, invited_email, role, status, invited_by, updated_at)
 values (extensions.uuid_generate_v5('c9222222-2222-4222-8222-222222222222', 'invite:k2@teste.local'), 'c9222222-2222-4222-8222-222222222222',
         'c2222222-2222-4222-8222-222222222222', 'k2@teste.local', 'member', 'accepted', 'c1111111-1111-4111-8111-111111111111', now());
 
-select is(private.copy_trip_cars(), 2, 'a cópia muda o perfil de quem é dono de viagem (duas pessoas)');
-select is(pg_temp.car('c1111111-1111-4111-8111-111111111111'), 'pickup|mist|rack,bike|metallic|classic',
-          'a viagem mais recente que não foi excluída; a Névoa continua metálica');
-select is(pg_temp.car('c3333333-3333-4333-8333-333333333333'), 'sedan|gold|hubcaps|metallic|classic',
-          'o Dourado continua metálico');
-select is(pg_temp.car('c2222222-2222-4222-8222-222222222222'), 'hatch|sunset||solid|classic',
-          'quem não é dono de viagem fica com o padrão');
-select ok((select synced_at > now() - interval '1 minute' and field_versions ? 'car_model'
-             from public.profiles where id = 'c1111111-1111-4111-8111-111111111111'),
-          'a cópia passa pelo sync_guard: versão da coluna e synced_at novos, para o time puxar');
 
 -- ------------------------------------------------------------------ os grants e a RLS
 select pg_temp.login('c1111111-1111-4111-8111-111111111111');
