@@ -1,5 +1,5 @@
 import { appendFile } from 'node:fs/promises';
-import { viewboxAround, type LngLat } from '../../supabase/functions/_shared/geo.ts';
+import { haversineM, viewboxAround, type LngLat } from '../../supabase/functions/_shared/geo.ts';
 import {
   placesErrorSchema,
   placesResponseSchema,
@@ -12,7 +12,9 @@ import {
   planQuestionsSchema,
   planWriteSchema,
   type PlanContext,
+  type PlanQuestion,
   type PlanRequest,
+  type PlanWrite,
 } from '../../supabase/functions/_shared/plan-protocol.ts';
 import { routeResponseSchema } from '../../supabase/functions/_shared/route-schema.ts';
 import {
@@ -21,26 +23,35 @@ import {
   toggleChoice,
   type FlowDeps,
   type MapStage,
+  type Prepared,
   type SearchInput,
 } from '../../src/features/intake/flow.ts';
+import { placeKey } from '../../src/features/intake/locate.ts';
 import type { SearchResult } from '../../src/features/intake/named.ts';
 import { plain } from '../../src/features/intake/places.ts';
 import { reachQuestion } from '../../src/features/intake/reach.ts';
+import { radiusForHours } from '../../src/features/intake/search.ts';
 import type { LabConfig } from './env.ts';
 import { costUsd, timedImport, type TimedImport } from './import-lab.ts';
 import { log, sleep, type Session } from './session.ts';
 
 /**
- * A medição da conversa (fase 24; a da fase 17 refeita): poucas leituras reais, contadas, pelas
- * funções publicadas e como o lab-a, pelo mesmo caminho do app (`intake/flow.ts`): a IA lê a vontade
- * e pergunta, o mapa de verdade dá as opções (a `find-places`, pela Geoapify), a primeira opção de
- * cada vontade é a escolha, a rota e o corredor dão as sugestões, e uma leitura escreve a viagem
- * sobre isso. Três textos fixos, sem nada da pessoa: a conversa da serra (a de antes), **"um café
- * colonial em Pomerode, saindo de Papanduva"** (o defeito de 15/11: as opções têm de ter o Torten
- * Paradies e o Mahlzeit, e as sugestões o Bioparque Zoo Pomerode) e uma saída de hoje em Canela. Sai
- * uma tabela com números, custos e os nomes dos lugares públicos achados.
+ * A medição da conversa (fase 24; a da fase 17 refeita; os pedidos de leigo na fase 25): poucas
+ * leituras reais, contadas, pelas funções publicadas e como o lab-a, pelo mesmo caminho do app
+ * (`intake/flow.ts`): a IA lê a vontade e pergunta, o mapa de verdade dá as opções (a `find-places`,
+ * pela Geoapify), a primeira opção de cada vontade é a escolha, a rota e o corredor dão as sugestões,
+ * e uma leitura escreve a viagem sobre isso. Sete textos fixos, sem nada da pessoa: a conversa da
+ * serra, **"um café colonial em Pomerode, saindo de Papanduva"** (o defeito de 15/11), uma saída de
+ * hoje em Canela, e **os quatro pedidos de leigo da fase 25** (decisão 7 de 20/11: a prova é com
+ * pedidos de leigo): "almoçar em mafra" (a Mafra de SC, nada fora do Brasil), "vou pra joinville"
+ * (idem), o pedido de 20/11 respondendo "1:30 no maximo" (o raio de 1,5 h; sem "3 horas" nas
+ * opções) e o de Canoinhas (a feirinha e o salão pendentes, e a escrita sem falar deles). Sai uma
+ * tabela com números, custos e os nomes dos lugares públicos achados; sai 1 quando uma cobrança
+ * falhou.
  */
 const CANELA = { lat: -29.37, lng: -50.81 };
+const PAPANDUVA = { lat: -26.37, lng: -50.144 };
+const MAJOR_VIEIRA = { lat: -26.37, lng: -50.33 };
 const UA = 'viajei-laboratorio/1.0 (medicao)';
 
 const s = (ms: number | null) => (ms === null ? '—' : `${(ms / 1000).toFixed(1)} s`);
@@ -155,6 +166,21 @@ function chooseFirst(map: MapStage): MapStage {
 const has = (names: readonly string[], want: string) =>
   names.some((n) => plain(n).includes(plain(want)));
 
+/** A resposta a cada pergunta: a primeira opção, ou "tanto faz" (o de antes), salvo o que o pedido mandar. */
+const firstOption = (q: PlanQuestion) => q.options[0] ?? 'tanto faz';
+
+/** O Brasil, grosso modo, pela coordenada: o que a cobrança "nenhuma opção fora do Brasil" usa. */
+const inBrazil = (p: { lat: number; lng: number }) =>
+  p.lat >= -34 && p.lat <= 6 && p.lng >= -74.5 && p.lng <= -34;
+
+/** O que a medição cobra de uma conversa: o mapa, o caminho e o que a IA escreveu. */
+type Check = (got: {
+  map: MapStage;
+  prepared: Prepared;
+  questions: readonly PlanQuestion[];
+  write: PlanWrite | null;
+}) => string[];
+
 export async function measureConversa(cfg: LabConfig, a: Session): Promise<number> {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(
     new Date(),
@@ -163,17 +189,17 @@ export async function measureConversa(cfg: LabConfig, a: Session): Promise<numbe
   const calls: { places: number; noSource: boolean } = { places: 0, noSource: false };
   const noSource = () => calls.noSource;
   const deps = labDeps(cfg, a, calls);
-  /** o que faltou nas conversas que cobram (o café colonial em Pomerode) */
+  /** o que faltou nas conversas que cobram */
   const missing: string[] = [];
 
   /** Uma conversa inteira: as perguntas (se houver), as opções, o caminho e a escrita. */
   const conversa = async (
     label: string,
     input: Omit<SearchInput, 'intent' | 'questions' | 'answers'>,
-    check?: (opcoes: string[], sugestoes: string[]) => string[],
+    opts: { answer?: (q: PlanQuestion) => string; check?: Check } = {},
   ) => {
     let intent = null;
-    let questions: PlanRequest['questions'];
+    let questions: PlanQuestion[];
     let answers: string[];
     if (input.kind === 'plan') {
       log(`medição: ${label}, as perguntas`);
@@ -187,12 +213,12 @@ export async function measureConversa(cfg: LabConfig, a: Session): Promise<numbe
       const parsed = planQuestionsSchema.safeParse(asked.data);
       questions = parsed.success ? parsed.data.questions : [];
       intent = parsed.success ? (parsed.data.intent ?? null) : null;
-      // a primeira opção de cada pergunta, ou uma resposta livre curta
-      answers = questions.map((q) => q.options[0] ?? 'tanto faz');
+      // a resposta por pergunta (fase 25): o que o pedido mandar, senão a primeira opção
+      answers = questions.map((q) => (opts.answer ?? firstOption)(q));
       rows.push({
         label: `${label} · perguntas`,
         run: asked,
-        detail: `${String(questions.length)} perguntas; vontades: ${intent && intent.wants.length > 0 ? intent.wants.map((w) => w.words).join(', ') : 'nenhuma'}; área: ${intent?.area ?? '—'}`,
+        detail: `${String(questions.length)} perguntas (${questions.map((q) => `${q.topic ?? '?'}: ${q.options.join(' / ')}`).join('; ')}); respostas: ${answers.join(' / ')}; vontades: ${intent && intent.wants.length > 0 ? intent.wants.map((w) => w.words).join(', ') : 'nenhuma'}; área: ${intent?.area ?? '—'}; origem: ${intent?.origin ?? '—'}`,
       });
     } else {
       questions = [reachQuestion('09:00')];
@@ -200,16 +226,28 @@ export async function measureConversa(cfg: LabConfig, a: Session): Promise<numbe
     }
     log(`medição: ${label}, as opções do mapa`);
     const t0 = Date.now();
-    const map = await searchMap({ ...input, intent, questions, answers }, deps);
+    const search: SearchInput = { ...input, intent, questions, answers };
+    let map = await searchMap(search, deps);
+    // a pergunta da cidade (D276) sem tela: a medição escolhe o candidato mais perto, e diz
+    let askedCity = '';
+    if (map.ask) {
+      const pick = map.ask.options[0];
+      askedCity = `a cidade "${map.ask.said}" pediu escolha (${map.ask.far ? 'só longe' : 'mais de uma'}): ${pick ? `${pick.address} · ${s(Date.now() - t0)}` : 'sem candidato'}; `;
+      if (pick)
+        map = await searchMap({ ...search, places: { [placeKey(map.ask.said)]: pick } }, deps);
+    }
     const opcoes = map.groups.flatMap((g) => g.options.map((o) => o.place.name));
     const status =
       map.groups.map((g) => g.status).join(',') || (map.nowhere ? 'sem onde procurar' : '—');
     const chosen = chooseFirst(map);
+    const where = map.groups
+      .map((g) => `${g.label}: ${g.centerLabel ?? '—'} a ${String(g.radiusKm)} km`)
+      .join('; ');
     if (chosen.chosen.length === 0 && !map.named.some((n) => n.state.kind === 'found')) {
       rows.push({
         label: `${label} · opções`,
         run: null,
-        detail: `busca ${status} em ${s(Date.now() - t0)}: nenhuma opção; a escrita não roda`,
+        detail: `${askedCity}busca ${status} em ${s(Date.now() - t0)} (${where}): nenhuma opção; a escrita não roda`,
       });
       return;
     }
@@ -219,12 +257,11 @@ export async function measureConversa(cfg: LabConfig, a: Session): Promise<numbe
       deps,
     );
     const sugestoes = prepared.suggestions.map((x) => x.place.name);
-    const problems = check?.(opcoes, sugestoes) ?? [];
-    missing.push(...problems);
+    const pendentes = prepared.missing.map((m) => m.name);
     rows.push({
       label: `${label} · opções`,
       run: null,
-      detail: `${String(opcoes.length)} opções (${opcoes.slice(0, 6).join('; ')}); ${String(sugestoes.length)} sugestões (${sugestoes.join('; ')}); rota ${prepared.routed ? 'real' : 'reta'}; ${s(Date.now() - t0)}${problems.length > 0 ? `; FALTOU: ${problems.join(', ')}` : ''}`,
+      detail: `${askedCity}saindo de ${map.origin?.label ?? '—'}; ${where}; ${String(opcoes.length)} opções (${opcoes.slice(0, 6).join('; ')}); ${String(sugestoes.length)} sugestões (${sugestoes.join('; ')}); pendentes: ${pendentes.length > 0 ? pendentes.join(', ') : 'nenhum'}; rota ${prepared.routed ? 'real' : 'reta'}; ${s(Date.now() - t0)}`,
     });
     log(`medição: ${label}, a escrita`);
     const write: PlanRequest = {
@@ -244,15 +281,24 @@ export async function measureConversa(cfg: LabConfig, a: Session): Promise<numbe
     };
     const wrote = await timedImport(cfg, a, write, PLAN_FN);
     let detail: string = wrote.outcome;
+    let written: PlanWrite | null = null;
     if (wrote.outcome === 'done') {
       const parsed = planWriteSchema.safeParse(wrote.data);
+      written = parsed.success ? parsed.data : null;
       detail = parsed.success
-        ? `${String(parsed.data.days.length)} dias; ${String(parsed.data.days.flatMap((d) => d.stops).length)} escolhas nos dias; ${String(parsed.data.suggestions.length)} frases de sugestão`
+        ? `"${parsed.data.trip.name ?? ''}"; ${String(parsed.data.days.length)} dias (${parsed.data.days.map((d) => d.title ?? '').join('; ')}); ${String(parsed.data.days.flatMap((d) => d.stops).length)} escolhas nos dias; ${String(parsed.data.suggestions.length)} frases de sugestão; antes de viajar: ${parsed.data.checklist_before.join(' / ')}`
         : 'fora do schema';
     }
-    rows.push({ label: `${label} · escrita`, run: wrote, detail });
+    const problems = opts.check?.({ map, prepared, questions, write: written }) ?? [];
+    missing.push(...problems.map((x) => `${label}: ${x}`));
+    rows.push({
+      label: `${label} · escrita`,
+      run: wrote,
+      detail: `${detail}${problems.length > 0 ? `; FALTOU: ${problems.join(', ')}` : ''}`,
+    });
   };
 
+  // ------------------------------------------------------------- as três conversas de antes
   await conversa('serra', {
     kind: 'plan',
     text: 'Serra Gaúcha em dezembro, 4 dias, saindo de Papanduva',
@@ -267,12 +313,17 @@ export async function measureConversa(cfg: LabConfig, a: Session): Promise<numbe
       context: { origin: null, position: null, place: null },
       center: null,
     },
-    (opcoes, sugestoes) =>
-      [
-        has(opcoes, 'Torten Paradies') ? null : 'Torten Paradies nas opções',
-        has(opcoes, 'Mahlzeit') ? null : 'Mahlzeit nas opções',
-        has(sugestoes, 'Zoo Pomerode') ? null : 'Bioparque Zoo Pomerode nas sugestões',
-      ].filter((x): x is string => x !== null),
+    {
+      check: ({ map, prepared }) => {
+        const opcoes = map.groups.flatMap((g) => g.options.map((o) => o.place.name));
+        const sugestoes = prepared.suggestions.map((x) => x.place.name);
+        return [
+          has(opcoes, 'Torten Paradies') ? null : 'Torten Paradies nas opções',
+          has(opcoes, 'Mahlzeit') ? null : 'Mahlzeit nas opções',
+          has(sugestoes, 'Zoo Pomerode') ? null : 'Bioparque Zoo Pomerode nas sugestões',
+        ].filter((x): x is string => x !== null);
+      },
+    },
   );
   await conversa('saída de hoje', {
     kind: 'today',
@@ -280,6 +331,134 @@ export async function measureConversa(cfg: LabConfig, a: Session): Promise<numbe
     context: { origin: null, position: CANELA, place: 'Canela, RS' },
     center: CANELA,
   });
+
+  // ------------------------------------------------ os pedidos de leigo (fase 25, decisão 7 de 20/11)
+  /** todos os centros de busca a até 400 km de onde se sai, e nenhuma opção fora do Brasil */
+  const perto = ({ map }: { map: MapStage }): string[] => {
+    const from = map.origin?.at;
+    const out: string[] = [];
+    if (!from) out.push('sem origem resolvida');
+    for (const g of map.groups) {
+      const km = from ? haversineM(from, g.center) / 1000 : 0;
+      if (km > 400) out.push(`${g.label} buscado a ${String(Math.round(km))} km de onde se sai`);
+      for (const o of g.options) {
+        if (!inBrazil(o.place)) out.push(`${o.place.name} fora do Brasil`);
+      }
+    }
+    return out;
+  };
+  await conversa(
+    'mafra',
+    {
+      kind: 'plan',
+      text: 'amanha quero almoçar em mafra e depois ir numa cachoeira',
+      context: { origin: 'Papanduva/SC', position: null, place: null },
+      center: PAPANDUVA,
+    },
+    {
+      check: (got) =>
+        [
+          ...perto(got),
+          ...got.map.groups.map((g) =>
+            plain(g.centerLabel ?? '').includes('mafra')
+              ? null
+              : `${g.label} sem "Mafra" no centro`,
+          ),
+        ].filter((x): x is string => x !== null),
+    },
+  );
+  await conversa(
+    'joinville',
+    {
+      kind: 'plan',
+      text: 'vou pra joinville sabado, queria parar pra tomar um cafe no caminho',
+      context: { origin: 'Papanduva/SC', position: null, place: null },
+      center: PAPANDUVA,
+    },
+    // o "no caminho" é da fase 26: aqui só se cobra que nada saiu do alcance nem do Brasil
+    { check: perto },
+  );
+  await conversa(
+    'cachoeira 1:30',
+    {
+      kind: 'plan',
+      text: 'gostaria de amanha visitar uma cachoeira e passar em cafe e voltar para casa',
+      context: { origin: 'Papanduva/SC', position: null, place: null },
+      center: PAPANDUVA,
+    },
+    {
+      // o pedido de 20/11 do Douglas, respondendo "1:30 no maximo" ao tempo
+      answer: (q) => (q.topic === 'reach' ? '1:30 no maximo' : firstOption(q)),
+      check: ({ map, questions }) => {
+        const reach = questions.find((q) => q.topic === 'reach');
+        const expected = radiusForHours(1.5);
+        return [
+          ...map.groups.map((g) =>
+            g.radiusKm === expected
+              ? null
+              : `${g.label} buscado a ${String(g.radiusKm)} km, não a ${String(expected)} (1,5 h)`,
+          ),
+          reach ? null : 'a IA não perguntou o tempo (a vontade sem área pede)',
+          reach?.options.some((o) => /3 ?h|tr[eê]s horas/i.test(o))
+            ? 'a IA ofereceu "3 horas" a quem volta para casa no mesmo dia'
+            : null,
+        ].filter((x): x is string => x !== null);
+      },
+    },
+  );
+  await conversa(
+    'canoinhas',
+    {
+      kind: 'plan',
+      text: 'iria na feirinha, tomar um cafe e levar a minha mulher cortar o cabelo, tudo isso em canoinhas sc',
+      // a pessoa estava em Major Vieira (21/11): a posição como ponto de referência
+      context: { origin: 'Major Vieira, SC', position: MAJOR_VIEIRA, place: 'Major Vieira, SC' },
+      center: MAJOR_VIEIRA,
+    },
+    {
+      check: ({ prepared, write }) => {
+        const pending = prepared.missing.map((m) => plain(m.name));
+        const fala = /feirinha|cabelo|sal[aã]o/i;
+        return [
+          pending.some((n) => n.includes('feirinha')) ? null : 'a feirinha não ficou pendente',
+          pending.some((n) => /cabelo|salao/.test(n)) ? null : 'o salão não ficou pendente',
+          write === null ? 'a escrita não voltou no schema' : null,
+          ...(write
+            ? [
+                fala.test(write.trip.name ?? '')
+                  ? `o nome da viagem fala do que não entrou: "${write.trip.name ?? ''}"`
+                  : null,
+                ...write.days.map((d) =>
+                  fala.test(d.title ?? '')
+                    ? `o título do dia fala do que não entrou: "${d.title ?? ''}"`
+                    : null,
+                ),
+                ...write.days.flatMap((d) =>
+                  d.stops.map((st) =>
+                    fala.test(st.note ?? '')
+                      ? `a nota fala do que não entrou: "${st.note ?? ''}"`
+                      : null,
+                  ),
+                ),
+                ...write.quests.map((q) =>
+                  fala.test(q.text) ? `a missão fala do que não entrou: "${q.text}"` : null,
+                ),
+                ...write.checklist_pack.map((t) =>
+                  fala.test(t) ? `a mala fala do que não entrou: "${t}"` : null,
+                ),
+                // a lista "antes de viajar" pode ajudar a resolver o pendente ("Escolher onde fica a feirinha"), nada mais
+                ...write.checklist_before.map((t) =>
+                  fala.test(t) &&
+                  !/escolher|marcar|onde fica|confirmar onde|achar onde|localizar/i.test(t)
+                    ? `a lista trata o pendente como parte do roteiro: "${t}"`
+                    : null,
+                ),
+              ]
+            : []),
+        ].filter((x): x is string => x !== null);
+      },
+    },
+  );
 
   const head =
     '| passo | resultado | 1º caractere | fim | entrada | saída | US$ | o que veio |\n|---|---|---|---|---|---|---|---|';

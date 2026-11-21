@@ -53,7 +53,7 @@ export async function devicePosition(opts: { prompt: boolean }): Promise<LatLng 
   const state = await navigator.permissions
     .query({ name: 'geolocation' })
     .then((s) => s.state)
-    .catch(() => 'prompt' as PermissionState);
+    .catch(() => 'prompt');
   if (state === 'denied' || (state === 'prompt' && !opts.prompt)) return null;
   return new Promise((resolve) =>
     navigator.geolocation.getCurrentPosition(

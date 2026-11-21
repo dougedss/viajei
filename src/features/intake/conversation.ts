@@ -6,6 +6,7 @@ import type {
   PlanRequest,
 } from '@shared/plan-protocol.ts';
 import { db } from '@/lib/db/schema.ts';
+import { filled } from '@/lib/text/filled.ts';
 import { answersByTopic, type MapStage, type Prepared } from './flow.ts';
 import type { PlaceHit } from './locate.ts';
 import type { LatLng } from './named.ts';
@@ -60,10 +61,9 @@ export function originLabelOf(
   c: Pick<Conversation, 'origin_override' | 'intent' | 'questions' | 'answers' | 'context' | 'map'>,
 ): string | null {
   const said =
-    c.origin_override?.trim() ||
-    c.intent?.origin ||
-    answersByTopic(c.questions, c.answers).origin ||
-    null;
+    filled(c.origin_override) ??
+    filled(c.intent?.origin) ??
+    filled(answersByTopic(c.questions, c.answers).origin);
   if (said) return said;
   if (c.map?.origin) return c.map.origin.label;
   if (c.context.position) return c.context.place ?? 'onde vocês estão';

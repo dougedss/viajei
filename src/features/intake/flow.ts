@@ -1,6 +1,7 @@
 // caminhos relativos: a medição do laboratório (`scripts/lab`) roda este módulo, com a rede dela
 import type { Interest, StopKind } from '../../../supabase/functions/_shared/constants.ts';
 import { haversineM, type LngLat } from '../../../supabase/functions/_shared/geo.ts';
+import { filled } from '../../lib/text/filled.ts';
 import type { Place, PlacesRequest } from '../../../supabase/functions/_shared/places-schema.ts';
 import type {
   PlanContext,
@@ -231,7 +232,7 @@ export async function searchMap(input: SearchInput, deps: FlowDeps): Promise<Map
   // de onde se sai (fase 25, D271): o que a pessoa disse (no "mudar", no pedido ou na resposta) vale
   // sempre; senão, onde ela está (a posição, nos dois caminhos, com a cidade do reverso); senão a
   // origem de antes. A posição é o ponto de referência de tudo nesta conversa.
-  const said = input.originOverride?.trim() || intent.origin || byTopic.origin || null;
+  const said = filled(input.originOverride) ?? filled(intent.origin) ?? filled(byTopic.origin);
   const position = !said && input.context.position ? input.center : null;
   const originLabel =
     said ?? (position ? (input.context.place ?? 'onde vocês estão') : input.context.origin);

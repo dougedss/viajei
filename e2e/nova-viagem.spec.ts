@@ -8,6 +8,7 @@ import { dateInSaoPaulo } from './helpers/dates.ts';
 import { linhas } from './helpers/db.ts';
 import { aiPlan, aiSse, respondSse } from './helpers/import.ts';
 import { criarUsuario } from './helpers/users.ts';
+import { posicaoDecidida } from './helpers/geo.ts';
 import { fakeOpenMeteo } from './helpers/world.ts';
 import { buscaNoMapa, lugar, rotaForjada } from './helpers/places.ts';
 import { radiusFor, reachOf, readReach } from '../src/features/intake/reach.ts';
@@ -416,6 +417,8 @@ test('a conversa nova: uma pergunta, as opções do mapa, a escolha, as sugestõ
   );
   const user = await criarUsuario('CafeColonial');
   await entrar(page, user.email);
+  // a pergunta de posição (fase 25) já respondida com "agora não": a conversa de antes, sem o cartão
+  await posicaoDecidida(page, 'declined');
   await campo(page).fill('quero ir num café colonial');
   await page.getByRole('button', { name: 'Montar a viagem' }).click();
 
@@ -513,6 +516,8 @@ test('o lugar nomeado com dois no mapa: "Escolher o local", nunca o chute', asyn
   );
   const user = await criarUsuario('Nomeado');
   await entrar(page, user.email);
+  // a pergunta de posição (fase 25) já respondida com "agora não": a conversa de antes, sem o cartão
+  await posicaoDecidida(page, 'declined');
   await campo(page).fill('quero passar no Bioparque, saindo de Papanduva');
   await page.getByRole('button', { name: 'Montar a viagem' }).click();
   const escolher = page.getByRole('radiogroup', { name: 'Bioparque' });
@@ -540,6 +545,8 @@ test('nenhuma opção ao alcance: a tela diz, oferece procurar mais longe, e nã
   );
   const user = await criarUsuario('Nenhuma');
   await entrar(page, user.email);
+  // a pergunta de posição (fase 25) já respondida com "agora não": a conversa de antes, sem o cartão
+  await posicaoDecidida(page, 'declined');
   await campo(page).fill('quero ir num café colonial, saindo de Papanduva');
   await page.getByRole('button', { name: 'Montar a viagem' }).click();
   await expect(page.getByText(/^Não achei café colonial a até .* de Papanduva, SC\.$/)).toBeVisible(
@@ -594,6 +601,8 @@ test('a busca no mapa sem fonte (no_source): o aviso, e a busca pelo nome segue'
   );
   const user = await criarUsuario('SemFonte');
   await entrar(page, user.email);
+  // a pergunta de posição (fase 25) já respondida com "agora não": a conversa de antes, sem o cartão
+  await posicaoDecidida(page, 'declined');
   await campo(page).fill('quero ir num café colonial, saindo de Papanduva');
   await page.getByRole('button', { name: 'Montar a viagem' }).click();
   await expect(page.getByText(/Não deu para buscar no mapa pelo tipo agora/)).toBeVisible({
@@ -662,17 +671,7 @@ test('quero sair hoje: a pergunta de alcance, as opções em volta da posição,
   // a posição já tinha sido permitida no mapa (D176): no navegador e na pergunta do app
   await context.grantPermissions(['geolocation']);
   await context.setGeolocation({ latitude: -29.371234, longitude: -50.876543 });
-  await page.evaluate(`new Promise((resolve, reject) => {
-    const req = indexedDB.open('viajei');
-    req.onerror = () => reject(req.error);
-    req.onsuccess = () => {
-      const db = req.result;
-      const tx = db.transaction('sync_state', 'readwrite');
-      tx.objectStore('sync_state').put({ key: 'geo:asked', value: 'granted' });
-      tx.oncomplete = () => { db.close(); resolve(true); };
-      tx.onerror = () => reject(tx.error);
-    };
-  })`);
+  await posicaoDecidida(page, 'granted');
 
   await campo(page).fill('quero sair hoje para um café colonial');
   await page.getByRole('button', { name: 'Montar a viagem' }).click();
