@@ -404,6 +404,50 @@ describe('plan-trip: a intenção no passo das perguntas', () => {
     expect(PLAN_ASK_SYSTEM_PROMPT).toContain('Você não monta roteiro e não escolhe lugares');
   });
 
+  it('as opções combinam com o pedido e a hora (fase 25, D275): o prompt manda, e a resposta coerente passa', async () => {
+    // a regra no prompt: nunca mais tempo do que o pedido permite; nunca nome de região
+    expect(PLAN_ASK_SYSTEM_PROMPT).toContain('As opções nunca contradizem o pedido nem a hora');
+    expect(PLAN_ASK_SYSTEM_PROMPT).toContain('a quem volta antes do almoço');
+    expect(PLAN_ASK_SYSTEM_PROMPT).toContain('Nunca o nome de uma região');
+    expect(PLAN_ASK_SYSTEM_PROMPT).not.toContain('"1 hora", "2 horas", "3 horas")');
+    // a quem "volta antes do almoço": a IA leu a manhã e ofereceu minutos e horas que cabem nela
+    const ai = JSON.stringify({
+      intent: {
+        wants: [
+          { words: 'padaria boa', kind: 'food' },
+          { words: 'mirante', kind: 'nature' },
+        ],
+        named: [],
+        area: '',
+        reach: 'morning',
+        reach_hours: null,
+        when: 'domingo',
+        origin: '',
+      },
+      questions: [
+        {
+          topic: 'reach',
+          text: 'Até quanto tempo de carro?',
+          options: ['30 min', '1 hora', '1h30'],
+        },
+      ],
+    });
+    const { events } = await run(
+      request({
+        text: 'domingo queria tomar cafe da manha numa padaria boa e depois ir num mirante, voltar antes do almoço',
+      }),
+      ai,
+    );
+    const done = events.at(-1);
+    expect(done).toMatchObject({
+      type: 'done',
+      data: {
+        intent: { reach: 'morning', when: 'domingo' },
+        questions: [{ topic: 'reach', options: ['30 min', '1 hora', '1h30'] }],
+      },
+    });
+  });
+
   it('o app da produção de hoje lê só as perguntas do mesmo done (compatível)', async () => {
     const { events } = await run(request(), questions(1, cafe));
     const done = events.at(-1);
