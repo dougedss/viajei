@@ -190,6 +190,63 @@ describe('o trabalhador da fila dos cartões-postais', () => {
     expect(http.filter((c) => c.url.includes('upload.wikimedia'))).toHaveLength(3 + 1);
   });
 
+  it('o mapa não acha o lugar pelo nome: o item do Wikidata perto da coordenada basta, e a peça sai sem a planta', async () => {
+    const salto: LandmarkJob = {
+      ...JOB,
+      place_key: 'geo:salto-do-jardim@-25.443,-49.239',
+      input: { name: 'Salto do Jardim', lat: -25.4428, lng: -49.2392, stop_kind: 'nature' },
+    };
+    const { rpc, calls } = rpcOf(salto);
+    const { ai, params } = aiOf([RECIPE]);
+    const { fetch, calls: http } = fakeFetch([
+      [/geocode\/search/, json({ results: [] })],
+      [/v2\/places\?/, json({ type: 'FeatureCollection', features: [] })],
+      [
+        /wbsearchentities/,
+        json({ search: [{ id: 'Q94923', label: 'Jardim Botânico de Curitiba' }] }),
+      ],
+      [/Special:EntityData\/Q94923/, json(Q94923)],
+      [/list=categorymembers/, json(CATEGORY_FILES)],
+      [/prop=imageinfo/, json(IMAGE_INFO)],
+      [/upload\.wikimedia/, png()],
+    ]);
+    const result = await runLandmarkJob({ ...base, rpc, fetch, ai });
+    expect(result).toMatchObject({ status: 'generated', photos: 3 });
+    expect(calls.identified?.[0]).toEqual([
+      'job-1',
+      'wikidata:Q94923',
+      'Jardim Botânico de Curitiba',
+      'Q94923',
+      {},
+    ]);
+    const [, , modeled, srcs] = calls.store?.[0] as [
+      unknown,
+      unknown,
+      unknown,
+      { outline: string },
+    ];
+    expect(modeled).toEqual({});
+    expect(srcs.outline).toBe('none');
+    // sem outro objeto do mapa não há escolha: a IA só escreveu a receita, sem planta
+    expect(ai).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(params[0])).toContain('sem contorno em planta');
+    expect(http.some((c) => c.url.includes('place-details'))).toBe(false);
+
+    // longe da coordenada dita, o item não vale: no_place, sem retentativa
+    const far = fakeFetch([
+      [/geocode\/search/, json({ results: [] })],
+      [/wbsearchentities/, json({ search: [{ id: 'Q94923' }] })],
+      [/Special:EntityData\/Q94923/, json(Q94923)],
+    ]);
+    const none = await runLandmarkJob({
+      ...base,
+      rpc: rpcOf({ ...salto, input: { ...salto.input, lat: -29.285, lng: -51.412 } }).rpc,
+      fetch: far.fetch,
+      ai,
+    });
+    expect(none).toMatchObject({ status: 'failed', code: 'no_place', retry: false });
+  });
+
   it('o mesmo item do Wikidata já no catálogo: o lugar só aponta para ele, sem IA', async () => {
     const { rpc, calls } = rpcOf(JOB, {
       identified: () => Promise.resolve({ landmark_id: 'lm-9', linked: true }),
@@ -215,6 +272,53 @@ describe('o trabalhador da fila dos cartões-postais', () => {
     const result = await runLandmarkJob({ ...base, rpc, fetch, ai });
     expect(result).toEqual({ status: 'failed', job: 'job-1', code: 'no_wikidata', retry: false });
     expect(calls.fail?.[0]).toEqual(['job-1', 'no_wikidata', false]);
+    expect(ai).not.toHaveBeenCalled();
+  });
+
+  it('o maxlag do Wikidata: espera o Retry-After e tenta de novo uma vez; se persiste, source_failed com o código no log', async () => {
+    const hotel: LandmarkJob = {
+      ...JOB,
+      place_key: 'geo:hotel-da-esquina@-25.443,-49.239',
+      input: { name: 'Hotel da esquina', lat: -25.4428, lng: -49.2392, stop_kind: 'lodging' },
+    };
+    const maxlag = () =>
+      Response.json(
+        { error: { code: 'maxlag', info: 'Waiting for a database server: 6 seconds lagged.' } },
+        { headers: { 'retry-after': '6' } },
+      );
+    const hotelSources = (search: (() => Response)[]) =>
+      fakeFetch([
+        [/geocode\/search/, json(GEOCODE_BAKERY)],
+        [/place-details\?id=pid-padaria/, json(DETAILS_BAKERY)],
+        [/wbsearchentities/, () => (search.shift() ?? maxlag)()],
+      ]);
+    const slept: number[] = [];
+    const sleep = (ms: number) => {
+      slept.push(ms);
+      return Promise.resolve();
+    };
+    const { ai } = aiOf([]);
+
+    const once = hotelSources([maxlag, json({ search: [] })]);
+    const { rpc } = rpcOf(hotel);
+    const recovered = await runLandmarkJob({ ...base, sleep, rpc, fetch: once.fetch, ai });
+    expect(recovered).toMatchObject({ status: 'failed', code: 'no_wikidata', retry: false });
+    expect(slept).toContain(6_000);
+    expect(once.calls.filter((c) => c.url.includes('wbsearchentities'))).toHaveLength(2);
+
+    const log: string[] = [];
+    const always = hotelSources([]);
+    const stuck = await runLandmarkJob({
+      ...base,
+      sleep,
+      rpc: rpcOf(hotel).rpc,
+      fetch: always.fetch,
+      ai,
+      log: (l) => log.push(l),
+    });
+    expect(stuck).toMatchObject({ status: 'failed', code: 'source_failed', retry: true });
+    expect(log.at(-1)).toContain('detail=wikidata:200:wikidata_maxlag');
+    expect(always.calls.filter((c) => c.url.includes('wbsearchentities'))).toHaveLength(2);
     expect(ai).not.toHaveBeenCalled();
   });
 

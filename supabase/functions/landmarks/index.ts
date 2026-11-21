@@ -81,8 +81,12 @@ export default {
         if (error) console.warn(`${LANDMARKS_FN} ai_imports ${error.code}`);
       },
       fetch: (input, init) => fetch(input, init),
+      // em stream: o SDK recusa um pedido sem stream com `max_tokens` alto (a receita e o veredito
+      // pedem 24 mil), e a resposta inteira chega pelo `finalMessage`
       ai: (params, options) =>
-        anthropic().beta.messages.create(params, { signal: options.signal, maxRetries: 1 }),
+        anthropic()
+          .beta.messages.stream(params, { signal: options.signal, maxRetries: 1 })
+          .finalMessage(),
       log: (line) => console.log(line),
     });
   }),

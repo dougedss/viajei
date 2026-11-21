@@ -18,7 +18,10 @@ import { GEOAPIFY_PLACES_URL } from './places-handler.ts';
  *    de 1.568 px e o `extmetadata` (a licença, o autor, o crédito). **Só licença livre** entra como
  *    referência; o autor, a licença e a URL ficam no registro da peça, nunca na tela.
  * Todas as chamadas em série, com o User-Agent do app (o Wikimedia recusa agentes genéricos),
- * `maxlag=5` nas da Action API (ninguém espera por elas). Nenhum pixel das fotos vai além da IA.
+ * `maxlag=5` nas da Action API (ninguém espera por elas). A Action API devolve o erro dela num
+ * envelope com status 200 (`{ error: { code } }`, o `maxlag` entre eles): ele vira um `SourceError`
+ * com o código e o `Retry-After`, e o trabalhador espera e tenta uma vez de novo só nesse caso.
+ * Nenhum pixel das fotos vai além da IA.
  */
 export const GEOAPIFY_GEOCODE_URL = 'https://api.geoapify.com/v1/geocode/search';
 export const GEOAPIFY_DETAILS_URL = 'https://api.geoapify.com/v2/place-details';
@@ -41,10 +44,21 @@ export type SourceFetch = typeof fetch;
 export class SourceError extends Error {
   readonly source: 'geoapify' | 'wikidata' | 'commons';
   readonly status: number;
-  constructor(source: SourceError['source'], status: number, detail: string) {
+  /** o código do envelope de erro da API (`maxlag`, `badvalue`…), quando foi isso */
+  readonly code: string | null;
+  /** quanto a API pediu para esperar (`Retry-After`), em ms */
+  readonly retryAfterMs: number | null;
+  constructor(
+    source: SourceError['source'],
+    status: number,
+    detail: string,
+    api: { code?: string; retryAfterMs?: number } = {},
+  ) {
     super(detail);
     this.source = source;
     this.status = status;
+    this.code = api.code ?? null;
+    this.retryAfterMs = api.retryAfterMs ?? null;
   }
 }
 
@@ -85,8 +99,29 @@ async function getJson<T>(
     throw new SourceError(source, 0, err instanceof Error ? err.message : String(err));
   }
   if (!res.ok) throw new SourceError(source, res.status, `${source} ${String(res.status)}`);
-  const parsed = schema.safeParse(await res.json().catch(() => null));
-  if (!parsed.success) throw new SourceError(source, res.status, `${source} fora do formato`);
+  const body: unknown = await res.json().catch(() => undefined);
+  if (body === undefined) throw new SourceError(source, res.status, `${source} sem JSON`);
+  // o envelope de erro da Action API (status 200): o código vai para o log, o Retry-After para quem retenta
+  const apiError =
+    typeof body === 'object' && body !== null && 'error' in body ? body.error : undefined;
+  if (typeof apiError === 'object' && apiError !== null && 'code' in apiError) {
+    const code = String(apiError.code);
+    const after = Number.parseInt(res.headers.get('retry-after') ?? '', 10);
+    throw new SourceError(source, res.status, `${source} ${code}`, {
+      code,
+      ...(Number.isFinite(after) && after > 0 ? { retryAfterMs: after * 1000 } : {}),
+    });
+  }
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    // o caminho do primeiro campo que não bate, para o log dizer onde (nunca o conteúdo)
+    const where = parsed.error.issues[0]?.path.map(String).join('.') ?? '';
+    throw new SourceError(
+      source,
+      res.status,
+      `${source} fora do formato${where ? ` em ${where}` : ''}`,
+    );
+  }
   return parsed.data;
 }
 

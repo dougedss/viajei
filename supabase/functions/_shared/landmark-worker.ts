@@ -161,6 +161,8 @@ const modeledOf = (p: OsmPlace) => ({
   place_id: p.place_id,
 });
 const label = (p: OsmPlace) => `${p.name} (${p.category}=${p.type})`;
+/** o nome do objeto do OSM, quando há objeto e ele tem nome */
+const nameOf = (p: OsmPlace | null) => (p && p.name.length > 0 ? p.name : null);
 
 /** Roda o próximo job da fila, se houver; devolve o que aconteceu (para o log e a medição). */
 export async function runLandmarkJob(deps: WorkerDeps): Promise<WorkerResult> {
@@ -234,7 +236,7 @@ export async function runLandmarkJob(deps: WorkerDeps): Promise<WorkerResult> {
     // o detalhe de uma fonte que falhou (a fonte e o status, ou "fora do formato"): sem URL, sem a pessoa
     const detail =
       err instanceof SourceError
-        ? `${err.source}:${String(err.status)}:${err.message.replace(/\s+/g, '_').slice(0, 40)}`
+        ? `${err.source}:${String(err.status)}:${err.message.replace(/\s+/g, '_').slice(0, 60)}`
         : e.code === 'timeout' || e.code === 'ai_failed' || e.code === 'ai_invalid'
           ? e.message.replace(/\s+/g, '_').slice(0, 60)
           : '';
@@ -274,7 +276,23 @@ function ensureTime(ctx: StepCtx, needMs: number): void {
 
 const geoapify = <T>(ctx: StepCtx, run: () => Promise<T>) =>
   ctx.pace('geoapify', GEOAPIFY_GAP_MS, run);
-const wikimedia = <T>(ctx: StepCtx, run: () => Promise<T>) => ctx.pace('wikimedia', 250, run);
+/** Uma chamada ao Wikimedia; no `maxlag` da Action API, espera o `Retry-After` e tenta uma vez de novo. */
+async function wikimedia<T>(ctx: StepCtx, run: () => Promise<T>): Promise<T> {
+  try {
+    return await ctx.pace('wikimedia', 250, run);
+  } catch (err) {
+    if (!(err instanceof SourceError) || err.code !== 'maxlag') throw err;
+    const wait = Math.min(err.retryAfterMs ?? MAXLAG_WAIT_MS, MAXLAG_WAIT_MAX_MS);
+    if (ctx.deadline - ctx.now() < wait + MAXLAG_MARGIN_MS) throw err;
+    await (ctx.deps.sleep ?? defaultSleep)(wait);
+    return ctx.pace('wikimedia', 250, run);
+  }
+}
+const MAXLAG_WAIT_MS = 5_000;
+const MAXLAG_WAIT_MAX_MS = 10_000;
+/** o que ainda tem de caber no orçamento depois da espera (o resto da corrente e a IA) */
+const MAXLAG_MARGIN_MS = 60_000;
+const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 function keyOf(ctx: StepCtx): string {
   const key = ctx.deps.geoapifyKey;
@@ -305,6 +323,22 @@ const aroundOf = (p: OsmPlace | GeoHit): Around | null =>
       }
     : null;
 
+/** O item do Wikidata pelo nome, aceito só com a coordenada (P625) a até `maxM` do centro. */
+async function wikidataNear(
+  ctx: StepCtx,
+  name: string,
+  center: { lat: number; lng: number },
+  maxM: number,
+): Promise<WikidataItem | null> {
+  const { deps } = ctx;
+  const found = await wikimedia(ctx, () => wikidataSearch(deps.fetch, name));
+  for (const h of found.slice(0, 3)) {
+    const cand = await wikimedia(ctx, () => wikidataItem(deps.fetch, h.id));
+    if (cand?.coord && distanceM(cand.coord, center) < maxM) return cand;
+  }
+  return null;
+}
+
 // ------------------------------------------------------------------ 1. identificar
 async function identify(ctx: StepCtx): Promise<Identified> {
   const { job, deps } = ctx;
@@ -326,33 +360,24 @@ async function identify(ctx: StepCtx): Promise<Identified> {
   const hit = hits
     .filter((h) => distanceM(h, near) < 2_000)
     .sort((a, b) => distanceM(a, near) - distanceM(b, near))[0];
-  if (!hit) throw new JobError('no_place');
-  const place = await geoapify(ctx, () => placeDetails(deps.fetch, key, hit.place_id));
-  if (!place) throw new JobError('no_place');
-  const center = { lat: place.lat, lng: place.lng };
+  const place = hit ? await geoapify(ctx, () => placeDetails(deps.fetch, key, hit.place_id)) : null;
 
-  // o item do Wikidata: pela tag, senão pela busca com a coordenada conferida (3 km)
+  // o item do Wikidata: pela tag do OSM, senão pela busca com a coordenada conferida (3 km). Quando o
+  // mapa não acha o lugar pelo nome (a geocodificação não indexa toda queda d'água nem todo parque,
+  // D269), o item do Wikidata perto da coordenada dita basta: a peça sai das fotos, sem a planta
   let item: WikidataItem | null = null;
-  const placeWikidata = place.wikidata;
+  const placeWikidata = place?.wikidata;
   if (placeWikidata) item = await wikimedia(ctx, () => wikidataItem(deps.fetch, placeWikidata));
-  if (!item) {
-    const found = await wikimedia(ctx, () => wikidataSearch(deps.fetch, place.name || inputName));
-    for (const h of found.slice(0, 3)) {
-      const cand = await wikimedia(ctx, () => wikidataItem(deps.fetch, h.id));
-      if (cand?.coord && distanceM(cand.coord, center) < 3_000) {
-        item = cand;
-        break;
-      }
-    }
-  }
-  if (!item) throw new JobError('no_wikidata');
+  item ??= await wikidataNear(ctx, nameOf(place) ?? inputName, place ?? near, 3_000);
+  if (!item) throw new JobError(place ? 'no_wikidata' : 'no_place');
+  const center = place ? { lat: place.lat, lng: place.lng } : (item.coord ?? near);
 
   // os objetos do OSM ao redor (os POIs num raio de 500 m, e a busca pelo nome do item e pelo nome
   // dito, na caixa de 2 km) e a escolha do que modelar, pela IA, só entre eles
   const around = new Map<string, Around>();
   const add = (p: OsmPlace | GeoHit) => {
     const a = aroundOf(p);
-    if (a && a.place_id !== place.place_id && distanceM(a, center) < 2_500)
+    if (a && a.place_id !== place?.place_id && distanceM(a, center) < 2_500)
       around.set(a.place_id, a);
   };
   ensureTime(ctx, 25_000);
@@ -370,9 +395,9 @@ async function identify(ctx: StepCtx): Promise<Identified> {
   const candidates: SubjectCandidate[] = [
     {
       index: 0,
-      name: place.name || inputName,
-      category: place.category,
-      type: place.type,
+      name: nameOf(place) ?? (item.label || inputName),
+      category: place?.category ?? 'wikidata',
+      type: place?.type ?? input.stop_kind ?? '',
       distance_m: 0,
       wikidata: item.id,
     },
@@ -406,10 +431,10 @@ async function identify(ctx: StepCtx): Promise<Identified> {
       );
     }
   }
-  const outlineSrc = modeled?.outline ?? (modeled ? null : place.outline);
+  const outlineSrc = modeled?.outline ?? (modeled ? null : (place?.outline ?? null));
   return {
     key: `wikidata:${item.id}`,
-    name: item.label || place.name || inputName,
+    name: item.label || (nameOf(place) ?? inputName),
     description: item.description,
     wikidata: item,
     place,
@@ -453,16 +478,7 @@ async function identifyCity(ctx: StepCtx): Promise<Identified> {
   let item: WikidataItem | null = monumentWikidata
     ? await wikimedia(ctx, () => wikidataItem(deps.fetch, monumentWikidata))
     : null;
-  if (!item) {
-    const found = await wikimedia(ctx, () => wikidataSearch(deps.fetch, proposal.name));
-    for (const h of found.slice(0, 3)) {
-      const cand = await wikimedia(ctx, () => wikidataItem(deps.fetch, h.id));
-      if (cand?.coord && distanceM(cand.coord, monument) < 1_500) {
-        item = cand;
-        break;
-      }
-    }
-  }
+  item ??= await wikidataNear(ctx, proposal.name, monument, 1_500);
   if (!item) throw new JobError('no_wikidata');
   return {
     key: `wikidata:${item.id}`,

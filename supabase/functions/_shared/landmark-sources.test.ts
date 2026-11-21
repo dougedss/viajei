@@ -23,8 +23,10 @@ import {
   pickPhotos,
   placeDetails,
   placesAround,
+  SourceError,
   sourcesRecord,
   wikidataItem,
+  wikidataSearch,
 } from './landmark-sources.ts';
 
 const KEY = 'chave-de-teste';
@@ -128,6 +130,36 @@ describe('as fontes públicas de um cartão-postal', () => {
       expect(c.url).toContain('maxlag=5');
       expect(c.ua).toBe(APP_USER_AGENT);
     }
+  });
+
+  it('o erro da Action API vem com status 200: o código e o Retry-After no SourceError; o formato errado diz onde', async () => {
+    const lagged = fakeFetch([
+      [
+        /wbsearchentities/,
+        () =>
+          Response.json(
+            { error: { code: 'maxlag', info: 'Waiting for a database server: 7 seconds lagged.' } },
+            { headers: { 'retry-after': '7' } },
+          ),
+      ],
+    ]);
+    const err = await wikidataSearch(lagged.fetch, 'Hotel Steffen').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(SourceError);
+    expect(err).toMatchObject({
+      source: 'wikidata',
+      status: 200,
+      code: 'maxlag',
+      retryAfterMs: 7_000,
+      message: 'wikidata maxlag',
+    });
+
+    const odd = fakeFetch([[/wbsearchentities/, json({ search: [{ title: 'sem id' }] })]]);
+    const odd1 = await wikidataSearch(odd.fetch, 'x').catch((e: unknown) => e);
+    expect(odd1).toMatchObject({ code: null, message: 'wikidata fora do formato em search.0.id' });
+
+    const html = fakeFetch([[/wbsearchentities/, () => new Response('<html>', { status: 200 })]]);
+    const odd2 = await wikidataSearch(html.fetch, 'x').catch((e: unknown) => e);
+    expect(odd2).toMatchObject({ code: null, message: 'wikidata sem JSON' });
   });
 
   it('o filtro de licença: só as livres, pelas grafias que a API devolve', () => {
