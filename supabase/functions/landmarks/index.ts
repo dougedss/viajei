@@ -65,20 +65,35 @@ export default {
         if (error) throw new Error(`landmark_verdict ${error.code}`);
         return data as 'published' | 'adjusted' | 'rejected' | 'stale';
       },
+      // o registro como a pessoa, no molde da importação (D132): abrir com o que os grants de
+      // inserção permitem e fechar com o resultado (o carimbo é do gatilho). Num insert só, as
+      // colunas do fechamento davam 42501 e a conferência ficava fora da conta (D269)
       async record(row) {
-        const { error } = await db.from('ai_imports').insert({
-          trip_id: row.trip_id,
-          kind: 'landmark',
-          input_chars: 0,
-          input_bytes: row.input_bytes,
-          model: row.model,
-          status: row.status,
-          error: row.error,
-          input_tokens: row.input_tokens,
-          output_tokens: row.output_tokens,
-          finished_at: new Date().toISOString(),
-        });
-        if (error) console.warn(`${LANDMARKS_FN} ai_imports ${error.code}`);
+        const { data, error } = await db
+          .from('ai_imports')
+          .insert({
+            trip_id: row.trip_id,
+            kind: 'landmark',
+            input_chars: 0,
+            input_bytes: row.input_bytes,
+            model: row.model,
+          })
+          .select('id')
+          .single();
+        if (error) {
+          console.warn(`${LANDMARKS_FN} ai_imports open ${error.code}`);
+          return;
+        }
+        const { error: closeError } = await db
+          .from('ai_imports')
+          .update({
+            status: row.status,
+            error: row.error,
+            input_tokens: row.input_tokens,
+            output_tokens: row.output_tokens,
+          })
+          .eq('id', data.id as string);
+        if (closeError) console.warn(`${LANDMARKS_FN} ai_imports close ${closeError.code}`);
       },
       fetch: (input, init) => fetch(input, init),
       // em stream: o SDK recusa um pedido sem stream com `max_tokens` alto (a receita e o veredito
