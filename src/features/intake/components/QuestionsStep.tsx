@@ -1,33 +1,60 @@
 import { MapPinned } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/Button.tsx';
 import { Card } from '@/components/ui/Card.tsx';
 import { TextField } from '@/components/ui/TextField.tsx';
 import type { PlanQuestion } from '@shared/plan-protocol.ts';
 import { cx } from '@/lib/cx.ts';
 import { canPlan, questionsLead } from '../conversation.ts';
+import { UNREAD_REACH_HINT } from '../reach.ts';
 
 type Props = {
   questions: readonly PlanQuestion[];
   answers: readonly string[];
+  /** quantas vezes a resposta de cada pergunta não foi entendida (fase 25, D274), pelo índice */
+  misread?: Readonly<Record<number, number>>;
+  /** "Saindo de Major Vieira, SC · mudar" (fase 25, D271), antes das perguntas */
+  origin?: ReactNode;
   onAnswer: (index: number, value: string) => void;
   onSubmit: () => void;
   onBack: () => void;
 };
 
+/** Na segunda vez sem entender, a pessoa escolhe entre as opções (D274). */
+export const MISREAD_LIMIT = 2;
+
 /**
  * As perguntas antes de montar (fase 17, a regra 16): quantas são, ditas antes; cada uma com as
  * opções e o campo para as palavras da pessoa. "Procurar no mapa" quando todas têm resposta (fase
- * 24: as respostas servem para buscar as opções que existem).
+ * 24: as respostas servem para buscar as opções que existem). O que a pessoa digita nunca se apaga
+ * por coincidir com uma opção (fase 25, D272: "1 hora" a caminho de "1 hora e meia" ficava vazio);
+ * a opção marcada é a que é igual ao campo. A resposta não entendida volta aqui com a frase e o texto
+ * no campo para editar; na segunda vez, só as opções (D274).
  */
-export function QuestionsStep({ questions, answers, onAnswer, onSubmit, onBack }: Props) {
+export function QuestionsStep({
+  questions,
+  answers,
+  misread = {},
+  origin,
+  onAnswer,
+  onSubmit,
+  onBack,
+}: Props) {
+  const onlyOptions = (q: PlanQuestion, i: number) =>
+    (misread[i] ?? 0) >= MISREAD_LIMIT && q.options.length > 0;
+  // na segunda vez sem entender, a resposta tem de ser uma opção
+  const blocked = questions.some(
+    (q, i) => onlyOptions(q, i) && !q.options.includes(answers[i] ?? ''),
+  );
   return (
     <div className="grid gap-4" data-questions>
       <p className="font-num text-[22px] leading-tight font-semibold">
         {questionsLead(questions.length)}
       </p>
+      {origin}
       {questions.map((q, i) => {
         const answer = answers[i] ?? '';
-        const chosen = q.options.includes(answer);
+        const tries = misread[i] ?? 0;
         return (
           <Card key={q.text} className="grid gap-3">
             <fieldset className="grid gap-3">
@@ -55,18 +82,31 @@ export function QuestionsStep({ questions, answers, onAnswer, onSubmit, onBack }
                   ))}
                 </div>
               ) : null}
-              <TextField
-                label={q.options.length > 0 ? 'Ou com as suas palavras' : 'A resposta'}
-                value={chosen ? '' : answer}
-                autoComplete="off"
-                onChange={(e) => onAnswer(i, e.target.value)}
-              />
+              {tries > 0 ? (
+                <p
+                  role="alert"
+                  className="text-[15px] font-semibold text-late-ink"
+                  data-misread={tries}
+                >
+                  {onlyOptions(q, i)
+                    ? 'Não entendi de novo. Escolha uma das opções acima.'
+                    : UNREAD_REACH_HINT}
+                </p>
+              ) : null}
+              {onlyOptions(q, i) ? null : (
+                <TextField
+                  label={q.options.length > 0 ? 'Ou com as suas palavras' : 'A resposta'}
+                  value={answer}
+                  autoComplete="off"
+                  onChange={(e) => onAnswer(i, e.target.value)}
+                />
+              )}
             </fieldset>
           </Card>
         );
       })}
       <Button
-        disabled={!canPlan({ questions: [...questions], answers: [...answers] })}
+        disabled={blocked || !canPlan({ questions: [...questions], answers: [...answers] })}
         onClick={onSubmit}
       >
         <MapPinned className="size-5" aria-hidden="true" />

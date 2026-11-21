@@ -164,6 +164,7 @@ export default function CriarViagemPage() {
           <QuestionsStep
             questions={talk.conv.questions}
             answers={talk.conv.answers}
+            misread={talk.conv.misread ?? {}}
             onAnswer={talk.answer}
             onSubmit={() => void talk.search()}
             onBack={() => void toList()}

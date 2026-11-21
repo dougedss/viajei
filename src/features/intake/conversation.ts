@@ -37,6 +37,12 @@ export type Conversation = {
   map: MapStage | null;
   /** o caminho pronto para a leitura que escreve: tentar de novo não busca nem traça de novo */
   prepared: Prepared | null;
+  /**
+   * quantas vezes a resposta de cada pergunta não foi entendida (fase 25, D274), pelo índice: a
+   * primeira volta com a frase e o texto para editar; a segunda, só as opções. Perguntar de novo não
+   * é uma pergunta nova (o teto de três é das perguntas)
+   */
+  misread?: Record<number, number>;
   started_at: string;
 };
 

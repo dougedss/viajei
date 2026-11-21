@@ -39,6 +39,7 @@ import {
   type MapStage,
 } from './flow.ts';
 import { gatherContext } from './gather.ts';
+import { unreadReach } from './reach.ts';
 import { todayQuestions } from './today.ts';
 
 /**
@@ -170,6 +171,15 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
 
   /** As opções no mapa, a partir da vontade e das respostas. */
   const search = async (c: Conversation) => {
+    // a resposta de alcance que não foi entendida volta como pergunta (fase 25, D274), nunca um raio
+    // padrão em silêncio; a conversa guarda a tentativa (na segunda, só as opções)
+    const unread = unreadReach(c.questions, c.answers);
+    if (unread !== null) {
+      const misread = { ...(c.misread ?? {}), [unread]: (c.misread?.[unread] ?? 0) + 1 };
+      await keep({ ...c, misread });
+      setStage({ kind: 'answering' });
+      return;
+    }
     setStage({ kind: 'searching', done: 0, total: 1 });
     const map = await searchMap(
       {
