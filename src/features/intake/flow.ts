@@ -129,6 +129,8 @@ export type SearchInput = {
   originOverride?: string | null;
   /** as cidades que a pessoa escolheu na pergunta da cidade (D276), pela chave do que disse */
   places?: Readonly<Record<string, PlaceHit>>;
+  /** a cidade que ela escreveu no lugar do que tinha dito (D283); '' = seguir sem (só a área) */
+  renamed?: Readonly<Record<string, string>>;
 };
 type Pick<T, K extends keyof T> = { [P in K]: T[P] };
 
@@ -165,21 +167,39 @@ async function locate(
   said: string | null,
   role: PlaceQuestion['role'],
   reference: LngLat | null,
-  chosen: Readonly<Record<string, PlaceHit>> | undefined,
+  answers: {
+    chosen?: Readonly<Record<string, PlaceHit>>;
+    renamed?: Readonly<Record<string, string>>;
+  },
+  depth = 0,
 ): Promise<{ hit: PlaceHit | null; ask: PlaceQuestion | null }> {
   if (!said) return { hit: null, ask: null };
-  const picked = chosen?.[placeKey(said)];
+  const key = placeKey(said);
+  const picked = answers.chosen?.[key];
   if (picked) return { hit: picked, ask: null };
+  // a pessoa escreveu a cidade no lugar do que tinha dito ("Serra Gaúcha" → "Gramado"), ou disse que
+  // segue sem ela (só para onde vai: procurar perto de onde sai), D283
+  const renamed = answers.renamed?.[key];
+  if (renamed !== undefined && depth < 2) {
+    if (renamed.trim() === '') return { hit: null, ask: null };
+    return locate(deps, renamed, role, reference, answers, depth + 1);
+  }
   const bias = reference
     ? { near: { lat: reference[1], lng: reference[0] }, radiusKm: MAX_RADIUS_KM }
     : undefined;
-  const results = await deps.geocode(said, bias).catch(() => []);
+  const results = await deps.geocode(said, bias).catch(() => null);
+  // o mapa fora do ar não é "não existe": segue sem a cidade, como a busca sem rede segue (D228)
+  if (results === null) return { hit: null, ask: null };
   const resolved = resolvePlace(results, reference);
   if (resolved.kind === 'found') return { hit: resolved.hit, ask: null };
-  if (resolved.kind === 'none') return { hit: null, ask: null };
   return {
     hit: null,
-    ask: { said, role, options: resolved.options, far: resolved.kind === 'far' },
+    ask: {
+      said,
+      role,
+      options: resolved.kind === 'unknown' ? [] : resolved.options,
+      kind: resolved.kind,
+    },
   };
 }
 
@@ -242,6 +262,10 @@ export async function searchMap(input: SearchInput, deps: FlowDeps): Promise<Map
   const originLabel =
     said ?? (position ? (input.context.place ?? 'onde vocês estão') : input.context.origin);
   const empty = { origin: null, groups: [], named: [], chosen: [], nowhere: false };
+  const cityAnswers = {
+    ...(input.places ? { chosen: input.places } : {}),
+    ...(input.renamed ? { renamed: input.renamed } : {}),
+  };
   // a origem pelo nome, conferida com o viés da posição (quando há); a cidade dita, com o viés da
   // origem já resolvida (D276): nunca outro país em silêncio
   const originFound =
@@ -252,22 +276,29 @@ export async function searchMap(input: SearchInput, deps: FlowDeps): Promise<Map
           originLabel,
           'origin',
           input.context.position ? at(input.context.position) : null,
-          input.places,
+          cityAnswers,
         );
   if (originFound.ask) return { ...empty, ask: originFound.ask };
   const originAt = position ? at(position) : originFound.hit ? at(originFound.hit) : null;
-  const origin = originAt && originLabel ? { label: originLabel, at: originAt } : null;
+  // o nome é o que a pessoa escreveu no lugar do que tinha dito, quando escreveu (D283)
+  const renamedTo = (label: string | null) =>
+    label === null ? undefined : input.renamed?.[placeKey(label)];
+  const originName = filled(renamedTo(originLabel)) ?? originLabel;
+  const origin = originAt && originName ? { label: originName, at: originAt } : null;
 
-  const areaLabel = intent.area ?? byTopic.area ?? null;
+  const saidArea = intent.area ?? byTopic.area ?? null;
   const areaFound = await locate(
     deps,
-    areaLabel,
+    saidArea,
     'area',
     originAt ?? (input.center ? at(input.center) : null),
-    input.places,
+    cityAnswers,
   );
   if (areaFound.ask) return { ...empty, origin, ask: areaFound.ask };
   const areaHit = areaFound.hit;
+  // "sem cidade" ('') tira a área; a cidade escrita é o nome dela
+  const renamedArea = renamedTo(saidArea);
+  const areaLabel = renamedArea === undefined ? saidArea : filled(renamedArea);
   // o alcance, numa regra só (fase 25, `reach.ts`): o que a IA leu do pedido, ou a resposta à pergunta
   const read = byTopic.reach ? readReach(byTopic.reach) : null;
   const reach = {
@@ -275,7 +306,7 @@ export async function searchMap(input: SearchInput, deps: FlowDeps): Promise<Map
     span: read?.span ?? spanOfReach(intent.reach),
   };
   const center = areaHit ? at(areaHit) : (originAt ?? (input.center ? at(input.center) : null));
-  const centerLabel = areaHit ? areaLabel : originLabel;
+  const centerLabel = areaHit ? areaLabel : originName;
   const radiusKm = areaHit ? AREA_RADIUS_KM : radiusFor(input.kind, reach);
   const from = originAt ?? center;
   if (!center || !from) return { ...empty, origin, nowhere: true };

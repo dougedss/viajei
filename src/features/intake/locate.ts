@@ -20,11 +20,15 @@ export type PlaceHit = SearchResult & {
 
 export type PlaceResolution =
   | { kind: 'found'; hit: PlaceHit }
-  /** mais de um plausível, longe um do outro: a pessoa escolhe */
+  /** mais de um plausível, longe um do outro e nenhum mais importante: a pessoa escolhe */
   | { kind: 'choice'; options: PlaceHit[] }
   /** nenhum plausível, mas há candidatos longe (outro país, além do alcance): a pessoa confirma */
   | { kind: 'far'; options: PlaceHit[] }
-  | { kind: 'none' };
+  /**
+   * nenhuma cidade com esse nome no mapa ("Serra Gaúcha" são postos de gasolina; "perto de papanduva"
+   * não volta nada): a pessoa diz qual é a cidade (D283), nunca o app segue sem ela em silêncio
+   */
+  | { kind: 'unknown' };
 
 /** Até onde um lugar dito ainda é plausível a partir de onde a pessoa está: o alcance máximo da D228. */
 export const PLAUSIBLE_KM = MAX_RADIUS_KM;
@@ -33,6 +37,13 @@ export const PLAUSIBLE_KM = MAX_RADIUS_KM;
  * contorno (`boundary`), cujo centro pode ficar a dezenas de km dela (a medição de 21/11, D282).
  */
 export const SAME_CITY_KM = 50;
+/**
+ * Entre dois candidatos plausíveis, o mais importante vale sozinho quando tem pelo menos isto vezes a
+ * importância do outro: o município de Papanduva diante das localidades de mesmo nome em Presidente
+ * Getúlio e em Campo Alegre (a medição de 21/11, D283). Mafra/SC e Mafra/Lisboa (0,49 e 0,49) e as
+ * duas Joinville (0,55 e 0,56) ficam em dúvida, e a tela pergunta.
+ */
+export const DOMINANCE = 2;
 
 const at = (r: { lat: number; lng: number }): LngLat => [r.lng, r.lat];
 const plainName = (s: string) =>
@@ -61,15 +72,13 @@ export function resolvePlace(
   reference: LngLat | null,
   plausibleKm = PLAUSIBLE_KM,
 ): PlaceResolution {
-  // quem diz de onde sai ou para onde vai diz uma cidade (ou uma região): com alguma cidade entre os
-  // resultados, as ruas, os rios e as lojas com o mesmo nome não contam (D282)
-  const cities = results.filter(isCity);
-  const pool = cities.length > 0 ? cities : results;
-  const hits: PlaceHit[] = pool.map((r) => {
+  // quem diz de onde sai ou para onde vai diz uma cidade: as ruas, os rios, as lojas e os postos com o
+  // mesmo nome não contam (D282); sem nenhuma cidade, a pessoa diz qual é (D283)
+  const hits: PlaceHit[] = results.filter(isCity).map((r) => {
     const km = reference ? haversineM(reference, at(r)) / 1000 : null;
     return { ...r, km, minutes: km === null ? null : driveMinutes(km) };
   });
-  if (hits.length === 0) return { kind: 'none' };
+  if (hits.length === 0) return { kind: 'unknown' };
   const byDistance = [...hits].sort((a, b) => (a.km ?? 0) - (b.km ?? 0));
   const plausible = reference ? byDistance.filter((h) => (h.km ?? 0) <= plausibleKm) : byDistance;
   if (plausible.length === 0) return { kind: 'far', options: byDistance.slice(0, MAX_CHOICES) };
@@ -81,18 +90,30 @@ export function resolvePlace(
     else if (distinct[i]?.category === 'boundary' && h.category === 'place') distinct[i] = h;
   }
   const first = distinct[0];
-  if (!first) return { kind: 'none' };
-  return distinct.length === 1
-    ? { kind: 'found', hit: first }
-    : { kind: 'choice', options: distinct.slice(0, MAX_CHOICES) };
+  if (!first) return { kind: 'unknown' };
+  if (distinct.length === 1) return { kind: 'found', hit: first };
+  // o homônimo pequeno não vira dúvida: o mais importante, com folga, é o que a pessoa disse (D283)
+  const [top, second] = [...distinct].sort((a, b) => (b.importance ?? -1) - (a.importance ?? -1));
+  if (
+    top?.importance !== undefined &&
+    second?.importance !== undefined &&
+    top.importance >= DOMINANCE * second.importance
+  ) {
+    return { kind: 'found', hit: top };
+  }
+  return { kind: 'choice', options: distinct.slice(0, MAX_CHOICES) };
 }
 
-/** A pergunta da cidade na tela: o que foi dito, o papel dela, os candidatos e se estão todos longe. */
+/**
+ * A pergunta da cidade na tela: o que foi dito, o papel dela (de onde sai ou para onde vai), os
+ * candidatos, e por que se pergunta: mais de um (`choice`), todos longe (`far`) ou nenhuma cidade com
+ * esse nome (`unknown`, sem candidatos: a pessoa escreve a cidade).
+ */
 export type PlaceQuestion = {
   said: string;
   role: 'origin' | 'area';
   options: PlaceHit[];
-  far: boolean;
+  kind: 'choice' | 'far' | 'unknown';
 };
 
 /** A chave de uma escolha guardada na conversa: o que foi dito, sem acento nem caixa. */

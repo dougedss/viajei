@@ -339,7 +339,7 @@ test('a cidade com dois candidatos plausíveis: a pergunta antes da busca, a esc
   await expect(escolher).toBeVisible({ timeout: 30_000 });
   await expect(escolher).toContainText('Escolher o local (2)');
   await expect(escolher).toContainText('Há mais de um “Bom Jardim” no mapa');
-  await expect(escolher.getByRole('radio')).toHaveCount(3);
+  await expect(escolher.getByRole('radio')).toHaveCount(2);
   await expect(escolher.getByRole('radio', { name: /^Bom Jardim da Serra/ })).toContainText(
     /a cerca de \d+ h/,
   );
@@ -348,6 +348,35 @@ test('a cidade com dois candidatos plausíveis: a pergunta antes da busca, a esc
   await escolher.getByRole('radio', { name: /^Bom Jardim da Serra/ }).click();
   await expect(page.locator('[data-option]')).toHaveCount(1, { timeout: 30_000 });
   expect(mapa.pedidos[0]).toMatchObject({ area: { type: 'circle', lng: -49.62, lat: -28.34 } });
+});
+
+test('"Serra Gaúcha" não é cidade no mapa: a tela pergunta a cidade, sem candidatos, e a busca roda em volta da cidade escrita', async ({
+  page,
+  context,
+}) => {
+  test.setTimeout(150_000);
+  await nominatim(page);
+  const mapa = await buscaNoMapa(context, () => [CAFE_SC]);
+  await page.route('**/functions/v1/plan-trip', (route) =>
+    respondSse(route, semPerguntas({ wants: CAFE, area: 'Serra Gaúcha', origin: 'Papanduva' })),
+  );
+  const user = await criarUsuario('Regiao');
+  await entrar(page, user.email);
+  await posicaoDecidida(page, 'declined');
+  await campo(page).fill('quero ir num café na Serra Gaúcha, saindo de Papanduva');
+  await page.getByRole('button', { name: 'Montar a viagem' }).click();
+  const pergunta = page.locator('[data-place-ask="unknown"]');
+  await expect(pergunta).toBeVisible({ timeout: 30_000 });
+  await expect(pergunta).toContainText(
+    'Não achei “Serra Gaúcha” como cidade no mapa. Para qual cidade vocês vão?',
+  );
+  await expect(pergunta.getByRole('radio')).toHaveCount(0);
+  expect(mapa.pedidos).toHaveLength(0);
+  await pergunta.getByLabel('A cidade').fill('Canoinhas');
+  await pergunta.getByRole('button', { name: 'Procurar esta cidade' }).click();
+  await expect(page.locator('[data-option]')).toHaveCount(1, { timeout: 30_000 });
+  expect(mapa.pedidos[0]).toMatchObject({ area: { type: 'circle', lng: -50.39, lat: -26.18 } });
+  await expect(page.getByText(/de Canoinhas\./).first()).toBeVisible();
 });
 
 test('feirinha, café e cortar o cabelo em Canoinhas: os três estados, o resumo, a viagem com a parada sem local e <pendentes> na escrita', async ({

@@ -115,6 +115,7 @@ function labDeps(
       lon: string;
       category?: string;
       type?: string;
+      importance?: number;
     }[];
     return rows.map((r) => ({
       name: r.name && r.name !== '' ? r.name : ((r.display_name ?? '').split(',')[0] ?? ''),
@@ -123,6 +124,7 @@ function labDeps(
       lng: Number(r.lon),
       ...(r.category ? { category: r.category } : {}),
       ...(r.type ? { type: r.type } : {}),
+      ...(typeof r.importance === 'number' ? { importance: r.importance } : {}),
     }));
   };
   return {
@@ -146,7 +148,7 @@ function labDeps(
       return nominatim(url).then((rows) => {
         // os candidatos de cada cidade dita, para a tabela dizer por que houve (ou não) pergunta
         calls.geocoded.push(
-          `"${q}"${bias ? ' (com viés)' : ''}: ${rows.map((r) => `${r.name} [${r.category ?? '?'}/${r.type ?? '?'}] ${r.address.split(',').slice(1, 3).join(',').trim()}`).join('; ') || 'nada'}`,
+          `"${q}"${bias ? ' (com viés)' : ''}: ${rows.map((r) => `${r.name} [${r.category ?? '?'}/${r.type ?? '?'} ${r.importance === undefined ? '' : r.importance.toFixed(3)}] ${r.address.split(',').slice(1, 3).join(',').trim()}`).join('; ') || 'nada'}`,
         );
         return rows;
       });
@@ -210,7 +212,12 @@ export async function measureConversa(cfg: LabConfig, a: Session): Promise<numbe
   const conversa = async (
     label: string,
     input: Omit<SearchInput, 'intent' | 'questions' | 'answers'>,
-    opts: { answer?: (q: PlanQuestion) => string; check?: Check } = {},
+    opts: {
+      answer?: (q: PlanQuestion) => string;
+      /** a cidade que a pessoa escreveria quando o que disse não é cidade no mapa (D283) */
+      city?: (said: string) => string;
+      check?: Check;
+    } = {},
   ) => {
     let intent = null;
     let questions: PlanQuestion[];
@@ -247,13 +254,21 @@ export async function measureConversa(cfg: LabConfig, a: Session): Promise<numbe
     // e a área podem perguntar, uma de cada vez
     let askedCity = '';
     const places: Record<string, PlaceHit> = {};
-    for (let round = 0; map.ask && round < 2; round++) {
+    const renamed: Record<string, string> = {};
+    for (let round = 0; map.ask && round < 3; round++) {
       const ask = map.ask;
       const pick = ask.options[0];
-      askedCity += `a cidade "${ask.said}" pediu escolha (${ask.far ? 'só longe' : 'mais de uma'}: ${ask.options.map((o) => o.address).join(' | ')}); escolhida a primeira; `;
-      if (!pick) break;
-      places[placeKey(ask.said)] = pick;
-      map = await searchMap({ ...search, places }, deps);
+      const typed = opts.city?.(ask.said);
+      if (ask.kind === 'unknown') {
+        askedCity += `"${ask.said}" não é cidade no mapa: a tela pergunta qual é${typed ? `; respondido "${typed}"` : '; sem resposta, a medição para'}; `;
+        if (!typed) break;
+        renamed[placeKey(ask.said)] = typed;
+      } else {
+        askedCity += `a cidade "${ask.said}" pediu escolha (${ask.kind === 'far' ? 'só longe' : 'mais de uma'}: ${ask.options.map((o) => o.address).join(' | ')}); escolhida a primeira; `;
+        if (!pick) break;
+        places[placeKey(ask.said)] = pick;
+      }
+      map = await searchMap({ ...search, places, renamed }, deps);
     }
     askedCity += `geocode: ${calls.geocoded.join(' · ')}; `;
     const opcoes = map.groups.flatMap((g) => g.options.map((o) => o.place.name));
@@ -319,12 +334,17 @@ export async function measureConversa(cfg: LabConfig, a: Session): Promise<numbe
   };
 
   // ------------------------------------------------------------- as três conversas de antes
-  await conversa('serra', {
-    kind: 'plan',
-    text: 'Serra Gaúcha em dezembro, 4 dias, saindo de Papanduva',
-    context: { origin: 'Papanduva/SC', position: null, place: null },
-    center: null,
-  });
+  await conversa(
+    'serra',
+    {
+      kind: 'plan',
+      text: 'Serra Gaúcha em dezembro, 4 dias, saindo de Papanduva',
+      context: { origin: 'Papanduva/SC', position: null, place: null },
+      center: null,
+    },
+    // "Serra Gaúcha" não é cidade no mapa (21/11: três postos com esse nome): a pessoa diria a cidade
+    { city: () => 'Bento Gonçalves' },
+  );
   await conversa(
     'café colonial',
     {

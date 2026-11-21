@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '@/lib/db/schema.ts';
 import { viewboxAround } from '@shared/geo.ts';
-import { geocode, searchNear } from './nominatim.ts';
+import { geocode, geocodePlace, searchNear } from './nominatim.ts';
 
 const MAJOR_VIEIRA = { lat: -26.3712, lng: -50.3268 };
 const row = (name: string, lat: number, lon: number, country: string) => ({
@@ -29,21 +29,16 @@ beforeEach(async () => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-describe('o viés do geocode (fase 25, D276): a área preferida, não um limite', () => {
-  it('com o viés, a URL leva o viewbox em volta do ponto e **não** leva bounded', async () => {
-    const urls = fakeFetch(() => [row('Mafra', -26.11, -49.8, 'Brasil')]);
-    await geocode('Mafra', undefined, { near: MAJOR_VIEIRA, radiusKm: 400 });
+describe('a cidade dita (fase 25, D276, D283): o viés é a área preferida, não um limite', () => {
+  it('com o viés, a URL leva o viewbox em volta do ponto e **não** leva bounded; a importância volta', async () => {
+    const urls = fakeFetch(() => [{ ...row('Mafra', -26.11, -49.8, 'Brasil'), importance: 0.49 }]);
+    const out = await geocodePlace('Mafra', { near: MAJOR_VIEIRA, radiusKm: 400 });
     const url = urls[0];
     expect(url?.searchParams.get('q')).toBe('mafra');
     expect(url?.searchParams.get('viewbox')).toBe(viewboxAround(MAJOR_VIEIRA, 400));
     expect(url?.searchParams.has('bounded')).toBe(false);
     expect(url?.searchParams.get('format')).toBe('jsonv2');
-  });
-
-  it('sem o viés, a busca é a de antes: sem viewbox, e a chave do cache é a consulta', async () => {
-    fakeFetch(() => [row('Mafra', 38.94, -9.33, 'Portugal')]);
-    await geocode('Mafra');
-    expect((await db.geocode.toArray()).map((e) => e.query)).toEqual(['mafra']);
+    expect(out[0]?.importance).toBe(0.49);
   });
 
   it('a chave do cache leva o ponto de referência: a mesma consulta de dois lugares não cai na mesma entrada', async () => {
@@ -52,20 +47,35 @@ describe('o viés do geocode (fase 25, D276): a área preferida, não um limite'
         ? [row('Mafra', -26.11, -49.8, 'Brasil')]
         : [row('Mafra', 38.94, -9.33, 'Portugal')],
     );
-    const fromSc = await geocode('mafra', undefined, { near: MAJOR_VIEIRA, radiusKm: 400 });
-    const fromPt = await geocode('mafra', undefined, {
-      near: { lat: 38.72, lng: -9.14 },
-      radiusKm: 400,
-    });
+    const fromSc = await geocodePlace('mafra', { near: MAJOR_VIEIRA, radiusKm: 400 });
+    const fromPt = await geocodePlace('mafra', { near: { lat: 38.72, lng: -9.14 }, radiusKm: 400 });
     expect(fromSc[0]?.address).toBe('Mafra, Brasil');
     expect(fromPt[0]?.address).toBe('Mafra, Portugal');
     expect((await db.geocode.toArray()).map((e) => e.query).sort()).toEqual([
-      'bias:-26.4,-50.3:mafra',
-      'bias:38.7,-9.1:mafra',
+      'place:-26.4,-50.3:mafra',
+      'place:38.7,-9.1:mafra',
     ]);
     // e a segunda vez do mesmo lugar vem do cache
-    await geocode('Mafra', undefined, { near: MAJOR_VIEIRA, radiusKm: 400 });
+    await geocodePlace('Mafra', { near: MAJOR_VIEIRA, radiusKm: 400 });
     expect(urls).toHaveLength(2);
+  });
+
+  it('sem referência, a chave própria (place:-): o cache de antes, sem a importância, não vale aqui', async () => {
+    // uma entrada de antes, pela consulta, sem importância
+    await db.geocode.put({
+      query: 'papanduva',
+      results: [{ name: 'Papanduva', address: 'Papanduva, SC', lat: -26.37, lng: -50.14 }],
+      fetched_at: '2026-11-01T00:00:00Z',
+    });
+    const urls = fakeFetch(() => [
+      { ...row('Papanduva', -26.37, -50.14, 'Brasil'), importance: 0.4 },
+    ]);
+    const out = await geocodePlace('Papanduva', null);
+    expect(urls).toHaveLength(1);
+    expect(urls[0]?.searchParams.has('viewbox')).toBe(false);
+    expect(out[0]?.importance).toBe(0.4);
+    // e o geocode de antes continua lendo a entrada dele
+    expect((await geocode('Papanduva'))[0]?.address).toBe('Papanduva, SC');
   });
 
   it('o searchNear continua um limite (bounded), como a conferência do nomeado pede', async () => {

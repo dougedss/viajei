@@ -948,7 +948,9 @@ a cidade conferida e os três estados estão provados na CI (Vitest, pgTAP, a fu
 - [ ] **A cidade conferida.** "amanha quero almoçar em mafra e depois ir numa cachoeira": as opções
   vêm de Mafra, Santa Catarina (a cidade dos cartões e "de Mafra" no título da lista), sem pergunta;
   "quero ir num café em Bom Jardim": a pergunta "Há mais de um “Bom Jardim” no mapa" com as
-  cidades e a distância, e a busca só depois da escolha.
+  cidades e a distância, e a busca só depois da escolha; "quero ir num café na Serra Gaúcha": "Não
+  achei “Serra Gaúcha” como cidade no mapa. Para qual cidade vocês vão?", com o campo da cidade; e
+  "saindo de Papanduva", sem a posição, não pergunta qual Papanduva.
 - [ ] **Nada some em silêncio.** "iria na feirinha, tomar um cafe e cortar o cabelo em Canoinhas": a
   feirinha e o salão aparecem como pendentes ("Fica pendente: entra na viagem sem local"), o resumo
   diz "1 sem escolha · 2 pendentes"; "Tirar da viagem" o salão (e Desfazer); escolha um café; a revisão

@@ -49,6 +49,8 @@ export type Conversation = {
   origin_override?: string | null;
   /** as cidades escolhidas na pergunta da cidade (fase 25, D276), pela chave do que foi dito */
   places?: Record<string, PlaceHit>;
+  /** a cidade escrita no lugar do que foi dito (D283), pela mesma chave; '' = seguir sem (a área) */
+  renamed?: Record<string, string>;
   started_at: string;
 };
 

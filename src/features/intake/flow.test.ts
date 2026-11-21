@@ -277,7 +277,7 @@ describe('a conversa nova: as opções do mapa (fase 24)', () => {
     });
     const base = input({ intent: intent({ area: 'Mafra', origin: 'Papanduva, SC' }) });
     const asked = await searchMap(base, d);
-    expect(asked.ask).toMatchObject({ said: 'Mafra', role: 'area', far: true });
+    expect(asked.ask).toMatchObject({ said: 'Mafra', role: 'area', kind: 'far' });
     expect(asked.ask?.options.map((o) => o.address)).toEqual(['Mafra, Lisboa, Portugal']);
     expect(asked.ask?.options[0]?.minutes).toBeGreaterThan(100 * 60);
     expect(asked.groups).toEqual([]);
@@ -287,6 +287,46 @@ describe('a conversa nova: as opções do mapa (fase 24)', () => {
     const chosen = await searchMap({ ...base, places: hit ? { mafra: hit } : {} }, d);
     expect(chosen.ask ?? null).toBeNull();
     expect(chosen.groups[0]?.center).toEqual([-9.3312, 38.9369]);
+  });
+
+  it('o que não é cidade no mapa pergunta a cidade, sem candidatos; a cidade escrita resolve; "sem cidade" segue de onde se sai (D283)', async () => {
+    const { d, requests } = deps({
+      geocode: (q) =>
+        Promise.resolve(/papanduva/i.test(q) ? [PAPANDUVA] : /pomerode/i.test(q) ? [POMERODE] : []),
+    });
+    const base = input({ intent: intent({ area: 'Serra Gaúcha', origin: 'Papanduva, SC' }) });
+    const asked = await searchMap(base, d);
+    expect(asked.ask).toEqual({ said: 'Serra Gaúcha', role: 'area', options: [], kind: 'unknown' });
+    expect(requests).toHaveLength(0);
+    // a pessoa escreveu a cidade: a busca em volta dela
+    const typed = await searchMap({ ...base, renamed: { 'serra gaucha': 'Pomerode' } }, d);
+    expect(typed.ask ?? null).toBeNull();
+    expect(typed.groups[0]?.center).toEqual([-49.177, -26.74]);
+    expect(typed.groups[0]?.centerLabel).toBe('Pomerode');
+    // "sem cidade": em volta de onde sai, pelo alcance de uma viagem
+    const without = await searchMap({ ...base, renamed: { 'serra gaucha': '' } }, d);
+    expect(without.ask ?? null).toBeNull();
+    expect(without.groups[0]?.center).toEqual([-50.144, -26.37]);
+    expect(without.groups[0]?.centerLabel).toBe('Papanduva, SC');
+    // e a origem que não é cidade também pergunta, de onde saem
+    const origin = await searchMap(
+      input({ intent: intent({ area: 'Pomerode', origin: 'minha casa' }) }),
+      d,
+    );
+    expect(origin.ask).toMatchObject({ said: 'minha casa', role: 'origin', kind: 'unknown' });
+  });
+
+  it('o mapa fora do ar não vira "não é cidade": segue sem a cidade, como a busca sem rede', async () => {
+    const { d } = deps({
+      geocode: (q) =>
+        /papanduva/i.test(q) ? Promise.resolve([PAPANDUVA]) : Promise.reject(new Error('rede')),
+    });
+    const stage = await searchMap(
+      input({ intent: intent({ area: 'Pomerode', origin: 'Papanduva, SC' }) }),
+      d,
+    );
+    expect(stage.ask ?? null).toBeNull();
+    expect(stage.groups[0]?.center).toEqual([-50.144, -26.37]);
   });
 
   it('sem origem, sem área e sem posição: não há onde procurar', async () => {

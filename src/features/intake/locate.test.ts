@@ -95,8 +95,63 @@ describe('a cidade conferida (fase 25, D276): plausível a até 400 km de onde a
     expect(resolvePlace([sede, rua, rio, contorno], null).kind).toBe('found');
     // duas cidades com o mesmo nome longe uma da outra continuam duas (Mafra/SC e Mafra/MT)
     expect(resolvePlace([MAFRA_SC, MAFRA_MT], null).kind).toBe('choice');
-    // e, sem nenhuma cidade entre os resultados, valem os que vieram
-    expect(resolvePlace([rua], null).kind).toBe('found');
+    // e, sem nenhuma cidade entre os resultados, a pessoa diz qual é (D283)
+    expect(resolvePlace([rua], null).kind).toBe('unknown');
+  });
+
+  it('homônimos de verdade: o município vale sozinho diante das localidades pequenas; os do mesmo peso ficam em dúvida (D283)', () => {
+    // a forma do que o Nominatim devolveu para "Papanduva" na medição de 21/11 (as importâncias aqui são
+    // do teste: o que a regra cobra é a folga de 2 vezes)
+    const municipio = {
+      ...city('Papanduva', 'Papanduva, Santa Catarina, Região Sul, Brasil', -26.43, -50.15),
+      category: 'boundary',
+      type: 'administrative',
+      importance: 0.41,
+    };
+    const distritoPr = {
+      ...city('Papanduva', 'Papanduva, Rio Branco do Sul, Paraná, Brasil', -25.12, -49.4),
+      category: 'boundary',
+      type: 'administrative',
+      importance: 0.12,
+    };
+    const localidade1 = {
+      ...city('Papanduva', 'Papanduva, Presidente Getúlio, Santa Catarina, Brasil', -27.0, -49.66),
+      type: 'hamlet',
+      importance: 0.1,
+    };
+    const localidade2 = {
+      ...city('Papanduva', 'Papanduva, Campo Alegre, Santa Catarina, Brasil', -26.15, -49.3),
+      type: 'hamlet',
+      importance: 0.1,
+    };
+    const all = [municipio, distritoPr, localidade1, localidade2];
+    // sem referência (a origem dita, sem posição), e com a posição em Major Vieira: o município
+    for (const ref of [null, [-50.3268, -26.3712] as [number, number]]) {
+      const r = resolvePlace(all, ref);
+      expect(r.kind).toBe('found');
+      expect(r.kind === 'found' ? r.hit.address : null).toBe(municipio.address);
+    }
+    // Mafra/SC e Mafra/Lisboa com a mesma importância, sem referência: a dúvida, e a pergunta
+    const pt = { ...MAFRA_PT, importance: 0.49 };
+    const sc = { ...MAFRA_SC, importance: 0.49 };
+    expect(resolvePlace([pt, sc], null).kind).toBe('choice');
+    // sem a importância (o cache de antes, as respostas de mentira): nada se decide por ela
+    expect(resolvePlace([MAFRA_PT, MAFRA_SC], null).kind).toBe('choice');
+  });
+
+  it('nenhuma cidade com o nome dito: "Serra Gaúcha" são postos; nada volta (D283)', () => {
+    const posto = (rua: string, lat: number) => ({
+      name: 'Serra Gaúcha',
+      address: `Serra Gaúcha, ${rua}, Bento Gonçalves, Rio Grande do Sul, Brasil`,
+      lat,
+      lng: -51.5,
+      category: 'amenity',
+      type: 'fuel',
+    });
+    expect(resolvePlace([posto('Rua A', -29.16), posto('Rua B', -29.18)], PAPANDUVA)).toEqual({
+      kind: 'unknown',
+    });
+    expect(resolvePlace([], PAPANDUVA)).toEqual({ kind: 'unknown' });
   });
 
   it('sem referência (nem posição, nem origem): um resultado vale; dois longe um do outro pedem a escolha', () => {
@@ -106,8 +161,7 @@ describe('a cidade conferida (fase 25, D276): plausível a até 400 km de onde a
     expect(r.kind === 'choice' ? r.options.map((o) => o.km) : []).toEqual([null, null]);
   });
 
-  it('nada do mapa: none; e a chave da escolha guardada é o que foi dito, sem acento nem caixa', () => {
-    expect(resolvePlace([], PAPANDUVA)).toEqual({ kind: 'none' });
+  it('a chave da escolha guardada é o que foi dito, sem acento nem caixa', () => {
     expect(placeKey('  São  Bento do SUL ')).toBe('sao bento do sul');
   });
 });

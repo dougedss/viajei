@@ -567,10 +567,12 @@ async function main(): Promise<number> {
   if (argv.includes('--medir-importacao')) {
     return measureImport(cfg, await signIn(cfg, LAB_USERS.a));
   }
-  // a medição da conversa (fase 17): três leituras reais, contadas, e uma consulta ao Overpass por
-  // roteiro
+  // a medição da conversa (fase 17; os pedidos de leigo na fase 25): as leituras reais, contadas, como
+  // o lab-b: uma medição gasta umas 35 buscas no mapa e 7 leituras, e as cotas por pessoa (60 e 10 em
+  // 24 h) são as dos cenários do lab-a, que o laboratório precisa (a medição de 21/11 esgotou a do
+  // lab-a, D283)
   if (argv.includes('--medir-conversa')) {
-    return measureConversa(cfg, await signIn(cfg, LAB_USERS.a));
+    return measureConversa(cfg, await signIn(cfg, LAB_USERS.b));
   }
   // a medição da leitura (fase 18): a confirmação em texto, PDF e print e a nota com QR, uma vez
   // cada, com arquivos inventados na hora

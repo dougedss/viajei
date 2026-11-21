@@ -27,6 +27,8 @@ type Props = {
   origin?: ReactNode;
   /** a cidade escolhida na pergunta da cidade (fase 25, D276) */
   onPlace: (said: string, hit: PlaceHit) => void;
+  /** a cidade escrita no lugar do que foi dito, ou '' para seguir sem ela (D283) */
+  onRename: (said: string, city: string) => void;
   onToggle: (id: string) => void;
   onPick: (named: number, pick: NamedEntry['pick']) => void;
   /** "Tirar" uma vontade da viagem, e o desfazer (fase 25, D278) */
@@ -255,66 +257,89 @@ function Group({
 }
 
 /**
- * A pergunta da cidade (fase 25, D276), no molde de "Escolher o local" da D229: a cidade dita tem mais
- * de um candidato plausível, ou só candidatos longe (outro país, além do alcance), e a busca só roda
- * depois da escolha. "Nenhum destes" volta ao texto. Nunca outro país em silêncio.
+ * A pergunta da cidade (fase 25, D276 e D283), no molde de "Escolher o local" da D229: a cidade dita tem
+ * mais de um candidato plausível, ou só candidatos longe (outro país, além do alcance), ou nenhuma
+ * cidade com esse nome no mapa ("Serra Gaúcha" são postos de gasolina). A busca só roda depois da
+ * resposta: um candidato, outra cidade escrita, ou (só para onde vão) seguir sem ela. "Voltar ao texto"
+ * fica embaixo. Nunca outro país em silêncio, e nunca o pedido sem a cidade em silêncio.
  */
 function PlaceAsk({
   ask,
   onPlace,
-  onBack,
+  onRename,
 }: {
   ask: PlaceQuestion;
   onPlace: Props['onPlace'];
-  onBack: () => void;
+  onRename: Props['onRename'];
 }) {
+  const [city, setCity] = useState('');
   const where = ask.role === 'origin' ? 'de onde vocês saem' : 'para onde vocês vão';
+  const lead =
+    ask.kind === 'unknown'
+      ? `Não achei “${ask.said}” como cidade no mapa. ${ask.role === 'origin' ? 'De qual cidade vocês saem?' : 'Para qual cidade vocês vão?'}`
+      : ask.kind === 'far'
+        ? `Não achei “${ask.said}” perto de vocês. É um destes, ${where}?`
+        : `Há mais de um “${ask.said}” no mapa. Qual é o de vocês, ${where}?`;
   return (
     <section
       className="grid gap-2"
       aria-label={`Escolher o local de ${ask.said}`}
-      data-place-ask={ask.far ? 'far' : 'choice'}
+      data-place-ask={ask.kind}
     >
-      <h2 className="label-caps text-accent-ink">
-        Escolher o local ({String(ask.options.length)})
-      </h2>
-      <p className="text-[15px]">
-        {ask.far
-          ? `Não achei “${ask.said}” perto de vocês. É um destes, ${where}?`
-          : `Há mais de um “${ask.said}” no mapa. Qual é o de vocês, ${where}?`}
-      </p>
-      <div role="radiogroup" className="grid gap-2" aria-label={ask.said}>
-        {ask.options.map((o) => (
-          <button
-            key={`${o.address}-${String(o.lat)}`}
-            type="button"
-            role="radio"
-            aria-checked={false}
-            onClick={() => onPlace(ask.said, o)}
-            className="grid min-h-14 gap-0.5 rounded-[16px] bg-card px-3 py-2 text-left shadow-[inset_0_0_0_1px_var(--color-line)]"
-          >
-            <span className="text-[16px] font-semibold">
-              {o.name}
-              {o.minutes !== null ? (
-                <span className="font-normal text-ink-2">
-                  {' '}
-                  · a {aboutMinutes(o.minutes)} de carro
-                </span>
-              ) : null}
-            </span>
-            <span className="text-[13px] break-words text-ink-2">{o.address}</span>
-          </button>
-        ))}
-        <button
-          type="button"
-          role="radio"
-          aria-checked={false}
-          onClick={onBack}
-          className="min-h-12 rounded-[16px] px-3 text-left text-[15px] font-semibold text-ink-2"
-        >
-          Nenhum destes
-        </button>
-      </div>
+      {ask.options.length > 0 ? (
+        <h2 className="label-caps text-accent-ink">
+          Escolher o local ({String(ask.options.length)})
+        </h2>
+      ) : null}
+      <p className="text-[15px]">{lead}</p>
+      {ask.options.length > 0 ? (
+        <div role="radiogroup" className="grid gap-2" aria-label={ask.said}>
+          {ask.options.map((o) => (
+            <button
+              key={`${o.address}-${String(o.lat)}`}
+              type="button"
+              role="radio"
+              aria-checked={false}
+              onClick={() => onPlace(ask.said, o)}
+              className="grid min-h-14 gap-0.5 rounded-[16px] bg-card px-3 py-2 text-left shadow-[inset_0_0_0_1px_var(--color-line)]"
+            >
+              <span className="text-[16px] font-semibold">
+                {o.name}
+                {o.minutes !== null ? (
+                  <span className="font-normal text-ink-2">
+                    {' '}
+                    · a {aboutMinutes(o.minutes)} de carro
+                  </span>
+                ) : null}
+              </span>
+              <span className="text-[13px] break-words text-ink-2">{o.address}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <form
+        className="grid gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (city.trim().length >= 2) onRename(ask.said, city);
+        }}
+      >
+        <TextField
+          label={ask.options.length > 0 ? 'Outra cidade' : 'A cidade'}
+          value={city}
+          autoComplete="off"
+          onChange={(e) => setCity(e.target.value)}
+        />
+        <Button type="submit" size="md" variant="secondary" disabled={city.trim().length < 2}>
+          <Search className="size-5" aria-hidden="true" />
+          Procurar esta cidade
+        </Button>
+      </form>
+      {ask.role === 'area' ? (
+        <Button size="md" variant="ghost" onClick={() => onRename(ask.said, '')}>
+          Sem cidade: procurar perto de onde vocês saem
+        </Button>
+      ) : null}
     </section>
   );
 }
@@ -444,7 +469,7 @@ export function OptionsStep(props: Props) {
           Antes de procurar no mapa:
         </p>
         {props.origin}
-        <PlaceAsk ask={map.ask} onPlace={props.onPlace} onBack={props.onBack} />
+        <PlaceAsk ask={map.ask} onPlace={props.onPlace} onRename={props.onRename} />
         <Button variant="ghost" size="md" onClick={props.onBack}>
           Voltar ao texto
         </Button>

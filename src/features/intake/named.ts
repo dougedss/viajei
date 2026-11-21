@@ -28,6 +28,8 @@ export type SearchResult = {
   lng: number;
   category?: string;
   type?: string;
+  /** a importância do Nominatim (fase 25, D283), quando vem */
+  importance?: number;
 };
 
 export type NamedHit = { name: string; address: string; lat: number; lng: number };

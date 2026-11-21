@@ -13,7 +13,7 @@ import {
   type ImportSession,
 } from '@/features/import/preview.ts';
 import { requestRoute } from '@/features/itinerary/route.ts';
-import { geocode, searchNear } from '@/lib/geocode/nominatim.ts';
+import { geocodePlace, searchNear } from '@/lib/geocode/nominatim.ts';
 import { isoToWall } from '@/lib/time/zone.ts';
 import { assemble } from './assemble.ts';
 import {
@@ -137,7 +137,7 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
   /** A rede da conversa: a busca por tipo pela função, o Nominatim pela fila, a rota pela função. */
   const deps = (onProgress?: FlowDeps['onProgress']): FlowDeps => ({
     findPlaces,
-    geocode: (q, bias) => geocode(q, undefined, bias),
+    geocode: (q, bias) => geocodePlace(q, bias ?? null),
     searchNear: (q, center, radiusKm) => searchNear(q, center, radiusKm),
     route: (waypoints: LngLat[]) => requestRoute(waypoints).catch(() => null),
     ...(onProgress ? { onProgress } : {}),
@@ -200,6 +200,7 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
         center: c.center,
         originOverride: c.origin_override ?? null,
         places: c.places ?? {},
+        renamed: c.renamed ?? {},
       },
       deps((done, total) => setStage({ kind: 'searching', done, total })),
     );
@@ -369,6 +370,17 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
     choosePlace: async (said: string, hit: PlaceHit) => {
       if (!conv) return;
       await search({ ...conv, places: { ...(conv.places ?? {}), [placeKey(said)]: hit } });
+    },
+    /**
+     * A cidade escrita no lugar do que foi dito (D283: "Serra Gaúcha" não é cidade no mapa; "Outra
+     * cidade" na escolha), ou '' para seguir sem ela; a busca roda então.
+     */
+    renamePlace: async (said: string, city: string) => {
+      if (!conv) return;
+      await search({
+        ...conv,
+        renamed: { ...(conv.renamed ?? {}), [placeKey(said)]: city.trim() },
+      });
     },
     answer: (index: number, value: string) => {
       if (!conv) return;

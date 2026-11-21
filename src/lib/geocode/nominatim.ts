@@ -28,6 +28,7 @@ type NominatimRow = {
   lon?: string;
   category?: string;
   type?: string;
+  importance?: number;
 };
 
 let lastCall = 0;
@@ -59,6 +60,7 @@ function toResult(row: NominatimRow): GeocodeResult | null {
     lng,
     ...(row.category ? { category: row.category } : {}),
     ...(row.type ? { type: row.type } : {}),
+    ...(typeof row.importance === 'number' ? { importance: row.importance } : {}),
   };
 }
 
@@ -91,27 +93,40 @@ async function fetchNominatim(
  */
 export type GeoBias = { near: { lat: number; lng: number }; radiusKm: number };
 
+/** Resultados para uma consulta: do cache quando existe, senão da rede (e aí entram no cache). */
+export async function geocode(query: string, signal?: AbortSignal): Promise<GeocodeResult[]> {
+  const key = normalizeQuery(query);
+  if (key.length < 3) return [];
+  const cached = await db.geocode.get(key);
+  if (cached) return cached.results;
+  const results = await throttled(() => fetchNominatim(key, signal));
+  const entry: GeocodeEntry = { query: key, results, fetched_at: new Date().toISOString() };
+  await db.geocode.put(entry);
+  return results;
+}
+
 /**
- * Resultados para uma consulta: do cache quando existe, senão da rede (e aí entram no cache). Com o
- * viés, a chave do cache leva o ponto de referência arredondado a uma casa (uns 10 km): a mesma
- * consulta de dois lugares diferentes não cai na mesma entrada, e as entradas de antes (sem viés)
- * continuam valendo para quem não o passa.
+ * A cidade que a pessoa disse (de onde sai, para onde vai), para a conversa conferir (fase 25, D276 e
+ * D283): com o viés, o `viewbox` em volta do ponto de referência **sem `bounded`** (a área preferida,
+ * não um limite). O cache tem a chave própria (`place:`), com o ponto arredondado a uma casa (uns
+ * 10 km) ou `-` sem referência: a mesma consulta de dois lugares diferentes não cai na mesma entrada, e
+ * as entradas de antes (sem a importância, que a conferência usa) não valem aqui.
  */
-export async function geocode(
+export async function geocodePlace(
   query: string,
+  bias: GeoBias | null,
   signal?: AbortSignal,
-  bias?: GeoBias,
 ): Promise<GeocodeResult[]> {
   const q = normalizeQuery(query);
   if (q.length < 3) return [];
-  const key = bias ? `bias:${bias.near.lat.toFixed(1)},${bias.near.lng.toFixed(1)}:${q}` : q;
+  const at = bias ? `${bias.near.lat.toFixed(1)},${bias.near.lng.toFixed(1)}` : '-';
+  const key = `place:${at}:${q}`;
   const cached = await db.geocode.get(key);
   if (cached) return cached.results;
   const results = await throttled(() =>
     fetchNominatim(q, signal, bias ? viewboxAround(bias.near, bias.radiusKm) : undefined, false),
   );
-  const entry: GeocodeEntry = { query: key, results, fetched_at: new Date().toISOString() };
-  await db.geocode.put(entry);
+  await db.geocode.put({ query: key, results, fetched_at: new Date().toISOString() });
   return results;
 }
 

@@ -195,6 +195,7 @@ export default function CriarViagemPage() {
             map={talk.conv.map}
             origin={origin}
             onPlace={(said, hit) => void talk.choosePlace(said, hit)}
+            onRename={(said, city) => void talk.renamePlace(said, city)}
             onToggle={talk.toggle}
             onPick={talk.pick}
             onRemove={talk.remove}

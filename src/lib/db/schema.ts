@@ -195,6 +195,12 @@ export type GeocodeResult = {
   /** a classe do OSM (`tourism`, `amenity`…) e o valor (`viewpoint`, `restaurant`…), quando vêm */
   category?: string;
   type?: string;
+  /**
+   * a importância que o Nominatim dá ao resultado (0 a 1; o município com verbete na Wikipédia vale
+   * mais que a localidade do mesmo nome): é o que separa a cidade dita dos homônimos (fase 25, D283).
+   * Opcional: o cache de antes não tem
+   */
+  importance?: number;
 };
 /** Cache das buscas de endereço (Nominatim), por consulta normalizada. */
 export type GeocodeEntry = { query: string; results: GeocodeResult[]; fetched_at: string };
