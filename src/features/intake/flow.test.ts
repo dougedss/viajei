@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Place, PlacesRequest } from '@shared/places-schema.ts';
 import { EMPTY_INTENT, type PlanIntent } from '@shared/plan-protocol.ts';
 import {
+  addNamed,
   answersByTopic,
   canBuild,
   pendingForAi,
@@ -412,6 +413,29 @@ describe('a conversa nova: a escolha e o caminho', () => {
     expect(prepared.places.pending).toEqual([
       { name: 'Feirinha', kind: 'event', why: 'not_found' },
     ]);
+  });
+
+  it('a busca pelo nome a partir do grupo sem fonte: o desfecho é o do nomeado, e o grupo não fica pendente de novo', async () => {
+    const { d } = deps({
+      findPlaces: () => Promise.reject(Object.assign(new Error('x'), { code: 'no_source' })),
+      searchNear: () =>
+        Promise.resolve([
+          {
+            name: 'Torten Paradies',
+            address: 'Torten Paradies, Pomerode, SC',
+            lat: -26.7404,
+            lng: -49.1718,
+            category: 'amenity',
+            type: 'cafe',
+          },
+        ]),
+    });
+    const stage = await searchMap(input(), d);
+    expect(summaryOf(stage).pending).toEqual(['Café colonial']);
+    const found = await addNamed(stage, 'Torten Paradies', 'food', d, 0);
+    expect(found.groups[0]?.byName).toBe(true);
+    expect(summaryOf(found)).toMatchObject({ chosen: 1, pending: [] });
+    expect(pendingOf(found)).toEqual([]);
   });
 
   it('o nomeado sem lugar fica pendente; "Nenhum destes" também; tirado, sai (fase 25)', () => {

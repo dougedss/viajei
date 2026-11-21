@@ -193,6 +193,8 @@ export type Assembled = {
    * o cartão-postal do lugar se acha no catálogo. Até a fase 23 ele se perdia aqui.
    */
   osm: Record<string, OsmRef>;
+  /** as chaves da revisão das paradas pendentes (fase 25, D278): sem local, a busca só pelo nome */
+  pending: string[];
 };
 
 export type OsmRef = { type: 'node' | 'way' | 'relation'; id: number };
@@ -333,6 +335,7 @@ export function assemble(input: AssembleInput): Assembled {
   const points: Record<string, ScheduleStop[]> = {};
   const suggestions: Assembled['suggestions'] = {};
   const osm: Assembled['osm'] = {};
+  const pending: string[] = [];
   // a rota real liga os pontos ligados de saída: a origem, as escolhas na ordem e a volta
   const routed: string[] = [];
   slots.forEach((day, d) => {
@@ -344,6 +347,7 @@ export function assemble(input: AssembleInput): Assembled {
       }
       if (slot.suggestion) suggestions[key] = slot.suggestion;
       else if (Number.isFinite(slot.pick.place.lat)) routed.push(key);
+      else pending.push(key);
       if (slot.pick.place.osm) osm[key] = slot.pick.place.osm;
       return {
         key,
@@ -423,6 +427,7 @@ export function assemble(input: AssembleInput): Assembled {
     schedule,
     points,
     osm,
+    pending,
   };
 }
 

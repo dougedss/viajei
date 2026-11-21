@@ -62,6 +62,11 @@ export type OptionGroup = {
   shown: number;
   /** a pessoa tirou esta vontade da viagem (fase 25, D278): "Tirar", com desfazer */
   removed?: boolean;
+  /**
+   * a pessoa procurou pelo nome a partir deste grupo (a busca por tipo não rodou): o desfecho é o do
+   * lugar nomeado, e o grupo não fica pendente de novo (fase 25)
+   */
+  byName?: boolean;
 };
 
 /**
@@ -402,6 +407,8 @@ export type Fate = 'chosen' | 'unchosen' | 'pending' | 'removed';
 
 export function groupFate(group: OptionGroup, chosen: readonly string[]): Fate {
   if (group.removed) return 'removed';
+  // procurado pelo nome: quem conta é o nomeado (escolhido, pendente ou tirado), não o grupo
+  if (group.byName) return 'chosen';
   if (group.status !== 'ok' || group.options.length === 0) return 'pending';
   return group.options.some((o) => chosen.includes(o.place.id)) ? 'chosen' : 'unchosen';
 }
@@ -659,6 +666,8 @@ export async function addNamed(
   name: string,
   kind: StopKind,
   deps: FlowDeps,
+  /** o grupo de onde a busca pelo nome saiu: o desfecho dele passa a ser o do nomeado (fase 25) */
+  group?: number,
 ): Promise<MapStage> {
   const where = searchArea(stage);
   const trimmed = name.trim();
@@ -678,5 +687,9 @@ export async function addNamed(
     state: state.kind === 'type' ? { kind: 'none' } : state,
     pick: state.kind === 'found' ? 0 : null,
   };
-  return { ...stage, named: [...stage.named, entry] };
+  return {
+    ...stage,
+    named: [...stage.named, entry],
+    groups: stage.groups.map((g, i) => (i === group ? { ...g, byName: true } : g)),
+  };
 }

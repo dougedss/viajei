@@ -34,7 +34,7 @@ type Props = {
   onMore: (group: number) => void;
   onWider: (group: number) => void;
   onByType: (named: number) => void;
-  onByName: (name: string, kind: StopKind) => void;
+  onByName: (name: string, kind: StopKind, group?: number) => void;
   onBuild: () => void;
   onBack: () => void;
 };
@@ -116,14 +116,22 @@ function OptionCard({
 }
 
 /** A busca pelo nome, quando a do mapa por tipo não está ligada ou não respondeu. */
-function ByName({ kind, onByName }: { kind: StopKind; onByName: Props['onByName'] }) {
+function ByName({
+  kind,
+  group,
+  onByName,
+}: {
+  kind: StopKind;
+  group: number;
+  onByName: Props['onByName'];
+}) {
   const [name, setName] = useState('');
   return (
     <form
       className="grid gap-2"
       onSubmit={(e) => {
         e.preventDefault();
-        if (name.trim().length >= 3) onByName(name, kind);
+        if (name.trim().length >= 3) onByName(name, kind, group);
       }}
     >
       <TextField
@@ -200,10 +208,10 @@ function Group({
       ) : group.status === 'none' ? (
         <Card className="grid gap-3" role="status">
           <p className="text-[15px]">
-            Não achei {group.label} {reach}.{' '}
-            <span className="text-ink-2">
-              Fica pendente: entra na viagem sem local, e a revisão procura de novo.
-            </span>
+            Não achei {group.label} {reach}.
+          </p>
+          <p className="text-[14px] text-ink-2">
+            Fica pendente: entra na viagem sem local, e dá para marcar o local na revisão.
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
             {group.radiusKm < 400 ? (
@@ -224,10 +232,12 @@ function Group({
                 : group.status === 'no_source'
                   ? 'Não deu para buscar no mapa pelo tipo agora.'
                   : 'O mapa não respondeu agora.'}{' '}
-            Dá para procurar pelo nome do lugar.{' '}
-            <span className="text-ink-2">
-              Sem isso, fica pendente: entra na viagem sem local, e a revisão procura de novo.
-            </span>
+            Dá para procurar pelo nome do lugar.
+          </p>
+          <p className="text-[14px] text-ink-2">
+            {group.byName
+              ? 'Procurado pelo nome: o lugar está acima.'
+              : 'Sem isso, fica pendente: entra na viagem sem local, e dá para marcar o local na revisão.'}
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
             {group.status === 'offline' || group.status === 'failed' ? (
@@ -235,9 +245,9 @@ function Group({
                 Tentar de novo
               </Button>
             ) : null}
-            {remove}
+            {group.byName ? null : remove}
           </div>
-          <ByName kind={group.search.kind} onByName={props.onByName} />
+          <ByName kind={group.search.kind} group={index} onByName={props.onByName} />
         </Card>
       )}
     </section>
@@ -388,7 +398,7 @@ function Named({ entry, index, props }: { entry: NamedEntry; index: number; prop
           ? `O mapa não respondeu para procurar “${said}”.`
           : `Não achei “${said}” no mapa.`}{' '}
         <span className="text-ink-2">
-          Fica pendente: entra na viagem sem local, e a revisão procura de novo.
+          Fica pendente: entra na viagem sem local, e dá para marcar o local na revisão.
         </span>
       </p>
       <div className="grid gap-2 sm:grid-cols-2">

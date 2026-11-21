@@ -201,7 +201,7 @@ export default function CriarViagemPage() {
             onMore={talk.more}
             onWider={(g) => void talk.wider(g)}
             onByType={(n) => void talk.byType(n)}
-            onByName={(name, kind) => void talk.byName(name, kind)}
+            onByName={(name, kind, group) => void talk.byName(name, kind, group)}
             onBuild={() => void talk.build()}
             onBack={() => void toList()}
           />

@@ -35,6 +35,8 @@ export async function newTripReview(
       schedule: Schedule;
       /** o objeto do OSM de cada lugar escolhido, pela chave da revisão (fase 23) */
       osm?: Record<string, NonNullable<ReviewStop['osm']>>;
+      /** as paradas pendentes, pela chave da revisão (fase 25, D278) */
+      pending?: readonly string[];
     };
   },
 ): Promise<StoredReview> {
@@ -73,7 +75,9 @@ export async function newTripReview(
                   }
                 : s;
             // a regra de ouro: a sugestão nasce desligada, e só a pessoa a liga
-            return suggestion ? { ...located, suggestion, include: false } : located;
+            if (suggestion) return { ...located, suggestion, include: false };
+            // o pendente (fase 25): a revisão só o procura pelo nome com a cidade
+            return options.plan?.pending?.includes(s.key) ? { ...located, pending: true } : located;
           }),
         })),
       }

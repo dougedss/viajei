@@ -250,7 +250,12 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
         importId: session.current.phase.kind === 'arriving' ? session.current.phase.id : null,
         partial: false,
         checked: { removed: [], unchecked: [], missing: prepared.missing.map((n) => n.name) },
-        plan: { suggestions: built.suggestions, schedule: built.schedule, osm: built.osm },
+        plan: {
+          suggestions: built.suggestions,
+          schedule: built.schedule,
+          osm: built.osm,
+          pending: built.pending,
+        },
       },
     );
     await saveReview(NEW_TRIP_KEY, stored);
@@ -394,10 +399,10 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
       setStage({ kind: 'choosing' });
     },
     /** A busca pelo nome, quando a busca no mapa por tipo não está ligada. */
-    byName: async (name: string, kind: Parameters<typeof addNamed>[2]) => {
+    byName: async (name: string, kind: Parameters<typeof addNamed>[2], group?: number) => {
       if (!conv?.map) return;
       setStage({ kind: 'searching', done: 0, total: 1 });
-      const map = await addNamed(conv.map, name, kind, deps());
+      const map = await addNamed(conv.map, name, kind, deps(), group);
       await keep({ ...conv, map, prepared: null });
       setStage({ kind: 'choosing' });
     },

@@ -38,12 +38,25 @@ export function classifyResults(
 
 /**
  * As buscas de uma parada, em ordem: nome e endereço; só o endereço; só o nome quando não há
- * endereço. Sem repetir a mesma consulta, e sem as curtas demais para o Nominatim.
+ * endereço. Sem repetir a mesma consulta, e sem as curtas demais para o Nominatim. A parada pendente
+ * da conversa (fase 25, D278: "a feirinha", com só a cidade como endereço) busca **só pelo nome com
+ * a cidade**: o endereço sozinho seria o centro da cidade, e o app afirmaria um lugar que não sabe.
  */
-export function queriesFor(stop: { name: string; address: string | null }): string[] {
+export function queriesFor(stop: {
+  name: string;
+  address: string | null;
+  pending?: boolean | undefined;
+}): string[] {
   const name = stop.name.trim();
   const address = stop.address?.trim() ?? '';
-  const all = address === '' ? [name] : name === '' ? [address] : [`${name}, ${address}`, address];
+  const all =
+    address === ''
+      ? [name]
+      : name === ''
+        ? [address]
+        : stop.pending
+          ? [`${name}, ${address}`]
+          : [`${name}, ${address}`, address];
   const seen = new Set<string>();
   return all.filter((q) => {
     const key = q.toLocaleLowerCase('pt-BR');
@@ -62,7 +75,14 @@ export function fromLink(url: string | null): Extract<GeoState, { kind: 'found' 
     : null;
 }
 
-export type GeoTarget = { key: string; name: string; address: string | null; url: string | null };
+export type GeoTarget = {
+  key: string;
+  name: string;
+  address: string | null;
+  url: string | null;
+  /** a parada pendente da conversa (fase 25): a busca só pelo nome com a cidade */
+  pending?: boolean;
+};
 
 /**
  * A busca de uma parada: a primeira consulta que acha alguma coisa decide (um lugar ou uma
@@ -101,7 +121,13 @@ export function geoTargets(review: Pick<Review, 'days'>): GeoTarget[] {
     day.include
       ? day.stops
           .filter((s) => s.include && s.lat === null && s.geo === null)
-          .map((s) => ({ key: s.key, name: s.name, address: s.address, url: s.url }))
+          .map((s) => ({
+            key: s.key,
+            name: s.name,
+            address: s.address,
+            url: s.url,
+            ...(s.pending ? { pending: true } : {}),
+          }))
       : [],
   );
 }

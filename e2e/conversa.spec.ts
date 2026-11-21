@@ -65,6 +65,8 @@ async function nominatim(page: Page): Promise<void> {
       });
       return;
     }
+    // a cidade só quando a consulta começa por ela: "Feirinha, Canoinhas SC" (a revisão procurando
+    // o pendente pelo nome) não é Canoinhas
     const q = url.searchParams.get('q') ?? '';
     const row = (name: string, address: string, lat: number, lon: number) => ({
       display_name: address,
@@ -74,13 +76,13 @@ async function nominatim(page: Page): Promise<void> {
       category: 'place',
       type: 'town',
     });
-    const json = /mafra/i.test(q)
+    const json = /^mafra/i.test(q)
       ? // como o Nominatim público devolve "mafra" (o balcão, 20/11): Lisboa em 1º, SC em 2º
         [
           row('Mafra', 'Mafra, Lisboa, Portugal', 38.9369, -9.3312),
           row('Mafra', 'Mafra, Santa Catarina, Brasil', -26.1116, -49.8054),
         ]
-      : /bom jardim/i.test(q)
+      : /^bom jardim/i.test(q)
         ? [
             row(
               'Bom Jardim da Serra',
@@ -90,11 +92,11 @@ async function nominatim(page: Page): Promise<void> {
             ),
             row('Bom Jardim', 'Bom Jardim, Rio Grande do Sul, Brasil', -29.5, -50.3),
           ]
-        : /canoinhas/i.test(q)
+        : /^canoinhas/i.test(q)
           ? [row('Canoinhas', 'Canoinhas, Santa Catarina, Brasil', -26.1765, -50.39)]
-          : /papanduva/i.test(q)
+          : /^papanduva/i.test(q)
             ? [row('Papanduva', 'Papanduva, Santa Catarina, Brasil', -26.37, -50.144)]
-            : /major vieira/i.test(q)
+            : /^major vieira/i.test(q)
               ? [row('Major Vieira', 'Major Vieira, Santa Catarina, Brasil', -26.3712, -50.3268)]
               : [];
     await route.fulfill({ json, headers });
@@ -223,7 +225,7 @@ test('sem a permissão: "Agora não", a origem da viagem mais recente, e a conve
   // a viagem mais recente da pessoa sai de Canoinhas (uma de dezembro, criada antes, de Papanduva)
   await novaViagem(page, { nome: 'Dezembro', inicio: 40, fim: 41, origem: 'Papanduva/SC' });
   await page.getByRole('link', { name: 'Início' }).click();
-  await novaViagem(page, { nome: 'Amanhã', inicio: 2, fim: 2, origem: 'Canoinhas, SC' });
+  await novaViagem(page, { nome: 'Depois', inicio: 10, fim: 10, origem: 'Canoinhas, SC' });
   await page.getByRole('link', { name: 'Início' }).click();
   await campo(page).fill('quero ir num café amanhã');
   await page.getByRole('button', { name: 'Montar a viagem' }).click();
@@ -267,7 +269,7 @@ test('"1 hora e meia" digitado inteiro; "1:3O no maximo" não entendido pergunta
   // a resposta com a letra O no lugar do zero não é um tempo: a tela pergunta de novo, com o texto
   await livre.fill('1:3O no maximo');
   await page.getByRole('button', { name: 'Procurar no mapa' }).click();
-  await expect(page.getByRole('alert')).toContainText('Não entendi quanto tempo', {
+  await expect(page.locator('[data-misread]')).toContainText('Não entendi quanto tempo', {
     timeout: 10_000,
   });
   await expect(livre).toHaveValue('1:3O no maximo');
@@ -426,6 +428,10 @@ test('feirinha, café e cortar o cabelo em Canoinhas: os três estados, o resumo
   });
   await expect(page.locator('[data-checked="faltou"]')).toContainText('Feirinha');
   await expect(page.getByRole('checkbox', { name: /^Feirinha/ })).toBeVisible();
+  // a revisão procura o pendente só pelo nome com a cidade, nunca pela cidade sozinha: sem local
+  await expect(page.getByText('Sem local · dá para marcar depois')).toBeVisible({
+    timeout: 20_000,
+  });
   const escrita1 = pedidos.find((p) => p.step === 'plan');
   expect(escrita1?.places?.chosen.map((c) => c.name)).toEqual(['Café da Praça']);
   expect(escrita1?.places?.pending).toEqual([

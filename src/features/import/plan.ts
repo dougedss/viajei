@@ -47,6 +47,11 @@ export type ReviewStop = Keyed<ImportStop> & {
   suggestion?: { detour: number; city: string | null; night: boolean } | null;
   /** o objeto do OpenStreetMap do lugar escolhido na conversa (fase 23): vai para a parada */
   osm?: { type: 'node' | 'way' | 'relation'; id: number } | null;
+  /**
+   * o que a pessoa pediu e o mapa não achou (fase 25, D278): entra sem local, e a revisão só procura
+   * pelo nome com a cidade, nunca pela cidade sozinha
+   */
+  pending?: boolean;
 };
 export type ReviewDay = {
   date: string;

@@ -96,6 +96,16 @@ describe('as consultas de uma parada', () => {
     expect(queriesFor({ name: 'Gramado', address: '  ' })).toEqual(['Gramado']);
   });
 
+  it('a parada pendente da conversa (fase 25) busca só pelo nome com a cidade, nunca pela cidade sozinha', () => {
+    expect(queriesFor({ name: 'Feirinha', address: 'Canoinhas SC', pending: true })).toEqual([
+      'Feirinha, Canoinhas SC',
+    ]);
+    expect(queriesFor({ name: 'Feirinha', address: 'Canoinhas SC' })).toEqual([
+      'Feirinha, Canoinhas SC',
+      'Canoinhas SC',
+    ]);
+  });
+
   it('sem consulta curta demais nem repetida', () => {
     expect(queriesFor({ name: 'X', address: null })).toEqual([]);
     expect(queriesFor({ name: '', address: 'RS' })).toEqual([]);

@@ -562,9 +562,10 @@ test('nenhuma opção ao alcance: a tela diz, oferece procurar mais longe, e nã
   expect(mapa.pedidos.map((p) => (p.area.type === 'circle' ? p.area.radius_m : 0))).toEqual([
     200_000, 200_000, 400_000, 400_000,
   ]);
-  // no teto, não há mais longe: só mudar o pedido
+  // no teto, não há mais longe; o café colonial fica pendente (fase 25), e dá para tirá-lo
   await expect(page.getByRole('button', { name: 'Procurar mais longe' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Mudar o pedido' })).toBeVisible();
+  await expect(page.getByText(/^Fica pendente: entra na viagem sem local/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Tirar da viagem' })).toBeVisible();
 });
 
 test('a busca no mapa sem fonte (no_source): o aviso, e a busca pelo nome segue', async ({

@@ -241,6 +241,20 @@ describe('a viagem nasce do que foi escolhido', () => {
     });
   });
 
+  it('o pendente (fase 25) entra no fim do último dia, sem coordenada, e a montagem diz a chave dele', () => {
+    const out = assemble(
+      input({ missing: [{ name: 'Feirinha', city: 'Pomerode', kind: 'event' }] }),
+    );
+    const day = out.data.days[0];
+    const feirinha = day?.stops.findIndex((s) => s.name === 'Feirinha') ?? -1;
+    expect(feirinha).toBeGreaterThan(0);
+    expect(day?.stops[feirinha]).toMatchObject({ lat: null, lng: null, address: 'Pomerode' });
+    expect(out.pending).toEqual([`d0s${String(feirinha)}`]);
+    // a última é a chegada em casa
+    expect(day?.stops.at(-1)?.name).toBe('Chegada em Papanduva, SC');
+    expect(assemble(input()).pending).toEqual([]);
+  });
+
   it('uma viagem só com a saída e a chegada não tem lugar', () => {
     expect(
       hasPlace([
