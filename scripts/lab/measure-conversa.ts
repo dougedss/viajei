@@ -26,7 +26,7 @@ import {
   type Prepared,
   type SearchInput,
 } from '../../src/features/intake/flow.ts';
-import { placeKey } from '../../src/features/intake/locate.ts';
+import { placeKey, type PlaceHit } from '../../src/features/intake/locate.ts';
 import type { SearchResult } from '../../src/features/intake/named.ts';
 import { plain } from '../../src/features/intake/places.ts';
 import { reachQuestion } from '../../src/features/intake/reach.ts';
@@ -73,10 +73,18 @@ function context(today: string, over: Partial<PlanContext> = {}): PlanContext {
 }
 
 /** A rede da medição: as funções publicadas como o lab-a, e o Nominatim identificado, um por vez. */
+/** O que a medição conta da rede: as buscas no mapa, a falta de fonte, e cada cidade geocodificada. */
+type Calls = {
+  places: number;
+  noSource: boolean;
+  /** cada consulta de cidade pelo nome e os candidatos que voltaram (nome, classe e endereço) */
+  geocoded: string[];
+};
+
 function labDeps(
   cfg: Pick<LabConfig, 'url' | 'publishableKey'>,
   a: Session,
-  calls: { places: number; noSource: boolean },
+  calls: Calls,
 ): FlowDeps {
   const call = async (fn: string, body: unknown): Promise<Response> => {
     const token = (await a.client.auth.getSession()).data.session?.access_token ?? '';
@@ -135,7 +143,13 @@ function labDeps(
       url.searchParams.set('q', q);
       // o viés (fase 25, D276): a área preferida em volta de onde se sai, sem `bounded`
       if (bias) url.searchParams.set('viewbox', viewboxAround(bias.near, bias.radiusKm));
-      return nominatim(url);
+      return nominatim(url).then((rows) => {
+        // os candidatos de cada cidade dita, para a tabela dizer por que houve (ou não) pergunta
+        calls.geocoded.push(
+          `"${q}"${bias ? ' (com viés)' : ''}: ${rows.map((r) => `${r.name} [${r.category ?? '?'}/${r.type ?? '?'}] ${r.address.split(',').slice(1, 3).join(',').trim()}`).join('; ') || 'nada'}`,
+        );
+        return rows;
+      });
     },
     searchNear: (q, center, radiusKm) => {
       const url = new URL('https://nominatim.openstreetmap.org/search');
@@ -186,7 +200,7 @@ export async function measureConversa(cfg: LabConfig, a: Session): Promise<numbe
     new Date(),
   );
   const rows: Row[] = [];
-  const calls: { places: number; noSource: boolean } = { places: 0, noSource: false };
+  const calls: Calls = { places: 0, noSource: false, geocoded: [] };
   const noSource = () => calls.noSource;
   const deps = labDeps(cfg, a, calls);
   /** o que faltou nas conversas que cobram */
@@ -227,15 +241,21 @@ export async function measureConversa(cfg: LabConfig, a: Session): Promise<numbe
     log(`medição: ${label}, as opções do mapa`);
     const t0 = Date.now();
     const search: SearchInput = { ...input, intent, questions, answers };
+    calls.geocoded = [];
     let map = await searchMap(search, deps);
-    // a pergunta da cidade (D276) sem tela: a medição escolhe o candidato mais perto, e diz
+    // a pergunta da cidade (D276) sem tela: a medição escolhe o candidato mais perto e diz; a origem
+    // e a área podem perguntar, uma de cada vez
     let askedCity = '';
-    if (map.ask) {
-      const pick = map.ask.options[0];
-      askedCity = `a cidade "${map.ask.said}" pediu escolha (${map.ask.far ? 'só longe' : 'mais de uma'}): ${pick ? `${pick.address} · ${s(Date.now() - t0)}` : 'sem candidato'}; `;
-      if (pick)
-        map = await searchMap({ ...search, places: { [placeKey(map.ask.said)]: pick } }, deps);
+    const places: Record<string, PlaceHit> = {};
+    for (let round = 0; map.ask && round < 2; round++) {
+      const ask = map.ask;
+      const pick = ask.options[0];
+      askedCity += `a cidade "${ask.said}" pediu escolha (${ask.far ? 'só longe' : 'mais de uma'}: ${ask.options.map((o) => o.address).join(' | ')}); escolhida a primeira; `;
+      if (!pick) break;
+      places[placeKey(ask.said)] = pick;
+      map = await searchMap({ ...search, places }, deps);
     }
+    askedCity += `geocode: ${calls.geocoded.join(' · ')}; `;
     const opcoes = map.groups.flatMap((g) => g.options.map((o) => o.place.name));
     const status =
       map.groups.map((g) => g.status).join(',') || (map.nowhere ? 'sem onde procurar' : '—');
@@ -418,10 +438,11 @@ export async function measureConversa(cfg: LabConfig, a: Session): Promise<numbe
     {
       check: ({ prepared, write }) => {
         const pending = prepared.missing.map((m) => plain(m.name));
-        const fala = /feirinha|cabelo|sal[aã]o/i;
+        // a IA pode chamar o salão de "cabeleireiro", "cortar o cabelo" ou "salão" (21/11: "Cabeleireiro")
+        const fala = /feir|cabel|sal[aã]o/i;
         return [
-          pending.some((n) => n.includes('feirinha')) ? null : 'a feirinha não ficou pendente',
-          pending.some((n) => /cabelo|salao/.test(n)) ? null : 'o salão não ficou pendente',
+          pending.some((n) => n.includes('feir')) ? null : 'a feirinha não ficou pendente',
+          pending.some((n) => /cabel|salao/.test(n)) ? null : 'o salão não ficou pendente',
           write === null ? 'a escrita não voltou no schema' : null,
           ...(write
             ? [

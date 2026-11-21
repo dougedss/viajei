@@ -462,7 +462,10 @@ describe('plan-trip: a intenção no passo das perguntas', () => {
   it('as opções combinam com o pedido e a hora (fase 25, D275): o prompt manda, e a resposta coerente passa', async () => {
     // a regra no prompt: nunca mais tempo do que o pedido permite; nunca nome de região
     expect(PLAN_ASK_SYSTEM_PROMPT).toContain('As opções nunca contradizem o pedido nem a hora');
-    expect(PLAN_ASK_SYSTEM_PROMPT).toContain('a quem volta antes do almoço');
+    expect(PLAN_ASK_SYSTEM_PROMPT).toContain('A quem volta antes do almoço');
+    // a medição de 21/11 (D282): a quem vai e volta no dia, nunca "3 horas" de ida
+    expect(PLAN_ASK_SYSTEM_PROMPT).toContain('a quem vai e volta no mesmo dia');
+    expect(PLAN_ASK_SYSTEM_PROMPT).toContain('"3 horas" ou mais só a quem vai dormir fora');
     expect(PLAN_ASK_SYSTEM_PROMPT).toContain('Nunca o nome de uma região');
     expect(PLAN_ASK_SYSTEM_PROMPT).not.toContain('"1 hora", "2 horas", "3 horas")');
     // a quem "volta antes do almoço": a IA leu a manhã e ofereceu minutos e horas que cabem nela

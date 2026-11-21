@@ -65,6 +65,40 @@ describe('a cidade conferida (fase 25, D276): plausível a até 400 km de onde a
     expect(resolvePlace([boundary, town], PAPANDUVA).kind).toBe('found');
   });
 
+  it('a sede e o contorno do município, a mais de 2 km: a mesma cidade, a sede vale (a medição de 21/11, D282)', () => {
+    const sede = city('Papanduva', 'Papanduva, Santa Catarina, Brasil', -26.3702, -50.1438);
+    const contorno = {
+      ...city(
+        'Papanduva',
+        'Papanduva, Região Geográfica Imediata de Mafra, Santa Catarina, Brasil',
+        -26.45,
+        -50.07,
+      ),
+      category: 'boundary',
+      type: 'administrative',
+    };
+    // sem referência nenhuma (a origem dita, sem posição): nenhuma pergunta
+    const r = resolvePlace([contorno, sede], null);
+    expect(r.kind).toBe('found');
+    expect(r.kind === 'found' ? r.hit.lat : null).toBe(-26.3702);
+    // com a rua e o rio do mesmo nome: com alguma cidade entre os resultados, só elas contam
+    const rua = {
+      ...city('Rua Papanduva', 'Rua Papanduva, Joinville, Brasil', -26.3, -48.85),
+      category: 'highway',
+      type: 'residential',
+    };
+    const rio = {
+      ...city('Rio Papanduva', 'Rio Papanduva, Santa Catarina, Brasil', -26.6, -50.3),
+      category: 'waterway',
+      type: 'river',
+    };
+    expect(resolvePlace([sede, rua, rio, contorno], null).kind).toBe('found');
+    // duas cidades com o mesmo nome longe uma da outra continuam duas (Mafra/SC e Mafra/MT)
+    expect(resolvePlace([MAFRA_SC, MAFRA_MT], null).kind).toBe('choice');
+    // e, sem nenhuma cidade entre os resultados, valem os que vieram
+    expect(resolvePlace([rua], null).kind).toBe('found');
+  });
+
   it('sem referência (nem posição, nem origem): um resultado vale; dois longe um do outro pedem a escolha', () => {
     expect(resolvePlace([MAFRA_SC], null).kind).toBe('found');
     const r = resolvePlace([JOINVILLE_FR, JOINVILLE_SC], null);

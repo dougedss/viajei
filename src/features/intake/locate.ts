@@ -28,15 +28,44 @@ export type PlaceResolution =
 
 /** Até onde um lugar dito ainda é plausível a partir de onde a pessoa está: o alcance máximo da D228. */
 export const PLAUSIBLE_KM = MAX_RADIUS_KM;
+/**
+ * Dois resultados de cidade com o mesmo nome a menos disto são o mesmo município: a sede (`place`) e o
+ * contorno (`boundary`), cujo centro pode ficar a dezenas de km dela (a medição de 21/11, D282).
+ */
+export const SAME_CITY_KM = 50;
 
 const at = (r: { lat: number; lng: number }): LngLat => [r.lng, r.lat];
+const plainName = (s: string) =>
+  s
+    .toLocaleLowerCase('pt-BR')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .trim();
+/** O resultado é uma cidade, um bairro ou um município (não uma rua, um rio, uma loja). */
+const isCity = (r: SearchResult) => r.category === 'place' || r.category === 'boundary';
+
+/**
+ * O mesmo lugar dito por dois resultados: a menos de 2 km um do outro (a entrada e o estacionamento),
+ * ou duas cidades com o mesmo nome a menos de `SAME_CITY_KM` (a sede e o contorno do município).
+ */
+function sameAs(a: SearchResult, b: SearchResult): boolean {
+  const m = haversineM(at(a), at(b));
+  if (m <= SAME_PLACE_M) return true;
+  return (
+    isCity(a) && isCity(b) && plainName(a.name) === plainName(b.name) && m <= SAME_CITY_KM * 1000
+  );
+}
 
 export function resolvePlace(
   results: readonly SearchResult[],
   reference: LngLat | null,
   plausibleKm = PLAUSIBLE_KM,
 ): PlaceResolution {
-  const hits: PlaceHit[] = results.map((r) => {
+  // quem diz de onde sai ou para onde vai diz uma cidade (ou uma região): com alguma cidade entre os
+  // resultados, as ruas, os rios e as lojas com o mesmo nome não contam (D282)
+  const cities = results.filter(isCity);
+  const pool = cities.length > 0 ? cities : results;
+  const hits: PlaceHit[] = pool.map((r) => {
     const km = reference ? haversineM(reference, at(r)) / 1000 : null;
     return { ...r, km, minutes: km === null ? null : driveMinutes(km) };
   });
@@ -44,10 +73,13 @@ export function resolvePlace(
   const byDistance = [...hits].sort((a, b) => (a.km ?? 0) - (b.km ?? 0));
   const plausible = reference ? byDistance.filter((h) => (h.km ?? 0) <= plausibleKm) : byDistance;
   if (plausible.length === 0) return { kind: 'far', options: byDistance.slice(0, MAX_CHOICES) };
-  // dois resultados a menos de 2 km um do outro são o mesmo lugar (a cidade e o município dela)
-  const distinct = plausible.filter(
-    (h, i) => !plausible.slice(0, i).some((o) => haversineM(at(o), at(h)) <= SAME_PLACE_M),
-  );
+  // o mesmo lugar dito duas vezes fica uma: a sede da cidade no lugar do contorno, quando há as duas
+  const distinct: PlaceHit[] = [];
+  for (const h of plausible) {
+    const i = distinct.findIndex((o) => sameAs(o, h));
+    if (i < 0) distinct.push(h);
+    else if (distinct[i]?.category === 'boundary' && h.category === 'place') distinct[i] = h;
+  }
   const first = distinct[0];
   if (!first) return { kind: 'none' };
   return distinct.length === 1
