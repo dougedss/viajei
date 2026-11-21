@@ -25,6 +25,7 @@ import {
 } from '../../src/features/intake/flow.ts';
 import type { SearchResult } from '../../src/features/intake/named.ts';
 import { plain } from '../../src/features/intake/places.ts';
+import { reachQuestion } from '../../src/features/intake/reach.ts';
 import type { LabConfig } from './env.ts';
 import { costUsd, timedImport, type TimedImport } from './import-lab.ts';
 import { log, sleep, type Session } from './session.ts';
@@ -199,9 +200,7 @@ export async function measureConversa(cfg: LabConfig, a: Session): Promise<numbe
         detail: `${String(questions.length)} perguntas; vontades: ${intent && intent.wants.length > 0 ? intent.wants.map((w) => w.words).join(', ') : 'nenhuma'}; área: ${intent?.area ?? '—'}`,
       });
     } else {
-      questions = [
-        { text: 'Quanto tempo vocês têm?', options: ['A manhã', 'O dia', 'Até amanhã'] },
-      ];
+      questions = [reachQuestion('09:00')];
       answers = ['O dia'];
     }
     log(`medição: ${label}, as opções do mapa`);

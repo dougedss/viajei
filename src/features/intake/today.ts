@@ -1,13 +1,14 @@
 import type { StopKind } from '@shared/constants.ts';
-import type { PlanContext, PlanQuestion, Reach } from '@shared/plan-protocol.ts';
+import type { PlanContext, PlanQuestion } from '@shared/plan-protocol.ts';
 import type { Stop, StopMemory } from '@/lib/db/schema.ts';
 import type { ReverseRow } from '@/lib/geocode/nominatim.ts';
+import { reachQuestion } from './reach.ts';
 
 /**
  * A saída de hoje (fase 17, "quero sair hoje"): o que entra na conta, como pista e nunca como regra.
  * Os gostos do perfil, o que a pessoa deu 4 e 5, onde já foi (a nota e quanto tempo faz: "voltar
- * a…?"), o tempo de hoje onde ela está e o alcance, a única pergunta que o app faz sem IA. Puro: quem
- * lê o aparelho, a posição e o tempo é `gather.ts`.
+ * a…?"), o tempo de hoje onde ela está e o alcance, a única pergunta que o app faz sem IA (a leitura
+ * da resposta mora em `reach.ts`). Puro: quem lê o aparelho, a posição e o tempo é `gather.ts`.
  */
 export type History = PlanContext['history'][number];
 
@@ -57,37 +58,25 @@ export function historyOf(
 }
 
 // --------------------------------------------------------------------------- as perguntas
-/** A pergunta de alcance, a mesma em toda saída de hoje. */
-export const REACH_QUESTION: PlanQuestion = {
-  text: 'Quanto tempo vocês têm?',
-  options: ['A manhã', 'O dia', 'Até amanhã'],
-};
 /** Sem posição e sem uma origem de antes, de onde sair vira a segunda pergunta. */
 export const ORIGIN_QUESTION: PlanQuestion = {
   text: 'De onde vocês saem?',
   options: [],
+  topic: 'origin',
 };
 
-/** As perguntas da saída de hoje, ditas antes: o alcance, e a origem quando o app não sabe. */
-export function todayQuestions(known: { position: boolean; origin: boolean }): PlanQuestion[] {
-  return known.position || known.origin ? [REACH_QUESTION] : [REACH_QUESTION, ORIGIN_QUESTION];
-}
-
-/** A resposta ao alcance, pela opção ou pelas palavras da pessoa ("só a tarde", "dormir fora"). */
-export function reachOf(answer: string): Reach {
-  const s = answer
-    .toLocaleLowerCase('pt-BR')
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '');
-  if (/amanha|dormir|noite fora|pernoit|fim de semana/.test(s)) return 'overnight';
-  if (/manha|almoco|pouco|cedo|2 ?h|duas horas|tres horas/.test(s)) return 'morning';
-  return 'day';
-}
-
-/** Quanto se procura em volta, em km: o alcance da saída de hoje, ou a região de uma viagem. */
-export function radiusFor(kind: 'plan' | 'today', reach: Reach | null): number {
-  if (kind === 'plan') return 200;
-  return reach === 'morning' ? 50 : reach === 'overnight' ? 220 : 120;
+/**
+ * As perguntas da saída de hoje, ditas antes: o alcance (com as opções que ainda cabem no dia, pela
+ * hora de agora: fase 25, D275) e a origem quando o app não sabe. A leitura da resposta e o raio são
+ * da regra única de `reach.ts`.
+ */
+export function todayQuestions(
+  known: { position: boolean; origin: boolean },
+  /** a hora de agora em São Paulo, "HH:MM" */
+  time: string,
+): PlanQuestion[] {
+  const reach = reachQuestion(time);
+  return known.position || known.origin ? [reach] : [reach, ORIGIN_QUESTION];
 }
 
 /** "Canela, RS": a cidade do `/reverse` e a sigla do estado, quando vêm. */

@@ -10,7 +10,6 @@ import type {
   PlanQuestion,
   PlanWant,
   QuestionTopic,
-  Reach,
 } from '../../../supabase/functions/_shared/plan-protocol.ts';
 import { placesForAi, type Legs, type PlacePick } from './assemble.ts';
 import { confirmNamed, type NamedState, type SearchResult } from './named.ts';
@@ -21,6 +20,7 @@ import {
   wantsInText,
   type PlaceSearch,
 } from './places.ts';
+import { radiusFor, readReach, REACH_QUESTION_TEXT, spanOfReach } from './reach.ts';
 import {
   AREA_RADIUS_KM,
   bestOrder,
@@ -31,7 +31,6 @@ import {
   OPTIONS_SHOWN,
   optionsFor,
   optionsRequest,
-  radiusForHours,
   suggestionsFor,
   widerRadius,
   type MapOption,
@@ -113,7 +112,7 @@ export function answersByTopic(
     const a = (answers[i] ?? '').trim();
     const topic: QuestionTopic | undefined =
       q.topic ??
-      (q.text === 'Quanto tempo vocês têm?'
+      (q.text === REACH_QUESTION_TEXT
         ? 'reach'
         : q.text === 'De onde vocês saem?'
           ? 'origin'
@@ -121,39 +120,6 @@ export function answersByTopic(
     if (topic && a !== '' && out[topic] === undefined) out[topic] = a;
   });
   return out;
-}
-
-/** "2 horas", "1h30", "meia hora", "40 min": o alcance em horas; null quando não é um tempo. */
-export function hoursOf(answer: string): number | null {
-  const s = answer
-    .toLocaleLowerCase('pt-BR')
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '');
-  if (s.includes('meia hora')) return 0.5;
-  const hm = /(\d+(?:[.,]\d+)?)\s*(?:h|hora|horas)\s*(?:e\s*)?(\d{1,2})?/.exec(s);
-  if (hm) return Number((hm[1] ?? '0').replace(',', '.')) + Number(hm[2] ?? 0) / 60;
-  const m = /(\d+)\s*min/.exec(s);
-  if (m) return Number(m[1]) / 60;
-  const words: Record<string, number> = { uma: 1, duas: 2, tres: 3, quatro: 4, cinco: 5 };
-  const w = /\b(uma|duas|tres|quatro|cinco)\s+horas?\b/.exec(s);
-  return w ? (words[w[1] ?? ''] ?? null) : null;
-}
-
-/** O alcance da saída de hoje pela resposta à pergunta do app (a mesma regra da D208). */
-function reachOfAnswer(answer: string): Reach {
-  const s = answer
-    .toLocaleLowerCase('pt-BR')
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '');
-  if (/amanha|dormir|noite fora|pernoit|fim de semana/.test(s)) return 'overnight';
-  if (/manha|almoco|pouco|cedo/.test(s)) return 'morning';
-  return 'day';
-}
-
-/** O raio da D207 quando a pessoa não disse área nem alcance: 50, 120 e 220 km hoje, 200 numa viagem. */
-export function defaultRadius(kind: 'plan' | 'today', reach: Reach | null): number {
-  if (kind === 'plan' && reach === null) return 200;
-  return reach === 'morning' ? 50 : reach === 'overnight' ? 220 : reach === 'day' ? 120 : 200;
 }
 
 const at = (r: { lat: number; lng: number }): LngLat => [r.lng, r.lat];
@@ -224,16 +190,15 @@ export async function searchMap(input: SearchInput, deps: FlowDeps): Promise<Map
 
   const areaLabel = intent.area ?? byTopic.area ?? null;
   const areaHit = await first(deps, areaLabel);
-  const hours = intent.reach_hours ?? (byTopic.reach ? hoursOf(byTopic.reach) : null);
-  const reach =
-    intent.reach ?? (input.kind === 'today' && byTopic.reach ? reachOfAnswer(byTopic.reach) : null);
+  // o alcance, numa regra só (fase 25, `reach.ts`): o que a IA leu do pedido, ou a resposta à pergunta
+  const read = byTopic.reach ? readReach(byTopic.reach) : null;
+  const reach = {
+    hours: intent.reach_hours ?? read?.hours ?? null,
+    span: read?.span ?? spanOfReach(intent.reach),
+  };
   const center = areaHit ? at(areaHit) : (originAt ?? (input.center ? at(input.center) : null));
   const centerLabel = areaHit ? areaLabel : originLabel;
-  const radiusKm = areaHit
-    ? AREA_RADIUS_KM
-    : hours
-      ? radiusForHours(hours)
-      : defaultRadius(input.kind, reach);
+  const radiusKm = areaHit ? AREA_RADIUS_KM : radiusFor(input.kind, reach);
   const from = originAt ?? center;
   if (!center || !from) return { origin, groups: [], named: [], chosen: [], nowhere: true };
 

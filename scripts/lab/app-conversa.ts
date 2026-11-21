@@ -146,7 +146,12 @@ export async function appConversa(ctx: ImportContext, today: string): Promise<Ch
       },
     );
     await step('o dia: as opções do mapa de verdade, pelo menos uma', async () => {
-      await p.getByRole('button', { name: 'O dia' }).click();
+      // as opções do alcance mudam com a hora (fase 25, D275): a primeira que o app oferece
+      await p
+        .getByRole('group', { name: 'Quanto tempo vocês têm?' })
+        .getByRole('button')
+        .first()
+        .click();
       const t0 = Date.now();
       await p.getByRole('button', { name: 'Procurar no mapa' }).click();
       await p

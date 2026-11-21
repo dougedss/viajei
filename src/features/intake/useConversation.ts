@@ -274,10 +274,13 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
         started_at: new Date().toISOString(),
       };
       if (kind === 'today') {
-        const questions = todayQuestions({
-          position: gathered.context.position !== null,
-          origin: gathered.context.origin !== null,
-        });
+        const questions = todayQuestions(
+          {
+            position: gathered.context.position !== null,
+            origin: gathered.context.origin !== null,
+          },
+          gathered.context.now,
+        );
         await keep({ ...base, questions, answers: questions.map(() => '') });
         setStage({ kind: 'answering' });
         return;

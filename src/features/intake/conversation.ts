@@ -8,7 +8,8 @@ import type {
 import { db } from '@/lib/db/schema.ts';
 import type { MapStage, Prepared } from './flow.ts';
 import type { LatLng } from './named.ts';
-import { ORIGIN_QUESTION, reachOf } from './today.ts';
+import { reachOf, readReach } from './reach.ts';
+import { ORIGIN_QUESTION } from './today.ts';
 
 /**
  * A conversa da viagem nova (fase 17), no aparelho: a descrição, o que o app sabe, as perguntas, as
@@ -62,7 +63,7 @@ export function planRequestOf(c: Conversation, places?: PlanPlaces): PlanRequest
     const originAt = c.questions.findIndex((q) => q.text === ORIGIN_QUESTION.text);
     context = {
       ...context,
-      reach: reachOf(answers[0] ?? ''),
+      reach: reachOf(readReach(answers[0] ?? '')),
       origin: originAt >= 0 ? (answers[originAt] ?? null) : context.origin,
     };
   }

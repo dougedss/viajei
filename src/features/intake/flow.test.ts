@@ -4,7 +4,6 @@ import { EMPTY_INTENT, type PlanIntent } from '@shared/plan-protocol.ts';
 import {
   answersByTopic,
   canBuild,
-  hoursOf,
   missingNamed,
   pickNamed,
   picksOf,
@@ -191,11 +190,25 @@ describe('a conversa nova: as opções do mapa (fase 24)', () => {
         ['O dia', 'Canela'],
       ),
     ).toEqual({ reach: 'O dia', origin: 'Canela' });
-    expect(hoursOf('2 horas')).toBe(2);
-    expect(hoursOf('1h30')).toBe(1.5);
-    expect(hoursOf('meia hora')).toBe(0.5);
-    expect(hoursOf('duas horas')).toBe(2);
-    expect(hoursOf('o dia')).toBeNull();
+  });
+
+  it('"1 hora e meia" e "1:30 no máximo" valem 1,5 h de alcance (a regra única de reach.ts)', async () => {
+    for (const answer of ['1 hora e meia', '1:30 no máximo', '1h30']) {
+      const { d, requests } = deps();
+      await searchMap(
+        input({
+          intent: intent(),
+          context: { origin: 'Papanduva, SC', position: null, place: null },
+          questions: [
+            { text: 'Até quanto tempo de carro?', options: ['1 hora', '2 horas'], topic: 'reach' },
+          ],
+          answers: [answer],
+        }),
+        d,
+      );
+      const area = requests[0]?.area;
+      expect(area?.type === 'circle' ? area.radius_m : 0).toBe(63_000);
+    }
   });
 });
 

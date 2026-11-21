@@ -10,6 +10,7 @@ import { aiPlan, aiSse, respondSse } from './helpers/import.ts';
 import { criarUsuario } from './helpers/users.ts';
 import { fakeOpenMeteo } from './helpers/world.ts';
 import { buscaNoMapa, lugar, rotaForjada } from './helpers/places.ts';
+import { radiusFor, reachOf, readReach } from '../src/features/intake/reach.ts';
 import {
   EMPTY_INTENT,
   type PlanIntent,
@@ -681,13 +682,21 @@ test('quero sair hoje: a pergunta de alcance, as opções em volta da posição,
   });
   await expect(page.getByText('Quanto tempo vocês têm?')).toBeVisible();
   await semRolagem(page, 'a pergunta de alcance');
-  await page.getByRole('button', { name: 'O dia' }).click();
+  // as opções mudam com a hora de agora (fase 25, D275): a primeira que o app oferece, e o raio dela
+  const alcance = page.getByRole('group', { name: 'Quanto tempo vocês têm?' }).getByRole('button');
+  const opcao = (await alcance.first().textContent()) ?? '';
+  await alcance.first().click();
   await page.getByRole('button', { name: 'Procurar no mapa' }).click();
   // o tipo saiu do texto, pela tabela, e a busca foi em volta da posição arredondada (uns 1 km)
   await expect(page.locator('[data-option]')).toHaveCount(1, { timeout: 20_000 });
   expect(mapa.pedidos.find((p) => p.names?.includes('colonial'))).toMatchObject({
     names: ['colonial'],
-    area: { type: 'circle', lng: -50.88, lat: -29.37, radius_m: 120_000 },
+    area: {
+      type: 'circle',
+      lng: -50.88,
+      lat: -29.37,
+      radius_m: radiusFor('today', readReach(opcao)) * 1000,
+    },
   });
   await page.getByRole('button', { name: /^Café Colonial Serrano/ }).click();
   await page.getByRole('button', { name: /^Traçar o caminho/ }).click();
@@ -701,7 +710,7 @@ test('quero sair hoje: a pergunta de alcance, as opções em volta da posição,
     text: 'quero sair hoje para um café colonial',
     position: { lat: -29.37, lng: -50.88 },
     place: 'Canela, RS',
-    reach: 'day',
+    reach: reachOf(readReach(opcao)),
     weather: expect.stringContaining('16° a 28°, chuva 60%'),
   });
   await page.getByRole('button', { name: 'Criar a viagem' }).click();

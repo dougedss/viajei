@@ -1,14 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  contextFor,
-  historyOf,
-  placeOfReverse,
-  radiusFor,
-  reachOf,
-  REACH_QUESTION,
-  roundPosition,
-  todayQuestions,
-} from './today.ts';
+import { contextFor, historyOf, placeOfReverse, roundPosition, todayQuestions } from './today.ts';
 
 const NOW = new Date('2026-11-15T12:00:00Z');
 const ME = 'me';
@@ -50,34 +41,25 @@ describe('a saída de hoje: o que entra na conta', () => {
     ]);
   });
 
-  it('a pergunta de alcance sempre; a de origem só quando o app não sabe de onde', () => {
-    expect(todayQuestions({ position: true, origin: false })).toEqual([REACH_QUESTION]);
-    expect(todayQuestions({ position: false, origin: true })).toEqual([REACH_QUESTION]);
-    expect(todayQuestions({ position: false, origin: false }).map((q) => q.text)).toEqual([
+  it('a pergunta de alcance sempre, com as opções da hora; a de origem só quando o app não sabe de onde', () => {
+    expect(todayQuestions({ position: true, origin: false }, '09:00')).toEqual([
+      {
+        text: 'Quanto tempo vocês têm?',
+        options: ['A manhã', 'O dia', 'Até amanhã'],
+        topic: 'reach',
+      },
+    ]);
+    expect(
+      todayQuestions({ position: false, origin: true }, '15:00').map((q) => q.options),
+    ).toEqual([['A tarde', 'Até a noite', 'Até amanhã']]);
+    expect(todayQuestions({ position: false, origin: false }, '19:00').map((q) => q.text)).toEqual([
       'Quanto tempo vocês têm?',
       'De onde vocês saem?',
     ]);
-    expect(REACH_QUESTION.options).toEqual(['A manhã', 'O dia', 'Até amanhã']);
-  });
-
-  it('o alcance pela opção ou pelas palavras da pessoa', () => {
-    expect(['A manhã', 'O dia', 'Até amanhã'].map(reachOf)).toEqual([
-      'morning',
-      'day',
-      'overnight',
+    expect(todayQuestions({ position: false, origin: false }, '19:00')[0]?.options).toEqual([
+      'Hoje à noite',
+      'Até amanhã',
     ]);
-    expect(reachOf('só até o almoço')).toBe('morning');
-    expect(reachOf('queremos dormir fora')).toBe('overnight');
-    expect(reachOf('a tarde toda')).toBe('day');
-  });
-
-  it('o raio da busca: o alcance de hoje, ou a região de uma viagem', () => {
-    expect([
-      radiusFor('today', 'morning'),
-      radiusFor('today', 'day'),
-      radiusFor('today', 'overnight'),
-    ]).toEqual([50, 120, 220]);
-    expect(radiusFor('plan', null)).toBe(200);
   });
 
   it('a cidade da posição, com a sigla do estado; a posição a uns 1 km', () => {
