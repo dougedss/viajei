@@ -67,6 +67,7 @@ import { appMapaClima } from './app-map.ts';
 import { appResync } from './app-resync.ts';
 import { labLighthouse } from './lighthouse.ts';
 import { expurgo } from './purge.ts';
+import { runBateria } from './bateria.ts';
 import { measureConversa } from './measure-conversa.ts';
 import { measureImport } from './measure-import.ts';
 import { measureRead } from './measure-read.ts';
@@ -573,6 +574,13 @@ async function main(): Promise<number> {
   // lab-a, D283)
   if (argv.includes('--medir-conversa')) {
     return measureConversa(cfg, await signIn(cfg, LAB_USERS.b));
+  }
+  // a bateria de pedidos de leigo (fase 27): dez pedidos novos pelo planejador de verdade, como o lab-b
+  // (a cota do laboratório), com as cobranças e o juiz, gravada em lab_runs; fora do cron
+  if (argv.includes('--bateria')) {
+    return runBateria(cfg, await signIn(cfg, LAB_USERS.b), {
+      rodada: Number(argValues(argv, '--rodada')[0] ?? '0') || null,
+    });
   }
   // a medição da leitura (fase 18): a confirmação em texto, PDF e print e a nota com QR, uma vez
   // cada, com arquivos inventados na hora

@@ -1,5 +1,8 @@
 import { looksLikeViajei } from '@/features/import/format.ts';
 import type { IntakePath } from './start.ts';
+import { isToday } from './today-rule.ts';
+
+export { isToday };
 
 /**
  * O campo da lista de viagens (fase 17): "Conte a viagem, cole o roteiro ou diga 'quero sair hoje'".
@@ -34,20 +37,7 @@ const TIME = /(?:^|[^\d])(?:[01]?\d|2[0-3])(?::[0-5]\d|h(?:[0-5]\d)?)(?![\d])/g;
 /** "11/12", "dia 13", "sexta", "1º dia", "primeiro dia", "segundo dia" */
 const DATE =
   /\b\d{1,2}\/\d{1,2}\b|\bdia \d{1,2}\b|\b(?:segunda|terca|quarta|quinta|sexta|sabado|domingo)(?:-feira)?\b|\b(?:primeiro|segundo|terceiro|quarto|quinto|\d+o) dia\b/g;
-/** "hoje", "agora", "bate e volta", "bate-volta", "já" no fim ("vamos sair já") */
-const TODAY = /\b(?:hoje|agora|bate[ -]e[ -]volta|bate[ -]volta|sair ja|ja ja)\b/;
-/** O que tira a frase de hoje: outra data, outro dia, vários dias ou um mês. */
-const ELSEWHEN =
-  /\b(?:amanha|depois de amanha|fim de semana|feriado|semana que vem|proxim[ao]s?|\d+ dias|\d+ noites|dias|noites|janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|segunda|terca|quarta|quinta|sexta|sabado|domingo)\b|\d{1,2}\/\d{1,2}/;
-
 const count = (re: RegExp, s: string) => (s.match(re) ?? []).length;
-
-/** A frase é a saída de hoje: curta, com "hoje" ou parecido, sem outra data. */
-export function isToday(text: string): boolean {
-  const s = plain(text.trim());
-  const lines = s.split('\n').filter((l) => l.trim() !== '');
-  return lines.length <= 3 && s.length <= 160 && TODAY.test(s) && !ELSEWHEN.test(s);
-}
 
 /** O texto tem cara de roteiro: várias linhas com horários e datas, ou um texto longo de várias linhas. */
 export function looksLikeItinerary(text: string): boolean {

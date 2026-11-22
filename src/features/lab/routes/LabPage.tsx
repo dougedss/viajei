@@ -8,7 +8,8 @@ import { Chip } from '@/components/ui/Chip.tsx';
 import { EmptyState } from '@/components/ui/EmptyState.tsx';
 import { PageHeader } from '@/components/ui/PageHeader.tsx';
 import { cx } from '@/lib/cx.ts';
-import { useLabRole, useLabRuns } from '../queries.ts';
+import { BateriaSection } from '../components/BateriaSection.tsx';
+import { useBateriaRuns, useLabRole, useLabRuns } from '../queries.ts';
 import {
   asStatus,
   failedScenarios,
@@ -235,6 +236,7 @@ function RunDetails({ run }: { run: LabRunRow }) {
 export default function LabPage() {
   const role = useLabRole();
   const runs = useLabRuns();
+  const bateria = useBateriaRuns();
 
   if (role.isPending || (role.data && runs.isPending)) return <Splash />;
   if (!role.data) {
@@ -392,6 +394,8 @@ export default function LabPage() {
           </section>
         </>
       )}
+
+      <BateriaSection runs={bateria.data ?? []} />
 
       <p className="text-[13px] text-ink-2">
         O agente roda sozinho todo dia às 3h, nas máquinas do GitHub, contra a produção, como dois
