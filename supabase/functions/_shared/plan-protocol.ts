@@ -15,6 +15,11 @@ export const PLAN_FN = 'plan-trip';
 /** A leitura da conversa (o `plan`): uma conversa inteira é uma leitura, a saída de hoje outra. */
 export const PLAN_DAILY_LIMIT = 10;
 /**
+ * A conta do laboratório (fase 27): uma rodada da bateria escreve até dez viagens, e a segunda rodada do
+ * dia esbarrava nas 10 de uma pessoa (a rodada 2 de 22/11 ficou sem nenhuma escrita: `rate_limited`).
+ */
+export const PLAN_LAB_DAILY_LIMIT = 100;
+/**
  * A chave da cota das perguntas na `edge_call`: elas têm a trava própria e não contam como leitura
  * (uma pessoa pode recomeçar). **Não é uma função**: as perguntas vão para a mesma `plan-trip`, com
  * `step: 'ask'` (a medição e o app chamaram `/functions/v1/plan-trip-ask`, que não existe).

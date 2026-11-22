@@ -28,6 +28,7 @@ import {
   PLAN_ASK_DAILY_LIMIT,
   PLAN_ASK_QUOTA,
   PLAN_DAILY_LIMIT,
+  PLAN_LAB_DAILY_LIMIT,
   PLAN_FN,
   PLAN_MAX_CHARS,
   planChars,
@@ -105,9 +106,11 @@ export async function handlePlan(req: Request, deps: ImportDeps): Promise<Respon
   if (input.text.trim() === '') return httpError(400, 'invalid_input', 'O pedido está vazio.');
 
   const ask = input.step === 'ask';
+  // a conta do laboratório tem cota maior (a bateria escreve até dez viagens por rodada, fase 27)
+  const lab = await deps.store.isLab();
   const claim = await deps.store.claim(
     ask ? PLAN_ASK_QUOTA : PLAN_FN,
-    ask ? PLAN_ASK_DAILY_LIMIT : PLAN_DAILY_LIMIT,
+    lab ? PLAN_LAB_DAILY_LIMIT : ask ? PLAN_ASK_DAILY_LIMIT : PLAN_DAILY_LIMIT,
   );
   if (!claim.ok) {
     return httpError(
@@ -121,7 +124,7 @@ export async function handlePlan(req: Request, deps: ImportDeps): Promise<Respon
     );
   }
   const variant =
-    input.variant && input.variant !== IMPORT_DEFAULT_VARIANT && (await deps.store.isLab())
+    input.variant && input.variant !== IMPORT_DEFAULT_VARIANT && lab
       ? input.variant
       : IMPORT_DEFAULT_VARIANT;
   const config = IMPORT_VARIANTS[variant];

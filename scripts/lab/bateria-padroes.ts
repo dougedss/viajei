@@ -143,6 +143,8 @@ export type Saida = {
   passeio: Outing;
   /** as perguntas que a IA fez (as duas rodadas somadas) */
   perguntas: number;
+  /** o que a bateria respondeu na segunda rodada ("pergunta → resposta"), para o juiz ler */
+  respostas?: readonly string[];
   /** a escrita, quando houve */
   write: PlanWrite | null;
   /** o que ficou pendente e foi para a escrita (os nomes) */
@@ -322,6 +324,7 @@ export function roteiroParaJuiz(saida: Saida, escolhidos: readonly string[]): st
       `pergunta feita: ${q.text}${q.options.length > 0 ? ` (${q.options.join(' / ')})` : ''}`,
     );
   }
+  for (const r of saida.respostas ?? []) lines.push(`a pessoa respondeu: ${r}`);
   if (saida.passeio.destino) lines.push(`destino: ${saida.passeio.destino}`);
   lines.push(
     `escolhidos (o primeiro candidato de cada passo): ${escolhidos.join('; ') || 'nenhum'}`,
@@ -335,7 +338,11 @@ export function roteiroParaJuiz(saida: Saida, escolhidos: readonly string[]): st
       lines.push(`antes de viajar: ${w.checklist_before.join(' / ')}`);
     if (w.quests.length > 0) lines.push(`missões: ${w.quests.map((q) => q.text).join(' / ')}`);
   } else {
-    lines.push('viagem escrita: não houve (nada escolhido)');
+    lines.push(
+      escolhidos.length > 0
+        ? 'viagem escrita: não houve (a escrita não rodou; julgue os lugares escolhidos)'
+        : 'viagem escrita: não houve (nada escolhido)',
+    );
   }
   return lines.join('\n').slice(0, 8_000);
 }

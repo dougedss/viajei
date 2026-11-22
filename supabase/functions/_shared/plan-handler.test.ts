@@ -229,6 +229,11 @@ describe('plan-trip: o roteiro', () => {
     expect(anthropic.calls[0]?.system).toBe(PLAN_SYSTEM_PROMPT);
   });
 
+  it('a conta do laboratório tem a cota da bateria (100), não a de uma pessoa (10)', async () => {
+    const { db } = await run(planRequest, plan, { isLab: () => Promise.resolve(true) });
+    expect(db.claimed).toEqual([['plan-trip', 100]]);
+  });
+
   it('a saída de hoje registra today', async () => {
     const { db } = await run(
       { ...planRequest, kind: 'today', context: { ...context, reach: 'day' } },

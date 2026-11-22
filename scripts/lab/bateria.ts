@@ -212,6 +212,8 @@ export async function runBateria(
     let nota: number | null = null;
     let detail: string;
     let falhou: string | null = null;
+    // a chamada que quebrou no meio (a escrita que não veio): o pedido fica vermelho, não verde
+    let quebrou: string | null = null;
     try {
       // a saída de hoje: a pergunta de alcance é do app; aqui, "o dia"
       const questions: PlanQuestion[] = kind === 'today' ? [reachQuestion('09:00')] : [];
@@ -329,6 +331,7 @@ export async function runBateria(
         ia += custoDe(w);
         const pw = w.outcome === 'done' ? planWriteSchema.safeParse(w.data) : null;
         write = pw?.success ? pw.data : null;
+        if (!write) quebrou = `a escrita não rodou: ${w.outcome} ${w.code ?? ''}`.trim();
         data.roteiro = write
           ? {
               nome: write.trip.name,
@@ -351,6 +354,7 @@ export async function runBateria(
         lugares: result.lugares,
         passeio: result.passeio,
         perguntas: perguntasFeitas,
+        respostas: Array.isArray(data.respostas) ? (data.respostas as string[]) : [],
         write,
         pendentes: [...pendentes, ...result.passeio.pendentes.map((p) => p.o_que)],
       };
@@ -378,6 +382,7 @@ export async function runBateria(
         falhas.length > 0
           ? `FALHOU: ${falhas.map((c) => `${c.nome} (${c.detalhe})`).join('; ')}`
           : 'cobranças verdes',
+        ...(quebrou ? [`QUEBROU: ${quebrou}`] : []),
       ].join(' · ');
     } catch (err) {
       falhou = (err instanceof Error ? err.message : String(err)).split('\n')[0] ?? 'falhou';
@@ -390,7 +395,7 @@ export async function runBateria(
     data.tempo_ms = Date.now() - t0;
     resultados.push({
       scenario,
-      status: falhou || cobrancas.some((c) => !c.ok) ? 'fail' : 'pass',
+      status: falhou || quebrou || cobrancas.some((c) => !c.ok) ? 'fail' : 'pass',
       latency_ms: Date.now() - t0,
       detail: detail.slice(0, 1000),
       data,

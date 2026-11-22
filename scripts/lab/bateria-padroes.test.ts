@@ -214,4 +214,18 @@ describe('as cobranças', () => {
     expect(texto).toContain('viagem escrita: "Café em Canoinhas"');
     expect(texto).toContain('antes de viajar: Escolher onde fica a feirinha');
   });
+
+  it('o juiz lê o que a pessoa respondeu, e sabe quando a escrita não rodou apesar dos escolhidos', () => {
+    const texto = roteiroParaJuiz(
+      saida({ respostas: ['O que vocês querem fazer? → um café'], write: null }),
+      ['Café do Relógio'],
+    );
+    expect(texto).toContain('a pessoa respondeu: O que vocês querem fazer? → um café');
+    expect(texto).toContain(
+      'viagem escrita: não houve (a escrita não rodou; julgue os lugares escolhidos)',
+    );
+    expect(roteiroParaJuiz(saida({ write: null }), [])).toContain(
+      'viagem escrita: não houve (nada escolhido)',
+    );
+  });
 });
