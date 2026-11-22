@@ -7,9 +7,14 @@ import {
   buildGenerateMessage,
   buildPlanSearchMessage,
   fromDelivery,
+  ORDER_ANY,
+  ORDER_QUESTION_TEXT,
   PLAN_SEARCH_SYSTEM_PROMPT,
   PLAN_SEARCH_TOOLS,
+  planSearchSystemPrompt,
+  TIME_QUESTION_TEXT,
   TOOL_NAMES,
+  topicOf,
 } from './plan-search-ai.ts';
 import { planSearchRequestSchema } from './plan-search-protocol.ts';
 
@@ -95,6 +100,17 @@ describe('as ferramentas do planejador', () => {
       'noite',
     ]);
     expect(deliver.properties.passos.items.properties.ordem?.type).toBe('integer');
+    // a fase 26: a busca de cada passo (um objeto raso, todo obrigatório), os descartados e o tempo
+    const busca = deliver.properties.passos.items.properties.busca as {
+      type?: string;
+      required?: string[];
+    };
+    expect(busca.type).toBe('object');
+    expect(busca.required).toEqual(['palavras', 'tipo_google', 'aberto_agora', 'nota_minima']);
+    expect(deliver.properties.passos.items.properties.descartados?.type).toBe('integer');
+    expect((PLAN_SEARCH_TOOLS[3]?.input_schema as { required: string[] }).required).toContain(
+      'tempo_min',
+    );
   });
 
   it('os formatos da bateria também cabem: nenhuma união', () => {
@@ -117,6 +133,38 @@ describe('os prompts', () => {
     // os nomes do exemplo são inventados (a armadilha da 25)
     expect(p).not.toMatch(/Torten|Mahlzeit|Malwee|Bioparque/);
     expect(p).toContain('Café do Relógio');
+  });
+
+  it('a fase 26: não chutar cidade a partir de região nem nomear a tentativa; só candidatos do tipo pedido, com os descartados; a pergunta da ordem e a do tempo, nesta ordem; tempo_min pela tabela', () => {
+    const p = PLAN_SEARCH_SYSTEM_PROMPT;
+    expect(p).toContain('não vira uma cidade escolhida por você');
+    expect(p).toContain('sem dizer qual você teria tentado');
+    expect(p).toContain('uma banca de produtos coloniais não é um café');
+    expect(p).toContain('um açaí não é uma sorveteria');
+    expect(p).toContain('diga em descartados quantos ficaram de fora');
+    expect(p).toContain(`"${ORDER_QUESTION_TEXT}"`);
+    expect(p).toContain(`"${ORDER_ANY}" é a ordem em que ela escreveu`);
+    expect(p).toContain(`"${TIME_QUESTION_TEXT}"`);
+    expect(p).toContain('"A manhã" e "Até o almoço"');
+    expect(p).toContain('A quarta pergunta não existe');
+    expect(p).toContain(
+      'a manhã (ou "antes do almoço", "cedo") 240; a tarde 300; até a noite ou o dia 600',
+    );
+    expect(p).toContain('"1:30 no máximo" é 90');
+    // a ordem das perguntas: o que impede a busca, a ordem, o tempo
+    expect(p.indexOf('(1) o que impede a busca')).toBeLessThan(p.indexOf('(2) a ordem'));
+    expect(p.indexOf('(2) a ordem')).toBeLessThan(p.indexOf('(3) o tempo'));
+  });
+
+  it('os dois modos: o passo a passo manda procurar só o passo 1 e não procurar quando vai perguntar; o de antes (o app em cache) procura tudo', () => {
+    const stepwise = planSearchSystemPrompt({ passoAPasso: true });
+    expect(stepwise).toContain('Procure só o passo 1');
+    expect(stepwise).toContain('não procure nada nesta rodada: entregue só as perguntas');
+    expect(stepwise).toContain('candidatos [], achou false');
+    expect(PLAN_SEARCH_SYSTEM_PROMPT).not.toContain('Procure só o passo 1');
+    expect(PLAN_SEARCH_SYSTEM_PROMPT).toBe(planSearchSystemPrompt({ passoAPasso: false }));
+    // os exemplos dos dois sem nome real
+    expect(stepwise).not.toMatch(/Torten|Mahlzeit|Malwee|Bioparque/);
   });
 
   it('a bateria: o gerador não inventa pessoa e cobre os padrões; o juiz dá nota e motivos', () => {
@@ -176,7 +224,8 @@ describe('a mensagem e a entrega', () => {
     expect(bare).not.toContain('<perguntas>');
   });
 
-  it('a entrega lida: as referências fora do padrão saem, os textos nos limites, as perguntas no molde do app, os vazios fora', () => {
+  it('a entrega lida: as referências fora do padrão saem, os textos nos limites, as perguntas no molde do app, os vazios fora; a busca, os descartados e o tempo nos limites (fase 26)', () => {
+    const busca = { palavras: '', tipo_google: 'hair_salon', aberto_agora: false, nota_minima: 7 };
     const out = fromDelivery({
       passos: [
         {
@@ -187,6 +236,8 @@ describe('a mensagem e a entrega', () => {
           hora_do_dia: '',
           candidatos: ['p3', 'x9', 'p3', 'Café do Relógio'],
           achou: true,
+          busca,
+          descartados: -2,
         },
         {
           ordem: 1,
@@ -196,6 +247,8 @@ describe('a mensagem e a entrega', () => {
           hora_do_dia: 'manha',
           candidatos: ['p1', 'p2'],
           achou: true,
+          busca: { palavras: 'café', tipo_google: 'cafe', aberto_agora: false, nota_minima: 4 },
+          descartados: 1,
         },
       ],
       pendentes: [
@@ -207,21 +260,59 @@ describe('a mensagem e a entrega', () => {
           texto: 'O que vocês querem fazer?',
           opcoes: ['um café', 'um café', ' ', 'uma cachoeira'],
         },
+        { texto: TIME_QUESTION_TEXT, opcoes: ['A manhã', 'Até o almoço'] },
       ],
       destino: '',
       origem: 'Papanduva',
+      tempo_min: 2_000,
     });
     expect(out.origem).toBe('Papanduva');
-    expect(out.passos[0]).toMatchObject({ ordem: 2, o_que: 'cortar o cabelo', candidatos: ['p3'] });
+    // o tempo nos limites de um dia
+    expect(out.tempo_min).toBe(1_440);
+    // as palavras vazias caem no o_que; a nota mínima no teto 5; os descartados nunca negativos
+    expect(out.passos[0]).toMatchObject({
+      ordem: 2,
+      o_que: 'cortar o cabelo',
+      candidatos: ['p3'],
+      busca: { palavras: 'cortar o cabelo', tipo_google: 'hair_salon', nota_minima: 5 },
+      descartados: 0,
+    });
     expect(out.passos[1]).toMatchObject({
       ordem: 1,
       candidatos: ['p1', 'p2'],
       hora_do_dia: 'manha',
+      busca: { palavras: 'café', nota_minima: 4 },
+      descartados: 1,
     });
     expect(out.pendentes).toEqual([{ o_que: 'a feirinha', pergunta: 'Onde fica a feirinha?' }]);
+    // a pergunta do tempo é de alcance: o app a lê com a regra única e pergunta de novo se não entender
     expect(out.perguntas).toEqual([
       { text: 'O que vocês querem fazer?', options: ['um café', 'uma cachoeira'], topic: 'other' },
+      { text: TIME_QUESTION_TEXT, options: ['A manhã', 'Até o almoço'], topic: 'reach' },
     ]);
+    expect(topicOf('Quanto tempo vocês têm?')).toBe('reach');
+    expect(topicOf(ORDER_QUESTION_TEXT)).toBe('other');
     expect(() => fromDelivery({ passos: 'x' })).toThrow();
+    // sem a busca de um passo, a entrega está fora do formato (a IA entrega de novo)
+    expect(() =>
+      fromDelivery({
+        passos: [
+          {
+            ordem: 1,
+            o_que: 'café',
+            relacao: 'na_cidade',
+            cidade: '',
+            hora_do_dia: '',
+            candidatos: [],
+            achou: false,
+          },
+        ],
+        pendentes: [],
+        perguntas: [],
+        destino: '',
+        origem: '',
+        tempo_min: 0,
+      }),
+    ).toThrow();
   });
 });

@@ -120,7 +120,7 @@ describe('procurar_lugares', () => {
     expect(result.is_error).toBe(false);
     expect(result.content).toContain('2 lugares para "café" em Canoinhas');
     expect(result.content).toContain(
-      'p1 · Café do Relógio · Canoinhas · nota 4,6 (212 avaliações) · aberto agora',
+      'p1 · Café do Relógio · Canoinhas · tipo cafe · nota 4,6 (212 avaliações) · aberto agora',
     );
     expect(result.content).toContain('p2 · Cantinho do Pão');
     expect(result.content).not.toContain('Café do Rio');
@@ -443,6 +443,8 @@ describe('a cidade que vale e o passeio de reserva', () => {
         relacao: 'na_cidade',
         cidade: 'Canoinhas',
         hora_do_dia: '',
+        buscado: true,
+        busca: { palavras: 'café', tipo_google: '', aberto_agora: false, nota_minima: 0 },
         candidatos: ['p1', 'p2'],
         achou: true,
         fora_da_cidade: false,
@@ -453,6 +455,13 @@ describe('a cidade que vale e o passeio de reserva', () => {
         relacao: 'na_cidade',
         cidade: 'Canoinhas',
         hora_do_dia: '',
+        buscado: true,
+        busca: {
+          palavras: 'cortar o cabelo',
+          tipo_google: '',
+          aberto_agora: false,
+          nota_minima: 0,
+        },
         candidatos: [],
         achou: false,
         fora_da_cidade: false,
@@ -462,5 +471,65 @@ describe('a cidade que vale e o passeio de reserva', () => {
     const empty = outingFromSearches(state(network(() => [])), 'no_plan');
     expect(empty.passos).toEqual([]);
     expect(empty.perguntas[0]?.text).toContain('Não consegui montar o passeio');
+  });
+});
+
+describe('o que a entrega precisa e a IA não sabe (fase 26)', () => {
+  it('a cidade de um passo, resolvida pela mesma regra e pelo cache da rodada; o destino pelo que localizar_nome achou com cara de cidade, senão pela geocodificação', async () => {
+    const net = network(
+      (q) =>
+        q === 'Joinville'
+          ? [
+              gplace('g-jlle', 'Joinville', 'Joinville', -26.3, -48.85, {
+                types: ['locality', 'political'],
+              }),
+            ]
+          : CAFES,
+      { geocode: [geocodeHit('Canoinhas', CANOINHAS.lat, CANOINHAS.lng)] },
+    );
+    const s = state(net);
+    await s.run(TOOL_NAMES.search, search());
+    const geocodes = () => net.calls.filter((c) => c.url.includes('/v1/geocode/search')).length;
+    expect(geocodes()).toBe(1);
+    // a cidade do passo: do cache (nenhuma geocodificação a mais); vazia, nada
+    expect(await s.cityHit('canoinhas')).toMatchObject({ name: 'Canoinhas', lat: CANOINHAS.lat });
+    expect(geocodes()).toBe(1);
+    expect(await s.cityHit('')).toBeNull();
+    // o destino: o que localizar_nome achou com cara de cidade, sem geocodificar
+    await s.run(TOOL_NAMES.locate, { nome: 'Joinville', cidade: '', lat: 0, lng: 0 });
+    expect(await s.destination('Joinville')).toEqual({ lat: -26.3, lng: -48.85 });
+    expect(geocodes()).toBe(1);
+    // um destino que ninguém localizou vai à geocodificação (a resposta de mentira é Canoinhas)
+    expect(await s.destination('Mafra')).toEqual({ lat: CANOINHAS.lat, lng: CANOINHAS.lng });
+    expect(geocodes()).toBe(2);
+    expect(await s.destination('')).toBeNull();
+  });
+
+  it('a IA procurou o passo? pelas palavras da busca ou do passo', async () => {
+    const net = network(() => CAFES, {
+      geocode: [geocodeHit('Canoinhas', CANOINHAS.lat, CANOINHAS.lng)],
+    });
+    const s = state(net);
+    await s.run(TOOL_NAMES.search, search({ o_que: 'Café' }));
+    expect(s.searchedFor({ o_que: 'café' })).toBe(true);
+    expect(s.searchedFor({ o_que: 'tomar um café', busca: { palavras: 'café' } })).toBe(true);
+    expect(s.searchedFor({ o_que: 'cortar o cabelo' })).toBe(false);
+  });
+
+  it('o resumo que a IA vê traz o tipo principal do Google, para ela julgar se uma banca é um café', async () => {
+    const net = network(() => [
+      gplace('g-banca', 'Banca da Colônia', 'Canoinhas', -26.177, -50.391, {
+        primaryType: 'grocery_store',
+        types: ['grocery_store', 'food', 'store'],
+      }),
+    ]);
+    const s = state(net);
+    const result = await s.run(
+      TOOL_NAMES.search,
+      search({}, { tipo: 'perto', cidade: '', lat: -26.37, lng: -50.33 }),
+    );
+    expect(result.content).toContain(
+      'p1 · Banca da Colônia · Canoinhas · tipo grocery_store · nota',
+    );
   });
 });

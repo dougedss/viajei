@@ -36,8 +36,8 @@ import {
   buildJudgeMessage,
   buildPlanSearchMessage,
   fromDelivery,
-  PLAN_SEARCH_SYSTEM_PROMPT,
   PLAN_SEARCH_TOOLS,
+  planSearchSystemPrompt,
   TOOL_NAMES,
 } from './plan-search-ai.ts';
 import {
@@ -85,10 +85,14 @@ const PROGRESS: Readonly<Record<string, string>> = {
   [TOOL_NAMES.deliver]: 'Montando o passeio…',
 };
 
-/** O pedido à Anthropic de um turno do laço: as ferramentas estritas, `auto`, sem saída estruturada. */
+/**
+ * O pedido à Anthropic de um turno do laço: as ferramentas estritas, `auto`, sem saída estruturada; o
+ * prompt no modo do pedido (o passo a passo da fase 26, ou o de antes para o app em cache).
+ */
 export function planSearchParamsFor(
   config: VariantConfig,
   messages: BetaMessageParam[],
+  options: { passoAPasso: boolean } = { passoAPasso: false },
 ): BetaMessageStreamParams {
   return {
     model: config.model,
@@ -97,7 +101,7 @@ export function planSearchParamsFor(
     output_config: { effort: config.effort },
     betas: [IMPORT_FALLBACK_BETA],
     fallbacks: 'default',
-    system: PLAN_SEARCH_SYSTEM_PROMPT,
+    system: planSearchSystemPrompt(options),
     tools: [...PLAN_SEARCH_TOOLS],
     tool_choice: { type: 'auto' },
     // uma cópia: a lista cresce a cada turno, e o pedido de cada um fica como foi
@@ -342,11 +346,14 @@ class PlanSearchRun {
     try {
       while (turns < PLAN_SEARCH_MAX_TURNS) {
         turns += 1;
-        const stream = deps.openStream(planSearchParamsFor(config, messages), {
-          signal: this.#abort.signal,
-          timeout: Math.max(1_000, deadlineAt - this.#now()),
-          maxRetries: 1,
-        });
+        const stream = deps.openStream(
+          planSearchParamsFor(config, messages, { passoAPasso: input.passo_a_passo }),
+          {
+            signal: this.#abort.signal,
+            timeout: Math.max(1_000, deadlineAt - this.#now()),
+            maxRetries: 1,
+          },
+        );
         for await (const ev of stream) this.#onEvent(ev);
         const message = await stream.finalMessage();
         this.#model = message.model;
@@ -369,7 +376,7 @@ class PlanSearchRun {
         for (const use of uses) {
           if (use.name === TOOL_NAMES.deliver) {
             try {
-              outing = this.#deliver(fromDelivery(use.input), state);
+              outing = await this.#deliver(fromDelivery(use.input), state);
               results.push({ type: 'tool_result', tool_use_id: use.id, content: 'Entregue.' });
             } catch {
               results.push({
@@ -500,21 +507,40 @@ class PlanSearchRun {
     };
   }
 
-  /** A entrega da IA, julgada: só referências que as ferramentas devolveram nesta rodada; o resto sai. */
-  #deliver(delivered: ReturnType<typeof fromDelivery>, state: ToolState): Outing {
-    const passos = [...delivered.passos]
-      .sort((a, b) => a.ordem - b.ordem)
-      .map((p, i) => {
-        const candidatos = p.candidatos.filter((ref) => state.placeOf(ref) !== undefined);
-        return {
-          ...p,
-          ordem: i + 1,
-          candidatos,
-          achou: candidatos.length > 0,
-          fora_da_cidade: candidatos.length > 0 && candidatos.every((ref) => state.isNeighbor(ref)),
-        };
+  /**
+   * A entrega da IA, julgada: só referências que as ferramentas devolveram nesta rodada; o resto sai.
+   * E o que o app precisa e a IA não sabe (fase 26): a coordenada da cidade de um passo `na_cidade` e
+   * a do destino (para o "no caminho" até ele e para a parada de cidade), e se a IA procurou o passo.
+   */
+  async #deliver(delivered: ReturnType<typeof fromDelivery>, state: ToolState): Promise<Outing> {
+    const destino_centro =
+      delivered.destino === '' ? null : await state.destination(delivered.destino);
+    const passos: Outing['passos'] = [];
+    for (const [i, p] of [...delivered.passos].sort((a, b) => a.ordem - b.ordem).entries()) {
+      const candidatos = p.candidatos.filter((ref) => state.placeOf(ref) !== undefined);
+      const city =
+        p.relacao === 'na_cidade' && p.cidade !== '' ? await state.cityHit(p.cidade) : null;
+      const centro =
+        p.relacao === 'na_cidade'
+          ? city
+            ? { lat: city.lat, lng: city.lng }
+            : null
+          : p.relacao === 'no_caminho'
+            ? destino_centro
+            : null;
+      passos.push({
+        ...p,
+        ordem: i + 1,
+        // a cidade como a geocodificação a conhece ("Canoinhas", não "canoinhas sc")
+        cidade: city?.name ?? p.cidade,
+        candidatos,
+        achou: candidatos.length > 0,
+        fora_da_cidade: candidatos.length > 0 && candidatos.every((ref) => state.isNeighbor(ref)),
+        buscado: candidatos.length > 0 || state.searchedFor(p),
+        centro,
       });
-    return { ...delivered, passos };
+    }
+    return { ...delivered, passos, destino_centro };
   }
 }
 

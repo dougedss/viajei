@@ -6,7 +6,7 @@ import { scriptedTurn } from '@/test/fixtures/plan-search-recording.ts';
 import { GOOGLE_PLACES_URL } from './google-places.ts';
 import type { ImportClose, ImportStore, OpenStream } from './import-handler.ts';
 import { SseDecoder, type ImportEvent } from './import-protocol.ts';
-import { PLAN_SEARCH_SYSTEM_PROMPT, TOOL_NAMES } from './plan-search-ai.ts';
+import { PLAN_SEARCH_SYSTEM_PROMPT, planSearchSystemPrompt, TOOL_NAMES } from './plan-search-ai.ts';
 import { handlePlanSearch, type PlanSearchDeps } from './plan-search-handler.ts';
 import {
   PLAN_SEARCH_MAX_TURNS,
@@ -208,34 +208,42 @@ const SEARCH_HAIR = {
   name: TOOL_NAMES.search,
   input: { ...SEARCH_CAFE.input, o_que: 'cortar o cabelo', tipo_google: 'hair_salon' },
 };
+/** Um passo como a IA o entrega, com a busca (fase 26) e o que não se disse no padrão. */
+const STEP = (over: Record<string, unknown> = {}) => ({
+  ordem: 1,
+  o_que: 'café',
+  relacao: 'na_cidade',
+  cidade: 'Canoinhas',
+  hora_do_dia: '',
+  candidatos: ['p1', 'p2', 'p9'],
+  achou: true,
+  busca: { palavras: 'café', tipo_google: 'cafe', aberto_agora: false, nota_minima: 0 },
+  descartados: 0,
+  ...over,
+});
 const DELIVER = (over: Record<string, unknown> = {}) => ({
   id: 'toolu_9',
   name: TOOL_NAMES.deliver,
   input: {
     passos: [
-      {
-        ordem: 1,
-        o_que: 'café',
-        relacao: 'na_cidade',
-        cidade: 'Canoinhas',
-        hora_do_dia: '',
-        candidatos: ['p1', 'p2', 'p9'],
-        achou: true,
-      },
-      {
+      STEP(),
+      STEP({
         ordem: 2,
         o_que: 'cortar o cabelo',
-        relacao: 'na_cidade',
-        cidade: 'Canoinhas',
-        hora_do_dia: '',
         candidatos: ['p3'],
-        achou: true,
-      },
+        busca: {
+          palavras: 'cortar o cabelo',
+          tipo_google: 'hair_salon',
+          aberto_agora: false,
+          nota_minima: 0,
+        },
+      }),
     ],
     pendentes: [{ o_que: 'a feirinha', pergunta: 'Onde fica a feirinha?' }],
     perguntas: [],
     destino: '',
     origem: '',
+    tempo_min: 0,
     ...over,
   },
 });
@@ -325,7 +333,7 @@ describe('plan-search: o laço com as ferramentas', () => {
       ['tool_result', 'toolu_2', false],
     ]);
     expect(results[0]?.content).toContain(
-      'p1 · Café do Relógio · Canoinhas · nota 4,6 (212 avaliações)',
+      'p1 · Café do Relógio · Canoinhas · tipo cafe · nota 4,6 (212 avaliações)',
     );
     // o registro: uma linha, kind plan_search, os tokens dos dois turnos somados
     expect(db.claimed).toEqual([['plan-search', 20]]);
@@ -350,6 +358,106 @@ describe('plan-search: o laço com as ferramentas', () => {
       /^plan-search id=\S+ status=succeeded error=- .* turns=2 calls=2 searches=2 places=3 source=google end=delivered in=4600 out=550 ms=\d+$/,
     );
     expect(logs.join('\n')).not.toMatch(/canoinhas|cabelo|AIza|chave-geoapify/i);
+  });
+
+  it('o passo a passo (fase 26): o prompt do modo, a IA procura só o passo 1, e a entrega leva o que o app precisa: a busca, o centro da cidade, se foi procurado, e a coordenada do destino', async () => {
+    const net = network((q) =>
+      q.startsWith('café')
+        ? [gplace('g1', 'Café do Relógio', 'Canoinhas')]
+        : q === 'Joinville'
+          ? [
+              {
+                ...gplace('g-jlle', 'Joinville', 'Joinville'),
+                location: { latitude: -26.3, longitude: -48.85 },
+                types: ['locality', 'political'],
+              },
+            ]
+          : [],
+    );
+    const turns = [
+      scriptedTurn([
+        SEARCH_CAFE,
+        {
+          id: 'toolu_l',
+          name: TOOL_NAMES.locate,
+          input: { nome: 'Joinville', cidade: '', lat: 0, lng: 0 },
+        },
+      ]),
+      scriptedTurn([
+        DELIVER({
+          passos: [
+            STEP({ ordem: 1, o_que: 'café', candidatos: ['p1'] }),
+            STEP({
+              ordem: 2,
+              o_que: 'almoçar',
+              relacao: 'na_cidade',
+              cidade: 'canoinhas',
+              candidatos: [],
+              achou: false,
+              busca: {
+                palavras: 'restaurante',
+                tipo_google: 'restaurant',
+                aberto_agora: false,
+                nota_minima: 4,
+              },
+            }),
+            STEP({
+              ordem: 3,
+              o_que: 'sorvete',
+              relacao: 'no_caminho',
+              cidade: '',
+              candidatos: [],
+              achou: false,
+              busca: {
+                palavras: 'sorveteria',
+                tipo_google: 'ice_cream_shop',
+                aberto_agora: false,
+                nota_minima: 0,
+              },
+            }),
+          ],
+          pendentes: [],
+          destino: 'Joinville',
+          tempo_min: 300,
+        }),
+      ]),
+    ];
+    const { events, anthropic } = await run(
+      request({
+        passo_a_passo: true,
+        text: 'café, almoçar em canoinhas e um sorvete no caminho pra joinville',
+      }),
+      turns,
+      { net },
+    );
+    expect(anthropic.calls[0]!.system).toBe(planSearchSystemPrompt({ passoAPasso: true }));
+    expect(anthropic.calls[0]!.system).toContain('Procure só o passo 1');
+    const result = doneOf(events);
+    expect(result.passeio.tempo_min).toBe(300);
+    expect(result.passeio.destino).toBe('Joinville');
+    expect(result.passeio.destino_centro).toEqual({ lat: -26.3, lng: -48.85 });
+    const [p1, p2, p3] = result.passeio.passos;
+    expect(p1).toMatchObject({
+      candidatos: ['p1'],
+      buscado: true,
+      centro: { lat: -26.1765, lng: -50.39 },
+      busca: { palavras: 'café', tipo_google: 'cafe' },
+      descartados: 0,
+    });
+    // o passo não procurado: sem candidato, buscado false, a cidade como a geocodificação a conhece e o centro dela
+    expect(p2).toMatchObject({
+      candidatos: [],
+      achou: false,
+      buscado: false,
+      cidade: 'Canoinhas',
+      centro: { lat: -26.1765, lng: -50.39 },
+      busca: { palavras: 'restaurante', nota_minima: 4 },
+    });
+    // "no caminho" até o destino: o centro é o destino
+    expect(p3).toMatchObject({ buscado: false, centro: { lat: -26.3, lng: -48.85 } });
+    // sem o campo (o app em cache), o prompt de antes
+    const legacy = await run(request(), [scriptedTurn([{ type: 'text', text: 'x' }])]);
+    expect(legacy.anthropic.calls[0]!.system).toBe(PLAN_SEARCH_SYSTEM_PROMPT);
   });
 
   it('a IA que responde só com texto: sem plano, o passeio de reserva com a pergunta, nunca um erro na tela', async () => {
@@ -425,22 +533,7 @@ describe('plan-search: o laço com as ferramentas', () => {
           },
         },
       ]),
-      scriptedTurn([
-        DELIVER({
-          passos: [
-            {
-              ordem: 1,
-              o_que: 'café',
-              relacao: 'na_cidade',
-              cidade: 'Canoinhas',
-              hora_do_dia: '',
-              candidatos: ['p1'],
-              achou: true,
-            },
-          ],
-          pendentes: [],
-        }),
-      ]),
+      scriptedTurn([DELIVER({ passos: [STEP({ candidatos: ['p1'] })], pendentes: [] })]),
     ];
     // a geocodificação de mentira responde Canoinhas para qualquer nome: a cidade inexistente cai na
     // plausibilidade pelo nome que volta; aqui o que se prova é o círculo dos vizinhos
@@ -468,22 +561,7 @@ describe('plan-search: o laço com as ferramentas', () => {
   it('sem a chave do Google, as buscas caem na Geoapify e a resposta diz a fonte de reserva', async () => {
     const turns = [
       scriptedTurn([SEARCH_CAFE]),
-      scriptedTurn([
-        DELIVER({
-          passos: [
-            {
-              ordem: 1,
-              o_que: 'café',
-              relacao: 'na_cidade',
-              cidade: 'Canoinhas',
-              hora_do_dia: '',
-              candidatos: [],
-              achou: false,
-            },
-          ],
-          pendentes: [],
-        }),
-      ]),
+      scriptedTurn([DELIVER({ passos: [STEP({ candidatos: [], achou: false })], pendentes: [] })]),
     ];
     const { events, net } = await run(request(), turns, { googleKey: undefined });
     const result = doneOf(events);

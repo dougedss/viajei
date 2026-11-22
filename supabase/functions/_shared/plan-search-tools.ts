@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { driveMinutes } from './drive.ts';
-import { haversineM } from './geo.ts';
 import { googleRequest, ProviderError, searchGoogle, withinCity } from './google-places.ts';
 import { isGoogleType } from './google-types.ts';
 import { searchGeoapify } from './places-handler.ts';
@@ -27,6 +26,18 @@ import {
   type PlanSearchEnding,
   type StepRelation,
 } from './plan-search-protocol.ts';
+import {
+  cityCircle,
+  isPoint,
+  kmBetween,
+  NEAR_MAX_KM,
+  nearCircle,
+  routeCircles,
+  type Point,
+} from './search-circles.ts';
+
+// os círculos moram em `search-circles.ts` desde a fase 26 (o app procura o passo seguinte com eles)
+export { routeCircles };
 
 /**
  * As ferramentas do planejador (fase 27), executadas pela função, sem Deno e sem rede própria (o
@@ -59,14 +70,6 @@ export type SearchMade = {
 
 /** Até onde uma cidade dita ainda é plausível a partir de onde a pessoa está (D276). */
 const PLAUSIBLE_KM = 400;
-/** O círculo em volta do centro de uma cidade: o município costuma caber nisto. */
-const CITY_RADIUS_M = 25_000;
-/** "Perto" sem raio dito, e o teto do Google. */
-const NEAR_DEFAULT_KM = 15;
-const NEAR_MAX_KM = 50;
-/** "No caminho": círculos ao longo da linha, no máximo quatro por chamada. */
-const ROUTE_MAX_CIRCLES = 4;
-const ROUTE_CIRCLE_KM = 40;
 /** O lugar nomeado: até cinco candidatos, perto do ponto quando há. */
 const LOCATE_RADIUS_M = 30_000;
 const LOCATE_LIMIT = 5;
@@ -119,8 +122,15 @@ const geocodeSchema = z.object({
 
 export type CityHit = { name: string; lat: number; lng: number; label: string };
 
-const km = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) =>
-  haversineM([a.lng, a.lat], [b.lng, b.lat]) / 1000;
+const km = kmBetween;
+/** Os tipos do Google que dizem "isto é uma cidade" (o resultado de `localizar_nome` para um destino). */
+const CITY_TYPES = new Set([
+  'locality',
+  'administrative_area_level_2',
+  'administrative_area_level_1',
+  'political',
+  'sublocality',
+]);
 const fmtKm = (v: number) => (v < 10 ? v.toFixed(1).replace('.', ',') : String(Math.round(v)));
 const fmtRating = (p: Place) =>
   p.rating === null || p.rating === undefined
@@ -159,6 +169,37 @@ export class ToolState {
 
   placeOf(ref: string): Place | undefined {
     return this.found.find((f) => f.ref === ref)?.place;
+  }
+
+  /**
+   * A cidade dita, resolvida (a mesma regra da ferramenta, com o cache da rodada): o centro que a
+   * entrega guarda num passo `na_cidade` para o app procurar lá quando chegar a vez (fase 26).
+   */
+  cityHit(said: string): Promise<CityHit | null> {
+    return said.trim() === '' ? Promise.resolve(null) : this.#city(said);
+  }
+
+  /**
+   * A coordenada do destino dito ("vou pra Joinville"), para a parada de cidade (fase 26, a 3.4) e
+   * para o "no caminho" até ele: o que `localizar_nome` já achou com esse nome e cara de cidade; senão
+   * a geocodificação da cidade.
+   */
+  async destination(said: string): Promise<Point | null> {
+    const wanted = plain(said);
+    if (wanted === '') return null;
+    const located = this.found.find(
+      (f) => plain(f.place.name) === wanted && f.place.categories.some((c) => CITY_TYPES.has(c)),
+    );
+    if (located) return { lat: located.place.lat, lng: located.place.lng };
+    const city = await this.#city(said);
+    return city ? { lat: city.lat, lng: city.lng } : null;
+  }
+
+  /** A IA procurou este passo nesta rodada (pelas palavras da busca ou do passo)? */
+  searchedFor(step: { o_que: string; busca?: { palavras: string } | undefined }): boolean {
+    const words = new Set([plain(step.o_que), plain(step.busca?.palavras ?? '')]);
+    words.delete('');
+    return this.searches.some((s) => words.has(plain(s.o_que)));
   }
 
   /** Executa uma chamada de ferramenta da IA; o que der errado volta como resposta de erro para ela. */
@@ -217,7 +258,7 @@ export class ToolState {
       }
       made.cidade = city.name;
       query = `${query} em ${city.name}`;
-      circles = [{ lat: city.lat, lng: city.lng, radius_m: CITY_RADIUS_M }];
+      circles = [cityCircle(city)];
     } else if (onde.tipo === 'perto') {
       if (!isPoint(onde.lat, onde.lng)) {
         return {
@@ -226,8 +267,7 @@ export class ToolState {
             'Para o tipo "perto", dê lat e lng (o ponto de referência do contexto). Sem ponto de referência no contexto, não procure: ponha a pergunta "De onde vocês saem?" e entregue.',
         };
       }
-      const radiusKm = onde.raio_km > 0 ? Math.min(NEAR_MAX_KM, onde.raio_km) : NEAR_DEFAULT_KM;
-      circles = [{ lat: onde.lat, lng: onde.lng, radius_m: Math.round(radiusKm * 1000) }];
+      circles = [nearCircle({ lat: onde.lat, lng: onde.lng }, onde.raio_km)];
     } else {
       if (!isPoint(onde.lat, onde.lng) || !isPoint(onde.lat2, onde.lng2)) {
         return {
@@ -510,12 +550,18 @@ export class ToolState {
     return ref;
   }
 
-  /** Um lugar numa linha para a IA: a referência, o nome, a cidade, a nota, o aberto agora, a distância. */
+  /**
+   * Um lugar numa linha para a IA: a referência, o nome, a cidade, o tipo principal (o Google põe o
+   * `primaryType` primeiro; é por ele que a IA julga se uma banca é um café, fase 26), a nota, o aberto
+   * agora, a distância.
+   */
   #line(ref: string, p: Place, center: { lat: number; lng: number } | null): string {
+    const type = p.provider === 'google' ? p.categories[0] : undefined;
     const parts = [
       ref,
       p.name,
       p.city,
+      type && !CITY_TYPES.has(type) ? `tipo ${type}` : null,
       fmtRating(p),
       p.open_now === true ? 'aberto agora' : p.open_now === false ? 'fechado agora' : null,
       p.business_status === 'closed_permanently'
@@ -530,31 +576,6 @@ export class ToolState {
 }
 
 // ------------------------------------------------------------------------ as contas
-const isPoint = (lat: number, lng: number) =>
-  Number.isFinite(lat) &&
-  Number.isFinite(lng) &&
-  !(lat === 0 && lng === 0) &&
-  Math.abs(lat) <= 90 &&
-  Math.abs(lng) <= 180;
-
-/** Os círculos ao longo da linha reta entre dois pontos: até quatro, de uns 40 km cada. */
-export function routeCircles(
-  from: { lat: number; lng: number },
-  to: { lat: number; lng: number },
-): { lat: number; lng: number; radius_m: number }[] {
-  const dist = km(from, to);
-  const n = Math.max(1, Math.min(ROUTE_MAX_CIRCLES, Math.ceil(dist / ROUTE_CIRCLE_KM)));
-  const radiusKm = Math.min(NEAR_MAX_KM, dist / n / 2 + 10);
-  return Array.from({ length: n }, (_, i) => {
-    const t = (i + 0.5) / n;
-    return {
-      lat: from.lat + (to.lat - from.lat) * t,
-      lng: from.lng + (to.lng - from.lng) * t,
-      radius_m: Math.round(radiusKm * 1000),
-    };
-  });
-}
-
 /**
  * A cidade que vale (D276, D282): com referência, a mais perto a até 400 km; sem referência, a primeira
  * do Brasil (senão a primeira). Nenhuma plausível: nulo, e a IA pergunta.
@@ -611,6 +632,9 @@ export function outingFromSearches(state: ToolState, ending: PlanSearchEnding): 
     candidatos: s.refs.slice(0, 12),
     achou: s.refs.length > 0,
     fora_da_cidade: s.neighbors,
+    // a busca feita é a busca do passo (fase 26): o app sabe que este passo já foi procurado
+    buscado: true,
+    busca: { palavras: s.o_que, tipo_google: '', aberto_agora: false, nota_minima: 0 },
   }));
   return {
     passos,

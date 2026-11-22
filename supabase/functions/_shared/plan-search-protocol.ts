@@ -44,6 +44,25 @@ export type DayTime = (typeof DAY_TIMES)[number];
 /** Uma referência curta de lugar que uma ferramenta devolveu nesta rodada: `p1`, `p2`… */
 export const PLACE_REF = /^p\d{1,3}$/;
 
+/** O ponto de referência de tudo (a posição ou a origem resolvida), arredondado a uns 1 km. */
+const pointSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+});
+
+/**
+ * Como procurar um passo (fase 26, a 3.1): as palavras, o tipo do Google, o aberto agora e a nota
+ * mínima que a IA usou (no passo 1) ou usaria (nos seguintes, que o app procura quando chega a vez,
+ * em volta da escolha anterior). A IA os passa em `entregar_passeio`; a função os guarda aqui.
+ */
+export const stepSearchSchema = z.object({
+  palavras: z.string().max(80),
+  tipo_google: z.string().max(60),
+  aberto_agora: z.boolean(),
+  nota_minima: z.number().min(0).max(5),
+});
+export type StepSearch = z.infer<typeof stepSearchSchema>;
+
 export const stepSchema = z.object({
   ordem: z.number().int().min(1).max(MAX_STEPS),
   /** nas palavras da pessoa: "café", "cortar o cabelo" */
@@ -57,6 +76,20 @@ export const stepSchema = z.object({
   achou: z.boolean(),
   /** os candidatos são dos vizinhos: nenhum dentro da cidade dita (a tela diz) */
   fora_da_cidade: z.boolean(),
+  // ------------------------------------------------- o que a função preenche ao entregar (fase 26)
+  // Opcionais só deste lado: o schema da ferramenta continua sem opcional. O app em cache não os lê
+  // (o `z.object` descarta chave a mais), e uma conversa guardada por uma versão de antes não os tem.
+  /** como procurar este passo (as palavras, o tipo, o aberto agora, a nota mínima) */
+  busca: stepSearchSchema.optional(),
+  /**
+   * o centro da busca que não depende da escolha anterior: a cidade resolvida (`na_cidade`) ou o
+   * destino (`no_caminho` até ele); null quando não há ou não se achou
+   */
+  centro: pointSchema.nullable().optional(),
+  /** a IA procurou este passo nesta rodada (no passo a passo, só o passo 1 costuma vir procurado) */
+  buscado: z.boolean().optional(),
+  /** quantos candidatos as ferramentas devolveram e a IA deixou de fora por não serem do tipo pedido */
+  descartados: z.number().int().min(0).optional(),
 });
 export type PlanStep = z.infer<typeof stepSchema>;
 
@@ -79,6 +112,16 @@ export const outingSchema = z.object({
   destino: z.string().max(120),
   /** de onde a pessoa sai, quando o pedido diz diferente do contexto ("saindo de Papanduva"); '' senão */
   origem: z.string().max(120),
+  // ------------------------------------------------- o que a função preenche ao entregar (fase 26)
+  /** a coordenada do destino, resolvida pela função (é a parada de cidade da 3.4); null sem destino */
+  destino_centro: pointSchema.nullable().optional(),
+  /** os minutos do passeio todo lidos do pedido ou das respostas pela IA; 0 (ou ausente) quando não disse */
+  tempo_min: z
+    .number()
+    .int()
+    .min(0)
+    .max(24 * 60)
+    .optional(),
 });
 export type Outing = z.infer<typeof outingSchema>;
 
@@ -112,12 +155,6 @@ export const planSearchResultSchema = z.object({
 });
 export type PlanSearchResult = z.infer<typeof planSearchResultSchema>;
 
-/** O ponto de referência de tudo (a posição ou a origem resolvida), arredondado a uns 1 km. */
-const pointSchema = z.object({
-  lat: z.number().min(-90).max(90),
-  lng: z.number().min(-180).max(180),
-});
-
 /**
  * O pedido ao planejador. `modo` `planejar` é a conversa (o padrão); `gerar_pedidos` e `julgar` são
  * da bateria do laboratório (fase 27, a 3.3), só para quem está em `lab_access`, com saída
@@ -126,6 +163,13 @@ const pointSchema = z.object({
 export const planSearchRequestSchema = z.object({
   modo: z.enum(['planejar', 'gerar_pedidos', 'julgar']).default('planejar'),
   kind: z.enum(['plan', 'today']).default('plan'),
+  /**
+   * o passo a passo (fase 26, a 3.1): o app sabe procurar os passos seguintes em volta da escolha
+   * anterior, então a IA planeja uma vez, procura só o passo 1 e entrega todos os passos com a busca
+   * de cada um; quando vai perguntar, não procura. O app em cache não manda o campo e recebe os
+   * candidatos de todos os passos, como antes.
+   */
+  passo_a_passo: z.boolean().default(false),
   text: z.string().min(1),
   questions: z.array(planQuestionSchema).max(MAX_QUESTIONS).default([]),
   answers: z.array(z.string().max(500)).max(MAX_QUESTIONS).default([]),
