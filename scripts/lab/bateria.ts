@@ -26,6 +26,7 @@ import {
 } from '../../src/features/intake/flow.ts';
 import { reachOf, readReach, reachQuestion } from '../../src/features/intake/reach.ts';
 import type { Json } from '../../src/lib/supabase/database.types.ts';
+import { comRetentativa } from './retentativa.ts';
 import {
   cidadePeloRotulo,
   cidadesDaRodada,
@@ -397,7 +398,7 @@ export async function runBateria(
       cobrancas,
       nota,
     });
-    log(`bateria: ${scenario} ${resultados.at(-1)?.status ?? '?'} · ${detail.slice(0, 160)}`);
+    log(`bateria: ${scenario} ${resultados.at(-1)?.status ?? '?'} · ${detail.slice(0, 700)}`);
   }
 
   // 3. a rodada gravada, e a tabela
@@ -421,21 +422,6 @@ export async function runBateria(
     teto_usd: BATERIA_TETO_USD,
     juiz_media: media,
   };
-  await gravar(b, cfg, {
-    id: randomUUID(),
-    startedAt,
-    status,
-    summary,
-    diagnostics,
-    checks: resultados.map((r) => ({
-      scenario: r.scenario,
-      status: r.status,
-      latency_ms: r.latency_ms,
-      detail: r.detail,
-      data: r.data,
-    })),
-  });
-
   const head =
     '| pedido | padrão | de | resultado | juiz | US$ | o que saiu |\n|---|---|---|---|---|---|---|';
   const rows = resultados.map((r, i) => {
@@ -451,6 +437,22 @@ export async function runBateria(
   const report = `## Bateria de pedidos de leigo · rodada ${String(rodada)} de ${today}\n\n${summary}\n\nSemente \`${seed}\`. Padrões da rodada:\n${padroes.map((p) => `- ${p}`).join('\n')}\n\n${[head, ...rows].join('\n')}\n\n### As leituras\n\n${[leiturasHead, ...leiturasRows].join('\n')}\n\nBuscas no Google (pelo planejador): ${String(buscas)} (~US$ ${usd(custoGoogle)} a US$ ${String(GOOGLE_USD_POR_BUSCA)} cada, antes da faixa grátis); buscas na Geoapify (as sugestões): ${String(calls.places)}${calls.noSource ? ' (sem fonte)' : ''}.\n`;
   console.log(report);
   if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, report);
+
+  // a rodada gravada depois do relatório: se o banco falhar, a tabela já está no log e no resumo
+  await gravar(b, cfg, {
+    id: randomUUID(),
+    startedAt,
+    status,
+    summary,
+    diagnostics,
+    checks: resultados.map((r) => ({
+      scenario: r.scenario,
+      status: r.status,
+      latency_ms: r.latency_ms,
+      detail: r.detail,
+      data: r.data,
+    })),
+  });
   return status === 'fail' ? 1 : 0;
 }
 
@@ -474,33 +476,59 @@ async function gravar(
 ): Promise<void> {
   const commit = process.env.GITHUB_SHA ?? null;
   // o banco é sempre o da produção (o preview da Vercel usa o mesmo projeto, D106): o alvo do painel
-  ok(
-    await b.client.from('lab_runs').insert({
-      id: run.id,
-      target: cfg.target,
-      source: 'bateria',
-      commit_sha: commit,
-      status: run.status,
-      summary: run.summary.slice(0, 500),
-      started_at: run.startedAt.toISOString(),
-      finished_at: new Date().toISOString(),
-      diagnostics: run.diagnostics as NonNullable<Json>,
-    }),
-    'gravar a rodada da bateria',
+  await comRetentativa(
+    async () => {
+      ok(
+        await b.client.from('lab_runs').insert({
+          id: run.id,
+          target: cfg.target,
+          source: 'bateria',
+          commit_sha: commit,
+          status: run.status,
+          summary: run.summary.slice(0, 500),
+          started_at: run.startedAt.toISOString(),
+          finished_at: new Date().toISOString(),
+          diagnostics: run.diagnostics as NonNullable<Json>,
+        }),
+        'gravar a rodada da bateria',
+      );
+    },
+    { tentativas: 3, esperaMs: (n) => n * 3_000 },
   );
-  if (run.checks.length > 0) {
-    ok(
-      await b.client.from('lab_checks').insert(
-        run.checks.map((c) => ({
-          run_id: run.id,
-          scenario: c.scenario,
-          status: c.status,
-          latency_ms: c.latency_ms,
-          detail: c.detail.slice(0, 1000),
-          data: c.data as NonNullable<Json>,
-        })),
-      ),
-      'gravar os pedidos da bateria',
-    );
+  // os pedidos um a um, cada um com até três tentativas (a rede do laboratório falha de vez em
+  // quando: um 522 do Cloudflare perdeu os dez pedidos da primeira rodada): um que falhe não leva
+  // os outros, e a lista dos que não gravaram vai para o erro
+  const perdidos: string[] = [];
+  for (const c of run.checks) {
+    try {
+      await comRetentativa(
+        async () => {
+          ok(
+            await b.client.from('lab_checks').insert({
+              run_id: run.id,
+              scenario: c.scenario,
+              status: c.status,
+              latency_ms: c.latency_ms,
+              detail: c.detail.slice(0, 1000),
+              data: c.data as NonNullable<Json>,
+            }),
+            `gravar ${c.scenario}`,
+          );
+        },
+        {
+          tentativas: 3,
+          esperaMs: (n) => n * 3_000,
+          onFalha: (n, err) =>
+            log(
+              `bateria: gravar ${c.scenario}, tentativa ${String(n)} falhou: ${(err instanceof Error ? err.message : String(err)).split('\n')[0]?.slice(0, 200) ?? ''}`,
+            ),
+        },
+      );
+    } catch {
+      perdidos.push(c.scenario);
+    }
+  }
+  if (perdidos.length > 0) {
+    throw new Error(`gravar os pedidos da bateria: não gravou ${perdidos.join(', ')}`);
   }
 }
