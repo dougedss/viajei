@@ -994,6 +994,35 @@ e na rodada da bateria; o que falta é um celular de verdade.
 
 Anotações:
 
+### 1.34 O passeio um passo de cada vez · 15 min (fase 26) · sem prova até a viagem
+
+Como o 1.24 a 1.33, fica como documentação até a viagem (D299 em diante). O passo a passo (a IA procura
+só o passo 1; o app procura o seguinte em volta da escolha), a ordem, a conta do tempo, a marca do que
+estoura, a janela da hora do dia e o destino como parada estão provados na CI (Vitest, a função com
+entrada fixa, o `conversa.spec`, o `nova-viagem.spec` e o `tela.spec`) e na rodada da bateria; o que
+falta é um celular de verdade.
+
+- [ ] **Dois passos, um de cada vez.** No celular, escreva "amanhã quero ir numa cachoeira e depois tomar
+  um café, tenho a tarde": só as cachoeiras ("1 de 2 · Cachoeira"); nenhum café na tela. Toque numa
+  cachoeira: o total aparece ("O passeio dá cerca de…; vocês têm a tarde"); "Continuar" mostra "Procurando
+  café perto de …" e depois os cafés **em volta da cachoeira escolhida**, cada um com "a cerca de N min de
+  <cachoeira> · +N min de estrada". A linha "1 · <cachoeira> · mudar" fica em cima.
+- [ ] **A opção marcada.** Um café que estoura a tarde aparece "Não cabe no tempo: daria …", esmaecido, e
+  ainda dá para tocá-lo. Se nenhum couber, a tela diz e oferece "Mais tempo" e "Voltar um passo".
+- [ ] **Voltar um passo.** Toque em "Voltar um passo": a cachoeira volta, o aviso "As opções de café vão
+  ser procuradas de novo" aparece; escolha outra cachoeira e os cafés mudam.
+- [ ] **A pergunta da ordem e a do tempo.** "quero uma cachoeira e um café": a IA pergunta "O que vem
+  primeiro?" (com "Tanto faz") e "Quanto tempo vocês têm?" com opções que combinam com o pedido; responda
+  "1 hora e meia" com as suas palavras e a conta usa 1 h 30.
+- [ ] **A hora do dia.** "domingo um café da manhã numa padaria e depois um mirante, voltar antes do
+  almoço": se a hora prevista de um passo cair fora da manhã, o aviso aparece no cartão e na revisão
+  ("Pedido de manhã; o roteiro chega às …").
+- [ ] **O destino como parada.** "vou pra joinville sábado, queria parar pra tomar um café no caminho":
+  o café no caminho e Joinville como parada depois dele, na revisão e na viagem criada.
+- [ ] **A lista de viagens** abre inteira, sem pular quando o convite de instalar aparece.
+- [ ] **O VoiceOver** no cabeçalho do passo, na linha dos passos feitos, nos cartões com o desvio e a
+  marca do tempo, e em "Voltar um passo".
+
 ## Parte 2 · Android
 
 O mesmo percurso, mais curto: aqui está só o que muda no Android, e no fim o resto, item a item,

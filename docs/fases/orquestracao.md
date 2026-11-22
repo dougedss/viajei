@@ -860,4 +860,111 @@ _(preenchido pelo orquestrador em 20/11, ~19h50 UTC, a partir do transcript, do 
   commit de fechamento da fase, junto com este relatório, o plano e a ideia de 21/11.
 
 ### Sessão
+- **Chat do VS Code aberto pelo Douglas**, `session_id` `be5c7d02-a894-4652-acfe-628e173b2664`, das 11h38 UTC de 22/11
+  (o prompt colado) ao resumo final (lido por ele às 18h59 UTC); a última resposta às 19h01 UTC (a dos laboratórios,
+  abaixo). Pela transcrição: **667 respostas, todas no Fable 5.1** (contra a regra de 08/11; o Douglas não trocou de
+  modelo e não comentou), duas compactações (13h13 e 18h06 UTC), 5 mensagens do Douglas ("fechamos aqui?" às 15h31;
+  "seguir ate o fim" às 15h32; "aindaz?" às 16h05; "ok, ja vou pedir a proxima tarefa para gerar o prompt e iniciar"
+  às 16h16; a dos laboratórios às 18h59), 2,23 M tokens de saída, 295,7 M lidos do cache, 8,39 M criados; 11
+  chamadas de Bash com `git commit` e 9 com `git push` (contagem por expressão, aproximada). **11 commits** na
+  `main`, de `6613956` (a 3.0: o CLS era a troca de fonte) a `0460200`, com o de fechamento `16e076e` `fase 27: a
+  fonte e o planejador` (o push com tudo), seguido de cinco commits de correção (os e2e do planejador, a gravação da
+  bateria, a cota do laboratório na `plan-trip`) e dos números. Sem o JSON do `claude -p`, o custo em dinheiro da
+  sessão não foi medido.
+- **CI na `fase-27`:** vermelha em `16e076e` (45027015535: três e2e do planejador, o teste errado e dois defeitos da
+  tela) e em `c623998` (45030087147: o e2e de Canoinhas por substring); verde em `b94b0c3` (45031823960), `e41921f`
+  (45041294100), `60c6771` (45044321552) e `0460200` (45046277618); na `main`, 45040361350 (`b94b0c3`) e
+  45047805186 (`0460200`, 17h09 UTC). 1.566 Vitest, 669 pgTAP, 79 Playwright.
+- **Laboratórios e medições:** a `medir-desempenho` (45019395883, `aca13be`, 11h52 UTC), que leu a causa do CLS da
+  `nova_viagem` (as fontes carregando depois do primeiro texto); o agendado de 22/11 (45032989466, `aca13be`,
+  14h28–15h07 UTC) **40 verdes** contra a produção da 25; **o preview (45033575599, `b94b0c3`, 15h08–15h48 UTC) 37
+  verdes, 0 vermelhos, 4 pulados, a `nova_viagem` com CLS 0**; a bateria 1 (45036576355, lab-b, 15h48–15h52 UTC) 8
+  de 10, juiz 7,0, US$ 1,21, os dez pedidos perdidos num 522 ao gravar (defeito da bateria, corrigido em
+  `e41921f`); **a produção (45040801438, `b94b0c3`, 15h54–16h20 UTC) 37 verdes, 1 vermelho, 3 pulados**: o
+  vermelho é **o Lighthouse da lista de viagens (performance 89, CLS 0,16 sem elemento identificado)**, intermitente
+  desde 18/11; a `nova_viagem` com CLS 0,001 e performance 95 (a 3.0 provada); a bateria 2 (45041293979, `e41921f`,
+  16h21–16h24 UTC) **10 de 10 nas cobranças, juiz 7,0, US$ 1,06, nenhuma escrita rodou** (a cota da `plan-trip` para
+  a conta do laboratório, corrigida em `60c6771` sem rodada nova). **Toda a IA da fase: US$ 1,0554; o Google, 37
+  buscas** (as 1.000 grátis do mês), do teto de US$ 5,00 (D296).
+- **No hospedado:** a `0020` às 14h33 UTC com o `--dry-run` lido; a `plan-search` v1 e a `find-places` v7 às 14h33;
+  **a primeira chamada real ao Google** (200, 20 lugares em Canoinhas: a chave vale); a `plan-trip` v10 às 16h52;
+  nenhum secret.
+- **O merge:** `git push origin b94b0c3:main` às 15h48 UTC, com o preview verde e antes do laboratório da produção
+  (a regra da seção 1 de então); os três commits seguintes por fast-forward depois da CI verde de cada um.
+- **Desvios de regra:** a sessão rodou inteira no Fable 5.1; **a segunda rodada da bateria** pela cláusula da seção
+  1 ("uma segunda só se a primeira ficou vermelha por um defeito que a CI passou a cobrir"), aplicada a um defeito
+  do próprio instrumento. **Às 18h59 UTC o Douglas, lendo a tabela do resumo, deu a regra nova:** "pq que parece
+  que se repete, deveria so rodar um de cada, ainda mais oq tem custo.. Apenas deveria rodar producao". O chat da
+  27 respondeu às 19h01 (nada rodou duas vezes por acidente; o custo foi a segunda bateria), **gravou a regra na
+  memória** (`feedback-laboratorio-uma-vez.md`: um laboratório por fase, na produção, depois do merge; nenhum no
+  preview; a bateria e qualquer medição com custo uma vez) e ofereceu corrigir as três linhas do plano com a regra
+  antiga; às 19h10 UTC seguia aberto, sem resposta dele. O que a sessão não conferiu está na D298.
+
+### Portão de saída (conferido às ~19h10 UTC de 22/11 pelo orquestrador, a pedido do Douglas: "proxima")
+- a ponta da `fase-27` está na `origin/main`: sim, `0460200` (o código até `60c6771`; `0460200` é só documentação),
+  com o commit `fase 27: a fonte e o planejador` (`16e076e`); as branches remotas `fase-23`, `fase-25` e `fase-27`
+  ainda existem.
+- CI verde no sha da `main` (45047805186): sim. O laboratório da produção (45040801438, em `b94b0c3`): vermelho só no
+  Lighthouse da lista de viagens, registrado na D296 pela regra da seção 1 (vira o primeiro item da próxima fase);
+  depois de `b94b0c3` só entraram a bateria, a cota do laboratório na `plan-trip` e a documentação.
+- `docs/decisoes.md` tem a seção "Fase 27 · A fonte e o planejador (22/11/2026)", D284 a D298, em sequência: sim.
+  `docs/fases/fase-27.md`, `docs/fases/orquestracao.md` (o portão de entrada), o plano e a ideia de 21/11 commitados
+  em `16e076e`: sim. Este fechamento fica fora do git até o commit de fechamento da próxima fase.
+- a memória do projeto atualizada depois do fim: sim (`viajei-projeto.md`, "Fase 27 fechada em 22/11/2026", pela
+  sessão; `viajei-google-cloud.md` com a chave testada; `feedback-laboratorio-uma-vez.md` reescrita às 19h01 UTC
+  com a regra nova); completada pelo orquestrador (a 26 aberta).
+- o resumo final foi dado (o Douglas o leu e comentou a tabela dos laboratórios às 18h59 UTC); o orquestrador
+  conferiu os números pela D296, pelo git e pelas execuções do GitHub, não pelo texto do resumo.
+- **Decisão do Douglas de 22/11, à noite:** a regra do laboratório (acima), já no prompt da 26.
+- **Pendências do Douglas:** o `.env.example` (modificado, não lido); apagar as branches remotas `fase-23`, `fase-25`
+  e `fase-27`; girar ou não a chave do Google (passou pelo chat em 22/11); a bateria no cron e com que teto (D293:
+  US$ 32 a 37 por mês a cheio, uns US$ 15 na prática); "os que falharam voltam" (em aberto); as três linhas do
+  plano com a regra antiga do laboratório (a sessão da 27 ofereceu corrigir); as sessões no Fable (a regra de
+  08/11 pede o Opus: se mudou, dizer ao orquestrador).
+- **O que fica para a 26 (a 3.0 dela):** o Lighthouse da lista de viagens (CLS 0,16); a escrita da bateria não
+  medida pelo planejador; os achados da D296 (a cidade chutada a partir de uma região, os candidatos fora do tipo,
+  o horário da feira que o roteiro não avisou).
+
+## Fase 26 · O passeio um passo de cada vez (sobre o planejador)
+
+### Portão de entrada (aberto às ~19h15 UTC de 22/11, a pedido do Douglas: "proxima")
+- fase 27 na `main`: sim, `0460200`, com o portão de saída conferido acima. A dependência (27 → 26) está
+  satisfeita. A ordem 23 → 25 → 27 → 26 → 28 → 29 → 19 → 20 → 21 (o plano, desde 21/11): o Douglas pediu "proxima"
+  às ~19h00 UTC de 22/11 sem objeção (às 16h16 UTC tinha dito ao chat da 27 que ia pedir a próxima), e o
+  orquestrador abriu a 26.
+- o último laboratório na produção (45040801438): vermelho só no Lighthouse da lista de viagens (performance 89,
+  CLS 0,16 sem elemento identificado), registrado na D296 como o primeiro item desta fase (a 3.0 do prompt).
+- `docs/decisoes.md` até a D298. **As D da fase 26 começam na D299.** Nenhuma migration prevista (a conversa mora
+  no aparelho; a parada de cidade já existe pelo tipo); se precisar, a **`0021`**, só acrescentando; o Dexie na v8;
+  a `plan-search` (v1) a republicar compatível com o app em cache; nenhum secret; a chave do Google testada.
+- memória do projeto atualizada depois da fase 27: sim (pela sessão), completada pelo orquestrador (o parágrafo da
+  fase 26).
+- **A regra nova do laboratório** (o Douglas, 22/11, 18h59 UTC) **está no prompt**: um laboratório por fase, na
+  produção, depois do merge; nenhum no preview; a bateria uma vez, sem segunda rodada; a `medir-desempenho` uma
+  vez, só para a 3.0 (sem custo), se os artefatos do laboratório não bastarem.
+- `docs/fases/fase-26.md` escrito às ~19h15 UTC de 22/11 pelo orquestrador, a partir do plano (a fase 26, as sete
+  decisões de 20/11 e o que foi descartado, o item 7 de 21/11, as fases 28 e 29), das ideias de 20 e 21/11, das
+  D284 a D298 (em especial a D286, a D287, a D288 a D291, a D293, a D296 a D298), D270 a D283, D224 a D238, D208,
+  D129, D130, D133, D162, D180, D211, da memória (`feedback-laboratorio-uma-vez.md` com a regra nova,
+  `viajei-prioridade-pesquisa-e-roteiro.md`, `viajei-google-cloud.md`) e de um levantamento do código em `0460200`
+  (`plan-search-protocol.ts`, `plan-search-ai.ts`, `plan-search-tools.ts`, `plan-search-handler.ts`,
+  `google-places.ts`, `drive.ts`, `places-schema.ts`, `plan-protocol.ts`; `intake/plan-search.ts`, `flow.ts`,
+  `search.ts`, `reach.ts`, `today.ts`, `hours.ts`, `assemble.ts`, `conversation.ts`, `useConversation.ts`,
+  `OptionsStep.tsx`, `QuestionsStep.tsx`, `CriarViagemPage.tsx`, `ReviewStep.tsx`; `HomePage.tsx`,
+  `RequireSession.tsx`, `lighthouse.ts`, `tela.spec.ts`; `bateria.ts`, `bateria-padroes.ts`, `app-conversa.ts`,
+  `lab.yml`; `e2e/helpers/planner.ts`). **O desenho recomendado:** a IA planeja uma vez e procura só o passo 1 (um
+  campo `passo_a_passo` no pedido, compatível com o app em cache; quando vai perguntar, não procura), a entrega
+  ganha `busca`, `centro` e `tempo_min` preenchidos pela função (os schemas das ferramentas continuam sem opcional),
+  **o app procura o passo seguinte pela relação** (a `find-places` do Google; `routeCircles` e `withinCity` puros,
+  reaproveitados no app) e diz nos cartões o que cada lugar acrescenta (o desvio), a pergunta da ordem ("O que vem
+  primeiro?", "Tanto faz"), a ordem final a dos passos (`bestOrder` só dentro do passo), a tela um passo por vez
+  com "Voltar um passo", a pergunta do tempo do passeio todo pelo planejador (lida por `readReach`), a conta
+  (a estrada, a permanência, os horários do Google) com o total à vista e o que estoura marcado, a janela da hora
+  do dia e o aviso antes de criar, o destino como parada de cidade (o objetivo da 28), seis cobranças novas na
+  bateria e a rodada única, teto US$ 3,00. **Marcado como não conferido:** se a IA de hoje pergunta a ordem quando
+  não dita; o custo de uma conversa de dois passos; o nome `kindOfGoogleTypes` da D291; as partes do dia em minutos
+  (suposição do orquestrador); a causa do CLS da lista (só a hipótese: as seções que chegam depois empurram a
+  lista). Fora do git até o commit de fechamento da fase, junto com este relatório.
+
+### Sessão
 _(a abrir pelo Douglas num chat novo; a preencher no próximo passo)_
