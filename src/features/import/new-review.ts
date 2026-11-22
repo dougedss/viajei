@@ -7,6 +7,7 @@ import { lastOrigin, proposeHeader } from './new-trip.ts';
 import { reviewOf, type ReviewStop } from './plan.ts';
 import type { Schedule } from '@/features/intake/assemble.ts';
 import type { OpeningPeriod } from '@shared/places-schema.ts';
+import type { DayTime } from '@shared/plan-search-protocol.ts';
 
 /** O rótulo do lugar confirmado no mapa (a revisão mostra; a atribuição do OSM vai junto). */
 export const OSM_LABEL = 'Conferido no mapa (OpenStreetMap)';
@@ -44,6 +45,8 @@ export async function newTripReview(
       google?: Record<string, string>;
       /** os períodos de funcionamento de cada lugar do Google, para a conta do passeio (fase 27) */
       hours?: Record<string, OpeningPeriod[]>;
+      /** a hora do dia dita para cada lugar, pela chave da revisão (fase 26) */
+      dayTimes?: Record<string, DayTime>;
     };
   },
 ): Promise<StoredReview> {
@@ -75,6 +78,7 @@ export async function newTripReview(
             const osm = options.plan?.osm?.[s.key] ?? null;
             const google = options.plan?.google?.[s.key] ?? null;
             const hours = options.plan?.hours?.[s.key] ?? null;
+            const dayTime = options.plan?.dayTimes?.[s.key] ?? null;
             // o rótulo diz de onde veio o lugar: o Google (fase 27) ou o OpenStreetMap
             const located =
               s.geo?.status === 'found' && s.geo.via === 'file'
@@ -88,6 +92,7 @@ export async function newTripReview(
                     osm,
                     google_place_id: google,
                     hours,
+                    day_time: dayTime,
                   }
                 : s;
             // a regra de ouro: a sugestão nasce desligada, e só a pessoa a liga

@@ -524,6 +524,95 @@ test('o lugar nomeado com dois no mapa: os dois candidatos do passo, e o caminho
   await expect(tracar).toBeEnabled();
 });
 
+test('vou pra Joinville com um café no caminho (fase 26, a 3.4): o café no caminho e Joinville como parada de cidade, na ordem', async ({
+  page,
+  context,
+}) => {
+  test.setTimeout(150_000);
+  await nominatimDaConversa(page);
+  await rotaForjada(context);
+  await buscaNoMapa(context, () => []);
+  const pedidos: PlanBody[] = [];
+  await page.route('**/functions/v1/plan-trip', (route) =>
+    respondSse(
+      route,
+      escrita({
+        trip: { name: 'Joinville', start_date: D[0] ?? null, end_date: D[0] ?? null },
+        days: [
+          {
+            date: D[0] ?? null,
+            title: 'Rumo a Joinville',
+            start: '08:00',
+            stops: [
+              { ref: 'e1', note: 'um café no caminho' },
+              { ref: 'e2', note: null },
+            ],
+          },
+        ],
+        suggestions: [],
+        quests: [],
+        checklist_before: [],
+        checklist_pack: [],
+      }),
+      (body) => pedidos.push(body as PlanBody),
+    ),
+  );
+  // a IA localizou Joinville, procurou o café no caminho e entregou o destino com a coordenada
+  await planejador(context, () =>
+    rodada(
+      achados([
+        lugarGoogle('g-cafe-br', 'Café da Estrada', -26.32, -49.5, 'São Bento do Sul', {
+          hours: null,
+          opening_hours: null,
+        }),
+      ]),
+      passeio([passo(1, 'café', ['p1'], { relacao: 'no_caminho', cidade: '', buscado: true })], {
+        destino: 'Joinville',
+        destino_centro: { lat: -26.3045, lng: -48.8487 },
+      }),
+    ),
+  );
+  const user = await criarUsuario('Destino');
+  await entrar(page, user.email);
+  await posicaoDecidida(page, 'declined');
+  await campo(page).fill(
+    'vou pra joinville sabado, queria parar pra tomar um cafe no caminho, saindo de Papanduva',
+  );
+  await page.getByRole('button', { name: 'Montar a viagem' }).click();
+  await expect(page.locator('[data-option]')).toHaveCount(1, { timeout: 20_000 });
+  // um passo só: o resumo diz o destino, e o caminho conta o café e Joinville
+  await page.getByRole('button', { name: /^Café da Estrada/ }).click();
+  await expect(page.locator('[data-summary]')).toContainText('destino: Joinville');
+  await page.getByRole('button', { name: 'Traçar o caminho por 2 lugares' }).click();
+  await expect(page.getByRole('heading', { name: 'Revisar a viagem' })).toBeVisible({
+    timeout: 30_000,
+  });
+  // a escrita recebeu o café e Joinville (a cidade, do tipo cidade), nessa ordem
+  const escrita1 = pedidos.find((p) => p.step === 'plan');
+  expect(escrita1?.places?.chosen.map((c) => [c.name, c.kind])).toEqual([
+    ['Café da Estrada', 'food'],
+    ['Joinville', 'city'],
+  ]);
+  await expect(page.getByRole('checkbox', { name: 'Joinville', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Criar a viagem' }).click();
+  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
+  const tripId = page.url().split('/').at(-2) ?? '';
+  await expect
+    .poll(
+      async () =>
+        (await linhas('stops', `trip_id=eq.${tripId}&select=name,kind,lat&order=position`)).map(
+          (s) => [s.name, s.kind, s.lat !== null],
+        ),
+      { timeout: 20_000 },
+    )
+    .toEqual([
+      ['Saída de Papanduva, SC', 'origin', true],
+      ['Café da Estrada', 'food', true],
+      ['Joinville', 'city', true],
+      ['Chegada em Papanduva, SC', 'origin', true],
+    ]);
+});
+
 test('nenhum candidato para o passo: a tela diz, oferece procurar mais longe (o Google num círculo maior), e não há viagem vazia', async ({
   page,
   context,

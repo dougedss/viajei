@@ -255,6 +255,13 @@ describe('a viagem nasce do que foi escolhido', () => {
     expect(assemble(input()).pending).toEqual([]);
   });
 
+  it('a hora do dia dita de cada escolha vai para a revisão pela chave (fase 26); sem ela, nada', () => {
+    const built = assemble(input({ chosen: [{ ...TORTEN, dayTime: 'manha' }] }));
+    // d0s0 é a saída, d0s1 a sugestão que cai antes no caminho (o museu), d0s2 a escolha
+    expect(built.dayTimes).toEqual({ d0s2: 'manha' });
+    expect(assemble(input()).dayTimes).toEqual({});
+  });
+
   it('uma viagem só com a saída e a chegada não tem lugar', () => {
     expect(
       hasPlace([

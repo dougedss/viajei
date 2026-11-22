@@ -58,6 +58,11 @@ export type Conversation = {
    */
   plan?: Outing | null;
   found?: FoundPlace[];
+  /**
+   * o tempo que a pessoa mudou na tela das opções (fase 26, a 3.3: "nada cabe" → mais tempo): vale
+   * acima da resposta à pergunta do tempo e do que a IA leu do pedido; não volta à IA (ela já planejou)
+   */
+  time_answer?: string | null;
   started_at: string;
 };
 

@@ -34,6 +34,9 @@ export function planSearchRequestOf(c: Conversation): PlanSearchRequest {
   }
   return {
     kind: c.kind,
+    // o passo a passo (fase 26): a IA procura só o passo 1; o app procura os seguintes em volta da
+    // escolha anterior quando chega a vez deles
+    passo_a_passo: true,
     text: c.text,
     questions: c.questions,
     answers,

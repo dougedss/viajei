@@ -408,14 +408,28 @@ test('feirinha, café e cortar o cabelo em Canoinhas pelo planejador: os passos 
   await page.getByRole('button', { name: 'Montar a viagem' }).click();
 
   // o andamento em palavras enquanto a IA procura, e nenhuma pergunta: a primeira rodada entregou
-  await expect(page.locator('[data-option]')).toHaveCount(3, { timeout: 30_000 });
-  expect(ia.pedidos).toHaveLength(1);
-  // os passos na ordem dita (a feirinha primeiro), cada um com "n de 3"; a feirinha sem candidato
+  // um passo de cada vez (fase 26): o passo 1 (a feirinha, sem candidato) e o pendente com a pergunta
   const steps = page.locator('[data-step]');
-  await expect(steps).toHaveCount(3);
-  await expect(steps.nth(0)).toContainText('1 de 3 · Feirinha');
-  await expect(steps.nth(1)).toContainText('2 de 3 · Café');
-  await expect(steps.nth(2)).toContainText('3 de 3 · Cortar o cabelo');
+  await expect(steps.first()).toContainText('1 de 3 · Feirinha', { timeout: 30_000 });
+  expect(ia.pedidos).toHaveLength(1);
+  await expect(steps).toHaveCount(1);
+  await expect(page.locator('[data-option]')).toHaveCount(0);
+  // cada coisa pedida num estado, à vista: a feirinha pendente (o passo e a pergunta)
+  await expect(page.locator('[data-fate="pending"]')).toHaveCount(2);
+  await expect(page.locator('[data-pending-question]')).toContainText('Onde fica a feirinha?');
+  // o resumo e "Traçar o caminho" só no fim
+  await expect(page.locator('[data-summary]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Traçar o caminho/ })).toHaveCount(0);
+  // "Tirar da viagem" o passo da feirinha sem candidato; a pergunta pendente fica; e continuar
+  await page
+    .getByRole('region', { name: 'Feirinha', exact: true })
+    .getByRole('button', { name: 'Tirar da viagem' })
+    .click();
+  await page.getByRole('button', { name: 'Continuar' }).click();
+  // o passo 2: os cafés que a IA achou em Canoinhas (a cidade não depende da escolha anterior)
+  await expect(steps.first()).toContainText('2 de 3 · Café');
+  await expect(page.locator('[data-steps-done]')).toContainText('Feirinha: tirado da viagem');
+  await expect(page.locator('[data-option]')).toHaveCount(2);
   await expect(page.getByText(/2 opções no mapa em Canoinhas/)).toBeVisible();
   // os cartões do Google: a nota, o aberto agora, o fechado agora
   const cafe = page.getByRole('button', { name: /^Café da Praça/ });
@@ -424,22 +438,15 @@ test('feirinha, café e cortar o cabelo em Canoinhas pelo planejador: os passos 
   await expect(page.getByRole('button', { name: /^Padaria do Centro/ })).toContainText(
     'Fechado agora',
   );
-  // cada coisa pedida num estado, à vista: a feirinha pendente (com a pergunta), o café e o salão sem escolha
-  await expect(page.locator('[data-fate="pending"]')).toHaveCount(2);
-  await expect(page.locator('[data-pending-question]')).toContainText('Onde fica a feirinha?');
-  await expect(page.locator('[data-summary]')).toHaveText(
-    '0 escolhidos · 2 sem escolha: Café, Cortar o cabelo · 2 pendentes: Feirinha, A feirinha',
-  );
-  // "Tirar da viagem" o salão e o passo da feirinha sem candidato; a pergunta pendente fica; o café escolhido
+  await cafe.click();
+  await page.getByRole('button', { name: 'Continuar' }).click();
+  // o passo 3: o salão, tirado da viagem; o fim, com o resumo de cada coisa pedida
+  await expect(steps.first()).toContainText('3 de 3 · Cortar o cabelo');
+  await expect(page.locator('[data-steps-done]')).toContainText('Café da Praça');
   await page
     .getByRole('region', { name: 'Cortar o cabelo' })
     .getByRole('button', { name: 'Tirar da viagem' })
     .click();
-  await page
-    .getByRole('region', { name: 'Feirinha', exact: true })
-    .getByRole('button', { name: 'Tirar da viagem' })
-    .click();
-  await cafe.click();
   await expect(page.locator('[data-summary]')).toHaveText(
     '1 escolhido · 1 pendente: A feirinha · 2 tirados: Feirinha, Cortar o cabelo',
   );
@@ -479,6 +486,195 @@ test('feirinha, café e cortar o cabelo em Canoinhas pelo planejador: os passos 
       ['Café da Praça', true, 'g-cafe-praca'],
       ['Chegada em Major Vieira, SC', true, null],
       ['Saída de Major Vieira, SC', true, null],
+    ]);
+});
+
+/**
+ * O passeio um passo de cada vez (fase 26, a decisão 1 do Douglas de 20/11): "quero ir numa cachoeira e
+ * depois tomar um café". A IA procura só o passo 1 (as cachoeiras) e entrega os dois passos; a tela
+ * mostra só a cachoeira; escolhida uma, "Continuar" procura os cafés em volta dela pela `find-places` do
+ * Google (respondida na página) e mostra o passo 2 com o que cada café acrescenta; a escolha muda as
+ * opções (outra cachoeira, outros cafés); o total do passeio fica à vista e o que estoura o tempo fica
+ * marcado; "Voltar um passo" avisa; a viagem nasce na ordem dos passos.
+ */
+const WIEGAND = lugarGoogle('g-wiegand', 'Cachoeira Wiegand', -26.95, -49.65, 'José Boiteux', {
+  categories: ['natural_feature', 'tourist_attraction'],
+  hours: null,
+  opening_hours: null,
+});
+const SALTO = lugarGoogle('g-salto', 'Salto do Rio Preto', -26.45, -50.6, 'Mafra', {
+  categories: ['natural_feature', 'tourist_attraction'],
+  hours: null,
+  opening_hours: null,
+});
+const CAFE_WIEGAND = lugarGoogle('g-cafe-w', 'Café da Serra', -26.9, -49.6, 'José Boiteux', {
+  hours: null,
+  opening_hours: null,
+});
+const CAFE_LONGE = lugarGoogle('g-cafe-l', 'Café do Litoral', -26.3, -48.85, 'Joinville', {
+  hours: null,
+  opening_hours: null,
+});
+const CAFE_SALTO = lugarGoogle('g-cafe-s', 'Café do Salto', -26.4, -50.55, 'Mafra', {
+  hours: null,
+  opening_hours: null,
+});
+
+test('o passeio um passo de cada vez: só a cachoeira; escolhida, "Continuar" procura o café em volta dela; a escolha muda as opções; o total à vista com o que estoura; "Voltar um passo" avisa; a viagem na ordem dos passos', async ({
+  page,
+  context,
+}) => {
+  test.setTimeout(180_000);
+  await nominatim(page);
+  await rotaForjada(context);
+  // a `find-places` do Google (o passo seguinte, pelo app): os cafés perto de onde o pedido manda; a
+  // busca por tipo da Geoapify (as sugestões) vazia
+  const mapa = await buscaNoMapa(context, (body) => {
+    if (!('provider' in body)) return [];
+    const b = body.bias;
+    if (!b) return [];
+    // perto da Wiegand (-26.95, -49.65): o café da serra e um longe demais; perto do Salto: outro
+    return b.lat < -26.7 ? [CAFE_WIEGAND, CAFE_LONGE] : [CAFE_SALTO];
+  });
+  const pedidos: PlanBody[] = [];
+  await escritor(
+    page,
+    {
+      trip: { name: 'Cachoeira e café', start_date: D1, end_date: D1 },
+      days: [
+        {
+          date: D1,
+          title: 'Cachoeira e café',
+          start: '08:00',
+          stops: [
+            { ref: 'e1', note: 'a cachoeira' },
+            { ref: 'e2', note: 'o café' },
+          ],
+        },
+      ],
+      suggestions: [],
+      quests: [],
+      checklist_before: [],
+      checklist_pack: [],
+    },
+    (body) => pedidos.push(body),
+  );
+  // a IA procurou só o passo 1 (as duas cachoeiras) e entregou os dois passos; a pessoa tem a tarde
+  const ia = await planejador(context, () =>
+    rodada(
+      achados([WIEGAND, SALTO]),
+      passeio(
+        [
+          passo(1, 'cachoeira', ['p1', 'p2'], {
+            relacao: 'perto_de_casa',
+            cidade: '',
+            buscado: true,
+            busca: { palavras: 'cachoeira', tipo_google: '', aberto_agora: false, nota_minima: 0 },
+          }),
+          passo(2, 'café', [], {
+            relacao: 'perto_do_anterior',
+            cidade: '',
+            buscado: false,
+            busca: { palavras: 'café', tipo_google: 'cafe', aberto_agora: false, nota_minima: 0 },
+          }),
+        ],
+        { tempo_min: 300 },
+      ),
+    ),
+  );
+  await context.grantPermissions(['geolocation']);
+  await context.setGeolocation(MAJOR_VIEIRA);
+  const user = await criarUsuario('PassoAPasso');
+  await entrar(page, user.email);
+  await posicaoDecidida(page, 'granted');
+  await campo(page).fill('amanhã quero ir numa cachoeira e depois tomar um café, tenho a tarde');
+  await page.getByRole('button', { name: 'Montar a viagem' }).click();
+
+  // o pedido ao planejador diz que o app sabe procurar os passos seguintes
+  await expect(page.locator('[data-option]')).toHaveCount(2, { timeout: 30_000 });
+  expect(ia.pedidos[0]).toMatchObject({ passo_a_passo: true });
+  // só o passo 1 na tela: as duas cachoeiras; nenhum café, nenhuma busca do app ainda
+  await expect(page.locator('[data-step="1"]')).toContainText('1 de 2 · Cachoeira');
+  await expect(page.locator('[data-step="2"]')).toHaveCount(0);
+  expect(mapa.pedidos.filter((p) => 'provider' in p)).toHaveLength(0);
+  const continuar = page.getByRole('button', { name: 'Continuar' });
+  await expect(continuar).toBeDisabled();
+  await expect(page.getByRole('button', { name: /^Traçar o caminho/ })).toHaveCount(0);
+  // cada candidato diz o total do passeio se for escolhido (a cachoeira mais a volta)
+  const wiegand = page.getByRole('button', { name: /^Cachoeira Wiegand/ });
+  await expect(wiegand).toContainText(/Daria \d+ h( \d\d)? no total/);
+
+  // escolhida a Wiegand, "Continuar": a busca do café em volta dela, pelo app
+  await wiegand.click();
+  await expect(page.locator('[data-outing-time]')).toContainText('O passeio dá cerca de');
+  await expect(page.locator('[data-outing-time]')).toContainText('vocês têm');
+  await continuar.click();
+  await expect(page.locator('[data-step="2"]')).toContainText('2 de 2 · Café', { timeout: 30_000 });
+  const buscas = mapa.pedidos.filter((p) => 'provider' in p);
+  expect(buscas).toHaveLength(1);
+  expect(buscas[0]).toMatchObject({
+    provider: 'google',
+    query: 'café',
+    type: 'cafe',
+    rank: 'distance',
+    bias: { lat: -26.95, lng: -49.65, radius_m: 15_000 },
+  });
+  // o passo 1 feito, numa linha; o passo 2 com o que cada café acrescenta ao passeio
+  await expect(page.locator('[data-steps-done]')).toContainText('Cachoeira Wiegand');
+  await expect(page.locator('[data-step="1"]')).toHaveCount(0);
+  const cafeSerra = page.getByRole('button', { name: /^Café da Serra/ });
+  await expect(cafeSerra).toContainText('de Cachoeira Wiegand');
+  await expect(page.getByText(/opções? no mapa perto de Cachoeira Wiegand/)).toBeVisible();
+  // o café longe demais estoura a tarde: marcado, esmaecido e ainda escolhível
+  const cafeLonge = page.getByRole('button', { name: /^Café do Litoral/ });
+  await expect(cafeLonge).toHaveAttribute('data-over', 'true');
+  await expect(cafeLonge).toContainText('Não cabe no tempo');
+  await expect(cafeLonge).toBeEnabled();
+
+  // "Voltar um passo": a escolha da cachoeira fica, o café vai ser procurado de novo, e a tela avisa
+  await page.getByRole('button', { name: 'Voltar um passo' }).click();
+  await expect(page.locator('[data-step="1"]')).toBeVisible();
+  await expect(page.locator('[data-step-notice]')).toContainText(
+    'As opções de café vão ser procuradas de novo',
+  );
+  await expect(wiegand).toHaveAttribute('aria-pressed', 'true');
+  // outra cachoeira: as opções do café mudam com ela (a busca em volta do Salto)
+  await wiegand.click();
+  await page.getByRole('button', { name: /^Salto do Rio Preto/ }).click();
+  await page.getByRole('button', { name: 'Continuar' }).click();
+  await expect(page.locator('[data-step="2"]')).toContainText('2 de 2 · Café', { timeout: 30_000 });
+  await expect(page.getByRole('button', { name: /^Café do Salto/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Café da Serra/ })).toHaveCount(0);
+  expect(mapa.pedidos.filter((p) => 'provider' in p)).toHaveLength(2);
+  await page.getByRole('button', { name: /^Café do Salto/ }).click();
+
+  // o fim: o resumo e "Traçar o caminho"; a viagem nasce na ordem dos passos (a cachoeira, depois o café)
+  await expect(page.locator('[data-summary]')).toContainText('2 escolhidos');
+  await page.getByRole('button', { name: /^Traçar o caminho por 2 lugares/ }).click();
+  await expect(page.getByRole('heading', { name: 'Revisar a viagem' })).toBeVisible({
+    timeout: 30_000,
+  });
+  const escrita1 = pedidos.find((p) => p.step === 'plan');
+  expect(escrita1?.places?.chosen.map((c) => c.name)).toEqual([
+    'Salto do Rio Preto',
+    'Café do Salto',
+  ]);
+  await page.getByRole('button', { name: 'Criar a viagem' }).click();
+  await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
+  const tripId = page.url().split('/').at(-2) ?? '';
+  await expect
+    .poll(
+      async () =>
+        (await linhas('stops', `trip_id=eq.${tripId}&select=name,position&order=position`)).map(
+          (s) => s.name,
+        ),
+      { timeout: 20_000 },
+    )
+    .toEqual([
+      'Saída de Major Vieira, SC',
+      'Salto do Rio Preto',
+      'Café do Salto',
+      'Chegada em Major Vieira, SC',
     ]);
 });
 

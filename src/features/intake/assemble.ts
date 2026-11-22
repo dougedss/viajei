@@ -3,6 +3,7 @@ import type { StopKind } from '../../../supabase/functions/_shared/constants.ts'
 import { haversineM, type LngLat } from '../../../supabase/functions/_shared/geo.ts';
 import type { ImportData, ImportStop } from '../../../supabase/functions/_shared/import-schema.ts';
 import type { OpeningPeriod, Place } from '../../../supabase/functions/_shared/places-schema.ts';
+import type { DayTime } from '../../../supabase/functions/_shared/plan-search-protocol.ts';
 import type {
   PlanNamed,
   PlanPending,
@@ -24,8 +25,11 @@ import { driveMinutes } from './search.ts';
  * rota; o que é texto (o nome da viagem, a frase de cada lugar, as missões, as listas) vem da IA.
  */
 
-/** Um lugar que vai para a viagem: a escolha (`e`), o nomeado (`n`) ou a sugestão (`s`). */
-export type PlacePick = { ref: string; place: Place; kind: StopKind };
+/**
+ * Um lugar que vai para a viagem: a escolha (`e`), o nomeado (`n`) ou a sugestão (`s`); desde a fase 26,
+ * a hora do dia dita para o passo dele ("de manhã"), para a revisão avisar quando o roteiro chega fora.
+ */
+export type PlacePick = { ref: string; place: Place; kind: StopKind; dayTime?: DayTime };
 
 /** A permanência padrão por tipo, em minutos: dá os horários; a pessoa ajusta na revisão. */
 export const DWELL_MINUTES: Readonly<Record<StopKind, number>> = {
@@ -199,6 +203,8 @@ export type Assembled = {
   google: Record<string, string>;
   /** os períodos de funcionamento de cada lugar (o Google, fase 27), para a conta do passeio */
   hours: Record<string, OpeningPeriod[]>;
+  /** a hora do dia dita para cada lugar (fase 26), pela chave da revisão: o aviso quando o roteiro chega fora */
+  dayTimes: Record<string, DayTime>;
 };
 
 export type OsmRef = { type: 'node' | 'way' | 'relation'; id: number };
@@ -341,6 +347,7 @@ export function assemble(input: AssembleInput): Assembled {
   const osm: Assembled['osm'] = {};
   const google: Assembled['google'] = {};
   const hours: Assembled['hours'] = {};
+  const dayTimes: Assembled['dayTimes'] = {};
   const pending: string[] = [];
   // a rota real liga os pontos ligados de saída: a origem, as escolhas na ordem e a volta
   const routed: string[] = [];
@@ -358,6 +365,7 @@ export function assemble(input: AssembleInput): Assembled {
       if (slot.pick.place.google_place_id) google[key] = slot.pick.place.google_place_id;
       if (slot.pick.place.hours && slot.pick.place.hours.length > 0)
         hours[key] = slot.pick.place.hours;
+      if (slot.pick.dayTime) dayTimes[key] = slot.pick.dayTime;
       return {
         key,
         kind: slot.pick.kind,
@@ -439,6 +447,7 @@ export function assemble(input: AssembleInput): Assembled {
     pending,
     google,
     hours,
+    dayTimes,
   };
 }
 

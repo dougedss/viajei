@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import type { Place, PlacesRequest } from '@shared/places-schema.ts';
+import type { FindPlacesRequest, Place, PlacesRequest } from '@shared/places-schema.ts';
 import { EMPTY_INTENT, type PlanIntent } from '@shared/plan-protocol.ts';
+import type { FoundPlace, Outing, PlanStep } from '@shared/plan-search-protocol.ts';
 import {
   addNamed,
   answersByTopic,
+  backTo,
   canBuild,
+  canContinue,
+  currentStep,
+  destinationPosition,
+  nextStep,
+  orderedPicks,
   pendingForAi,
   pendingOf,
   pickNamed,
@@ -12,10 +19,16 @@ import {
   prepare,
   removeWant,
   searchMap,
+  searchStep,
+  stageAccount,
+  stageFromOuting,
+  stepsDone,
+  stepSearchPlan,
   summaryOf,
   toggleChoice,
   type FlowDeps,
   type GeoBias,
+  type MapStage,
   type NamedEntry,
   type SearchInput,
 } from './flow.ts';
@@ -432,6 +445,7 @@ describe('a conversa nova: a escolha e o caminho', () => {
       unchosen: ['Café'],
       pending: ['Feirinha', 'Cortar o cabelo'],
       removed: [],
+      destination: null,
     });
     expect(pendingOf(stage)).toEqual([
       { name: 'Feirinha', city: 'Pomerode', kind: 'event' },
@@ -444,6 +458,7 @@ describe('a conversa nova: a escolha e o caminho', () => {
       unchosen: [],
       pending: ['Feirinha'],
       removed: ['Cortar o cabelo'],
+      destination: null,
     });
     expect(pendingForAi(decided)).toEqual([{ name: 'Feirinha', kind: 'event', why: 'not_found' }]);
     // e o desfazer
@@ -538,5 +553,454 @@ describe('a conversa nova: a escolha e o caminho', () => {
     expect(prepared.legs).toBeNull();
     expect(prepared.places.chosen[0]?.minutes).toBeNull();
     expect(prepared.suggestions.length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------- o passeio um passo de cada vez (fase 26)
+/** Um lugar do Google inventado, na forma dos que o planejador devolve. */
+const gplace = (
+  id: string,
+  name: string,
+  lng: number,
+  lat: number,
+  city: string,
+  categories = ['cafe', 'food'],
+): Place => ({
+  id,
+  name,
+  lat,
+  lng,
+  categories,
+  city,
+  address: `${name}, ${city} - SC`,
+  opening_hours: null,
+  website: null,
+  osm: null,
+  distance_m: null,
+  provider: 'google',
+  google_place_id: id,
+  rating: 4.5,
+  user_rating_count: 100,
+  open_now: true,
+  business_status: 'operational',
+  maps_url: null,
+  hours: null,
+});
+const HOME: [number, number] = [-50.33, -26.37];
+// as cachoeiras (o passo 1, procurado pela IA) e os cafés (o passo 2, que o app procura)
+const WIEGAND = gplace('g-wiegand', 'Cachoeira Wiegand', -49.65, -26.95, 'José Boiteux', [
+  'natural_feature',
+  'tourist_attraction',
+]);
+const PERTO = gplace('g-cafe-perto', 'Café da Serra', -49.6, -26.9, 'José Boiteux');
+const LONGE = gplace('g-cafe-longe', 'Café do Vale', -50.4, -26.2, 'Canoinhas');
+const step = (ordem: number, o_que: string, over: Partial<PlanStep> = {}): PlanStep => ({
+  ordem,
+  o_que,
+  relacao: 'perto_do_anterior',
+  cidade: '',
+  hora_do_dia: '',
+  candidatos: [],
+  achou: false,
+  fora_da_cidade: false,
+  busca: { palavras: o_que, tipo_google: '', aberto_agora: false, nota_minima: 0 },
+  ...over,
+});
+const outing = (passos: PlanStep[], over: Partial<Outing> = {}): Outing => ({
+  passos,
+  pendentes: [],
+  perguntas: [],
+  destino: '',
+  origem: '',
+  ...over,
+});
+const found = (places: Place[]): FoundPlace[] =>
+  places.map((place, i) => ({ ref: `p${String(i + 1)}`, place }));
+const ORIGIN = { label: 'Major Vieira, SC', at: HOME };
+/** A `find-places` do Google de mentira: devolve os dois cafés a toda busca e guarda os pedidos. */
+function googleDeps(answer: (q: string) => Place[] = () => [PERTO, LONGE]) {
+  const requests: Extract<FindPlacesRequest, { provider: 'google' }>[] = [];
+  const d: FlowDeps = {
+    ...deps().d,
+    findPlaces: (r) => {
+      if ('provider' in r) {
+        requests.push(r);
+        return Promise.resolve(answer(r.query));
+      }
+      return Promise.resolve([]);
+    },
+  };
+  return { d, requests };
+}
+
+describe('o passeio um passo de cada vez (fase 26): os grupos do passo a passo', () => {
+  it('a IA procurou só o passo 1: o passo 2 nasce por procurar, o da vez é o 1, e o destino vira a parada de cidade', () => {
+    const { stage, dropped } = stageFromOuting(
+      {
+        lugares: found([WIEGAND]),
+        passeio: outing(
+          [
+            step(1, 'cachoeira', {
+              relacao: 'perto_de_casa',
+              candidatos: ['p1'],
+              achou: true,
+              buscado: true,
+            }),
+            step(2, 'café'),
+          ],
+          { destino: 'Joinville', destino_centro: { lat: -26.3, lng: -48.85 } },
+        ),
+      },
+      ORIGIN,
+      HOME,
+    );
+    expect(dropped).toBe(0);
+    expect(stage.groups.map((g) => g.status)).toEqual(['ok', 'unsearched']);
+    expect(currentStep(stage)).toBe(0);
+    expect(nextStep(stage)).toBe(1);
+    expect(stage.destination).toEqual({ name: 'Joinville', at: [-48.85, -26.3] });
+    // sem escolha, não dá para continuar nem traçar
+    expect(canContinue(stage)).toBe(false);
+    expect(stepsDone(stage)).toBe(false);
+  });
+
+  it('um passo seguinte numa cidade que a IA já procurou fica com o que ela achou; um que depende do anterior é sempre procurado pelo app', () => {
+    const { stage } = stageFromOuting(
+      {
+        lugares: found([WIEGAND, PERTO, LONGE]),
+        passeio: outing([
+          step(1, 'cachoeira', { relacao: 'perto_de_casa', candidatos: ['p1'], achou: true }),
+          step(2, 'café', {
+            relacao: 'na_cidade',
+            cidade: 'Canoinhas',
+            candidatos: ['p3'],
+            achou: true,
+            buscado: true,
+          }),
+          step(3, 'sorvete', { relacao: 'perto_do_anterior', candidatos: ['p2'], achou: true }),
+        ]),
+      },
+      ORIGIN,
+      HOME,
+    );
+    expect(stage.groups.map((g) => g.status)).toEqual(['ok', 'ok', 'unsearched']);
+    expect(stage.groups[2]?.options).toEqual([]);
+    // sem o passo a passo (a conversa de antes): tudo como a IA entregou, e nenhum passo da vez
+    const legacy = stageFromOuting(
+      {
+        lugares: found([WIEGAND, PERTO]),
+        passeio: outing([
+          step(1, 'a', { candidatos: ['p1'], achou: true }),
+          step(2, 'b', { candidatos: ['p2'], achou: true }),
+        ]),
+      },
+      ORIGIN,
+      HOME,
+      { stepwise: false },
+    ).stage;
+    expect(legacy.groups.map((g) => g.status)).toEqual(['ok', 'ok']);
+    expect(currentStep(legacy)).toBeNull();
+    expect(stepsDone(legacy)).toBe(true);
+  });
+});
+
+describe('o passeio um passo de cada vez (fase 26): a busca do passo seguinte pela relação', () => {
+  const base = (relacao: PlanStep['relacao'], over: Partial<PlanStep> = {}) => {
+    const { stage } = stageFromOuting(
+      {
+        lugares: found([WIEGAND]),
+        passeio: outing([
+          step(1, 'cachoeira', {
+            relacao: 'perto_de_casa',
+            candidatos: ['p1'],
+            achou: true,
+            buscado: true,
+          }),
+          step(2, 'café', { relacao, ...over }),
+        ]),
+      },
+      ORIGIN,
+      HOME,
+    );
+    return toggleChoice(stage, WIEGAND.id);
+  };
+
+  it('perto_do_anterior: um círculo de 15 km em volta do escolhido, por distância; cada cartão diz a distância dele e o desvio', async () => {
+    const { d, requests } = googleDeps();
+    const stage = base('perto_do_anterior');
+    expect(stepSearchPlan(stage, 1)?.where).toBe('perto de Cachoeira Wiegand');
+    const next = await searchStep(stage, 1, d);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      provider: 'google',
+      query: 'café',
+      bias: { lat: -26.95, lng: -49.65, radius_m: 15_000 },
+      rank: 'distance',
+      limit: 20,
+    });
+    const g = next.groups[1];
+    expect(g?.status).toBe('ok');
+    expect(g?.where).toBe('perto de Cachoeira Wiegand');
+    // o mais perto da cachoeira primeiro, com o que acrescenta ao passeio
+    expect(g?.options.map((o) => o.place.id)).toEqual(['g-cafe-perto', 'g-cafe-longe']);
+    expect(g?.options[0]?.fromPrevious).toMatchObject({ name: 'Cachoeira Wiegand' });
+    expect(g?.options[0]?.fromPrevious?.minutes).toBeLessThan(
+      g?.options[1]?.fromPrevious?.minutes ?? 0,
+    );
+    expect(g?.options[0]?.detour).toBeDefined();
+    expect(next.notice ?? null).toBeNull();
+  });
+
+  it('no_caminho: os círculos entre o escolhido e o destino (ou casa), juntos sem repetir', async () => {
+    const { d, requests } = googleDeps();
+    const home = base('no_caminho');
+    await searchStep(home, 1, d);
+    // Wiegand → casa: ~80 km em linha reta, dois círculos
+    expect(requests.length).toBeGreaterThanOrEqual(2);
+    expect(stepSearchPlan(home, 1)?.where).toBe('no caminho de volta');
+    const toCity = {
+      ...home,
+      destination: { name: 'Joinville', at: [-48.85, -26.3] as [number, number] },
+    };
+    const plan = stepSearchPlan(toCity, 1);
+    expect(plan?.where).toBe('no caminho até Joinville');
+    expect(plan?.next).toEqual([-48.85, -26.3]);
+    const { d: d2, requests: r2 } = googleDeps(() => [PERTO, PERTO]);
+    const next = await searchStep(toCity, 1, d2);
+    expect(r2.length).toBeGreaterThanOrEqual(2);
+    expect(next.groups[1]?.options.map((o) => o.place.id)).toEqual(['g-cafe-perto']);
+  });
+
+  it('na_cidade: o círculo de 25 km no centro da cidade, as palavras com a cidade, o filtro no app e os vizinhos ditos', async () => {
+    const { d, requests } = googleDeps(() => [LONGE, PERTO]);
+    const stage = base('na_cidade', { cidade: 'Canoinhas', centro: { lat: -26.18, lng: -50.39 } });
+    const next = await searchStep(stage, 1, d);
+    expect(requests[0]).toMatchObject({
+      query: 'café em Canoinhas',
+      bias: { lat: -26.18, lng: -50.39, radius_m: 25_000 },
+      rank: 'relevance',
+    });
+    // só o de Canoinhas fica; o de José Boiteux sai
+    expect(next.groups[1]?.options.map((o) => o.place.id)).toEqual(['g-cafe-longe']);
+    expect(next.groups[1]?.step?.fora_da_cidade).toBe(false);
+    expect(next.groups[1]?.where).toBe('em Canoinhas');
+    // nada dentro: os vizinhos valem, ditos
+    const { d: d2 } = googleDeps(() => [PERTO]);
+    const neighbors = await searchStep(stage, 1, d2);
+    expect(neighbors.groups[1]?.options.map((o) => o.place.id)).toEqual(['g-cafe-perto']);
+    expect(neighbors.groups[1]?.step?.fora_da_cidade).toBe(true);
+  });
+
+  it('perto_de_casa: 15 km em volta de onde se sai; sem_relacao: em volta do anterior e no caminho de volta', async () => {
+    const { d, requests } = googleDeps();
+    await searchStep(base('perto_de_casa'), 1, d);
+    expect(requests[0]).toMatchObject({
+      bias: { lat: -26.37, lng: -50.33, radius_m: 15_000 },
+      rank: 'distance',
+    });
+    const { d: d2, requests: r2 } = googleDeps();
+    const loose = base('sem_relacao');
+    expect(stepSearchPlan(loose, 1)?.where).toBe(
+      'perto de Cachoeira Wiegand e no caminho de volta',
+    );
+    await searchStep(loose, 1, d2);
+    expect(r2.length).toBeGreaterThanOrEqual(2);
+    // com mais de uma escolha no passo anterior, o centro é a última escolhida
+    const two = {
+      ...loose,
+      groups: loose.groups.map((g, i) =>
+        i === 0
+          ? {
+              ...g,
+              options: [...g.options, { place: LONGE, km: 1, minutes: 5, kind: 'food' as const }],
+            }
+          : g,
+      ),
+    };
+    const both = toggleChoice(two, LONGE.id);
+    expect(stepSearchPlan(both, 1)?.previous?.name).toBe('Café do Vale');
+  });
+
+  it('a busca que falha não some: o grupo diz o estado, como na busca por tipo', async () => {
+    const d: FlowDeps = {
+      ...deps().d,
+      findPlaces: () => Promise.reject(Object.assign(new Error('x'), { code: 'daily_limit' })),
+    };
+    const next = await searchStep(base('perto_do_anterior'), 1, d);
+    expect(next.groups[1]?.status).toBe('limit');
+    expect(stepsDone(next)).toBe(false);
+  });
+});
+
+describe('o passeio um passo de cada vez (fase 26): continuar, voltar, a ordem e a conta', () => {
+  const twoSteps = (): MapStage => {
+    const { stage } = stageFromOuting(
+      {
+        lugares: found([WIEGAND]),
+        passeio: outing([
+          step(1, 'cachoeira', {
+            relacao: 'perto_de_casa',
+            candidatos: ['p1'],
+            achou: true,
+            buscado: true,
+          }),
+          step(2, 'café'),
+        ]),
+      },
+      ORIGIN,
+      HOME,
+    );
+    return toggleChoice(stage, WIEGAND.id);
+  };
+
+  it('escolhido o passo 1, dá para continuar; o passo 2 procurado e escolhido fecha o passeio; a ordem final é a dos passos', async () => {
+    const chosen1 = twoSteps();
+    expect(canContinue(chosen1)).toBe(true);
+    const { d } = googleDeps();
+    const searched = await searchStep({ ...chosen1, step: 1 }, 1, d);
+    expect(stepsDone(searched)).toBe(false);
+    const done = toggleChoice(searched, LONGE.id);
+    expect(stepsDone(done)).toBe(true);
+    expect(canBuild(done)).toBe(true);
+    // a ordem é a dos passos (a cachoeira, depois o café), mesmo que o café fique mais perto de casa
+    expect(orderedPicks(done, HOME).map((p) => p.place.id)).toEqual(['g-wiegand', 'g-cafe-longe']);
+    expect(picksOf(done).map((p) => p.ref)).toEqual(['e1', 'e2']);
+    const prepared = await prepare(done, { interests: [], learned: [] }, d);
+    expect(prepared.picks.map((p) => p.place.id)).toEqual(['g-wiegand', 'g-cafe-longe']);
+    // duas escolhas no mesmo passo: entre si, pelo caminho mais curto a partir do anterior
+    const twoCafes = toggleChoice(done, PERTO.id);
+    expect(orderedPicks(twoCafes, HOME).map((p) => p.place.id)).toEqual([
+      'g-wiegand',
+      'g-cafe-perto',
+      'g-cafe-longe',
+    ]);
+  });
+
+  it('"Voltar um passo" desfaz as escolhas dos seguintes, os que dependem do anterior voltam a ser procurados, e a tela avisa', async () => {
+    const { d } = googleDeps();
+    const searched = await searchStep({ ...twoSteps(), step: 1 }, 1, d);
+    const done = toggleChoice(searched, LONGE.id);
+    const back = backTo(done, 0);
+    expect(back.step).toBe(0);
+    expect(back.chosen).toEqual(['g-wiegand']);
+    expect(back.groups[1]?.status).toBe('unsearched');
+    expect(back.groups[1]?.options).toEqual([]);
+    expect(back.notice).toBe('As opções de café vão ser procuradas de novo depois da sua escolha.');
+    // um passo seguinte numa cidade não depende do anterior: as opções ficam, só a escolha sai
+    const { stage } = stageFromOuting(
+      {
+        lugares: found([WIEGAND, LONGE]),
+        passeio: outing([
+          step(1, 'cachoeira', {
+            relacao: 'perto_de_casa',
+            candidatos: ['p1'],
+            achou: true,
+            buscado: true,
+          }),
+          step(2, 'café', {
+            relacao: 'na_cidade',
+            cidade: 'Canoinhas',
+            candidatos: ['p2'],
+            achou: true,
+            buscado: true,
+          }),
+        ]),
+      },
+      ORIGIN,
+      HOME,
+    );
+    const both = toggleChoice(toggleChoice({ ...stage, step: 1 }, WIEGAND.id), LONGE.id);
+    const kept = backTo(both, 0);
+    expect(kept.groups[1]?.status).toBe('ok');
+    expect(kept.chosen).toEqual(['g-wiegand']);
+    expect(kept.notice ?? null).toBeNull();
+  });
+
+  it('o destino entra como parada de cidade: depois do último passo "no caminho"; sem um, antes do passo na cidade dele; senão no fim', () => {
+    const { stage } = stageFromOuting(
+      {
+        lugares: found([PERTO, WIEGAND]),
+        passeio: outing(
+          [
+            step(1, 'café', {
+              relacao: 'no_caminho',
+              candidatos: ['p1'],
+              achou: true,
+              buscado: true,
+            }),
+            step(2, 'cachoeira', {
+              relacao: 'na_cidade',
+              cidade: 'Joinville',
+              candidatos: ['p2'],
+              achou: true,
+              buscado: true,
+            }),
+          ],
+          { destino: 'Joinville', destino_centro: { lat: -26.3, lng: -48.85 } },
+        ),
+      },
+      ORIGIN,
+      HOME,
+    );
+    expect(destinationPosition(stage)).toBe(1);
+    const chosen = toggleChoice(toggleChoice({ ...stage, step: 1 }, PERTO.id), WIEGAND.id);
+    expect(orderedPicks(chosen, HOME).map((p) => p.place.name)).toEqual([
+      'Café da Serra',
+      'Joinville',
+      'Cachoeira Wiegand',
+    ]);
+    // o destino é uma `e` (a plan-trip só aceita e, n e s) do tipo cidade, e não conta como escolha
+    const picks = picksOf(chosen);
+    expect(picks.map((p) => [p.ref, p.kind])).toEqual([
+      ['e1', 'food'],
+      ['e2', 'nature'],
+      ['e3', 'city'],
+    ]);
+    expect(summaryOf(chosen)).toMatchObject({ chosen: 2, destination: 'Joinville' });
+    // sem passo no caminho: antes do primeiro passo na cidade do destino
+    const inCity = {
+      ...stage,
+      groups: stage.groups.map((g, i) =>
+        i === 0 && g.step ? { ...g, step: { ...g.step, relacao: 'perto_de_casa' as const } } : g,
+      ),
+    };
+    expect(destinationPosition(inCity)).toBe(1);
+    // só o destino dito, sem escolha: já dá para traçar ("vou pra Joinville")
+    const onlyCity = {
+      ...stage,
+      step: 1,
+      chosen: [] as string[],
+      groups: stage.groups.map((g) => ({ ...g, removed: true })),
+    };
+    expect(canBuild(onlyCity)).toBe(true);
+    expect(picksOf(onlyCity).map((p) => p.kind)).toEqual(['city']);
+  });
+
+  it('a conta do passeio para o que está escolhido: a estrada, a permanência e a hora do dia do passo', async () => {
+    const { d } = googleDeps();
+    const { stage } = stageFromOuting(
+      {
+        lugares: found([WIEGAND]),
+        passeio: outing([
+          step(1, 'cachoeira', {
+            relacao: 'perto_de_casa',
+            candidatos: ['p1'],
+            achou: true,
+            buscado: true,
+            hora_do_dia: 'noite',
+          }),
+          step(2, 'café'),
+        ]),
+      },
+      ORIGIN,
+      HOME,
+    );
+    const chosen = toggleChoice(stage, WIEGAND.id);
+    const acc = stageAccount(chosen, { start: '08:00', date: '2026-12-05' });
+    expect(acc.dwell).toBe(90);
+    expect(acc.road).toBeGreaterThan(60);
+    expect(acc.arrivals[0]?.outsideWindow).toMatch(/vocês queriam à noite$/);
+    const more = toggleChoice(await searchStep({ ...chosen, step: 1 }, 1, d), LONGE.id);
+    expect(stageAccount(more, { start: '08:00', date: '2026-12-05' }).dwell).toBe(165);
   });
 });

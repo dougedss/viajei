@@ -9,6 +9,7 @@ import type {
 } from '@shared/import-schema.ts';
 import { toE164 } from '@shared/phone.ts';
 import type { OpeningPeriod } from '@shared/places-schema.ts';
+import type { DayTime } from '@shared/plan-search-protocol.ts';
 import { contactsFromImport, listItemsFromImport } from '@/features/itinerary/import-rows.ts';
 import { datesBetween, planDays, sortStops } from '@/features/itinerary/rules.ts';
 import { reservationFromImport } from '@/features/reservations/import.ts';
@@ -60,6 +61,8 @@ export type ReviewStop = Keyed<ImportStop> & {
    * pelo nome com a cidade, nunca pela cidade sozinha
    */
   pending?: boolean;
+  /** a hora do dia que a pessoa disse para este passo (fase 26): a revisão avisa quando o roteiro chega fora */
+  day_time?: DayTime | null;
 };
 export type ReviewDay = {
   date: string;

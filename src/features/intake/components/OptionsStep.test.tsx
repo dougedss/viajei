@@ -1,5 +1,5 @@
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Place } from '@shared/places-schema.ts';
 import type { MapStage, OptionGroup } from '../flow.ts';
 import { ratingText, statusText } from '../option-text.ts';
@@ -172,5 +172,247 @@ describe('OptionsStep: os cartões do Google (fase 27)', () => {
     unmount();
     render(<MapAttribution />);
     expect(screen.queryByText(/Dados do Google Maps/)).toBeNull();
+  });
+});
+
+/**
+ * Um passo de cada vez (fase 26): só o passo da vez aparece; os feitos numa linha com "mudar"; o aviso
+ * de "Voltar um passo"; "Continuar" só com o passo decidido; o rótulo da nota; o pendente na posição; a
+ * conta do tempo com o que estoura marcado; "Mais tempo" quando nada cabe.
+ */
+const stepGroup = (
+  label: string,
+  ordem: number,
+  places: Place[],
+  over: Partial<OptionGroup> = {},
+  step: Partial<NonNullable<OptionGroup['step']>> = {},
+): OptionGroup => ({
+  ...group(places),
+  label,
+  status: places.length > 0 ? 'ok' : 'unsearched',
+  step: {
+    ordem,
+    relacao: 'perto_do_anterior',
+    cidade: '',
+    hora_do_dia: '',
+    fora_da_cidade: false,
+    busca: { palavras: label, tipo_google: '', aberto_agora: false, nota_minima: 0 },
+    ...step,
+  },
+  where: ordem === 1 ? 'perto de onde vocês saem' : 'perto de Cachoeira Alta',
+  ...over,
+});
+const CACHOEIRA = google({
+  id: 'g-cach',
+  name: 'Cachoeira Alta',
+  lat: -26.2,
+  lng: -50.05,
+  categories: ['tourist_attraction'],
+  hours: null,
+});
+const CAFE_PERTO = google({
+  id: 'g-perto',
+  name: 'Café da Serra',
+  lat: -26.15,
+  lng: -50.0,
+  hours: null,
+});
+const CAFE_LONGE = google({
+  id: 'g-longe',
+  name: 'Café do Vale',
+  lat: -27.5,
+  lng: -48.5,
+  hours: null,
+});
+const stepwise = (over: Partial<MapStage> = {}): MapStage => ({
+  ...stage([
+    stepGroup('cachoeira', 1, [CACHOEIRA], {}, { relacao: 'perto_de_casa' }),
+    stepGroup('café', 2, [], {}),
+  ]),
+  step: 0,
+  ...over,
+});
+const TIME = {
+  start: '08:00',
+  date: '2026-12-05',
+  budget: { minutes: 300, label: 'a tarde' },
+  unread: false,
+};
+
+describe('OptionsStep: um passo de cada vez (fase 26)', () => {
+  it('só o passo da vez aparece; os candidatos do seguinte não; "Continuar" só com a escolha, e "Traçar" só no fim', () => {
+    const onContinue = vi.fn();
+    const { rerender } = render(
+      <OptionsStep {...props(stepwise())} onContinue={onContinue} onStepBack={vi.fn()} />,
+    );
+    expect(screen.getByRole('region', { name: 'Cachoeira' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Café' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Traçar o caminho/ })).toBeNull();
+    const continuar = screen.getByRole('button', { name: 'Continuar' });
+    expect(continuar.hasAttribute('disabled')).toBe(true);
+    // sem passo anterior, não há "Voltar um passo"
+    expect(screen.queryByRole('button', { name: 'Voltar um passo' })).toBeNull();
+    rerender(
+      <OptionsStep
+        {...props(stepwise({ chosen: ['g-cach'] }))}
+        onContinue={onContinue}
+        onStepBack={vi.fn()}
+      />,
+    );
+    const ok = screen.getByRole('button', { name: 'Continuar' });
+    expect(ok.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(ok);
+    expect(onContinue).toHaveBeenCalledTimes(1);
+  });
+
+  it('o passo feito vira uma linha com "mudar"; o aviso de voltar aparece; o último passo mostra o resumo e "Traçar"', () => {
+    const onBackTo = vi.fn();
+    const onStepBack = vi.fn();
+    render(
+      <OptionsStep
+        {...props(
+          stepwise({
+            step: 1,
+            chosen: ['g-cach', 'g-perto'],
+            groups: [
+              stepGroup('cachoeira', 1, [CACHOEIRA], {}, { relacao: 'perto_de_casa' }),
+              stepGroup('café', 2, [CAFE_PERTO, CAFE_LONGE]),
+            ],
+            notice: 'As opções de café vão ser procuradas de novo depois da sua escolha.',
+          }),
+        )}
+        onBackTo={onBackTo}
+        onStepBack={onStepBack}
+      />,
+    );
+    const done = screen.getByRole('list', { name: 'Passos feitos' });
+    expect(done.textContent).toContain('1');
+    expect(done.textContent).toContain('Cachoeira Alta');
+    fireEvent.click(screen.getByRole('button', { name: 'Mudar o passo 1' }));
+    expect(onBackTo).toHaveBeenCalledWith(0);
+    expect(screen.getByRole('status').textContent).toContain('vão ser procuradas de novo');
+    expect(screen.getByRole('region', { name: 'Café' }).textContent).toContain('2 de 2 · Café');
+    expect(screen.queryByRole('region', { name: 'Cachoeira' })).toBeNull();
+    // no último passo não há "Continuar": o resumo e "Traçar o caminho"
+    expect(screen.queryByRole('button', { name: 'Continuar' })).toBeNull();
+    expect(screen.getByText(/1 escolhido|2 escolhidos/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Traçar o caminho/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar um passo' }));
+    expect(onStepBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('"o melhor café": o critério à vista quando a busca tem nota mínima; o pendente fica na posição dele, sem busca', () => {
+    render(
+      <OptionsStep
+        {...props(
+          stepwise({
+            groups: [
+              stepGroup(
+                'café',
+                1,
+                [CAFE_PERTO],
+                {},
+                {
+                  relacao: 'perto_de_casa',
+                  busca: {
+                    palavras: 'café',
+                    tipo_google: 'cafe',
+                    aberto_agora: false,
+                    nota_minima: 4,
+                  },
+                  descartados: 2,
+                },
+              ),
+              {
+                ...group([]),
+                label: 'a feirinha',
+                status: 'none',
+                question: 'Onde fica a feirinha?',
+              },
+            ],
+          }),
+        )}
+      />,
+    );
+    expect(screen.getByText('Os melhores primeiro, pela nota do Google.')).toBeTruthy();
+    expect(screen.getByText(/2 lugares que não eram café ficaram de fora/)).toBeTruthy();
+    expect(screen.getByText('Onde fica a feirinha?')).toBeTruthy();
+  });
+
+  it('o total à vista com o que a pessoa tem; cada candidato diz o total se for escolhido e o que estoura fica marcado; nada cabe oferece mais tempo', () => {
+    const onTime = vi.fn();
+    const { rerender } = render(
+      <OptionsStep
+        {...props(
+          stepwise({
+            step: 1,
+            chosen: ['g-cach'],
+            groups: [
+              stepGroup('cachoeira', 1, [CACHOEIRA], {}, { relacao: 'perto_de_casa' }),
+              {
+                ...stepGroup('café', 2, [CAFE_PERTO, CAFE_LONGE]),
+                // como a busca do passo seguinte entrega: o que cada lugar acrescenta ao passeio
+                options: [
+                  {
+                    place: CAFE_PERTO,
+                    km: 30,
+                    minutes: 45,
+                    kind: 'food' as const,
+                    fromPrevious: { name: 'Cachoeira Alta', km: 7, minutes: 15 },
+                    detour: 10,
+                  },
+                  {
+                    place: CAFE_LONGE,
+                    km: 200,
+                    minutes: 180,
+                    kind: 'food' as const,
+                    fromPrevious: { name: 'Cachoeira Alta', km: 190, minutes: 170 },
+                    detour: 0,
+                  },
+                ],
+              },
+            ],
+          }),
+        )}
+        time={TIME}
+        onTime={onTime}
+        onStepBack={vi.fn()}
+      />,
+    );
+    const total = screen.getByText(/^O passeio dá cerca de/);
+    expect(total.parentElement?.textContent).toContain('vocês têm a tarde, cerca de 5 h');
+    const perto = screen.getByRole('button', { name: /^Café da Serra/ });
+    expect(perto.getAttribute('data-over')).toBeNull();
+    expect(perto.textContent).toMatch(/Daria \d+ h( \d\d)? no total/);
+    expect(perto.textContent).toContain('a cerca de 15 min de Cachoeira Alta · +10 min de estrada');
+    const longe = screen.getByRole('button', { name: /^Café do Vale/ });
+    expect(longe.getAttribute('data-over')).toBe('true');
+    expect(longe.textContent).toMatch(/Não cabe no tempo: daria/);
+    // ainda escolhível: o botão não está desligado
+    expect(longe.hasAttribute('disabled')).toBe(false);
+    expect(screen.queryByText(/Nenhuma opção de café cabe/)).toBeNull();
+    // só o café longe: nada cabe → mais tempo
+    rerender(
+      <OptionsStep
+        {...props(
+          stepwise({
+            step: 1,
+            chosen: ['g-cach'],
+            groups: [
+              stepGroup('cachoeira', 1, [CACHOEIRA], {}, { relacao: 'perto_de_casa' }),
+              stepGroup('café', 2, [CAFE_LONGE]),
+            ],
+          }),
+        )}
+        time={TIME}
+        onTime={onTime}
+        onStepBack={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/Nenhuma opção de café cabe no tempo/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Mais tempo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'O dia' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Usar este tempo' }));
+    expect(onTime).toHaveBeenCalledWith('O dia');
   });
 });

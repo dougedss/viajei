@@ -1,5 +1,7 @@
+import { DAY_TIME_WINDOWS } from '../../../supabase/functions/_shared/day-span.ts';
 import { hoursOnDay, openStatusAt } from '../../../supabase/functions/_shared/google-places.ts';
 import type { OpeningPeriod } from '../../../supabase/functions/_shared/places-schema.ts';
+import type { DayTime } from '../../../supabase/functions/_shared/plan-search-protocol.ts';
 
 /**
  * O horário na conta do passeio (fase 27, a sugestão aceita em 21/11): com os períodos de funcionamento
@@ -27,4 +29,21 @@ export function hoursNotice(
   if (openStatusAt(hours, day, time) !== 'closed') return null;
   const onDay = hoursOnDay(hours, day);
   return onDay ? `Fechado às ${time}: abre ${onDay}` : `Fechado na ${DAYS[day] ?? ''}`.trimEnd();
+}
+
+/**
+ * A hora do dia dita entra na conta (fase 26, a 3.3): "Pedido de manhã; o roteiro chega às 13:25"
+ * quando a hora prevista da parada cai fora da janela da hora do dia que a pessoa disse para ela.
+ * Null sem hora do dia, sem horário previsto, ou dentro da janela. Nada se afirma sem período.
+ */
+export function dayTimeNotice(
+  dayTime: DayTime | null | undefined,
+  time: string | null | undefined,
+): string | null {
+  if (!dayTime || !time) return null;
+  const w = DAY_TIME_WINDOWS[dayTime];
+  const [h = '0', m = '0'] = time.split(':');
+  const at = Number(h) * 60 + Number(m);
+  if (at >= w.from && at < w.to) return null;
+  return `Pedido ${w.label}; o roteiro chega às ${time}`;
 }

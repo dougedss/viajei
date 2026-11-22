@@ -203,6 +203,7 @@ export default function CriarViagemPage() {
           <OptionsStep
             map={talk.conv.map}
             origin={origin}
+            time={talk.time}
             onPlace={(said, hit) => void talk.choosePlace(said, hit)}
             onRename={(said, city) => void talk.renamePlace(said, city)}
             onToggle={talk.toggle}
@@ -214,6 +215,10 @@ export default function CriarViagemPage() {
             onByName={(name, kind, group) => void talk.byName(name, kind, group)}
             onBuild={() => void talk.build()}
             onBack={() => void toList()}
+            onContinue={() => void talk.continueStep()}
+            onStepBack={talk.stepBack}
+            onBackTo={talk.backTo}
+            onTime={talk.setTime}
           />
         ) : (
           <Card className="grid gap-2" aria-live="polite" data-thinking={stage.kind}>

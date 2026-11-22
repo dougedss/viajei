@@ -2,11 +2,13 @@
 import type { Interest, StopKind } from '../../../supabase/functions/_shared/constants.ts';
 import { haversineM, type LngLat } from '../../../supabase/functions/_shared/geo.ts';
 import { filled } from '../../lib/text/filled.ts';
+import { withinCity } from '../../../supabase/functions/_shared/google-places.ts';
 import { kindOfGoogleTypes } from '../../../supabase/functions/_shared/google-types.ts';
 import {
   GOOGLE_MAX_RADIUS_M,
   isGooglePlace,
   type FindPlacesRequest,
+  type GooglePlacesRequest,
   type Place,
   type PlacesProvider,
   type PlacesRequest,
@@ -16,7 +18,15 @@ import type {
   Outing,
   PlanSearchResult,
   StepRelation,
+  StepSearch,
 } from '../../../supabase/functions/_shared/plan-search-protocol.ts';
+import {
+  cityCircle,
+  nearCircle,
+  routeCircles,
+  type Circle,
+  type Point,
+} from '../../../supabase/functions/_shared/search-circles.ts';
 import type {
   PlanContext,
   PlanIntent,
@@ -29,6 +39,7 @@ import type {
 } from '../../../supabase/functions/_shared/plan-protocol.ts';
 import { placesForAi, type Legs, type PlacePick } from './assemble.ts';
 import { placeKey, resolvePlace, type PlaceHit, type PlaceQuestion } from './locate.ts';
+import { outingAccount, type OutingAccount } from './outing-time.ts';
 import { confirmNamed, type NamedState, type SearchResult } from './named.ts';
 import { radiusFor, readReach, REACH_QUESTION_TEXT, spanOfReach } from './reach.ts';
 import {
@@ -62,7 +73,15 @@ import {
  * vontade, a escolha, o caminho entre as escolhas e as sugestões no corredor dele. A IA não entra
  * aqui: ela leu a vontade antes e escreve a viagem depois, sobre o que este módulo achou.
  */
-export type GroupStatus = 'ok' | 'none' | 'no_source' | 'offline' | 'failed' | 'limit';
+export type GroupStatus =
+  | 'ok'
+  | 'none'
+  | 'no_source'
+  | 'offline'
+  | 'failed'
+  | 'limit'
+  /** o passo seguinte ainda não foi procurado (fase 26): a busca roda quando chega a vez dele */
+  | 'unsearched';
 
 /** As opções de uma vontade ("café colonial"): os cartões, e o que aconteceu com a busca. */
 export type OptionGroup = {
@@ -101,7 +120,17 @@ export type StepInfo = {
   hora_do_dia: DayTime;
   /** os candidatos são dos vizinhos: nenhum dentro da cidade dita (a tela diz) */
   fora_da_cidade: boolean;
+  /** como procurar este passo (fase 26): as palavras, o tipo, o aberto agora, a nota mínima */
+  busca?: StepSearch;
+  /** o centro que não depende da escolha anterior: a cidade resolvida, ou o destino (fase 26) */
+  centro?: Point | null;
+  /** quantos candidatos a IA deixou de fora por não serem do tipo pedido (fase 26) */
+  descartados?: number;
 };
+
+/** A relação depende do lugar escolhido no passo anterior: a busca só pode rodar quando chegar a vez. */
+export const dependsOnPrevious = (relacao: StepRelation): boolean =>
+  relacao === 'perto_do_anterior' || relacao === 'no_caminho' || relacao === 'sem_relacao';
 
 /**
  * Um lugar que a pessoa nomeou: o que o mapa achou, e a escolha dela quando há mais de um. `skip`:
@@ -127,6 +156,15 @@ export type MapStage = {
    * ou só candidatos longe (outro país); a busca só roda depois da escolha
    */
   ask?: PlaceQuestion | null;
+  /**
+   * o passo da vez (fase 26): o índice em `groups` do passo que a tela mostra; os seguintes só aparecem
+   * depois da escolha dele. Ausente numa conversa de antes (todos os grupos à vista)
+   */
+  step?: number;
+  /** a cidade de destino dita ("vou pra Joinville"), com a coordenada: entra como parada (fase 26, a 3.4) */
+  destination?: { name: string; at: LngLat } | null;
+  /** o aviso de "Voltar um passo": as opções do passo seguinte vão ser procuradas de novo */
+  notice?: string | null;
 };
 
 /** O viés de uma busca pelo nome: a área preferida em volta de um ponto (D276). */
@@ -471,20 +509,213 @@ function namedPlace(entry: NamedEntry, i: number): Place | null {
   };
 }
 
-/** Os lugares que vão para a viagem: as escolhas (`e1`…) e os nomeados confirmados (`n1`…). */
-export function picksOf(stage: MapStage): PlacePick[] {
-  const options = new Map(
-    stage.groups.flatMap((g) => g.options.map((o) => [o.place.id, o] as const)),
+/** Um lugar que vai para a viagem e de onde ele veio: a escolha de um passo, o nomeado, ou o destino. */
+export type PickSlot = {
+  pick: PlacePick;
+  /** o índice do grupo do passo (as escolhas); null nos nomeados e no destino */
+  group: number | null;
+  /** a posição do passo na ordem dita; null no que não tem passo */
+  position: number | null;
+  kind: 'choice' | 'named' | 'destination';
+};
+
+/** O destino dito ("vou pra Joinville") como lugar do mapa: a parada de cidade (fase 26, a 3.4). */
+function destinationPlace(d: NonNullable<MapStage['destination']>): Place {
+  return {
+    id: `destination:${d.name}`,
+    name: d.name,
+    lat: d.at[1],
+    lng: d.at[0],
+    categories: ['locality'],
+    city: d.name,
+    address: null,
+    opening_hours: null,
+    website: null,
+    osm: null,
+    distance_m: null,
+  };
+}
+
+/** Os índices dos grupos que são passos do planejador, na ordem dita. */
+export function stepGroups(stage: Pick<MapStage, 'groups'>): number[] {
+  return stage.groups
+    .map((g, i) => (g.step ? { i, ordem: g.step.ordem } : null))
+    .filter((x): x is { i: number; ordem: number } => x !== null)
+    .sort((a, b) => a.ordem - b.ordem)
+    .map((x) => x.i);
+}
+
+const sameName = (a: string, b: string) =>
+  a
+    .trim()
+    .toLocaleLowerCase('pt-BR')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '') ===
+  b
+    .trim()
+    .toLocaleLowerCase('pt-BR')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '');
+
+/**
+ * Onde a parada do destino entra entre os passos: depois do último passo "no caminho" (o caminho é
+ * até ele); sem um, antes do primeiro passo que é na cidade do destino; sem nenhum dos dois, depois de
+ * todos os passos. Devolve a posição (0 = antes de tudo).
+ */
+export function destinationPosition(stage: Pick<MapStage, 'groups' | 'destination'>): number {
+  const steps = stepGroups(stage).map((i) => stage.groups[i]?.step);
+  const lastOnRoute = steps.reduce((at, st, i) => (st?.relacao === 'no_caminho' ? i + 1 : at), -1);
+  if (lastOnRoute >= 0) return lastOnRoute;
+  const inCity = steps.findIndex(
+    (st) => st !== undefined && stage.destination && sameName(st.cidade, stage.destination.name),
   );
-  const chosen = stage.chosen.flatMap((id, i): PlacePick[] => {
-    const o = options.get(id);
-    return o ? [{ ref: `e${String(i + 1)}`, place: o.place, kind: o.kind }] : [];
+  return inCity >= 0 ? inCity : steps.length;
+}
+
+/**
+ * Os lugares que vão para a viagem, com a origem de cada um: as escolhas (`e1`…, pelos passos na ordem
+ * dita quando o planejador os deu, senão na ordem do toque), o destino como parada de cidade (também
+ * uma `e`: a `plan-trip` só aceita `e`, `n` e `s`) e os nomeados confirmados (`n1`…).
+ */
+export function pickSlots(stage: MapStage): PickSlot[] {
+  const options = new Map(
+    stage.groups.flatMap((g, i) => g.options.map((o) => [o.place.id, { o, group: i }] as const)),
+  );
+  const steps = stepGroups(stage);
+  const positionOf = (group: number) => {
+    const at = steps.indexOf(group);
+    return at >= 0 ? at : null;
+  };
+  // as escolhas: pelos passos quando há passos (a ordem dita), senão na ordem do toque
+  const chosenIds =
+    steps.length > 0
+      ? [
+          ...steps.flatMap((gi) => stage.chosen.filter((id) => options.get(id)?.group === gi)),
+          ...stage.chosen.filter((id) => {
+            const g = options.get(id)?.group;
+            return g === undefined || !steps.includes(g);
+          }),
+        ]
+      : stage.chosen;
+  const choices: PickSlot[] = chosenIds.flatMap((id, i) => {
+    const hit = options.get(id);
+    if (!hit) return [];
+    const dayTime = stage.groups[hit.group]?.step?.hora_do_dia;
+    return [
+      {
+        pick: {
+          ref: `e${String(i + 1)}`,
+          place: hit.o.place,
+          kind: hit.o.kind,
+          ...(dayTime ? { dayTime } : {}),
+        },
+        group: hit.group,
+        position: positionOf(hit.group),
+        kind: 'choice' as const,
+      },
+    ];
   });
-  const named = stage.named.flatMap((n, i): PlacePick[] => {
+  const destination: PickSlot[] = stage.destination
+    ? [
+        {
+          pick: {
+            ref: `e${String(choices.length + 1)}`,
+            place: destinationPlace(stage.destination),
+            kind: 'city',
+          },
+          group: null,
+          position: destinationPosition(stage),
+          kind: 'destination' as const,
+        },
+      ]
+    : [];
+  const named: PickSlot[] = stage.named.flatMap((n, i) => {
     const place = namedPlace(n, i);
-    return place ? [{ ref: `n${String(i + 1)}`, place, kind: n.named.kind }] : [];
+    return place
+      ? [
+          {
+            pick: { ref: `n${String(i + 1)}`, place, kind: n.named.kind },
+            group: null,
+            position: null,
+            kind: 'named' as const,
+          },
+        ]
+      : [];
   });
-  return [...named, ...chosen];
+  return [...named, ...choices, ...destination];
+}
+
+/** Os lugares que vão para a viagem: as escolhas (`e1`…), o destino e os nomeados confirmados (`n1`…). */
+export function picksOf(stage: MapStage): PlacePick[] {
+  return pickSlots(stage).map((s) => s.pick);
+}
+
+/**
+ * A ordem final (fase 26, revê a D230): a dos passos, como a pessoa disse; `bestOrder` só ordena o que
+ * ficou sem ordem (as escolhas de um mesmo passo entre si, do ponto anterior ao próximo ponto fixo; os
+ * nomeados sem passo, no fim, do último ponto a casa). Sem passos (a conversa de antes), o caminho
+ * mais curto de tudo, como a D230.
+ */
+export function orderedPicks(stage: MapStage, start: LngLat | null): PlacePick[] {
+  const slots = pickSlots(stage);
+  const home = stage.origin?.at ?? null;
+  const from = start ?? home ?? (slots[0] ? at(slots[0].pick.place) : null);
+  if (!from) return slots.map((s) => s.pick);
+  const steps = stepGroups(stage);
+  if (steps.length === 0) {
+    const all = slots.map((s) => s.pick);
+    const order = bestOrder(
+      from,
+      all.map((p) => at(p.place)),
+      home !== null,
+    );
+    return order.map((i) => all[i]).filter((p): p is PlacePick => p !== undefined);
+  }
+  const out: PlacePick[] = [];
+  let cursor = from;
+  const destinationAt = destinationPosition(stage);
+  const destination = slots.find((s) => s.kind === 'destination');
+  const nextFixed = (position: number): LngLat =>
+    destination && destinationAt > position ? at(destination.pick.place) : (home ?? cursor);
+  for (let position = 0; position <= steps.length; position++) {
+    if (destination && destinationAt === position) {
+      out.push(destination.pick);
+      cursor = at(destination.pick.place);
+    }
+    if (position === steps.length) break;
+    const mine = slots.filter((s) => s.kind === 'choice' && s.position === position);
+    if (mine.length === 0) continue;
+    const order =
+      mine.length > 1
+        ? bestOrder(
+            cursor,
+            mine.map((s) => at(s.pick.place)),
+            true,
+            nextFixed(position),
+          )
+        : [0];
+    for (const i of order) {
+      const slot = mine[i];
+      if (!slot) continue;
+      out.push(slot.pick);
+      cursor = at(slot.pick.place);
+    }
+  }
+  // o que ficou sem ordem (os nomeados sem passo): do último ponto a casa, pelo caminho mais curto
+  const loose = slots.filter((s) => s.kind === 'named');
+  if (loose.length > 0) {
+    const order = bestOrder(
+      cursor,
+      loose.map((s) => at(s.pick.place)),
+      home !== null,
+      home ?? cursor,
+    );
+    for (const i of order) {
+      const slot = loose[i];
+      if (slot) out.push(slot.pick);
+    }
+  }
+  return out;
 }
 
 // ------------------------------------------------------------ os três estados (fase 25, D278)
@@ -562,6 +793,7 @@ export function summaryOf(stage: MapStage): {
   unchosen: string[];
   pending: string[];
   removed: string[];
+  destination: string | null;
 } {
   const fates = [
     ...stage.named.map((n, i) => [namedFate(n, i), n.named.name] as const),
@@ -569,18 +801,25 @@ export function summaryOf(stage: MapStage): {
   ];
   const of = (fate: Fate) => fates.filter(([f]) => f === fate).map(([, name]) => name);
   return {
-    chosen: picksOf(stage).length,
+    // o destino não é uma escolha: vai dito à parte
+    chosen: pickSlots(stage).filter((s) => s.kind !== 'destination').length,
     unchosen: of('unchosen'),
     pending: of('pending'),
     removed: of('removed'),
+    destination: stage.destination?.name ?? null,
   };
 }
 
-/** Dá para seguir: pelo menos um lugar escolhido, ou um nomeado decidido. */
+/**
+ * Dá para seguir: pelo menos um lugar escolhido (ou o destino dito), os nomeados decididos e, no passo
+ * a passo (fase 26), o último passo feito (escolhido, pendente ou tirado): o resumo e "Traçar o
+ * caminho" só no fim.
+ */
 export function canBuild(stage: MapStage): boolean {
   return (
     picksOf(stage).length > 0 &&
-    stage.named.every((n) => n.state.kind !== 'choice' || n.pick !== null)
+    stage.named.every((n) => n.state.kind !== 'choice' || n.pick !== null) &&
+    stepsDone(stage)
   );
 }
 
@@ -609,15 +848,10 @@ export async function prepare(
   likes: { interests: readonly Interest[]; learned: readonly { kind: StopKind }[] },
   deps: FlowDeps,
 ): Promise<Prepared> {
-  const all = picksOf(stage);
   const origin = stage.origin?.at ?? null;
-  const start = origin ?? (all[0] ? at(all[0].place) : [0, 0]);
-  const order = bestOrder(
-    start,
-    all.map((p) => at(p.place)),
-    origin !== null,
-  );
-  const picks = order.map((i) => all[i]).filter((p): p is PlacePick => p !== undefined);
+  // a ordem é a dos passos (fase 26); o caminho mais curto só no que ficou sem ordem
+  const picks = orderedPicks(stage, origin);
+  const start = origin ?? (picks[0] ? at(picks[0].place) : [0, 0]);
   const waypoints: LngLat[] = [
     ...(origin ? [origin] : []),
     ...picks.map((p) => at(p.place)),
@@ -792,17 +1026,42 @@ export async function addNamed(
  * sem repetir, com o tempo de carro de onde se sai; o tipo do app pelos tipos do Google (ou pelas
  * categorias da Geoapify, na fonte de reserva).
  */
-export function optionsFromPlaces(places: readonly Place[], from: LngLat): MapOption[] {
+export function optionsFromPlaces(
+  places: readonly Place[],
+  from: LngLat,
+  /**
+   * num passo seguinte (fase 26): o lugar escolhido no passo anterior e o próximo ponto fixo (o
+   * destino, ou casa), para cada cartão dizer o que o lugar acrescenta ao passeio
+   */
+  around?: { previous: { name: string; at: LngLat }; next: LngLat | null },
+): MapOption[] {
   const seen = new Set<string>();
   const out: MapOption[] = [];
   for (const place of places) {
     if (seen.has(place.id)) continue;
     seen.add(place.id);
-    const km = haversineM(from, [place.lng, place.lat]) / 1000;
+    const here: LngLat = [place.lng, place.lat];
+    const km = haversineM(from, here) / 1000;
     const kind = isGooglePlace(place)
       ? kindOfGoogleTypes(place.categories)
       : kindOfCategories(place.categories);
-    out.push({ place, km, minutes: driveMinutes(km), kind });
+    const option: MapOption = { place, km, minutes: driveMinutes(km), kind };
+    if (around) {
+      const fromKm = haversineM(around.previous.at, here) / 1000;
+      option.fromPrevious = {
+        name: around.previous.name,
+        km: fromKm,
+        minutes: driveMinutes(fromKm),
+      };
+      if (around.next) {
+        // o desvio: ir do anterior ao candidato e dele ao próximo ponto fixo, menos ir direto
+        const direct = driveMinutes(haversineM(around.previous.at, around.next) / 1000);
+        const via =
+          option.fromPrevious.minutes + driveMinutes(haversineM(here, around.next) / 1000);
+        option.detour = Math.max(0, via - direct);
+      }
+    }
+    out.push(option);
   }
   return out;
 }
@@ -828,31 +1087,53 @@ export function whereOf(step: Pick<StepInfo, 'relacao' | 'cidade'>): string {
  * ordem dos passos, **só com as referências que existem** nos lugares que as ferramentas devolveram
  * nesta rodada (a referência desconhecida sai e conta em `dropped`); os pendentes entram como grupos
  * sem opção, com a pergunta (os três estados da D278 valem para eles). A IA não acrescenta lugar.
+ *
+ * **Um passo de cada vez** (fase 26, `stepwise`): a IA procurou só o passo 1; os passos seguintes
+ * nascem `unsearched` e o app os procura em volta da escolha anterior quando chega a vez (`searchStep`).
+ * Um passo cuja relação depende da escolha anterior é sempre procurado pelo app (os candidatos que a IA
+ * tenha posto nele foram medidos do ponto de referência, não da escolha); um passo numa cidade ou
+ * perto de casa que a IA já procurou fica com o que ela achou. O destino dito, com a coordenada que a
+ * função resolveu, vira a parada de cidade (a 3.4).
  */
 export function stageFromOuting(
   result: Pick<PlanSearchResult, 'lugares' | 'passeio'>,
   origin: MapStage['origin'],
   reference: LngLat | null,
+  options: { stepwise?: boolean } = {},
 ): { stage: MapStage; dropped: number } {
+  const stepwise = options.stepwise ?? true;
   const from = origin?.at ?? reference;
   const byRef = new Map(result.lugares.map((f) => [f.ref, f.place] as const));
   let dropped = 0;
   const steps = [...result.passeio.passos].sort((a, b) => a.ordem - b.ordem);
-  const groups: OptionGroup[] = steps.map((p) => {
+  const groups: OptionGroup[] = steps.map((p, index) => {
     const places = p.candidatos.flatMap((ref) => {
       const place = byRef.get(ref);
       if (!place) dropped += 1;
       return place ? [place] : [];
     });
     const center: LngLat = places[0] ? [places[0].lng, places[0].lat] : (from ?? [0, 0]);
-    const options = from ? optionsFromPlaces(places, from) : optionsFromPlaces(places, center);
     const step: StepInfo = {
       ordem: p.ordem,
       relacao: p.relacao,
       cidade: p.cidade,
       hora_do_dia: p.hora_do_dia,
       fora_da_cidade: p.fora_da_cidade,
+      ...(p.busca ? { busca: p.busca } : {}),
+      ...(p.centro !== undefined ? { centro: p.centro } : {}),
+      ...(p.descartados !== undefined ? { descartados: p.descartados } : {}),
     };
+    // o app procura este passo quando chegar a vez: a relação depende da escolha anterior (depois do
+    // passo 1), ou a IA não o procurou (o passo a passo)
+    const toSearch =
+      stepwise &&
+      index > 0 &&
+      (dependsOnPrevious(p.relacao) || (places.length === 0 && p.buscado !== true));
+    const options = toSearch
+      ? []
+      : from
+        ? optionsFromPlaces(places, from)
+        : optionsFromPlaces(places, center);
     const search: PlaceSearch = {
       label: p.o_que,
       kind: options[0]?.kind ?? 'other',
@@ -862,7 +1143,7 @@ export function stageFromOuting(
     return {
       label: p.o_que,
       search,
-      status: options.length > 0 ? 'ok' : 'none',
+      status: toSearch ? 'unsearched' : options.length > 0 ? 'ok' : 'none',
       center,
       centerLabel: p.cidade || null,
       radiusKm: AREA_RADIUS_KM,
@@ -886,10 +1167,338 @@ export function stageFromOuting(
       question: pend.pergunta || `Onde fica ${pend.o_que}?`,
     });
   }
+  const destination =
+    result.passeio.destino !== '' && result.passeio.destino_centro
+      ? {
+          name: result.passeio.destino,
+          at: [result.passeio.destino_centro.lng, result.passeio.destino_centro.lat] as LngLat,
+        }
+      : null;
+  const first = stepGroups({ groups })[0];
   return {
-    stage: { origin, groups, named: [], chosen: [], nowhere: !from && groups.length === 0 },
+    stage: {
+      origin,
+      groups,
+      named: [],
+      chosen: [],
+      nowhere: !from && groups.length === 0,
+      ...(stepwise && first !== undefined ? { step: first } : {}),
+      ...(destination ? { destination } : {}),
+    },
     dropped,
   };
+}
+
+// ------------------------------------------------- o passeio um passo de cada vez (fase 26)
+/** O índice do grupo do passo da vez; null numa conversa sem passos (ou de antes). */
+export function currentStep(stage: Pick<MapStage, 'groups' | 'step'>): number | null {
+  return stage.step !== undefined && stage.groups[stage.step]?.step ? stage.step : null;
+}
+
+/** O passo depois do da vez, na ordem dita; null no último. */
+export function nextStep(stage: Pick<MapStage, 'groups' | 'step'>): number | null {
+  const current = currentStep(stage);
+  if (current === null) return null;
+  const steps = stepGroups(stage);
+  return steps[steps.indexOf(current) + 1] ?? null;
+}
+
+/** O passo antes do da vez; null no primeiro. */
+export function previousStep(stage: Pick<MapStage, 'groups' | 'step'>): number | null {
+  const current = currentStep(stage);
+  if (current === null) return null;
+  const steps = stepGroups(stage);
+  const at = steps.indexOf(current);
+  return at > 0 ? (steps[at - 1] ?? null) : null;
+}
+
+/** Um passo está decidido: escolhido, pendente (procurado e sem lugar) ou tirado; "sem escolha" não. */
+export function stepDecided(stage: MapStage, group: number): boolean {
+  const g = stage.groups[group];
+  if (!g) return false;
+  if (g.status === 'unsearched') return false;
+  return groupFate(g, stage.chosen) !== 'unchosen';
+}
+
+/** Dá para continuar ao passo seguinte: o da vez está decidido. */
+export function canContinue(stage: MapStage): boolean {
+  const current = currentStep(stage);
+  return current !== null && stepDecided(stage, current);
+}
+
+/** Todos os passos foram feitos: o resumo e "Traçar o caminho" aparecem (sem passos, sempre). */
+export function stepsDone(stage: MapStage): boolean {
+  const current = currentStep(stage);
+  if (current === null) return true;
+  return nextStep(stage) === null && stepDecided(stage, current);
+}
+
+/** O último lugar escolhido antes de um passo (a última escolha do passo anterior com escolha). */
+export function lastChosenBefore(
+  stage: MapStage,
+  group: number,
+): { name: string; at: LngLat } | null {
+  const steps = stepGroups(stage);
+  const position = steps.indexOf(group);
+  for (let i = position - 1; i >= 0; i--) {
+    const g = stage.groups[steps[i] ?? -1];
+    if (!g) continue;
+    const ids = stage.chosen.filter((id) => g.options.some((o) => o.place.id === id));
+    const last = ids.at(-1);
+    const option = g.options.find((o) => o.place.id === last);
+    if (option) return { name: option.place.name, at: [option.place.lng, option.place.lat] };
+  }
+  return null;
+}
+
+/** O passo seguinte vira o da vez (depois de procurado); o aviso de "voltar" sai. */
+export function advanceStep(stage: MapStage, to: number): MapStage {
+  return { ...stage, step: to, notice: null };
+}
+
+/**
+ * "Voltar um passo" (ou "mudar" num passo feito): o passo pedido vira o da vez e os seguintes
+ * recomeçam: as escolhas deles saem, o "tirar" também, e os que dependem da escolha anterior voltam a
+ * `unsearched` (as opções vão ser procuradas de novo); a tela avisa.
+ */
+export function backTo(stage: MapStage, group: number): MapStage {
+  const steps = stepGroups(stage);
+  const position = steps.indexOf(group);
+  if (position < 0) return stage;
+  const later = new Set(steps.slice(position + 1));
+  const redo: string[] = [];
+  const groups = stage.groups.map((g, i) => {
+    if (!later.has(i) || !g.step) return g;
+    // o "tirar" e o "pelo nome" do passo seguinte recomeçam junto com a escolha
+    const rest: OptionGroup = { ...g };
+    delete rest.removed;
+    delete rest.byName;
+    if (dependsOnPrevious(g.step.relacao)) {
+      redo.push(g.label);
+      return { ...rest, status: 'unsearched' as const, options: [], shown: OPTIONS_SHOWN };
+    }
+    return rest;
+  });
+  const laterIds = new Set(
+    stage.groups.flatMap((g, i) => (later.has(i) ? g.options.map((o) => o.place.id) : [])),
+  );
+  return {
+    ...stage,
+    groups,
+    chosen: stage.chosen.filter((id) => !laterIds.has(id)),
+    step: group,
+    notice:
+      redo.length > 0
+        ? `As opções de ${redo.join(' e ')} vão ser procuradas de novo depois da sua escolha.`
+        : null,
+  };
+}
+
+/** Onde se procura o passo seguinte, pela relação dele: os círculos, as palavras e o texto da tela. */
+export function stepSearchPlan(
+  stage: MapStage,
+  group: number,
+): {
+  circles: Circle[];
+  query: string;
+  rank: 'relevance' | 'distance';
+  cityFilter: string | null;
+  previous: { name: string; at: LngLat } | null;
+  next: LngLat | null;
+  where: string;
+} | null {
+  const g = stage.groups[group];
+  if (!g?.step) return null;
+  const step = g.step;
+  const busca = step.busca ?? {
+    palavras: g.label,
+    tipo_google: '',
+    aberto_agora: false,
+    nota_minima: 0,
+  };
+  const home = stage.origin?.at ?? null;
+  const previous = lastChosenBefore(stage, group);
+  const point = (p: LngLat): Point => ({ lat: p[1], lng: p[0] });
+  const destination = stage.destination?.at ?? null;
+  const anchor = previous?.at ?? home;
+  if (!anchor && !step.centro) return null;
+  const destinationName = stage.destination?.name ?? null;
+  switch (step.relacao) {
+    case 'perto_do_anterior':
+      return {
+        circles: [nearCircle(point(anchor ?? home ?? [0, 0]))],
+        query: busca.palavras,
+        rank: 'distance',
+        cityFilter: null,
+        previous,
+        next: destination ?? home,
+        where: previous ? `perto de ${previous.name}` : 'perto de onde vocês saem',
+      };
+    case 'no_caminho': {
+      const from = anchor ?? home;
+      const to: LngLat | null =
+        destination ?? (step.centro ? [step.centro.lng, step.centro.lat] : home);
+      const circles =
+        from && to && (from[0] !== to[0] || from[1] !== to[1])
+          ? routeCircles(point(from), point(to))
+          : [nearCircle(point(from ?? to ?? [0, 0]))];
+      return {
+        circles,
+        query: busca.palavras,
+        rank: 'relevance',
+        cityFilter: null,
+        previous,
+        next: to,
+        where: `no caminho${destinationName ? ` até ${destinationName}` : previous ? ' de volta' : ''}`,
+      };
+    }
+    case 'na_cidade': {
+      const center = step.centro ? ([step.centro.lng, step.centro.lat] as LngLat) : anchor;
+      return {
+        circles: [cityCircle(point(center ?? [0, 0]))],
+        query: step.cidade ? `${busca.palavras} em ${step.cidade}` : busca.palavras,
+        rank: 'relevance',
+        cityFilter: step.cidade || null,
+        previous,
+        next: destination ?? home,
+        where: step.cidade ? `em ${step.cidade}` : 'na cidade',
+      };
+    }
+    case 'perto_de_casa':
+      return {
+        circles: [nearCircle(point(home ?? anchor ?? [0, 0]))],
+        query: busca.palavras,
+        rank: 'distance',
+        cityFilter: null,
+        previous,
+        next: home,
+        where: 'perto de onde vocês saem',
+      };
+    case 'sem_relacao': {
+      // sem relação dita: em volta do anterior e no caminho de volta para casa
+      const from = previous?.at ?? home;
+      const to = home;
+      const circles =
+        from && to && previous
+          ? routeCircles(point(from), point(to))
+          : [nearCircle(point(from ?? [0, 0]))];
+      return {
+        circles,
+        query: busca.palavras,
+        rank: previous ? 'relevance' : 'distance',
+        cityFilter: null,
+        previous,
+        next: home,
+        where: previous
+          ? `perto de ${previous.name} e no caminho de volta`
+          : 'perto de onde vocês saem',
+      };
+    }
+  }
+}
+
+/**
+ * A busca do passo seguinte, feita pelo app quando chega a vez dele (fase 26, a decisão 1 de 20/11):
+ * a `find-places` do Google pelas palavras do passo, onde a relação manda (em volta do último lugar
+ * escolhido no passo anterior; nos círculos do caminho até o destino ou casa; dentro da cidade dita,
+ * com o filtro no app e os vizinhos ditos; perto de onde se sai). Os candidatos valem pela mesma regra
+ * do julgamento: só o que a função devolveu nesta busca; o app não inventa lugar. Cada cartão diz o que
+ * o lugar acrescenta ao passeio (a distância do anterior e o desvio), não a distância de casa.
+ */
+export async function searchStep(
+  stage: MapStage,
+  group: number,
+  deps: FlowDeps,
+): Promise<MapStage> {
+  const g = stage.groups[group];
+  const plan = stepSearchPlan(stage, group);
+  if (!g?.step || !plan) return stage;
+  const busca = g.step.busca;
+  // o tipo do Google só quando há (o pedido recusa o texto vazio)
+  const tipo = busca?.tipo_google.trim() ?? '';
+  const first = plan.circles[0];
+  const base: OptionGroup = {
+    ...g,
+    options: [],
+    shown: OPTIONS_SHOWN,
+    center: first ? [first.lng, first.lat] : g.center,
+    radiusKm: first ? first.radius_m / 1000 : g.radiusKm,
+    where: plan.where,
+  };
+  const from = stage.origin?.at ?? base.center;
+  let next: OptionGroup;
+  try {
+    const lists = await Promise.all(
+      plan.circles.map((c) => {
+        const request: GooglePlacesRequest = {
+          provider: 'google',
+          query: plan.query,
+          bias: c,
+          type: tipo === '' ? null : tipo,
+          open_now: busca?.aberto_agora ?? false,
+          min_rating: busca?.nota_minima ?? 0,
+          rank: plan.rank,
+          limit: 20,
+        };
+        return deps.findPlaces(request);
+      }),
+    );
+    const merged: Place[] = [];
+    const seen = new Set<string>();
+    for (const list of lists)
+      for (const p of list)
+        if (!seen.has(p.id)) {
+          seen.add(p.id);
+          merged.push(p);
+        }
+    const scoped = plan.cityFilter
+      ? withinCity(merged, plan.cityFilter)
+      : { places: merged, neighbors: false };
+    const around = plan.previous ? { previous: plan.previous, next: plan.next } : undefined;
+    const options = optionsFromPlaces(scoped.places, from, around).sort((a, b) =>
+      around
+        ? (a.detour ?? a.fromPrevious?.minutes ?? 0) - (b.detour ?? b.fromPrevious?.minutes ?? 0) ||
+          (a.fromPrevious?.km ?? 0) - (b.fromPrevious?.km ?? 0)
+        : 0,
+    );
+    next = {
+      ...base,
+      options,
+      status: options.length > 0 ? 'ok' : 'none',
+      provider: options[0]?.place.provider ?? 'google',
+      step: {
+        ...g.step,
+        fora_da_cidade: scoped.neighbors && options.length > 0,
+      },
+    };
+  } catch (err) {
+    next = { ...base, status: statusOf(err) };
+  }
+  return { ...stage, groups: stage.groups.map((x, i) => (i === group ? next : x)), notice: null };
+}
+
+/**
+ * A conta do passeio todo para o que está escolhido (fase 26, a 3.3): de casa ao passo 1, entre os
+ * passos na ordem, do último a casa, mais a permanência e o que o horário impõe. A tela a mostra desde
+ * o passo 1 e a refaz para cada candidato ("se for escolhido").
+ */
+export function stageAccount(
+  stage: MapStage,
+  time: { start: string; date: string },
+): OutingAccount {
+  const origin = stage.origin?.at ?? null;
+  return outingAccount({
+    home: origin,
+    stops: orderedPicks(stage, origin).map((p) => ({
+      name: p.place.name,
+      kind: p.kind,
+      at: Number.isFinite(p.place.lat) ? ([p.place.lng, p.place.lat] as LngLat) : null,
+      hours: p.place.hours ?? null,
+      ...(p.dayTime ? { dayTime: p.dayTime } : {}),
+    })),
+    start: time.start,
+    date: time.date,
+  });
 }
 
 /** As perguntas do planejador que o app ainda vai fazer, dentro do teto, depois das que já tem. */

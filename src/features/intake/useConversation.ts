@@ -30,14 +30,21 @@ import { findPlaces } from './find-places.ts';
 import {
   addNamed,
   addWant,
+  advanceStep,
   answersByTopic,
+  backTo,
+  currentStep,
+  nextStep,
   nightsNear,
   pickNamed,
   prepare,
+  previousStep,
   questionsAfter,
   removeWant,
+  searchStep,
   showMore,
   stageFromOuting,
+  stepSearchPlan,
   toggleChoice,
   widen,
   type FlowDeps,
@@ -47,8 +54,9 @@ import {
 import { declineGeo, grantGeo, readGeoConsent } from '@/features/travel-mode/queries.ts';
 import { gatherContext } from './gather.ts';
 import { placeKey, resolvePlace, type PlaceHit, type PlaceQuestion } from './locate.ts';
+import { timeBudget } from './outing-time.ts';
 import { planSearchRequestOf, streamPlanSearch } from './plan-search.ts';
-import { unreadReach } from './reach.ts';
+import { readReach, unreadReach } from './reach.ts';
 import { MAX_RADIUS_KM } from './search.ts';
 import { todayQuestions } from './today.ts';
 
@@ -113,20 +121,6 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
   /** a conversa que espera a resposta à pergunta de posição (fase 25) */
   const pendingStart = useRef<{ kind: 'plan' | 'today'; text: string } | null>(null);
 
-  useEffect(() => {
-    let alive = true;
-    void loadConversation().then((c) => {
-      if (!alive) return;
-      setConv(c);
-      // de volta à tela: as opções e as perguntas continuam; a leitura que estava no meio, não
-      if (c?.map) setStage({ kind: 'choosing' });
-      else if (c && c.questions.length > 0) setStage({ kind: 'answering' });
-      setLoaded(true);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
   // sair da tela cancela a leitura (o StrictMode desmonta e remonta na hora: só se não voltou)
   useEffect(() => {
     mounted.current = true;
@@ -152,6 +146,50 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
     ...(onProgress ? { onProgress } : {}),
   });
 
+  /**
+   * O passo da vez (fase 26): se ainda não foi procurado, a busca do app pela relação dele, com o
+   * cartão "Procurando café perto de X…"; o que achou fica na conversa.
+   */
+  const ensureStep = async (c: Conversation) => {
+    const map = c.map;
+    const step = map ? currentStep(map) : null;
+    if (!map || step === null || map.groups[step]?.status !== 'unsearched') return;
+    const plan = stepSearchPlan(map, step);
+    const label = map.groups[step].label;
+    setStage({
+      kind: 'searching',
+      done: 0,
+      total: 1,
+      note: `Procurando ${label}${plan ? ` ${plan.where}` : ''}…`,
+    });
+    const searched = await searchStep(map, step, deps());
+    await keep({ ...c, map: searched, prepared: null });
+    setStage({ kind: 'choosing' });
+  };
+
+  const setMap = (change: (m: MapStage) => MapStage) => {
+    if (!conv?.map) return;
+    void keep({ ...conv, map: change(conv.map), prepared: null });
+  };
+
+  useEffect(() => {
+    let alive = true;
+    void loadConversation().then((c) => {
+      if (!alive) return;
+      setConv(c);
+      // de volta à tela: as opções e as perguntas continuam; a leitura que estava no meio, não
+      if (c?.map) {
+        setStage({ kind: 'choosing' });
+        // o passo da vez ainda não procurado (o app fechou no meio da busca): procura agora
+        void ensureStep(c);
+      } else if (c && c.questions.length > 0) setStage({ kind: 'answering' });
+      setLoaded(true);
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- uma vez, ao abrir a tela
+  }, []);
   /** Um pedido que pode ser cancelado: o anterior sai, e o novo fica como o corrente. */
   const controller = () => {
     abort.current?.abort();
@@ -343,13 +381,11 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
       : null;
     const { stage: map, dropped } = stageFromOuting(result, origin.origin, reference);
     if (dropped > 0) console.info(`[conversa] ${String(dropped)} referência(s) da IA sem lugar`);
-    await keep({ ...planned, map, prepared: null });
+    const next = { ...planned, map, prepared: null };
+    await keep(next);
     setStage({ kind: 'choosing' });
-  };
-
-  const setMap = (change: (m: MapStage) => MapStage) => {
-    if (!conv?.map) return;
-    void keep({ ...conv, map: change(conv.map), prepared: null });
+    // a IA procura o passo 1; se não procurou (o passo a passo não foi seguido), o app procura
+    await ensureStep(next);
   };
 
   /** A viagem escrita sobre as escolhas: a leitura só, com o caminho que já se traçou. */
@@ -397,6 +433,7 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
           pending: built.pending,
           google: built.google,
           hours: built.hours,
+          dayTimes: built.dayTimes,
         },
       },
     );
@@ -521,15 +558,62 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
     /** As respostas dadas: o planejador procura. */
     search: () => (conv ? search(conv) : Promise.resolve()),
     toggle: (id: string) => setMap((m) => toggleChoice(m, id)),
+    /**
+     * "Continuar" (fase 26): o passo seguinte vira o da vez e, se depende da escolha anterior, é
+     * procurado em volta dela agora (o cartão "Procurando café perto de X…").
+     */
+    continueStep: async () => {
+      if (!conv?.map) return;
+      const to = nextStep(conv.map);
+      if (to === null) return;
+      const next: Conversation = { ...conv, map: advanceStep(conv.map, to), prepared: null };
+      await keep(next);
+      await ensureStep(next);
+    },
+    /** "Voltar um passo" (fase 26): o passo anterior volta a ser o da vez; os seguintes recomeçam. */
+    stepBack: () => {
+      if (!conv?.map) return;
+      const to = previousStep(conv.map);
+      if (to !== null) void keep({ ...conv, map: backTo(conv.map, to), prepared: null });
+    },
+    /** "mudar" num passo feito: volta a ele (os seguintes recomeçam). */
+    backTo: (group: number) => {
+      if (!conv?.map) return;
+      void keep({ ...conv, map: backTo(conv.map, group), prepared: null });
+    },
+    /** "Mais tempo" (fase 26, a 3.3): a resposta nova à pergunta do tempo, só para a conta do app. */
+    setTime: (answer: string) => {
+      if (!conv) return;
+      void keep({ ...conv, time_answer: answer.trim() || null });
+    },
+    /**
+     * O tempo do passeio para a conta das opções (fase 26): a hora de sair e o dia (como a montagem
+     * usa), e quanto tempo a pessoa tem (o que ela mudou na tela, a resposta à pergunta do tempo, ou o
+     * que a IA leu do pedido; null quando ninguém disse). `unread`: a resposta mudada não foi entendida.
+     */
+    time: conv
+      ? {
+          start: conv.kind === 'today' ? soon(new Date()) : '08:00',
+          date: conv.kind === 'today' ? conv.context.today : plusDay(conv.context.today),
+          budget: timeBudget({
+            answer: conv.time_answer ?? answersByTopic(conv.questions, conv.answers).reach ?? null,
+            tempo_min: conv.plan?.tempo_min ?? null,
+          }),
+          unread: !!conv.time_answer && readReach(conv.time_answer) === null,
+        }
+      : null,
     pick: (index: number, pick: NamedEntry['pick']) => setMap((m) => pickNamed(m, index, pick)),
     /** "Tirar da viagem" uma vontade sem opção, e o desfazer (fase 25, D278). */
     remove: (group: number, removed: boolean) => setMap((m) => removeWant(m, group, removed)),
     more: (group: number) => setMap((m) => showMore(m, group)),
-    /** "Procurar mais longe": a mesma busca com o dobro do raio. */
+    /** "Procurar mais longe": a mesma busca com o dobro do raio (o passo ainda não procurado, a busca dele). */
     wider: async (group: number) => {
       if (!conv?.map) return;
       setStage({ kind: 'searching', done: 0, total: 1 });
-      const map = await widen(conv.map, group, deps());
+      const map =
+        conv.map.groups[group]?.status === 'unsearched'
+          ? await searchStep(conv.map, group, deps())
+          : await widen(conv.map, group, deps());
       await keep({ ...conv, map, prepared: null });
       setStage({ kind: 'choosing' });
     },

@@ -24,7 +24,7 @@ import {
   setStopIncluded,
 } from '../review-edit.ts';
 import type { Schedule } from '@/features/intake/assemble.ts';
-import { hoursNotice } from '@/features/intake/hours.ts';
+import { dayTimeNotice, hoursNotice } from '@/features/intake/hours.ts';
 import { reschedule } from '@/features/intake/reschedule.ts';
 import { CheckRow } from './CheckRow.tsx';
 
@@ -133,12 +133,30 @@ function SuggestionLine({ stop }: { stop: ReviewStop }) {
  */
 function HoursLine({ stop, date }: { stop: ReviewStop; date: string }) {
   const notice = hoursNotice(stop.hours, date, stop.time);
-  if (!notice || !stop.include) return null;
+  // a hora do dia dita (fase 26): "Pedido de manhã; o roteiro chega às 13:25", ao lado do aviso do horário
+  const window = dayTimeNotice(stop.day_time, stop.time);
+  if ((!notice && !window) || !stop.include) return null;
   return (
-    <span className="inline-flex items-center gap-1 font-semibold text-tight-ink" data-hours-notice>
-      <AlertTriangle className="size-3.5 shrink-0" aria-hidden="true" />
-      {notice}
-    </span>
+    <>
+      {notice ? (
+        <span
+          className="inline-flex items-center gap-1 font-semibold text-tight-ink"
+          data-hours-notice
+        >
+          <AlertTriangle className="size-3.5 shrink-0" aria-hidden="true" />
+          {notice}
+        </span>
+      ) : null}
+      {window ? (
+        <span
+          className="inline-flex items-center gap-1 font-semibold text-tight-ink"
+          data-day-time-notice
+        >
+          <AlertTriangle className="size-3.5 shrink-0" aria-hidden="true" />
+          {window}
+        </span>
+      ) : null}
+    </>
   );
 }
 

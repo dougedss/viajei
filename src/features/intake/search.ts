@@ -58,8 +58,20 @@ export const MAX_RADIUS_KM = 400;
 export const widerRadius = (km: number): number => Math.min(MAX_RADIUS_KM, km * 2);
 
 // ------------------------------------------------------------------------------ as opções
-/** Uma opção do mapa num cartão: o lugar como está no mapa, a distância e o tempo estimado. */
-export type MapOption = { place: Place; km: number; minutes: number; kind: StopKind };
+/**
+ * Uma opção do mapa num cartão: o lugar como está no mapa, a distância e o tempo estimado de onde se
+ * sai e, num passo seguinte (fase 26), o que o lugar acrescenta ao passeio: a distância do lugar
+ * escolhido no passo anterior e o desvio (ir do anterior ao candidato e dele ao próximo ponto fixo,
+ * menos ir direto), em minutos, pela mesma estimativa.
+ */
+export type MapOption = {
+  place: Place;
+  km: number;
+  minutes: number;
+  kind: StopKind;
+  fromPrevious?: { name: string; km: number; minutes: number };
+  detour?: number;
+};
 
 /** Quantas opções a tela mostra de cada vez; "Mais opções" mostra as seguintes. */
 export const OPTIONS_SHOWN = 6;
@@ -142,11 +154,17 @@ export function optionsRequest(
 
 // ------------------------------------------------------------------------ a ordem do caminho
 /**
- * A ordem das escolhas que faz o caminho mais curto, saindo de casa e voltando (em linha reta): todas
- * as ordens até sete lugares (5.040), e o mais perto primeiro acima disso. A rota real vem depois,
- * nessa ordem.
+ * A ordem das escolhas que faz o caminho mais curto, saindo de `origin` e terminando em `end` (casa,
+ * por padrão; em linha reta): todas as ordens até sete lugares (5.040), e o mais perto primeiro acima
+ * disso. A rota real vem depois, nessa ordem. Desde a fase 26 só ordena o que ficou sem ordem (as
+ * escolhas de um mesmo passo entre si; os nomeados sem passo): a ordem dos passos é a da pessoa.
  */
-export function bestOrder(origin: LngLat, points: readonly LngLat[], roundTrip = true): number[] {
+export function bestOrder(
+  origin: LngLat,
+  points: readonly LngLat[],
+  roundTrip = true,
+  end: LngLat = origin,
+): number[] {
   const n = points.length;
   const d = (a: LngLat, b: LngLat) => haversineM(a, b);
   const cost = (order: readonly number[]) => {
@@ -157,7 +175,7 @@ export function bestOrder(origin: LngLat, points: readonly LngLat[], roundTrip =
       total += d(at, p);
       at = p;
     }
-    return roundTrip ? total + d(at, origin) : total;
+    return roundTrip ? total + d(at, end) : total;
   };
   const ids = points.map((_, i) => i);
   if (n <= 1) return ids;
