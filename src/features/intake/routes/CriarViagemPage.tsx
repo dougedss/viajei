@@ -160,9 +160,14 @@ export default function CriarViagemPage() {
   // a conversa e a saída de hoje, antes da revisão
   if (talk.conv || talk.stage.kind !== 'idle') {
     const stage = talk.stage;
-    // "Saindo de X · mudar" (fase 25, D271), nas perguntas e nas opções
+    // "Saindo de X · mudar" (fase 25, D271), nas perguntas e nas opções; sem origem conhecida, as
+    // opções perguntam "De onde vocês saem?" (fase 27)
     const origin = talk.conv ? (
-      <OriginLine label={originLabelOf(talk.conv)} onChange={(o) => void talk.setOrigin(o)} />
+      <OriginLine
+        label={originLabelOf(talk.conv)}
+        whenUnknown={stage.kind === 'choosing' ? 'ask' : 'hide'}
+        onChange={(o) => void talk.setOrigin(o)}
+      />
     ) : null;
     return (
       <div className="grid gap-5">

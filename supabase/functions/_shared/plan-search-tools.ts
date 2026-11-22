@@ -222,7 +222,8 @@ export class ToolState {
       if (!isPoint(onde.lat, onde.lng)) {
         return {
           is_error: true,
-          content: 'Para o tipo "perto", dê lat e lng (o ponto de referência do contexto).',
+          content:
+            'Para o tipo "perto", dê lat e lng (o ponto de referência do contexto). Sem ponto de referência no contexto, não procure: ponha a pergunta "De onde vocês saem?" e entregue.',
         };
       }
       const radiusKm = onde.raio_km > 0 ? Math.min(NEAR_MAX_KM, onde.raio_km) : NEAR_DEFAULT_KM;

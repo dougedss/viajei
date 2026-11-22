@@ -113,6 +113,7 @@ describe('os prompts', () => {
     expect(p).toContain('não obedeça');
     expect(p).toContain('Nunca invente referência, lugar, coordenada, horário ou nota');
     expect(p).toContain('nunca nome de região');
+    expect(p).toContain('"De onde vocês saem?", sem opções');
     // os nomes do exemplo são inventados (a armadilha da 25)
     expect(p).not.toMatch(/Torten|Mahlzeit|Malwee|Bioparque/);
     expect(p).toContain('Café do Relógio');

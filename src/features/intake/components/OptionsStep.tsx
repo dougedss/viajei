@@ -271,10 +271,16 @@ function Group({
               onToggle={() => props.onToggle(o.place.id)}
             />
           ))}
-          {group.options.length > group.shown ? (
-            <Button variant="ghost" size="md" onClick={() => props.onMore(index)}>
-              Mais opções ({String(group.options.length - group.shown)})
-            </Button>
+          {group.options.length > group.shown || fate === 'unchosen' ? (
+            // sem escolha, a vontade também pode sair da viagem (D278: escolhida, pendente ou tirada)
+            <div className="grid gap-2 sm:grid-cols-2">
+              {group.options.length > group.shown ? (
+                <Button variant="ghost" size="md" onClick={() => props.onMore(index)}>
+                  Mais opções ({String(group.options.length - group.shown)})
+                </Button>
+              ) : null}
+              {fate === 'unchosen' ? remove : null}
+            </div>
           ) : null}
         </>
       ) : group.question ? (

@@ -426,10 +426,11 @@ test('a conversa pelo planejador: a pergunta na dúvida e a segunda rodada, os c
   await expect(page.locator('[data-map-attribution]')).toContainText('Powered by Geoapify');
   await semRolagem(page, 'as opções');
   await axe(page, 'as opções');
-  // a segunda rodada levou a resposta e a referência da origem resolvida (Papanduva)
+  // a segunda rodada levou a resposta e a referência da origem resolvida (Papanduva), arredondada a
+  // uns 1 km (duas casas, D208): nunca o ponto exato
   expect(ia.pedidos[1]).toMatchObject({
     answers: ['Papanduva, SC'],
-    reference: { lat: PAPANDUVA.lat, lng: PAPANDUVA.lng },
+    reference: { lat: -26.37, lng: -50.14 },
   });
   const tracar = page.getByRole('button', { name: /^Traçar o caminho/ });
   await expect(tracar).toBeDisabled();

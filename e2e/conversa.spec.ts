@@ -284,9 +284,13 @@ test('a origem com dois candidatos plausíveis ("Bom Jardim"): a pergunta antes 
   await posicaoDecidida(page, 'declined');
   await campo(page).fill('quero ir num café amanhã');
   await page.getByRole('button', { name: 'Montar a viagem' }).click();
-  // sem origem conhecida, a primeira rodada roda; "mudar" para "Bom Jardim" pergunta qual
+  // sem origem conhecida, a primeira rodada roda e as opções perguntam de onde saem (sem "Saindo de");
+  // "Bom Jardim" pergunta qual
   await expect(page.locator('[data-option]')).toHaveCount(1, { timeout: 30_000 });
-  await page.getByRole('button', { name: 'Mudar de onde vocês saem' }).click();
+  await expect(page.locator('[data-options] [data-origin="unknown"]')).toContainText(
+    'De onde vocês saem?',
+  );
+  await page.getByRole('button', { name: 'Informar de onde vocês saem' }).click();
   await page.getByLabel('De onde vocês saem?').fill('Bom Jardim');
   await page.getByRole('button', { name: 'Usar esta origem' }).click();
   const escolher = page.locator('[data-place-ask="choice"]');

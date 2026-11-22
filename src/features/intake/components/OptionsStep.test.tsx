@@ -126,6 +126,14 @@ describe('OptionsStep: os cartões do Google (fase 27)', () => {
     expect(gone.querySelector('[data-rating]')).toBeNull();
   });
 
+  it('o grupo com opções e sem escolha tem "Tirar da viagem"; o escolhido, não (D278)', () => {
+    render(<OptionsStep {...props(stage([group([google()])]))} />);
+    expect(screen.getByRole('button', { name: 'Tirar da viagem' })).toBeTruthy();
+    cleanup();
+    render(<OptionsStep {...props({ ...stage([group([google()])]), chosen: ['ChIJ-cafe'] })} />);
+    expect(screen.queryByRole('button', { name: 'Tirar da viagem' })).toBeNull();
+  });
+
   it('um lugar do mapa de antes (a Geoapify) continua como era: o horário traduzido e sem o Google no pé', () => {
     render(<OptionsStep {...props(stage([group([osm()])]))} />);
     const card = screen.getByRole('button', { name: /^Café do Mapa/ });
