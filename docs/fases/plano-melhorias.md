@@ -794,7 +794,8 @@ documentação dela). Ideia fechada no balcão em 21/11 (`docs/ideias/2026-11-21
   (`claude-sonnet-5-5`, `IMPORT_MODEL`), até a bateria dizer outra coisa. A relação entre os passos deixa
   de ser uma tabela de regras do app e vira o "onde" da ferramenta de procurar: é o que a 26 usa.
 - **A bateria de pedidos de leigo, no laboratório, fora do deploy** (decisão 6): **10 pedidos por rodada,
-  sempre diferentes entre si**, os resultados **guardados** em `lab_runs` (o painel `/lab`) "para sempre
+  sempre diferentes entre si e novos a cada rodada, com os padrões de pedido mudando** (decisão do Douglas
+  de 22/11, abaixo), os resultados **guardados** em `lab_runs` (o painel `/lab`) "para sempre
   ir melhorando e analisá-los", **nunca como portão da CI** ("não pode ser atrelado ao deploy, para não
   deixar ainda mais demorado"). Por pedido: o texto, o que a IA leu, o que as ferramentas devolveram, o
   que ficou pendente, o roteiro que saiu, o tempo e o custo, e o resultado de cada cobrança. As
@@ -1326,10 +1327,15 @@ bateria de 50 a 100 pedidos como portão do deploy (ele reduziu para 10 e tirou 
 numa tira quando o dia tem volta (a decisão 1 de 15/11 passa a valer como "o trecho inteiro até o
 objetivo"); cada lugar escolhido como um objetivo.
 
-**Em aberto, para ele:** os 10 pedidos da bateria são novos a cada rodada ou são 10 fixos? O balcão leu
-"sempre um diferente do outro" como os dois e recomenda novos a cada rodada, com os que falharam
-voltando até passar. **Pendência só dele, antes da fase 27:** a conta do Google Cloud com faturamento, a
-Places API (New) ligada e a chave em `supabase secrets`.
+**Decidido em 22/11:** os 10 pedidos da bateria são **novos a cada rodada**. O Douglas: "mudam a cada
+rodada, pois assim vc pode ter a chance de pegar outros comportamentos inesperados e precisa mudar os
+padrões de pedidos". Ou seja, a rodada nova não troca só as palavras: muda o tipo de pedido. A outra metade
+da recomendação do balcão (os que falharam voltando até passar) ele não comentou; fica em aberto, e a fase
+27 não a adota sem perguntar. **A chave do Google, feita em 22/11:** conta qimkt38, projeto `viajei-515509`
+com faturamento (a "Minha conta de faturamento 1", reaberta), a Places API (New) ligada, a chave restrita a
+ela e o secret `GOOGLE_PLACES_API_KEY` no Supabase de produção (pelas mãos do Douglas; o nome aparece no
+painel, atualizado às 09h54 UTC de 22/11). Falta a fase 27 pôr o nome no `.env.example` e no
+`remote:secrets-push`.
 
 O que essas decisões mudam: a **D176**, a **D203** e a **D208** (a conversa pede a posição; a origem à
 vista; as opções pela hora), na fase 25; a **D226**, a **D227**, a **D228**, a **D225**, a **D230** e a

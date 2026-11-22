@@ -751,8 +751,113 @@ _(preenchido pelo orquestrador em 20/11, ~19h50 UTC, a partir do transcript, do 
   fase, junto com este relatório, o plano e as três ideias.
 
 ### Sessão
-_(a abrir pelo Douglas num chat novo; a preencher no próximo passo)_
-
 - **21/11, ~08h50 UTC, antes de abrir o chat:** o Douglas pediu para **esperar**: "estamos definindo mais uns ajustes e vou esperar para iniciar o 25; talvez alguma coisa do 25 vai ser alterado, e você ajusta as demandas todas de uma vez". O `fase-25.md` fica escrito e **não deve ser colado** até ele trazer os ajustes; o orquestrador então revisa o plano (as fases 25 e 26) e o prompt numa passada só, e refaz este portão se mudar.
 - **21/11, ~09h17 UTC:** os ajustes chegaram (as duas ideias de 21/11, acima). O plano foi revisto e o `fase-25.md`
   reescrito numa passada só; **a 25 está pronta para abrir quando o Douglas pedir**; nenhuma fase foi aberta.
+- **Chat do VS Code aberto pelo Douglas**, `session_id` `0767f156-46ff-4051-8a35-f30b48eb15c9`, das 09h23 UTC de 21/11
+  ao resumo final às 15h26 UTC (o laboratório da produção lido às 15h55; a última resposta às 17h47, a "fechou
+  aqui?"). Pela transcrição: **58 respostas no Fable 5.1 e 182 no Opus 5.5** (começou no Fable, contra a regra de
+  08/11; o Douglas trocou para o Opus com `/model` às 10h21), uma compactação (13h03), 6 mensagens do Douglas, 379
+  mil tokens de saída, 100,2 M lidos do cache, 1,69 M criados; 19 chamadas de Bash com `git commit` e 9 com `git
+  push`. **18 commits** na `main`, de `6d6a6ca` (a 3.0) a `aca13be`, com o de fechamento `53071f8` `fase 25:
+  correções da conversa`. Sem o JSON do `claude -p`, o custo em dinheiro da sessão não foi medido.
+- **CI na `fase-25`:** vermelha só em `53071f8` (44894539154); verde em `1195648` (44896059799), `eb794a6`
+  (44898358249), `e82bd35` (44900768409), `246f2c1` (44902315763), `de6f9a0` (44918426737) e `aca13be`
+  (44921681780); na `main`, 44916861543 (`246f2c1`), 44918432708 (`de6f9a0`) e 44921685622 (`aca13be`, 15h54 UTC).
+- **Laboratórios e medição:** a medição 1 (44897815194, lab-a) vermelha, que levou à D282; a 2 (44899822777) não
+  mediu (o login falhou); a 2b (44899974593) não mediu o mapa (a cota de buscas do lab-a, D283); **a 3 (44902017111,
+  lab-b) verde em todas as cobranças**; **o preview (44914384227, `246f2c1`) 39 verdes, 0 vermelhos, 2 pulados**;
+  **o da produção (44919029673, `de6f9a0`, 15h25–15h53 UTC) 37 verdes, 1 vermelho, 3 pulados**: o vermelho é o
+  Lighthouse da `nova_viagem` (performance 88; o CLS de 0,016 para 0,136, sempre o mesmo `div.rounded-card`; a causa
+  não conferida), registrado na D281 como o primeiro item da próxima fase. O agendado de 21/11 (44914556412),
+  preso no sha da 23, cancelado na fila. **Toda a IA da fase: US$ 0,3426** do teto de 1,00 (D281).
+- **No hospedado:** a `0019` (`trips.car_*` fora) aplicada às 11h08 UTC com o `--dry-run` lido; a `plan-trip` na v8
+  (11h35 UTC); nenhum secret.
+- **Desvios de regra:** a sessão começou no Fable 5.1; o merge foi às 15h00 UTC, antes de o laboratório do preview
+  terminar, com a liberação do Douglas no chat ("ok, pude subir e fazer o merge msm assim"). O que a sessão não
+  conferiu: a causa do login que falhou na medição 2; se um quadrado de busca menor ordenaria melhor as cidades; o
+  Nominatim além das consultas que a medição registrou; a causa do CLS.
+
+### Portão de saída (conferido às ~10h00 UTC de 22/11, a pedido do Douglas: "fechar", no chat da chave do Google)
+- a ponta da `fase-25` está na `origin/main`: sim, `aca13be` (o código é o de `246f2c1`; `de6f9a0` e `aca13be` são só
+  documentação), com o commit `fase 25: correções da conversa` (`53071f8`); as branches remotas `fase-23` e
+  `fase-25` ainda existem.
+- CI verde no sha da `main` (44921685622): sim. O laboratório da produção (44919029673): vermelho só no Lighthouse
+  da `nova_viagem`, registrado na D281 pela regra da seção 1 do prompt (o vermelho da produção vira o primeiro item
+  da próxima fase). O agendado de 22/11 ainda não tinha rodado às 10h00 UTC (o cron é às 06h07 UTC e costuma sair
+  por volta das 16h UTC).
+- `docs/decisoes.md` tem a seção "Fase 25 · Correções da conversa (21/11/2026)", D270 a D283, em sequência: sim.
+  `docs/fases/fase-25.md`, `docs/fases/orquestracao.md`, o plano e as ideias de 21/11 commitados em `53071f8`: sim.
+  Este fechamento, a decisão da bateria no plano e na ideia de 21/11 ficam fora do git até o commit de fechamento
+  da próxima fase.
+- a memória do projeto atualizada depois do fim: sim (`viajei-projeto.md` às 15h54 UTC de 21/11, "Fechamento da
+  fase 25"); completada em 22/11 (a chave do Google, a bateria, este portão).
+- o resumo final (15h26 UTC, completado às 15h55 com o laboratório da produção e às 17h47): o sha, o que mudou por
+  entrega, os testes (1.484 Vitest, 655 pgTAP, 79 Playwright), as medições e os laboratórios, a `0019` e a
+  `plan-trip` v8, as D270 a D283 e o que mudou na D176, D203, D208, D225, D228 e D231, as armadilhas (a cota de
+  buscas vale para as contas do laboratório; os homônimos do Nominatim; o `stale` do `sync_push`; "o dia" só antes
+  das 11h; o agendado preso no sha de quando nasce; push na `main` cancela a CI anterior; os nomes reais proibidos
+  nos exemplos dos prompts) e o que ficou sem prova (o cartão da posição num aparelho).
+- **Decisões do Douglas de 22/11:** a bateria da 27 tem **10 pedidos novos a cada rodada**, com os padrões de pedido
+  mudando (no plano, na seção de 21/11, e na ideia de 21/11); **a chave do Google existe**: conta qimkt38, projeto
+  `viajei-515509`, a Places API (New) ligada, a chave restrita a ela, o secret `GOOGLE_PLACES_API_KEY` no Supabase
+  de produção (o nome conferido no painel; a chave não testada numa chamada real). A dougeds.contato ficou de fora
+  (a conta de faturamento dela pedia um pré-pagamento de R$ 150, que o Douglas não quis).
+- **Pendências do Douglas:** o `.env.example` (modificado, não lido); apagar as branches remotas `fase-23` e
+  `fase-25`; a pasta `.claude/`; girar ou não a chave do Google (ela passou pelo chat em 22/11).
+- **O que fica para a 27 (a 3.0 dela):** o Lighthouse da `nova_viagem` (o CLS de 0,136), o primeiro item; o
+  nome `GOOGLE_PLACES_API_KEY` no `.env.example` e no `remote:secrets-push`; ler o agendado de 22/11.
+
+## Fase 27 · A fonte e o planejador
+
+### Portão de entrada (aberto às ~10h17 UTC de 22/11, a pedido do Douglas: "proxima")
+- fase 25 na `main`: sim, `aca13be` (o código em `246f2c1`; D270 a D283), com o portão de saída conferido às ~10h00 UTC
+  de 22/11 pelo chat da chave do Google (acima). A dependência (25 → 27) está satisfeita. A ordem 23 → 25 → 27 → 26 →
+  28 → 29 → 19 → 20 → 21 (a recomendação do balcão, no plano desde 21/11): o Douglas pediu "proxima" às ~10h05 UTC de
+  22/11 sem objeção, e o orquestrador abriu a 27.
+- o último laboratório na produção (44919029673): vermelho só no Lighthouse da `nova_viagem` (o CLS de 0,136),
+  registrado na D281 como o primeiro item desta fase (a 3.0 do prompt). O agendado de 22/11 ainda não tinha rodado
+  às 10h05 UTC.
+- `docs/decisoes.md` até a D283. **As D da fase 27 começam na D284.** A próxima migration é a **`0020`** (o `place_id`
+  do Google em `stops`, o `kind` novo em `ai_imports`, o que a bateria pedir), só acrescentando; o Dexie na v7 (a
+  próxima é a v8); uma função nova (o planejador, `plan-search` na recomendação); **nenhum secret da sessão: o
+  `GOOGLE_PLACES_API_KEY` foi criado pelo Douglas em 22/11** (conta `qimkt38`, projeto `viajei-515509`, Places API
+  (New), chave restrita; o nome conferido no painel pelo chat da chave; a chave **não testada numa chamada real**: a
+  primeira é da sessão, e conta no teto).
+- memória do projeto atualizada depois da fase 25: sim (pela sessão em 21/11 e pelo chat da chave em 22/11),
+  completada pelo orquestrador (o parágrafo da fase 27).
+- **A decisão da bateria** (o Douglas, 22/11): dez pedidos **novos a cada rodada, com os padrões de pedido mudando**;
+  "os que falharam voltam" não comentado: o prompt manda registrar como em aberto e não adotar sem perguntar.
+- `docs/fases/fase-27.md` escrito às ~10h17 UTC de 22/11 pelo orquestrador, a partir do plano (a fase 27 e as decisões
+  1, 3, 4, 5, 6 e 8 de 21/11 e a de 22/11), das ideias de 21 e 20/11, das D127 a D133, D211, D224 a D238, D260, D268,
+  D270 a D283, da memória (`viajei-prioridade-pesquisa-e-roteiro.md`, `viajei-google-cloud.md`,
+  `feedback-chave-nova-comando-env.md`), da documentação pública **do Google** (a Places API (New), lida por agente em
+  21 e 22/11: Text Search `POST places:searchText` com `textQuery`, `locationBias` círculo até 50 km ou retângulo,
+  `locationRestriction` só retângulo, `includedType`, `openNow`, `minRating`, `pageSize` ≤ 20 e até 60 resultados, o
+  field mask obrigatório; Place Details `GET /v1/places/{id}`; os SKUs: id/location/formattedAddress Essentials,
+  displayName/primaryType/businessStatus/googleMapsUri Pro, rating/userRatingCount/opening hours/websiteUri
+  Enterprise; cobra-se pelo SKU mais alto; faturamento obrigatório), **do Supabase** (os limites das Edge Functions:
+  150 s de parede no Free e 400 s nos pagos, 2 s de CPU por worker, 256 MB, 504 sem resposta em 150 s) e **da
+  Anthropic** (o uso de ferramentas: `tools` com `input_schema`, `strict`, `tool_use`/`tool_result`, `stop_reason`
+  `tool_use`; **`tool_choice` `any` e `tool` devolvem 400 no Sonnet 5.5 e no Opus 5.5**; `disable_parallel_tool_use`;
+  o `toolRunner` do SDK TypeScript com stream) e de um levantamento do código em `aca13be` (`places-schema.ts`,
+  `places-handler.ts`, `find-places/index.ts`, `import-ai.ts`, `import-handler.ts`, `plan-handler.ts`, `plan-ai.ts`,
+  `flow.ts` com os três estados, `locate.ts`, `useConversation.ts`, `measure-conversa.ts` como lab-b, `lab_runs` e
+  `lab_checks`, `LabPage.tsx`, `conversa.spec.ts`). **Marcado como não conferido:** os preços em dinheiro do Google
+  (só a leitura do balcão); se `tools` e `output_config.format` vão no mesmo pedido (por isso a entrega é uma
+  ferramenta estrita); a lista de tipos do Google (a "Tabela A"); se a Text Search da cidade devolve o `viewport`; se
+  o `locationRestriction` vale para uma consulta com texto; a busca ao longo de uma rota (não achada: círculos ao
+  longo da linha); o plano do Supabase deste projeto (desenhar para 150 s); se o `import` de subcaminho do SDK
+  funciona no Deno. Com a 3.0 (o CLS, o agendado de 22/11, os nomes nos scripts, o pedido sem tipo), a fonte (o
+  handler do Google com `fetch` injetado, o field mask Enterprise registrado, "em Canoinhas" dentro da cidade pelo
+  app, os cartões com a nota e o aberto agora, `stops.google_place_id` na `0020`, a primeira chamada real), o
+  planejador (a função `plan-search` com o laço de ferramentas `procurar_lugares`, `localizar_nome`,
+  `tempo_de_carro` e a entrega `entregar_passeio`, `tool_choice: auto`, teto de 6 turnos e 8 chamadas, o prazo de
+  140 s, o app julgando as `ref`s, as cotas), a bateria (a tarefa `bateria` sob pedido, dez pedidos gerados pela IA a
+  partir de padrões que rodam, as cobranças objetivas e o juiz, gravada em `lab_runs`/`lab_checks`, o painel), a
+  Geoapify nas sugestões até a medição, os testes, a rodada da bateria como medição (teto da fase US$ 5,00, IA mais
+  Google), a documentação (D225, D226, D227, D228, D230 e D231 revistas; prompt mestre v14; 9.10). Fora do git até o
+  commit de fechamento da fase, junto com este relatório, o plano e a ideia de 21/11.
+
+### Sessão
+_(a abrir pelo Douglas num chat novo; a preencher no próximo passo)_

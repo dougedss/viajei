@@ -47,8 +47,7 @@ const optionals = (schema: unknown) => {
           (k): k is string => typeof k === 'string',
         ),
       );
-      for (const k of Object.keys(n.properties))
-        if (!required.has(k)) out.push(`${path}.${k}`);
+      for (const k of Object.keys(n.properties)) if (!required.has(k)) out.push(`${path}.${k}`);
     }
   });
   return out;

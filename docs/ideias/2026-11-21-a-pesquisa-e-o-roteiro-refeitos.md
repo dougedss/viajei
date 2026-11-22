@@ -153,6 +153,10 @@ Nenhum dos dois mapas tem "a feirinha" como um lugar: quem sabe onde ela fica é
 - Decisão do Douglas: **10 pedidos por rodada, sempre um diferente do outro**, com os resultados
   **guardados** "para sempre ir melhorando e analisá-los", e **fora do deploy** ("não pode ser atrelado
   ao deploy, para não deixar ainda mais demorado").
+- Decisão do Douglas de 22/11, depois desta ideia fechada: os 10 pedidos são **novos a cada rodada**,
+  "pois assim vc pode ter a chance de pegar outros comportamentos inesperados e precisa mudar os padrões
+  de pedidos". Os que falharam voltarem até passar (a outra metade da recomendação do balcão) ele não
+  comentou.
 - O laboratório já roda sozinho, todo dia e sob pedido, separado do deploy, e grava as rodadas em
   `lab_runs` (o painel `/lab`). A bateria entra como uma tarefa dele, nunca como portão da CI.
 - O que guardar por pedido: o texto, o que a IA leu, o que as ferramentas devolveram, o que ficou
