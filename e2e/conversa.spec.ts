@@ -511,7 +511,7 @@ const CAFE_WIEGAND = lugarGoogle('g-cafe-w', 'Café da Serra', -26.9, -49.6, 'Jo
   hours: null,
   opening_hours: null,
 });
-const CAFE_LONGE = lugarGoogle('g-cafe-l', 'Café do Litoral', -26.3, -48.85, 'Joinville', {
+const CAFE_LONGE = lugarGoogle('g-cafe-l', 'Café do Litoral', -27.6, -48.55, 'Florianópolis', {
   hours: null,
   opening_hours: null,
 });
@@ -559,7 +559,8 @@ test('o passeio um passo de cada vez: só a cachoeira; escolhida, "Continuar" pr
     },
     (body) => pedidos.push(body),
   );
-  // a IA procurou só o passo 1 (as duas cachoeiras) e entregou os dois passos; a pessoa tem a tarde
+  // a IA procurou só o passo 1 (as duas cachoeiras) e entregou os dois passos; a pessoa tem o dia
+  // (10 h): a cachoeira e o café perto dela cabem (cerca de 7 h); o café de Florianópolis, não (12 h)
   const ia = await planejador(context, () =>
     rodada(
       achados([WIEGAND, SALTO]),
@@ -578,7 +579,7 @@ test('o passeio um passo de cada vez: só a cachoeira; escolhida, "Continuar" pr
             busca: { palavras: 'café', tipo_google: 'cafe', aberto_agora: false, nota_minima: 0 },
           }),
         ],
-        { tempo_min: 300 },
+        { tempo_min: 600 },
       ),
     ),
   );
@@ -587,7 +588,7 @@ test('o passeio um passo de cada vez: só a cachoeira; escolhida, "Continuar" pr
   const user = await criarUsuario('PassoAPasso');
   await entrar(page, user.email);
   await posicaoDecidida(page, 'granted');
-  await campo(page).fill('amanhã quero ir numa cachoeira e depois tomar um café, tenho a tarde');
+  await campo(page).fill('amanhã quero ir numa cachoeira e depois tomar um café, tenho o dia');
   await page.getByRole('button', { name: 'Montar a viagem' }).click();
 
   // o pedido ao planejador diz que o app sabe procurar os passos seguintes
@@ -625,7 +626,8 @@ test('o passeio um passo de cada vez: só a cachoeira; escolhida, "Continuar" pr
   const cafeSerra = page.getByRole('button', { name: /^Café da Serra/ });
   await expect(cafeSerra).toContainText('de Cachoeira Wiegand');
   await expect(page.getByText(/opções? no mapa perto de Cachoeira Wiegand/)).toBeVisible();
-  // o café longe demais estoura a tarde: marcado, esmaecido e ainda escolhível
+  // o café perto da cachoeira cabe; o longe demais estoura o dia: marcado, esmaecido e ainda escolhível
+  await expect(cafeSerra).not.toHaveAttribute('data-over', 'true');
   const cafeLonge = page.getByRole('button', { name: /^Café do Litoral/ });
   await expect(cafeLonge).toHaveAttribute('data-over', 'true');
   await expect(cafeLonge).toContainText('Não cabe no tempo');

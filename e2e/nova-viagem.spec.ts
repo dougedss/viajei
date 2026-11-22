@@ -569,6 +569,8 @@ test('vou pra Joinville com um café no caminho (fase 26, a 3.4): o café no cam
       passeio([passo(1, 'café', ['p1'], { relacao: 'no_caminho', cidade: '', buscado: true })], {
         destino: 'Joinville',
         destino_centro: { lat: -26.3045, lng: -48.8487 },
+        // de onde sai, lido do pedido (sem posição e sem viagem anterior): o app resolve no Nominatim
+        origem: 'Papanduva, SC',
       }),
     ),
   );
