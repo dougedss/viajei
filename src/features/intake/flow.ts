@@ -2,11 +2,21 @@
 import type { Interest, StopKind } from '../../../supabase/functions/_shared/constants.ts';
 import { haversineM, type LngLat } from '../../../supabase/functions/_shared/geo.ts';
 import { filled } from '../../lib/text/filled.ts';
-import type {
-  FindPlacesRequest,
-  Place,
-  PlacesRequest,
+import { kindOfGoogleTypes } from '../../../supabase/functions/_shared/google-types.ts';
+import {
+  GOOGLE_MAX_RADIUS_M,
+  isGooglePlace,
+  type FindPlacesRequest,
+  type Place,
+  type PlacesProvider,
+  type PlacesRequest,
 } from '../../../supabase/functions/_shared/places-schema.ts';
+import type {
+  DayTime,
+  Outing,
+  PlanSearchResult,
+  StepRelation,
+} from '../../../supabase/functions/_shared/plan-search-protocol.ts';
 import type {
   PlanContext,
   PlanIntent,
@@ -20,13 +30,6 @@ import type {
 import { placesForAi, type Legs, type PlacePick } from './assemble.ts';
 import { placeKey, resolvePlace, type PlaceHit, type PlaceQuestion } from './locate.ts';
 import { confirmNamed, type NamedState, type SearchResult } from './named.ts';
-import {
-  CLASSIC_CATEGORIES,
-  searchFor,
-  suggestionCategories,
-  wantsInText,
-  type PlaceSearch,
-} from './places.ts';
 import { radiusFor, readReach, REACH_QUESTION_TEXT, spanOfReach } from './reach.ts';
 import {
   AREA_RADIUS_KM,
@@ -34,6 +37,7 @@ import {
   corridorArea,
   cuisineRequest,
   DESTINATION_RADIUS_M,
+  driveMinutes,
   MAX_RADIUS_KM,
   nightOptions,
   OPTIONS_SHOWN,
@@ -43,6 +47,14 @@ import {
   widerRadius,
   type MapOption,
 } from './search.ts';
+import {
+  CLASSIC_CATEGORIES,
+  kindOfCategories,
+  searchFor,
+  suggestionCategories,
+  wantsInText,
+  type PlaceSearch,
+} from './places.ts';
 
 /**
  * A conversa nova (fase 24), passo a passo, com a rede por injeção (o app liga a `find-places`, o
@@ -71,6 +83,24 @@ export type OptionGroup = {
    * lugar nomeado, e o grupo não fica pendente de novo (fase 25)
    */
   byName?: boolean;
+  /** de onde vieram as opções (fase 27): o Google, pelo planejador; sem isto, a Geoapify por tipo */
+  provider?: PlacesProvider;
+  /** o passo do planejador (fase 27): a ordem e a relação com o resto do passeio (o que a 26 usa) */
+  step?: StepInfo;
+  /** onde se procurou, em palavras ("em Canoinhas", "perto de onde vocês saem"), no lugar do raio */
+  where?: string;
+  /** o pendente do planejador: o que foi pedido e não tem lugar, com a pergunta que resolve */
+  question?: string;
+};
+
+/** O passo do planejador, guardado no grupo (fase 27): o que a fase 26 lê para o passo seguinte. */
+export type StepInfo = {
+  ordem: number;
+  relacao: StepRelation;
+  cidade: string;
+  hora_do_dia: DayTime;
+  /** os candidatos são dos vizinhos: nenhum dentro da cidade dita (a tela diz) */
+  fora_da_cidade: boolean;
 };
 
 /**
@@ -372,11 +402,38 @@ export function showMore(stage: MapStage, group: number): MapStage {
   };
 }
 
-/** "Procurar mais longe": a mesma busca com o dobro do raio. */
+/**
+ * "Procurar mais longe": a mesma busca com o dobro do raio. Num grupo do planejador (fase 27), a busca
+ * por texto no Google num círculo maior (até os 50 km do Google), sem o filtro da cidade: é o que
+ * "mais longe" quer dizer.
+ */
 export async function widen(stage: MapStage, group: number, deps: FlowDeps): Promise<MapStage> {
   const g = stage.groups[group];
   if (!g) return stage;
   const from = stage.origin?.at ?? g.center;
+  if (g.step) {
+    const radiusKm = Math.min(GOOGLE_MAX_RADIUS_M / 1000, widerRadius(g.radiusKm));
+    const base = {
+      ...g,
+      radiusKm,
+      options: [],
+      where: `a até ${String(radiusKm)} km${g.centerLabel ? ` de ${g.centerLabel}` : ''}`,
+    };
+    let next: OptionGroup;
+    try {
+      const places = await deps.findPlaces({
+        provider: 'google',
+        query: g.centerLabel ? `${g.label} em ${g.centerLabel}` : g.label,
+        bias: { lng: g.center[0], lat: g.center[1], radius_m: Math.round(radiusKm * 1000) },
+        limit: 20,
+      });
+      const options = optionsFromPlaces(places, from);
+      next = { ...base, options, status: options.length > 0 ? 'ok' : 'none' };
+    } catch (err) {
+      next = { ...base, status: statusOf(err) };
+    }
+    return { ...stage, groups: stage.groups.map((x, i) => (i === group ? next : x)) };
+  }
   const next = await runGroup(
     deps,
     g.label,
@@ -727,4 +784,120 @@ export async function addNamed(
     named: [...stage.named, entry],
     groups: stage.groups.map((g, i) => (i === group ? { ...g, byName: true } : g)),
   };
+}
+
+// ------------------------------------------------------------- o planejador (fase 27)
+/**
+ * Os cartões dos lugares que o planejador achou: na ordem em que a IA os pôs (os melhores primeiro),
+ * sem repetir, com o tempo de carro de onde se sai; o tipo do app pelos tipos do Google (ou pelas
+ * categorias da Geoapify, na fonte de reserva).
+ */
+export function optionsFromPlaces(places: readonly Place[], from: LngLat): MapOption[] {
+  const seen = new Set<string>();
+  const out: MapOption[] = [];
+  for (const place of places) {
+    if (seen.has(place.id)) continue;
+    seen.add(place.id);
+    const km = haversineM(from, [place.lng, place.lat]) / 1000;
+    const kind = isGooglePlace(place)
+      ? kindOfGoogleTypes(place.categories)
+      : kindOfCategories(place.categories);
+    out.push({ place, km, minutes: driveMinutes(km), kind });
+  }
+  return out;
+}
+
+/** Onde se procurou, em palavras, pela relação do passo. */
+export function whereOf(step: Pick<StepInfo, 'relacao' | 'cidade'>): string {
+  switch (step.relacao) {
+    case 'na_cidade':
+      return step.cidade ? `em ${step.cidade}` : 'na cidade';
+    case 'perto_de_casa':
+      return 'perto de onde vocês saem';
+    case 'perto_do_anterior':
+      return 'perto do passo anterior';
+    case 'no_caminho':
+      return 'no caminho';
+    case 'sem_relacao':
+      return step.cidade ? `em ${step.cidade}` : '';
+  }
+}
+
+/**
+ * **O app julga** (fase 27): os grupos nascem do passeio que o planejador entregou, um por passo e na
+ * ordem dos passos, **só com as referências que existem** nos lugares que as ferramentas devolveram
+ * nesta rodada (a referência desconhecida sai e conta em `dropped`); os pendentes entram como grupos
+ * sem opção, com a pergunta (os três estados da D278 valem para eles). A IA não acrescenta lugar.
+ */
+export function stageFromOuting(
+  result: Pick<PlanSearchResult, 'lugares' | 'passeio'>,
+  origin: MapStage['origin'],
+  reference: LngLat | null,
+): { stage: MapStage; dropped: number } {
+  const from = origin?.at ?? reference;
+  const byRef = new Map(result.lugares.map((f) => [f.ref, f.place] as const));
+  let dropped = 0;
+  const steps = [...result.passeio.passos].sort((a, b) => a.ordem - b.ordem);
+  const groups: OptionGroup[] = steps.map((p) => {
+    const places = p.candidatos.flatMap((ref) => {
+      const place = byRef.get(ref);
+      if (!place) dropped += 1;
+      return place ? [place] : [];
+    });
+    const center: LngLat = places[0] ? [places[0].lng, places[0].lat] : (from ?? [0, 0]);
+    const options = from ? optionsFromPlaces(places, from) : optionsFromPlaces(places, center);
+    const step: StepInfo = {
+      ordem: p.ordem,
+      relacao: p.relacao,
+      cidade: p.cidade,
+      hora_do_dia: p.hora_do_dia,
+      fora_da_cidade: p.fora_da_cidade,
+    };
+    const search: PlaceSearch = {
+      label: p.o_que,
+      kind: options[0]?.kind ?? 'other',
+      categories: [],
+      names: [],
+    };
+    return {
+      label: p.o_que,
+      search,
+      status: options.length > 0 ? 'ok' : 'none',
+      center,
+      centerLabel: p.cidade || null,
+      radiusKm: AREA_RADIUS_KM,
+      options,
+      shown: OPTIONS_SHOWN,
+      provider: options[0]?.place.provider ?? 'google',
+      step,
+      where: whereOf(step),
+    };
+  });
+  for (const pend of result.passeio.pendentes) {
+    groups.push({
+      label: pend.o_que,
+      search: { label: pend.o_que, kind: 'other', categories: [], names: [] },
+      status: 'none',
+      center: from ?? [0, 0],
+      centerLabel: null,
+      radiusKm: AREA_RADIUS_KM,
+      options: [],
+      shown: OPTIONS_SHOWN,
+      question: pend.pergunta || `Onde fica ${pend.o_que}?`,
+    });
+  }
+  return {
+    stage: { origin, groups, named: [], chosen: [], nowhere: !from && groups.length === 0 },
+    dropped,
+  };
+}
+
+/** As perguntas do planejador que o app ainda vai fazer, dentro do teto, depois das que já tem. */
+export function questionsAfter(
+  current: readonly PlanQuestion[],
+  outing: Pick<Outing, 'perguntas'>,
+  max = 3,
+): PlanQuestion[] {
+  const room = Math.max(0, max - current.length);
+  return [...current, ...outing.perguntas.slice(0, room)];
 }

@@ -2,7 +2,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import type { LngLat } from '@shared/geo.ts';
 import type { ImportEvent } from '@shared/import-protocol.ts';
-import { PLAN_FN, planQuestionsSchema, planWriteSchema } from '@shared/plan-protocol.ts';
+import { PLAN_FN, planWriteSchema } from '@shared/plan-protocol.ts';
+import { MAX_QUESTIONS } from '@shared/plan-protocol.ts';
 import { ImportFailure, streamEvents } from '@/features/import/client.ts';
 import { NEW_TRIP_KEY, saveReview } from '@/features/import/draft.ts';
 import { newTripReview } from '@/features/import/new-review.ts';
@@ -14,12 +15,13 @@ import {
 } from '@/features/import/preview.ts';
 import { requestRoute } from '@/features/itinerary/route.ts';
 import { geocodePlace, searchNear } from '@/lib/geocode/nominatim.ts';
+import { filled } from '@/lib/text/filled.ts';
 import { isoToWall } from '@/lib/time/zone.ts';
 import { assemble } from './assemble.ts';
 import {
-  askRequestOf,
   clearConversation,
   loadConversation,
+  originLabelOf,
   planRequestOf,
   saveConversation,
   type Conversation,
@@ -28,12 +30,14 @@ import { findPlaces } from './find-places.ts';
 import {
   addNamed,
   addWant,
+  answersByTopic,
   nightsNear,
   pickNamed,
   prepare,
+  questionsAfter,
   removeWant,
-  searchMap,
   showMore,
+  stageFromOuting,
   toggleChoice,
   widen,
   type FlowDeps,
@@ -42,17 +46,22 @@ import {
 } from './flow.ts';
 import { declineGeo, grantGeo, readGeoConsent } from '@/features/travel-mode/queries.ts';
 import { gatherContext } from './gather.ts';
-import { placeKey, type PlaceHit } from './locate.ts';
+import { placeKey, resolvePlace, type PlaceHit, type PlaceQuestion } from './locate.ts';
+import { planSearchRequestOf, streamPlanSearch } from './plan-search.ts';
 import { unreadReach } from './reach.ts';
+import { MAX_RADIUS_KM } from './search.ts';
 import { todayQuestions } from './today.ts';
 
 /**
- * A conversa da viagem nova (fase 17; refeita na fase 24), da vontade à revisão. A IA lê o pedido e
- * pergunta só o que falta para buscar (na saída de hoje, o app pergunta o alcance); o app busca as
- * opções que existem no mapa (a `find-places`, pela Geoapify) e a pessoa escolhe; com as escolhas, o
- * caminho (a `route-day`) e as sugestões no corredor dele; uma leitura só escreve a viagem sobre o
- * que foi escolhido; e a revisão da fase 10 cria a viagem ao salvar. A conversa mora no aparelho:
- * fechar o app nas opções ou na revisão não pergunta nem busca de novo. Sair da tela corta a leitura.
+ * A conversa da viagem nova (fase 17; refeita na fase 24; o planejador na fase 27), do pedido à
+ * revisão. **A IA planeja a busca com ferramentas e o app julga** (`plan-search`): a função procura
+ * o que a pessoa pediu onde ela pediu (o Google atrás da função), devolve os lugares que achou e o
+ * passeio em passos, e o app monta os grupos só com as referências que existem; pergunta só na
+ * dúvida (a cidade, o que fazer). Na saída de hoje, o app pergunta o alcance antes, sem IA. A pessoa
+ * escolhe; com as escolhas, o caminho (a `route-day`) e as sugestões no corredor dele (a Geoapify);
+ * uma leitura só escreve a viagem sobre o que foi escolhido (a `plan-trip`); e a revisão da fase 10
+ * cria a viagem ao salvar. A conversa mora no aparelho: fechar o app nas opções ou na revisão não
+ * pergunta nem busca de novo. Sair da tela corta a leitura.
  */
 type ErrorPhase = Extract<ImportPhase, { kind: 'error' }>;
 const errorPhase = (code: ErrorPhase['code'], retryAt: string | null = null): ErrorPhase => ({
@@ -69,18 +78,18 @@ export type ConversationStage =
   | { kind: 'consent' }
   /** lendo o aparelho (a posição, o tempo) */
   | { kind: 'gathering' }
-  /** a IA lendo o pedido e pensando no que perguntar */
+  /** a IA lendo o pedido (a conversa de antes; o planejador procura em `searching`) */
   | { kind: 'asking' }
   | { kind: 'answering' }
-  /** buscando as opções no mapa */
-  | { kind: 'searching'; done: number; total: number }
+  /** o planejador procurando no mapa (o andamento em `note`) */
+  | { kind: 'searching'; done: number; total: number; note?: string | null }
   /** as opções na tela: a pessoa escolhe */
   | { kind: 'choosing' }
   /** o caminho entre as escolhas e o que há nele */
   | { kind: 'routing' }
   /** a IA escrevendo a viagem sobre as escolhas */
   | { kind: 'writing' }
-  | { kind: 'error'; phase: ErrorPhase; step: 'ask' | 'plan' };
+  | { kind: 'error'; phase: ErrorPhase; step: 'ask' | 'search' | 'plan' };
 
 /** A hora de sair numa saída de hoje: daqui a uns 15 min, no quarto de hora seguinte. */
 function soon(now: Date): string {
@@ -134,7 +143,7 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
     await saveConversation(next);
   };
 
-  /** A rede da conversa: a busca por tipo pela função, o Nominatim pela fila, a rota pela função. */
+  /** A rede da conversa: a busca pela função, o Nominatim pela fila, a rota pela função. */
   const deps = (onProgress?: FlowDeps['onProgress']): FlowDeps => ({
     findPlaces,
     geocode: (q, bias) => geocodePlace(q, bias ?? null),
@@ -143,19 +152,37 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
     ...(onProgress ? { onProgress } : {}),
   });
 
-  /** Um passo da IA, em SSE: os eventos chegam na sessão, e o `done` volta (ou o erro vai à tela). */
+  /** Um pedido que pode ser cancelado: o anterior sai, e o novo fica como o corrente. */
+  const controller = () => {
+    abort.current?.abort();
+    const next = new AbortController();
+    abort.current = next;
+    return next;
+  };
+  const release = (c: AbortController) => {
+    if (abort.current === c) abort.current = null;
+  };
+  const fail = (err: unknown, step: 'ask' | 'search' | 'plan'): boolean => {
+    if (err instanceof ImportFailure && err.code === 'canceled') return false;
+    setStage({
+      kind: 'error',
+      phase:
+        err instanceof ImportFailure ? errorPhase(err.code, err.retryAt) : errorPhase('failed'),
+      step,
+    });
+    return true;
+  };
+
+  /** A leitura que escreve, em SSE: os eventos chegam na sessão, e o `done` volta (ou o erro vai à tela). */
   const stream = async (
     body: unknown,
-    step: 'ask' | 'plan',
+    step: 'plan',
   ): Promise<Extract<ImportEvent, { type: 'done' }> | null> => {
-    abort.current?.abort();
-    const controller = new AbortController();
-    abort.current = controller;
+    const c = controller();
     session.current = { phase: { kind: 'reading', id: null }, raw: '' };
     const box: { done: Extract<ImportEvent, { type: 'done' }> | null } = { done: null };
-    const fail = (phase: ErrorPhase) => setStage({ kind: 'error', phase, step });
     try {
-      await streamEvents(PLAN_FN, body, controller.signal, (event) => {
+      await streamEvents(PLAN_FN, body, c.signal, (event) => {
         if (event.type === 'done') {
           box.done = event;
           return;
@@ -165,19 +192,77 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
       if (box.done) return box.done;
       // o stream fechou sem dizer como terminou, ou terminou com um erro dito
       const phase = session.current.phase;
-      fail(phase.kind === 'error' ? phase : errorPhase('failed'));
+      setStage({
+        kind: 'error',
+        phase: phase.kind === 'error' ? phase : errorPhase('failed'),
+        step,
+      });
       return null;
     } catch (err) {
-      if (err instanceof ImportFailure && err.code === 'canceled') return null;
-      fail(err instanceof ImportFailure ? errorPhase(err.code, err.retryAt) : errorPhase('failed'));
+      fail(err, step);
       return null;
     } finally {
-      if (abort.current === controller) abort.current = null;
+      release(c);
       void queryClient.invalidateQueries({ queryKey: ['plan-quota'] });
     }
   };
 
-  /** As opções no mapa, a partir da vontade e das respostas. */
+  /**
+   * De onde saem, como lugar (fase 25, D271 e D276): o que a pessoa escreveu (no "mudar", na resposta
+   * ou, pelo planejador, no pedido) geocodificado com o viés da posição e conferido pela plausibilidade;
+   * senão a posição; senão a origem de antes já resolvida (o `center`). Na dúvida, a pergunta da cidade.
+   */
+  const originOf = async (
+    c: Conversation,
+    said: string | null,
+  ): Promise<{ origin: MapStage['origin']; ask: PlaceQuestion | null }> => {
+    const d = deps();
+    const reference: LngLat | null = c.context.position
+      ? [c.context.position.lng, c.context.position.lat]
+      : c.center
+        ? [c.center.lng, c.center.lat]
+        : null;
+    if (said) {
+      const picked = c.places?.[placeKey(said)];
+      const renamed = c.renamed?.[placeKey(said)];
+      const query = picked ? null : (renamed ?? said);
+      if (picked) return { origin: { label: said, at: [picked.lng, picked.lat] }, ask: null };
+      const results = await d
+        .geocode(
+          query ?? said,
+          reference
+            ? { near: { lat: reference[1], lng: reference[0] }, radiusKm: MAX_RADIUS_KM }
+            : undefined,
+        )
+        .catch(() => null);
+      if (results) {
+        const resolved = resolvePlace(results, reference);
+        if (resolved.kind === 'found') {
+          return {
+            origin: { label: renamed ?? said, at: [resolved.hit.lng, resolved.hit.lat] },
+            ask: null,
+          };
+        }
+        return {
+          origin: null,
+          ask: {
+            said,
+            role: 'origin',
+            options: resolved.kind === 'unknown' ? [] : resolved.options,
+            kind: resolved.kind,
+          },
+        };
+      }
+    }
+    const label = originLabelOf({ ...c, map: null });
+    return { origin: label && reference ? { label, at: reference } : null, ask: null };
+  };
+
+  /**
+   * O planejador (fase 27): uma rodada da `plan-search` com o pedido, as respostas e o contexto; o
+   * app julga o que voltou e monta os grupos. Na primeira rodada, as perguntas da IA (a cidade, o que
+   * fazer) vão para a tela e a busca espera; respondidas, a segunda rodada entrega.
+   */
   const search = async (c: Conversation) => {
     // a resposta de alcance que não foi entendida volta como pergunta (fase 25, D274), nunca um raio
     // padrão em silêncio; a conversa guarda a tentativa (na segunda, só as opções)
@@ -188,23 +273,77 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
       setStage({ kind: 'answering' });
       return;
     }
-    setStage({ kind: 'searching', done: 0, total: 1 });
-    const map = await searchMap(
-      {
-        kind: c.kind,
-        text: c.text,
-        intent: c.intent,
-        questions: c.questions,
-        answers: c.answers,
-        context: c.context,
-        center: c.center,
-        originOverride: c.origin_override ?? null,
-        places: c.places ?? {},
-        renamed: c.renamed ?? {},
-      },
-      deps((done, total) => setStage({ kind: 'searching', done, total })),
-    );
-    await keep({ ...c, map, prepared: null });
+    setStage({ kind: 'searching', done: 0, total: 1, note: null });
+    // de onde saem, antes de tudo: o "mudar", a resposta de origem; a dúvida pergunta antes da busca
+    const said =
+      filled(c.origin_override) ?? filled(answersByTopic(c.questions, c.answers).origin) ?? null;
+    const first = await originOf(c, said);
+    if (first.ask) {
+      await keep({
+        ...c,
+        map: { origin: null, groups: [], named: [], chosen: [], nowhere: false, ask: first.ask },
+        prepared: null,
+      });
+      setStage({ kind: 'choosing' });
+      return;
+    }
+    const withOrigin: Conversation = first.origin
+      ? { ...c, center: { lat: first.origin.at[1], lng: first.origin.at[0] } }
+      : c;
+    const ctrl = controller();
+    let result;
+    try {
+      result = await streamPlanSearch(planSearchRequestOf(withOrigin), ctrl.signal, (note) =>
+        setStage({ kind: 'searching', done: 0, total: 1, note }),
+      );
+    } catch (err) {
+      fail(err, 'search');
+      return;
+    } finally {
+      release(ctrl);
+      void queryClient.invalidateQueries({ queryKey: ['plan-quota'] });
+    }
+    const planned: Conversation = {
+      ...withOrigin,
+      plan: result.passeio,
+      found: result.lugares,
+      intent: null,
+    };
+    // a primeira rodada pode perguntar (a cidade, o que fazer): a tela das perguntas, dentro do teto
+    if (result.passeio.perguntas.length > 0 && !c.plan) {
+      const questions = questionsAfter(c.questions, result.passeio, MAX_QUESTIONS);
+      if (questions.length > c.questions.length) {
+        await keep({
+          ...planned,
+          questions,
+          answers: questions.map((_, i) => c.answers[i] ?? ''),
+          map: null,
+          prepared: null,
+        });
+        setStage({ kind: 'answering' });
+        return;
+      }
+    }
+    // a origem que o pedido disse diferente do contexto ("saindo de Papanduva"): o lugar dela
+    const origin =
+      result.passeio.origem && result.passeio.origem !== said
+        ? await originOf(planned, result.passeio.origem)
+        : first;
+    if (origin.ask) {
+      await keep({
+        ...planned,
+        map: { origin: null, groups: [], named: [], chosen: [], nowhere: false, ask: origin.ask },
+        prepared: null,
+      });
+      setStage({ kind: 'choosing' });
+      return;
+    }
+    const reference: LngLat | null = planned.center
+      ? [planned.center.lng, planned.center.lat]
+      : null;
+    const { stage: map, dropped } = stageFromOuting(result, origin.origin, reference);
+    if (dropped > 0) console.info(`[conversa] ${String(dropped)} referência(s) da IA sem lugar`);
+    await keep({ ...planned, map, prepared: null });
     setStage({ kind: 'choosing' });
   };
 
@@ -281,51 +420,41 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
   };
 
   /**
-   * Lê o aparelho e pergunta (a IA, na conversa; o app, na saída de hoje). `prompt`: a pessoa acabou de
-   * tocar em "Usar posição", e o navegador pode perguntar agora (fase 25, D271).
+   * Lê o aparelho e segue: na saída de hoje, o app pergunta o alcance (sem IA); na conversa, o
+   * planejador procura (e pergunta só na dúvida). `prompt`: a pessoa acabou de tocar em "Usar
+   * posição", e o navegador pode perguntar agora (fase 25, D271).
    */
   const begin = async (kind: 'plan' | 'today', text: string, prompt: boolean) => {
     if (!uid) return;
     setStage({ kind: 'gathering' });
     const gathered = await gatherContext(kind, uid, { prompt });
-    {
-      const base: Conversation = {
-        kind,
-        text,
-        context: gathered.context,
-        center: gathered.center,
-        questions: [],
-        answers: [],
-        intent: null,
-        map: null,
-        prepared: null,
-        started_at: new Date().toISOString(),
-      };
-      if (kind === 'today') {
-        const questions = todayQuestions(
-          {
-            position: gathered.context.position !== null,
-            origin: gathered.context.origin !== null,
-          },
-          gathered.context.now,
-        );
-        await keep({ ...base, questions, answers: questions.map(() => '') });
-        setStage({ kind: 'answering' });
-        return;
-      }
-      setStage({ kind: 'asking' });
-      // as perguntas vão para a mesma função, com `step: 'ask'`; voltam com a vontade
-      const done = await stream(askRequestOf(base), 'ask');
-      if (!done) return;
-      const parsed = planQuestionsSchema.safeParse(done.data);
-      const questions = parsed.success ? parsed.data.questions : [];
-      const intent = parsed.success ? (parsed.data.intent ?? null) : null;
-      const next = { ...base, questions, intent, answers: questions.map(() => '') };
-      await keep(next);
-      // nada a perguntar: busca direto
-      if (questions.length === 0) await search(next);
-      else setStage({ kind: 'answering' });
+    const base: Conversation = {
+      kind,
+      text,
+      context: gathered.context,
+      center: gathered.center,
+      questions: [],
+      answers: [],
+      intent: null,
+      map: null,
+      prepared: null,
+      plan: null,
+      started_at: new Date().toISOString(),
+    };
+    if (kind === 'today') {
+      const questions = todayQuestions(
+        {
+          position: gathered.context.position !== null,
+          origin: gathered.context.origin !== null,
+        },
+        gathered.context.now,
+      );
+      await keep({ ...base, questions, answers: questions.map(() => '') });
+      setStage({ kind: 'answering' });
+      return;
     }
+    await keep(base);
+    await search(base);
   };
 
   /** A resposta à pergunta de posição: a mesma do mapa (D48), guardada por aparelho; depois, a conversa. */
@@ -342,7 +471,7 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
     stage,
     /**
      * Começa: com o consentimento de posição ainda não dado neste aparelho (nem recusado nas últimas
-     * 24 h), a pergunta de posição vem antes (fase 25, D271); senão, lê o aparelho e pergunta.
+     * 24 h), a pergunta de posição vem antes (fase 25, D271); senão, lê o aparelho e segue.
      */
     start: async (kind: 'plan' | 'today', text: string) => {
       if (!uid) return;
@@ -389,7 +518,7 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
       const answers = conv.questions.map((_, i) => (i === index ? value : (conv.answers[i] ?? '')));
       void keep({ ...conv, answers });
     },
-    /** As respostas dadas: as opções do mapa. */
+    /** As respostas dadas: o planejador procura. */
     search: () => (conv ? search(conv) : Promise.resolve()),
     toggle: (id: string) => setMap((m) => toggleChoice(m, id)),
     pick: (index: number, pick: NamedEntry['pick']) => setMap((m) => pickNamed(m, index, pick)),
@@ -412,7 +541,7 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
       await keep({ ...conv, map, prepared: null });
       setStage({ kind: 'choosing' });
     },
-    /** A busca pelo nome, quando a busca no mapa por tipo não está ligada. */
+    /** A busca pelo nome, quando a busca no mapa não achou (ou não está ligada). */
     byName: async (name: string, kind: Parameters<typeof addNamed>[2], group?: number) => {
       if (!conv?.map) return;
       setStage({ kind: 'searching', done: 0, total: 1 });

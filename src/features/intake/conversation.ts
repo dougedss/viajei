@@ -5,6 +5,7 @@ import type {
   PlanQuestion,
   PlanRequest,
 } from '@shared/plan-protocol.ts';
+import type { FoundPlace, Outing } from '@shared/plan-search-protocol.ts';
 import { db } from '@/lib/db/schema.ts';
 import { filled } from '@/lib/text/filled.ts';
 import { answersByTopic, type MapStage, type Prepared } from './flow.ts';
@@ -51,6 +52,12 @@ export type Conversation = {
   places?: Record<string, PlaceHit>;
   /** a cidade escrita no lugar do que foi dito (D283), pela mesma chave; '' = seguir sem (a área) */
   renamed?: Record<string, string>;
+  /**
+   * o planejador (fase 27): o passeio em passos que a IA entregou e os lugares que as ferramentas
+   * acharam, pela referência (só eles valem como candidato). `plan` nulo: a conversa de antes
+   */
+  plan?: Outing | null;
+  found?: FoundPlace[];
   started_at: string;
 };
 

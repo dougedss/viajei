@@ -11,13 +11,9 @@ import { criarUsuario } from './helpers/users.ts';
 import { posicaoDecidida } from './helpers/geo.ts';
 import { fakeOpenMeteo } from './helpers/world.ts';
 import { buscaNoMapa, lugar, rotaForjada } from './helpers/places.ts';
-import { radiusFor, reachOf, readReach } from '../src/features/intake/reach.ts';
-import {
-  EMPTY_INTENT,
-  type PlanIntent,
-  type PlanPlaces,
-  type PlanWrite,
-} from '../supabase/functions/_shared/plan-protocol.ts';
+import { achados, lugarGoogle, passeio, passo, planejador, rodada } from './helpers/planner.ts';
+import { reachOf, readReach } from '../src/features/intake/reach.ts';
+import type { PlanPlaces, PlanWrite } from '../supabase/functions/_shared/plan-protocol.ts';
 
 /**
  * Criar a viagem conversando (fase 17): o campo no lugar do botão "Nova viagem" e do formulário, e os
@@ -279,25 +275,23 @@ test('um roteiro em texto livre: a importação cria a viagem e pergunta as data
 
 // ---------------------------------------------------------------- a conversa nova (fase 24)
 const PAPANDUVA = { lat: -26.37, lng: -50.144 };
-const MAHLZEIT = lugar(
-  'mahlzeit',
-  'Mahlzeit Café Colonial',
-  -26.73,
-  -49.18,
-  ['catering', 'catering.cafe'],
+// os candidatos do planejador (fase 27), na forma dos lugares do Google (inventados)
+const TORTEN_G = lugarGoogle(
+  'g-torten',
+  'Torten Paradies Café Colonial',
+  -26.7404,
+  -49.1718,
   'Pomerode',
-  'Tu-Su 13:00-19:00',
 );
-const TORTEN = lugar('torten', 'Torten Paradies Café Colonial', -26.7404, -49.1718, [
+const MAHLZEIT_G = lugarGoogle('g-mahlzeit', 'Mahlzeit Café Colonial', -26.73, -49.18, 'Pomerode');
+const BAUER_G = lugarGoogle('g-bauer', 'Café Colonial Bauer', -26.76, -49.16, 'Pomerode', {
+  categories: ['restaurant', 'food'],
+});
+// o mesmo café visto pela Geoapify (a busca das sugestões, no corredor): a tela não o repete
+const MAHLZEIT_G_COMO_OSM = lugar('mahlzeit-osm', 'Mahlzeit Café Colonial', -26.73, -49.18, [
   'catering',
   'catering.cafe',
 ]);
-const BAUER = lugar('bauer', 'Café Colonial Bauer', -26.76, -49.16, [
-  'catering',
-  'catering.restaurant',
-]);
-// o nome sem "colonial": a busca é por palavra do nome, e a tela não mostra
-const CENTRO = lugar('centro', 'Café do Centro', -26.74, -49.17, ['catering', 'catering.cafe']);
 const ZOO = lugar('zoo', 'Bioparque Zoo Pomerode', -26.7302, -49.1745, [
   'entertainment',
   'entertainment.zoo',
@@ -347,15 +341,6 @@ async function nominatimDaConversa(page: Page): Promise<void> {
   });
 }
 
-/** O passo das perguntas da IA (fase 24): as perguntas e a vontade, como o `done` leva. */
-function perguntas(
-  questions: { topic: string; text: string; options: string[] }[],
-  intent: Partial<PlanIntent>,
-): string {
-  const data = { questions, intent: { ...EMPTY_INTENT, ...intent } };
-  return aiSse(JSON.stringify(data), { data });
-}
-
 /** A viagem escrita sobre as escolhas: só textos e referências, como o `done` leva. */
 function escrita(write: PlanWrite): string {
   return aiSse(JSON.stringify(write), { data: write });
@@ -369,80 +354,82 @@ type PlanBody = {
   context: Record<string, unknown>;
 };
 
-test('a conversa nova: uma pergunta, as opções do mapa, a escolha, as sugestões desligadas, e a viagem com exatamente o escolhido', async ({
+test('a conversa pelo planejador: a pergunta na dúvida e a segunda rodada, os candidatos do Google por passo, a escolha, as sugestões desligadas, e a viagem com exatamente o escolhido', async ({
   page,
   context,
 }) => {
   test.setTimeout(150_000);
   await nominatimDaConversa(page);
   await rotaForjada(context);
+  // as sugestões no corredor e perto do destino continuam pela Geoapify (a busca por tipo)
   const mapa = await buscaNoMapa(context, (body) =>
-    body.area.type === 'circle' && body.names?.includes('colonial')
-      ? [TORTEN, MAHLZEIT, CENTRO, BAUER]
-      : [ZOO, MUSEU, MAHLZEIT],
+    'provider' in body ? [] : [ZOO, MUSEU, MAHLZEIT_G_COMO_OSM],
   );
   const pedidos: PlanBody[] = [];
   await page.route('**/functions/v1/plan-trip', (route) =>
     respondSse(
       route,
-      (body) =>
-        (body as PlanBody).step === 'ask'
-          ? perguntas([{ topic: 'origin', text: 'De onde vocês saem?', options: [] }], {
-              wants: [{ words: 'café colonial', kind: 'food' }],
-            })
-          : escrita({
-              trip: {
-                name: 'Café colonial na serra',
-                start_date: D[0] ?? null,
-                end_date: D[0] ?? null,
-              },
-              days: [
-                {
-                  date: D[0] ?? null,
-                  title: 'Cucas e cafés',
-                  start: '12:30',
-                  stops: [{ ref: 'e1', note: 'café colonial da colonização alemã' }],
-                },
-              ],
-              suggestions: [
-                { ref: 's1', note: 'um passeio no caminho' },
-                { ref: 's2', note: 'outro passeio no caminho' },
-              ],
-              quests: [{ text: 'Foto do time com a cuca mais alta', ref: 'e1' }],
-              checklist_before: ['Conferir se abre no dia'],
-              checklist_pack: ['Casaco'],
-            }),
+      escrita({
+        trip: {
+          name: 'Café colonial na serra',
+          start_date: D[0] ?? null,
+          end_date: D[0] ?? null,
+        },
+        days: [
+          {
+            date: D[0] ?? null,
+            title: 'Cucas e cafés',
+            start: '12:30',
+            stops: [{ ref: 'e1', note: 'café colonial da colonização alemã' }],
+          },
+        ],
+        suggestions: [
+          { ref: 's1', note: 'um passeio no caminho' },
+          { ref: 's2', note: 'outro passeio no caminho' },
+        ],
+        quests: [{ text: 'Foto do time com a cuca mais alta', ref: 'e1' }],
+        checklist_before: ['Conferir se abre no dia'],
+        checklist_pack: ['Casaco'],
+      }),
       (body) => pedidos.push(body as PlanBody),
     ),
   );
+  // a primeira rodada pergunta de onde saem (sem posição e sem origem conhecida); a segunda entrega
+  const ia = await planejador(context, (body) =>
+    (body.answers ?? []).length === 0
+      ? rodada([], passeio([], { perguntas: [{ text: 'De onde vocês saem?', options: [] }] }))
+      : rodada(
+          achados([TORTEN_G, MAHLZEIT_G, BAUER_G]),
+          passeio([passo(1, 'café colonial', ['p1', 'p2', 'p3'], { cidade: 'Pomerode' })]),
+        ),
+  );
   const user = await criarUsuario('CafeColonial');
   await entrar(page, user.email);
-  // a pergunta de posição (fase 25) já respondida com "agora não": a conversa de antes, sem o cartão
+  // a pergunta de posição (fase 25) já respondida com "agora não": sem o cartão
   await posicaoDecidida(page, 'declined');
   await campo(page).fill('quero ir num café colonial');
   await page.getByRole('button', { name: 'Montar a viagem' }).click();
 
-  // uma pergunta, dita antes: só o que falta para buscar
+  // a pergunta da IA, dita antes: só o que falta
   await expect(page.getByText('Tenho 1 pergunta antes de montar.')).toBeVisible({
     timeout: 20_000,
   });
   await page.getByLabel('A resposta').fill('Papanduva, SC');
   await page.getByRole('button', { name: 'Procurar no mapa' }).click();
 
-  // as opções que existem no mapa: três, com a cidade, o tempo de carro e o horário quando o mapa tem
+  // os candidatos do passo: três, com a nota, a cidade, o tempo de carro e o horário
   const opcoes = page.locator('[data-option]');
   await expect(opcoes).toHaveCount(3, { timeout: 20_000 });
-  await expect(page.getByText('Café do Centro')).toHaveCount(0);
-  await expect(page.getByText('Horário no mapa: ter a dom, 13:00–19:00')).toBeVisible();
+  await expect(page.getByText(/3 opções no mapa em Pomerode/)).toBeVisible();
   await expect(page.getByText(/cerca de \d+ h( \d+)? de carro/).first()).toBeVisible();
+  await expect(page.locator('[data-map-attribution]')).toContainText('Dados do Google Maps');
   await expect(page.locator('[data-map-attribution]')).toContainText('Powered by Geoapify');
   await semRolagem(page, 'as opções');
   await axe(page, 'as opções');
-  // a busca por tipo: as categorias da tabela, a palavra do nome, a posição arredondada
-  expect(mapa.pedidos.find((p) => p.names?.includes('colonial'))).toMatchObject({
-    categories: ['catering.cafe', 'catering.restaurant'],
-    names: ['colonial'],
-    area: { type: 'circle', lng: -50.14, lat: -26.37, radius_m: 200_000 },
+  // a segunda rodada levou a resposta e a referência da origem resolvida (Papanduva)
+  expect(ia.pedidos[1]).toMatchObject({
+    answers: ['Papanduva, SC'],
+    reference: { lat: PAPANDUVA.lat, lng: PAPANDUVA.lng },
   });
   const tracar = page.getByRole('button', { name: /^Traçar o caminho/ });
   await expect(tracar).toBeDisabled();
@@ -470,143 +457,143 @@ test('a conversa nova: uma pergunta, as opções do mapa, a escolha, as sugestõ
   await zoo.click();
   await expect(zoo).toHaveAttribute('aria-checked', 'true');
 
-  // a leitura que escreveu recebeu as escolhas e as sugestões do mapa, e nada mais
-  expect(pedidos.map((p) => p.step)).toEqual(['ask', 'plan']);
-  expect(pedidos[1]?.places?.chosen.map((c) => c.name)).toEqual(['Mahlzeit Café Colonial']);
-  expect(pedidos[1]?.places?.suggestions.map((c) => c.name).sort()).toEqual([
+  // a leitura que escreveu recebeu a escolha e as sugestões do mapa, e nada mais; as sugestões vieram
+  // da Geoapify (o corredor e o destino), não do Google
+  expect(pedidos.map((p) => p.step)).toEqual(['plan']);
+  expect(pedidos[0]?.places?.chosen.map((c) => c.name)).toEqual(['Mahlzeit Café Colonial']);
+  expect(pedidos[0]?.places?.suggestions.map((c) => c.name).sort()).toEqual([
     'Bioparque Zoo Pomerode',
     'Museu da Imigração',
   ]);
+  expect(mapa.pedidos.every((p) => !('provider' in p))).toBe(true);
 
   await page.getByRole('button', { name: 'Criar a viagem' }).click();
   await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
   const tripId = page.url().split('/').at(-2) ?? '';
-  // exatamente a saída, o café, a sugestão ligada e a chegada, com as coordenadas do mapa
+  // exatamente a saída, o café, a sugestão ligada e a chegada; o place_id do Google só no café
   await expect
     .poll(
       async () =>
-        (await linhas('stops', `trip_id=eq.${tripId}&select=name,kind,lat,source&order=name`)).map(
-          (s) => [s.name, s.kind, s.lat !== null, s.source],
-        ),
+        (
+          await linhas(
+            'stops',
+            `trip_id=eq.${tripId}&select=name,kind,lat,source,google_place_id&order=name`,
+          )
+        ).map((s) => [s.name, s.kind, s.lat !== null, s.source, s.google_place_id]),
       { timeout: 20_000 },
     )
     .toEqual([
-      ['Bioparque Zoo Pomerode', 'nature', true, 'ai'],
-      ['Chegada em Papanduva, SC', 'origin', true, 'ai'],
-      ['Mahlzeit Café Colonial', 'food', true, 'ai'],
-      ['Saída de Papanduva, SC', 'origin', true, 'ai'],
+      ['Bioparque Zoo Pomerode', 'nature', true, 'ai', null],
+      ['Chegada em Papanduva, SC', 'origin', true, 'ai', null],
+      ['Mahlzeit Café Colonial', 'food', true, 'ai', 'g-mahlzeit'],
+      ['Saída de Papanduva, SC', 'origin', true, 'ai', null],
     ]);
 });
 
-test('o lugar nomeado com dois no mapa: "Escolher o local", nunca o chute', async ({
+test('o lugar nomeado com dois no mapa: os dois candidatos do passo, e o caminho só com um escolhido', async ({
   page,
   context,
 }) => {
   test.setTimeout(120_000);
   await nominatimDaConversa(page);
   await buscaNoMapa(context, () => []);
-  await page.route('**/functions/v1/plan-trip', (route) =>
-    respondSse(
-      route,
-      perguntas([], {
-        named: [{ name: 'Bioparque', city: null, kind: 'nature' }],
-        origin: 'Papanduva, SC',
-      }),
+  await planejador(context, () =>
+    rodada(
+      achados([
+        lugarGoogle('g-zoo-1', 'Bioparque Zoo Pomerode', -26.7302, -49.1745, 'Pomerode', {
+          categories: ['zoo', 'tourist_attraction'],
+        }),
+        lugarGoogle('g-zoo-2', 'Bioparque Zoo Fazenda', -27.5, -48.6, 'Palhoça', {
+          categories: ['zoo'],
+        }),
+      ]),
+      passeio([passo(1, 'Bioparque', ['p1', 'p2'], { relacao: 'sem_relacao', cidade: '' })]),
     ),
   );
   const user = await criarUsuario('Nomeado');
   await entrar(page, user.email);
-  // a pergunta de posição (fase 25) já respondida com "agora não": a conversa de antes, sem o cartão
   await posicaoDecidida(page, 'declined');
   await campo(page).fill('quero passar no Bioparque, saindo de Papanduva');
   await page.getByRole('button', { name: 'Montar a viagem' }).click();
-  const escolher = page.getByRole('radiogroup', { name: 'Bioparque' });
-  await expect(page.getByText('Escolher o local (2)')).toBeVisible({ timeout: 20_000 });
-  await expect(escolher.getByRole('radio')).toHaveCount(3);
+  await expect(page.locator('[data-option]')).toHaveCount(2, { timeout: 20_000 });
   const tracar = page.getByRole('button', { name: /^Traçar o caminho/ });
   await expect(tracar).toBeDisabled();
-  await axe(page, 'a escolha do local');
-  await escolher.getByRole('radio', { name: /^Bioparque Zoo Pomerode/ }).click();
+  await axe(page, 'a escolha entre os dois');
+  await page.getByRole('button', { name: /^Bioparque Zoo Pomerode/ }).click();
   await expect(tracar).toBeEnabled();
 });
 
-test('nenhuma opção ao alcance: a tela diz, oferece procurar mais longe, e não há viagem vazia', async ({
+test('nenhum candidato para o passo: a tela diz, oferece procurar mais longe (o Google num círculo maior), e não há viagem vazia', async ({
   page,
   context,
 }) => {
   test.setTimeout(120_000);
   await nominatimDaConversa(page);
   const mapa = await buscaNoMapa(context, () => []);
-  await page.route('**/functions/v1/plan-trip', (route) =>
-    respondSse(
-      route,
-      perguntas([], { wants: [{ words: 'café colonial', kind: 'food' }], origin: 'Papanduva, SC' }),
-    ),
+  await planejador(context, () =>
+    rodada([], passeio([passo(1, 'café colonial', [], { cidade: 'Pomerode', achou: false })])),
   );
   const user = await criarUsuario('Nenhuma');
   await entrar(page, user.email);
-  // a pergunta de posição (fase 25) já respondida com "agora não": a conversa de antes, sem o cartão
   await posicaoDecidida(page, 'declined');
-  await campo(page).fill('quero ir num café colonial, saindo de Papanduva');
+  await campo(page).fill('quero ir num café colonial em Pomerode, saindo de Papanduva');
   await page.getByRole('button', { name: 'Montar a viagem' }).click();
-  await expect(page.getByText(/^Não achei café colonial a até .* de Papanduva, SC\.$/)).toBeVisible(
-    {
-      timeout: 20_000,
-    },
-  );
+  await expect(page.getByText(/^Não achei café colonial em Pomerode\.$/)).toBeVisible({
+    timeout: 20_000,
+  });
   await expect(page.getByRole('button', { name: /^Traçar o caminho/ })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Criar a viagem' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Procurar mais longe' }).click();
-  await expect(page.getByText(/^Não achei café colonial a até/)).toBeVisible({ timeout: 20_000 });
-  // cada procura são duas buscas (pelo nome "colonial" e pela cozinha regional), no mesmo raio
-  expect(mapa.pedidos.map((p) => (p.area.type === 'circle' ? p.area.radius_m : 0))).toEqual([
-    200_000, 200_000, 400_000, 400_000,
-  ]);
-  // no teto, não há mais longe; o café colonial fica pendente (fase 25), e dá para tirá-lo
+  await expect(page.getByText(/^Não achei café colonial a até 50 km de Pomerode\.$/)).toBeVisible({
+    timeout: 20_000,
+  });
+  // mais longe é a busca por texto no Google num círculo maior, sem o filtro da cidade
+  expect(mapa.pedidos).toHaveLength(1);
+  expect(mapa.pedidos[0]).toMatchObject({
+    provider: 'google',
+    query: 'café colonial em Pomerode',
+    bias: { radius_m: 50_000 },
+  });
+  // no teto do Google, não há mais longe; o passo fica pendente, dá para tirá-lo ou procurar pelo nome
   await expect(page.getByRole('button', { name: 'Procurar mais longe' })).toHaveCount(0);
   await expect(page.getByText(/^Fica pendente: entra na viagem sem local/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Tirar da viagem' })).toBeVisible();
+  await expect(page.getByLabel('Procurar pelo nome do lugar')).toBeVisible();
 });
 
-test('a busca no mapa sem fonte (no_source): o aviso, e a busca pelo nome segue', async ({
+test('o planejador sem a fonte (nenhum lugar, fonte none): o passo pendente, e a busca pelo nome segue até a viagem', async ({
   page,
   context,
 }) => {
   test.setTimeout(150_000);
   await nominatimDaConversa(page);
   await rotaForjada(context);
-  await buscaNoMapa(context, () => ({ status: 503, code: 'no_source' }));
+  await buscaNoMapa(context, () => []);
+  await planejador(context, () => ({
+    ...rodada([], passeio([passo(1, 'café colonial', [], { cidade: 'Pomerode', achou: false })])),
+    numeros: { turnos: 2, chamadas: 1, buscas: 1, lugares: 0, fonte: 'none', fim: 'delivered' },
+  }));
   await page.route('**/functions/v1/plan-trip', (route) =>
-    respondSse(route, (body) =>
-      (body as PlanBody).step === 'ask'
-        ? perguntas([], {
-            wants: [{ words: 'café colonial', kind: 'food' }],
-            origin: 'Papanduva, SC',
-          })
-        : escrita({
-            trip: { name: 'Café', start_date: D[0] ?? null, end_date: D[0] ?? null },
-            days: [
-              {
-                date: D[0] ?? null,
-                title: null,
-                start: '13:00',
-                stops: [{ ref: 'n1', note: null }],
-              },
-            ],
-            suggestions: [],
-            quests: [],
-            checklist_before: [],
-            checklist_pack: [],
-          }),
+    respondSse(
+      route,
+      escrita({
+        trip: { name: 'Café', start_date: D[0] ?? null, end_date: D[0] ?? null },
+        days: [
+          { date: D[0] ?? null, title: null, start: '13:00', stops: [{ ref: 'n1', note: null }] },
+        ],
+        suggestions: [],
+        quests: [],
+        checklist_before: [],
+        checklist_pack: [],
+      }),
     ),
   );
   const user = await criarUsuario('SemFonte');
   await entrar(page, user.email);
-  // a pergunta de posição (fase 25) já respondida com "agora não": a conversa de antes, sem o cartão
   await posicaoDecidida(page, 'declined');
-  await campo(page).fill('quero ir num café colonial, saindo de Papanduva');
+  await campo(page).fill('quero ir num café colonial em Pomerode, saindo de Papanduva');
   await page.getByRole('button', { name: 'Montar a viagem' }).click();
-  await expect(page.getByText(/Não deu para buscar no mapa pelo tipo agora/)).toBeVisible({
+  await expect(page.getByText(/^Não achei café colonial em Pomerode\.$/)).toBeVisible({
     timeout: 20_000,
   });
   await page.getByLabel('Procurar pelo nome do lugar').fill('Torten Paradies');
@@ -624,7 +611,7 @@ test('a busca no mapa sem fonte (no_source): o aviso, e a busca pelo nome segue'
   await expect(page.getByText(/sugestão no caminho/)).toHaveCount(0);
 });
 
-test('quero sair hoje: a pergunta de alcance, as opções em volta da posição, e a viagem de hoje no mapa', async ({
+test('quero sair hoje: a pergunta de alcance, o planejador com a posição e o alcance, e a viagem de hoje no mapa', async ({
   page,
   context,
 }) => {
@@ -633,19 +620,16 @@ test('quero sair hoje: a pergunta de alcance, as opções em volta da posição,
   await fakeOpenMeteo(context);
   await rotaForjada(context);
   const hoje = dateInSaoPaulo(0);
-  const mapa = await buscaNoMapa(context, (body) =>
-    body.names?.includes('colonial')
-      ? [
-          lugar(
-            'serrano',
-            'Café Colonial Serrano',
-            -29.36,
-            -50.85,
-            ['catering', 'catering.cafe'],
-            'Canela',
-          ),
-        ]
-      : [],
+  await buscaNoMapa(context, () => []);
+  const ia = await planejador(context, () =>
+    rodada(
+      achados([
+        lugarGoogle('g-serrano', 'Café Colonial Serrano', -29.36, -50.85, 'Canela', {
+          categories: ['cafe', 'food'],
+        }),
+      ]),
+      passeio([passo(1, 'café colonial', ['p1'], { relacao: 'perto_de_casa', cidade: '' })]),
+    ),
   );
   let contexto: Record<string, unknown> | null = null;
   await page.route('**/functions/v1/plan-trip', (route) =>
@@ -682,20 +666,22 @@ test('quero sair hoje: a pergunta de alcance, as opções em volta da posição,
   });
   await expect(page.getByText('Quanto tempo vocês têm?')).toBeVisible();
   await semRolagem(page, 'a pergunta de alcance');
-  // as opções mudam com a hora de agora (fase 25, D275): a primeira que o app oferece, e o raio dela
+  // as opções mudam com a hora de agora (fase 25, D275): a primeira que o app oferece
   const alcance = page.getByRole('group', { name: 'Quanto tempo vocês têm?' }).getByRole('button');
   const opcao = (await alcance.first().textContent()) ?? '';
   await alcance.first().click();
   await page.getByRole('button', { name: 'Procurar no mapa' }).click();
-  // o tipo saiu do texto, pela tabela, e a busca foi em volta da posição arredondada (uns 1 km)
+  // o planejador recebeu a saída de hoje: a posição arredondada (uns 1 km), a cidade, o alcance lido
   await expect(page.locator('[data-option]')).toHaveCount(1, { timeout: 20_000 });
-  expect(mapa.pedidos.find((p) => p.names?.includes('colonial'))).toMatchObject({
-    names: ['colonial'],
-    area: {
-      type: 'circle',
-      lng: -50.88,
-      lat: -29.37,
-      radius_m: radiusFor('today', readReach(opcao)) * 1000,
+  expect(ia.pedidos[0]).toMatchObject({
+    kind: 'today',
+    text: 'quero sair hoje para um café colonial',
+    answers: [opcao],
+    reference: { lat: -29.37, lng: -50.88 },
+    context: {
+      position: { lat: -29.37, lng: -50.88 },
+      place: 'Canela, RS',
+      reach: reachOf(readReach(opcao)),
     },
   });
   await page.getByRole('button', { name: /^Café Colonial Serrano/ }).click();
@@ -703,7 +689,7 @@ test('quero sair hoje: a pergunta de alcance, as opções em volta da posição,
   await expect(page.getByRole('heading', { name: 'Revisar a viagem' })).toBeVisible({
     timeout: 30_000,
   });
-  // o que foi para a IA: a posição arredondada, a cidade, o tempo e o alcance; uma leitura só
+  // o que foi para a IA que escreve: a posição arredondada, a cidade, o tempo e o alcance; uma leitura só
   expect(contexto).toMatchObject({
     step: 'plan',
     kind: 'today',

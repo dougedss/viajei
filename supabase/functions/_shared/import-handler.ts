@@ -79,7 +79,15 @@ export type ImportStore = {
     trip_id: string | null;
     input_chars: number;
     model: string;
-    kind?: 'import' | 'plan' | 'today' | 'confirmation' | 'receipt';
+    kind?:
+      | 'import'
+      | 'plan'
+      | 'today'
+      | 'confirmation'
+      | 'receipt'
+      | 'plan_search'
+      | 'bateria_pedidos'
+      | 'bateria_juiz';
     input_bytes?: number;
   }): Promise<string>;
   close(id: string, row: ImportClose): Promise<void>;

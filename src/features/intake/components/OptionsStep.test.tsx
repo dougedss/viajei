@@ -2,7 +2,8 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Place } from '@shared/places-schema.ts';
 import type { MapStage, OptionGroup } from '../flow.ts';
-import { MapAttribution, OptionsStep, ratingText, statusText } from './OptionsStep.tsx';
+import { ratingText, statusText } from '../option-text.ts';
+import { MapAttribution, OptionsStep } from './OptionsStep.tsx';
 
 afterEach(cleanup);
 

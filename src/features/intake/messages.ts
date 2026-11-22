@@ -1,4 +1,5 @@
 import { PLAN_ASK_DAILY_LIMIT, PLAN_DAILY_LIMIT, PLAN_MAX_CHARS } from '@shared/plan-protocol.ts';
+import { PLAN_SEARCH_DAILY_LIMIT } from '@shared/plan-search-protocol.ts';
 import { errorCopy, whenBack, type ErrorCopy } from '@/features/import/messages.ts';
 import type { ImportPhase } from '@/features/import/preview.ts';
 
@@ -8,7 +9,7 @@ import type { ImportPhase } from '@/features/import/preview.ts';
  */
 export function planErrorCopy(
   phase: Extract<ImportPhase, { kind: 'error' }>,
-  step: 'ask' | 'plan',
+  step: 'ask' | 'search' | 'plan',
   now: Date,
 ): ErrorCopy {
   const back = phase.retryAt
@@ -20,10 +21,15 @@ export function planErrorCopy(
           title: 'Limite de conversas do dia',
           text: `Vocês já começaram ${String(PLAN_ASK_DAILY_LIMIT)} conversas nas últimas 24 horas. ${back}`,
         }
-      : {
-          title: 'Limite de viagens montadas do dia',
-          text: `A IA já montou ${String(PLAN_DAILY_LIMIT)} viagens para vocês nas últimas 24 horas. ${back}`,
-        };
+      : step === 'search'
+        ? {
+            title: 'Limite de buscas do dia',
+            text: `A IA já planejou ${String(PLAN_SEARCH_DAILY_LIMIT)} buscas para vocês nas últimas 24 horas. ${back}`,
+          }
+        : {
+            title: 'Limite de viagens montadas do dia',
+            text: `A IA já montou ${String(PLAN_DAILY_LIMIT)} viagens para vocês nas últimas 24 horas. ${back}`,
+          };
   }
   if (phase.code === 'too_long') {
     return {

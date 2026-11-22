@@ -3,7 +3,6 @@ import { ProviderError, searchGoogle } from './google-places.ts';
 import {
   findPlacesRequestSchema,
   PLACES_DAILY_LIMIT,
-  type GooglePlacesInput,
   type Place,
   type PlacesErrorCode,
   type PlacesInput,
@@ -219,8 +218,8 @@ export async function handlePlaces(req: Request, deps: PlacesDeps): Promise<Resp
   const provider: PlacesProvider = google ? 'google' : 'geoapify';
   // a forma do pedido, sem nada da pessoa (nem as palavras, nem a posição)
   const shape = google
-    ? `provider=google type=${(input as GooglePlacesInput).type ?? '-'} bias=${(input as GooglePlacesInput).bias ? 'circle' : '-'}`
-    : `area=${(input as PlacesInput).area.type} categories=${String((input as PlacesInput).categories.length)} names=${String((input as PlacesInput).names.length)}`;
+    ? `provider=google type=${input.type ?? '-'} bias=${input.bias ? 'circle' : '-'}`
+    : `area=${input.area.type} categories=${String(input.categories.length)} names=${String(input.names.length)}`;
   const line = (status: string, places: number, requests: number) =>
     deps.log(
       `find-places status=${status} ${shape} requests=${String(requests)} places=${String(places)} ms=${String(Math.round(now() - startedAt))}`,
@@ -243,11 +242,11 @@ export async function handlePlaces(req: Request, deps: PlacesDeps): Promise<Resp
     return fail(429, 'daily_limit', MESSAGES.daily_limit);
   }
 
-  const requests = google ? 1 : Math.max(1, (input as PlacesInput).names.length);
+  const requests = google ? 1 : Math.max(1, input.names.length);
   try {
     const places = google
-      ? await searchGoogle(deps, key, input as GooglePlacesInput)
-      : await searchGeoapify(deps, key, input as PlacesInput);
+      ? await searchGoogle(deps, key, input)
+      : await searchGeoapify(deps, key, input);
     line('ok', places.length, requests);
     const body: PlacesResponse = { provider, fetched_at: new Date(now()).toISOString(), places };
     return Response.json(body, { headers: { 'Cache-Control': 'no-store' } });

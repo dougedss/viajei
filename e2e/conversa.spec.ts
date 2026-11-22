@@ -1,24 +1,21 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
-import {
-  EMPTY_INTENT,
-  type PlanIntent,
-  type PlanPlaces,
-  type PlanWrite,
-} from '../supabase/functions/_shared/plan-protocol.ts';
+import type { PlanPlaces, PlanWrite } from '../supabase/functions/_shared/plan-protocol.ts';
 import { campo, entrar, novaViagem } from './helpers/app.ts';
 import { dateInSaoPaulo } from './helpers/dates.ts';
 import { linhas } from './helpers/db.ts';
 import { posicaoDecidida } from './helpers/geo.ts';
 import { aiSse, respondSse } from './helpers/import.ts';
-import { buscaNoMapa, lugar, rotaForjada } from './helpers/places.ts';
+import { buscaNoMapa, rotaForjada } from './helpers/places.ts';
+import { achados, lugarGoogle, passeio, passo, planejador, rodada } from './helpers/planner.ts';
 import { criarUsuario } from './helpers/users.ts';
 
 /**
- * As correções da conversa (fase 25, D270 a D278), com a IA, o mapa e o Nominatim respondidos no
- * navegador e a posição concedida pelo Playwright: a pergunta de posição e "Saindo de X · mudar"; o
- * campo livre digitado inteiro; a resposta não entendida perguntada de novo; "almoçar em Mafra" com a
- * Mafra de Santa Catarina pelo viés; a pergunta da cidade com dois plausíveis; e um pedido com coisas
- * que a busca não acha terminando em pendente, com a viagem nascendo com a parada sem local.
+ * A conversa com o planejador (fase 27) e as correções da fase 25, com a IA, o Google e o Nominatim
+ * respondidos no navegador e a posição concedida pelo Playwright: a pergunta de posição e "Saindo de
+ * X · mudar"; a pergunta da IA na dúvida e a segunda rodada; o campo livre digitado inteiro e a
+ * resposta não entendida perguntada de novo (a saída de hoje); a origem com dois plausíveis; e o
+ * pedido de Canoinhas terminando com o café escolhido, o salão tirado e a feirinha pendente com a
+ * pergunta, a viagem nascendo com a parada sem local e o `place_id` do Google na parada escolhida.
  */
 const MAJOR_VIEIRA = { latitude: -26.3712, longitude: -50.3268 };
 const D1 = dateInSaoPaulo(1);
@@ -31,27 +28,25 @@ type PlanBody = {
   answers?: string[];
   context: Record<string, unknown>;
 };
-type Question = {
-  topic: 'when' | 'origin' | 'area' | 'reach' | 'other';
-  text: string;
-  options: string[];
-};
 
-/** O passo das perguntas da IA: as perguntas e a vontade, como o `done` leva. */
-function perguntas(questions: Question[], intent: Partial<PlanIntent>): string {
-  const data = { questions, intent: { ...EMPTY_INTENT, ...intent } };
-  return aiSse(JSON.stringify(data), { data });
-}
 /** A viagem escrita sobre as escolhas: só textos e referências. */
 function escrita(write: PlanWrite): string {
   return aiSse(JSON.stringify(write), { data: write });
 }
-const ALCANCE: Question = {
-  topic: 'reach',
-  text: 'Até quanto tempo de carro?',
-  options: ['1 hora', '2 horas'],
+const ESCRITA_CAFE: PlanWrite = {
+  trip: { name: 'Café', start_date: D1, end_date: D1 },
+  days: [{ date: D1, title: 'Café', start: '09:00', stops: [{ ref: 'e1', note: null }] }],
+  suggestions: [],
+  quests: [],
+  checklist_before: [],
+  checklist_pack: [],
 };
-const CAFE: PlanIntent['wants'] = [{ words: 'café', kind: 'food' }];
+/** A `plan-trip` só escreve (o `ask` de antes não é mais chamado pela conversa). */
+async function escritor(page: Page, write: PlanWrite, onRequest?: (body: PlanBody) => void) {
+  await page.route('**/functions/v1/plan-trip', (route) =>
+    respondSse(route, escrita(write), (body) => onRequest?.(body as PlanBody)),
+  );
+}
 
 /** O Nominatim de mentira: a cidade da posição, as origens e as cidades da fase. */
 async function nominatim(page: Page): Promise<void> {
@@ -103,61 +98,39 @@ async function nominatim(page: Page): Promise<void> {
   });
 }
 
-const CAFE_SC = lugar(
-  'cafe-sc',
-  'Café da Praça',
-  -26.18,
-  -50.39,
-  ['catering', 'catering.cafe'],
-  'Canoinhas',
-);
-const RESTAURANTE_MAFRA = lugar(
-  'rest-mafra',
-  'Restaurante Mafrense',
-  -26.11,
-  -49.8,
-  ['catering', 'catering.restaurant'],
-  'Mafra',
-);
-const CASCATA_MAFRA = lugar(
-  'cascata-mafra',
-  'Cascata do Rio Negro',
-  -26.2,
-  -49.9,
-  ['tourism', 'tourism.attraction'],
-  'Mafra',
-);
+/** Os lugares inventados que "o Google achou" em Canoinhas. */
+const CAFE = lugarGoogle('g-cafe-praca', 'Café da Praça', -26.18, -50.39, 'Canoinhas');
+const PADARIA = lugarGoogle('g-padaria', 'Padaria do Centro', -26.179, -50.392, 'Canoinhas', {
+  categories: ['bakery', 'food'],
+  rating: 4.3,
+  user_rating_count: 80,
+  open_now: false,
+});
+const SALAO = lugarGoogle('g-salao', 'Salão Luz', -26.177, -50.388, 'Canoinhas', {
+  categories: ['hair_salon', 'point_of_interest'],
+  rating: 4.8,
+  user_rating_count: 57,
+});
 
-/** A tela das perguntas da IA sem pergunta nenhuma: só a vontade, e a busca direta. */
-const semPerguntas = (intent: Partial<PlanIntent>) => (body: unknown) =>
-  (body as PlanBody).step === 'ask' ? perguntas([], intent) : escrita(ESCRITA_CAFE);
-const ESCRITA_CAFE: PlanWrite = {
-  trip: { name: 'Café', start_date: D1, end_date: D1 },
-  days: [{ date: D1, title: 'Café', start: '09:00', stops: [{ ref: 'e1', note: null }] }],
-  suggestions: [],
-  quests: [],
-  checklist_before: [],
-  checklist_pack: [],
-};
-
-test('a posição na conversa: o cartão, "Usar posição", "Saindo de Major Vieira, SC", as opções medidas dali, e "mudar"', async ({
+test('a posição na conversa: o cartão, "Usar posição", a pergunta da IA e a segunda rodada, "Saindo de Major Vieira, SC", e "mudar"', async ({
   page,
   context,
 }) => {
   test.setTimeout(150_000);
   await nominatim(page);
   await rotaForjada(context);
-  const mapa = await buscaNoMapa(context, () => [CAFE_SC]);
-  const pedidos: PlanBody[] = [];
-  await page.route('**/functions/v1/plan-trip', (route) =>
-    respondSse(
-      route,
-      (body) =>
-        (body as PlanBody).step === 'ask'
-          ? perguntas([ALCANCE], { wants: CAFE })
-          : escrita(ESCRITA_CAFE),
-      (body) => pedidos.push(body as PlanBody),
-    ),
+  await buscaNoMapa(context, () => []);
+  await escritor(page, ESCRITA_CAFE);
+  // a primeira rodada pergunta (a dúvida do tempo); a segunda, com a resposta, entrega o café
+  const ia = await planejador(context, (body) =>
+    (body.answers ?? []).length === 0
+      ? rodada(
+          [],
+          passeio([], {
+            perguntas: [{ text: 'Até quanto tempo de carro?', options: ['1 hora', '2 horas'] }],
+          }),
+        )
+      : rodada(achados([CAFE]), passeio([passo(1, 'café', ['p1'], { relacao: 'perto_de_casa' })])),
   );
   // a permissão do navegador, dada no toque; a posição em Major Vieira
   await context.grantPermissions(['geolocation']);
@@ -173,14 +146,19 @@ test('a posição na conversa: o cartão, "Usar posição", "Saindo de Major Vie
   await expect(cartao).toContainText('saber de onde vocês saem');
   await cartao.getByRole('button', { name: 'Usar posição' }).click();
 
-  // a IA recebeu onde a pessoa está (arredondado a uns 1 km), e "saindo de" é a cidade do reverso
+  // o planejador recebeu onde a pessoa está (arredondado a uns 1 km), e "saindo de" é a cidade do reverso
   await expect(page.getByText('Tenho 1 pergunta antes de montar.')).toBeVisible({
     timeout: 20_000,
   });
-  expect(pedidos[0]?.context).toMatchObject({
-    position: { lat: -26.37, lng: -50.33 },
-    place: 'Major Vieira, SC',
-    origin: 'Major Vieira, SC',
+  expect(ia.pedidos[0]).toMatchObject({
+    kind: 'plan',
+    text: 'quero ir num café amanhã',
+    reference: { lat: -26.37, lng: -50.33 },
+    context: {
+      position: { lat: -26.37, lng: -50.33 },
+      place: 'Major Vieira, SC',
+      origin: 'Major Vieira, SC',
+    },
   });
   // "Saindo de Major Vieira, SC · mudar" à vista nas perguntas
   const origem = page.locator('[data-origin]');
@@ -189,36 +167,40 @@ test('a posição na conversa: o cartão, "Usar posição", "Saindo de Major Vie
   await page.getByRole('button', { name: '1 hora' }).click();
   await page.getByRole('button', { name: 'Procurar no mapa' }).click();
 
-  // as opções medidas de onde a pessoa está: a busca em volta da posição (arredondada), a 1 h
+  // a segunda rodada leva a pergunta e a resposta; as opções do Google, medidas de onde a pessoa está
   await expect(page.locator('[data-option]')).toHaveCount(1, { timeout: 20_000 });
-  expect(mapa.pedidos[0]).toMatchObject({
-    area: { type: 'circle', lng: -50.33, lat: -26.37, radius_m: 37_000 },
+  expect(ia.pedidos[1]).toMatchObject({
+    questions: [{ text: 'Até quanto tempo de carro?' }],
+    answers: ['1 hora'],
+    reference: { lat: -26.37, lng: -50.33 },
   });
   await expect(page.locator('[data-options] [data-origin]')).toContainText(
     'Saindo de Major Vieira, SC',
   );
+  await expect(page.locator('[data-option]').first()).toContainText('4,6 · 212 avaliações');
+  await expect(page.locator('[data-map-attribution]')).toContainText('Dados do Google Maps');
 
-  // "mudar": a origem escrita vale acima da posição, e a busca roda de novo dali
+  // "mudar": a origem escrita vale acima da posição, e o planejador roda de novo dali
   await page.getByRole('button', { name: 'Mudar de onde vocês saem' }).click();
   await page.getByLabel('De onde vocês saem?').fill('Canoinhas');
   await page.getByRole('button', { name: 'Usar esta origem' }).click();
   await expect(page.locator('[data-options] [data-origin]')).toContainText('Saindo de Canoinhas', {
     timeout: 20_000,
   });
-  expect(mapa.pedidos.at(-1)).toMatchObject({ area: { type: 'circle', lng: -50.39, lat: -26.18 } });
+  expect(ia.pedidos.at(-1)).toMatchObject({ reference: { lat: -26.18, lng: -50.39 } });
 });
 
-test('sem a permissão: "Agora não", a origem da viagem mais recente, e a conversa segue', async ({
+test('sem a permissão: "Agora não", a origem da viagem mais recente, e a conversa segue sem pergunta', async ({
   page,
   context,
 }) => {
   test.setTimeout(150_000);
   await nominatim(page);
   await rotaForjada(context);
-  await buscaNoMapa(context, () => [CAFE_SC]);
-  const pedidos: PlanBody[] = [];
-  await page.route('**/functions/v1/plan-trip', (route) =>
-    respondSse(route, semPerguntas({ wants: CAFE }), (body) => pedidos.push(body as PlanBody)),
+  await buscaNoMapa(context, () => []);
+  await escritor(page, ESCRITA_CAFE);
+  const ia = await planejador(context, () =>
+    rodada(achados([CAFE]), passeio([passo(1, 'café', ['p1'], { relacao: 'perto_de_casa' })])),
   );
   const user = await criarUsuario('SemPosicao');
   await entrar(page, user.email);
@@ -238,27 +220,28 @@ test('sem a permissão: "Agora não", a origem da viagem mais recente, e a conve
   await expect(page.locator('[data-options] [data-origin]')).toContainText(
     'Saindo de Canoinhas, SC',
   );
-  expect(pedidos[0]?.context).toMatchObject({ position: null, origin: 'Canoinhas, SC' });
+  expect(ia.pedidos[0]).toMatchObject({
+    context: { position: null, origin: 'Canoinhas, SC' },
+    reference: { lat: -26.18, lng: -50.39 },
+  });
 });
 
-test('"1 hora e meia" digitado inteiro; "1:3O no maximo" não entendido pergunta de novo, e "1h30" busca a até 1,5 h', async ({
+test('a saída de hoje: "1 hora e meia" digitado inteiro; "1:3O no maximo" não entendido pergunta de novo, e "1h30" vai ao planejador', async ({
   page,
   context,
 }) => {
   test.setTimeout(150_000);
   await nominatim(page);
-  const mapa = await buscaNoMapa(context, () => [CAFE_SC]);
-  await page.route('**/functions/v1/plan-trip', (route) =>
-    respondSse(route, (body) =>
-      (body as PlanBody).step === 'ask'
-        ? perguntas([ALCANCE], { wants: CAFE, origin: 'Canoinhas' })
-        : escrita(ESCRITA_CAFE),
-    ),
+  await buscaNoMapa(context, () => []);
+  const ia = await planejador(context, () =>
+    rodada(achados([CAFE]), passeio([passo(1, 'café', ['p1'], { relacao: 'perto_de_casa' })])),
   );
+  await context.grantPermissions(['geolocation']);
+  await context.setGeolocation(MAJOR_VIEIRA);
   const user = await criarUsuario('Tempo');
   await entrar(page, user.email);
-  await posicaoDecidida(page, 'declined');
-  await campo(page).fill('quero ir num café amanhã, saindo de Canoinhas');
+  await posicaoDecidida(page, 'granted');
+  await campo(page).fill('quero sair hoje para um café');
   await page.getByRole('button', { name: 'Montar a viagem' }).click();
   const livre = page.getByLabel('Ou com as suas palavras');
   await expect(livre).toBeVisible({ timeout: 20_000 });
@@ -273,181 +256,188 @@ test('"1 hora e meia" digitado inteiro; "1:3O no maximo" não entendido pergunta
     timeout: 10_000,
   });
   await expect(livre).toHaveValue('1:3O no maximo');
-  expect(mapa.pedidos).toHaveLength(0);
+  expect(ia.pedidos).toHaveLength(0);
   await livre.fill('1h30');
   await page.getByRole('button', { name: 'Procurar no mapa' }).click();
   await expect(page.locator('[data-option]')).toHaveCount(1, { timeout: 20_000 });
-  // a até 1,5 h: o raio da mesma estimativa dos cartões
-  expect(mapa.pedidos[0]).toMatchObject({ area: { type: 'circle', radius_m: 63_000 } });
+  // o planejador recebeu a saída de hoje, a resposta inteira e o alcance lido dela
+  expect(ia.pedidos[0]).toMatchObject({
+    kind: 'today',
+    answers: ['1h30'],
+    context: { reach: 'day', position: { lat: -26.37, lng: -50.33 } },
+    reference: { lat: -26.37, lng: -50.33 },
+  });
 });
 
-test('"almoçar em mafra": com o viés de onde a pessoa está, a Mafra de Santa Catarina, sem pergunta', async ({
+test('a origem com dois candidatos plausíveis ("Bom Jardim"): a pergunta antes de procurar, a escolha, e o planejador roda dali', async ({
   page,
   context,
 }) => {
   test.setTimeout(150_000);
   await nominatim(page);
-  const mapa = await buscaNoMapa(context, (body) =>
-    body.categories.includes('catering.restaurant') ? [RESTAURANTE_MAFRA] : [CASCATA_MAFRA],
-  );
-  await page.route('**/functions/v1/plan-trip', (route) =>
-    respondSse(
-      route,
-      semPerguntas({
-        wants: [
-          { words: 'almoçar', kind: 'food' },
-          { words: 'cachoeira', kind: 'nature' },
-        ],
-        area: 'Mafra',
-        when: 'amanhã',
-      }),
-    ),
-  );
-  await context.grantPermissions(['geolocation']);
-  await context.setGeolocation(MAJOR_VIEIRA);
-  const user = await criarUsuario('Mafra');
-  await entrar(page, user.email);
-  await posicaoDecidida(page, 'granted');
-  await campo(page).fill('amanha quero almoçar em mafra e depois ir numa cachoeira');
-  await page.getByRole('button', { name: 'Montar a viagem' }).click();
-  // nenhuma pergunta da cidade: a única Mafra plausível a partir de Major Vieira é a de SC
-  await expect(page.locator('[data-option]')).toHaveCount(2, { timeout: 30_000 });
-  await expect(page.locator('[data-place-ask]')).toHaveCount(0);
-  await expect(page.getByText(/de Mafra\./).first()).toBeVisible();
-  // as duas buscas em volta da Mafra de Santa Catarina, nunca da de Lisboa
-  for (const pedido of mapa.pedidos) {
-    expect(pedido.area).toMatchObject({ type: 'circle', lng: -49.81, lat: -26.11 });
-  }
-});
-
-test('a cidade com dois candidatos plausíveis: a pergunta antes da busca, a escolha, e então as opções', async ({
-  page,
-  context,
-}) => {
-  test.setTimeout(150_000);
-  await nominatim(page);
-  const mapa = await buscaNoMapa(context, () => [CAFE_SC]);
-  await page.route('**/functions/v1/plan-trip', (route) =>
-    respondSse(route, semPerguntas({ wants: CAFE, area: 'Bom Jardim', origin: 'Canoinhas' })),
+  await buscaNoMapa(context, () => []);
+  const ia = await planejador(context, () =>
+    rodada(achados([CAFE]), passeio([passo(1, 'café', ['p1'], { relacao: 'perto_de_casa' })])),
   );
   const user = await criarUsuario('DoisPlausiveis');
   await entrar(page, user.email);
   await posicaoDecidida(page, 'declined');
-  await campo(page).fill('quero ir num café em Bom Jardim, saindo de Canoinhas');
+  await campo(page).fill('quero ir num café amanhã');
   await page.getByRole('button', { name: 'Montar a viagem' }).click();
+  // sem origem conhecida, a primeira rodada roda; "mudar" para "Bom Jardim" pergunta qual
+  await expect(page.locator('[data-option]')).toHaveCount(1, { timeout: 30_000 });
+  await page.getByRole('button', { name: 'Mudar de onde vocês saem' }).click();
+  await page.getByLabel('De onde vocês saem?').fill('Bom Jardim');
+  await page.getByRole('button', { name: 'Usar esta origem' }).click();
   const escolher = page.locator('[data-place-ask="choice"]');
   await expect(escolher).toBeVisible({ timeout: 30_000 });
   await expect(escolher).toContainText('Escolher o local (2)');
   await expect(escolher).toContainText('Há mais de um “Bom Jardim” no mapa');
   await expect(escolher.getByRole('radio')).toHaveCount(2);
-  await expect(escolher.getByRole('radio', { name: /^Bom Jardim da Serra/ })).toContainText(
-    /a cerca de \d+ h/,
-  );
-  // a busca só roda depois da escolha, e em volta do que foi escolhido
-  expect(mapa.pedidos).toHaveLength(0);
+  // o planejador só roda de novo depois da escolha, com a referência da cidade escolhida
+  const antes = ia.pedidos.length;
   await escolher.getByRole('radio', { name: /^Bom Jardim da Serra/ }).click();
   await expect(page.locator('[data-option]')).toHaveCount(1, { timeout: 30_000 });
-  expect(mapa.pedidos[0]).toMatchObject({ area: { type: 'circle', lng: -49.62, lat: -28.34 } });
+  expect(ia.pedidos).toHaveLength(antes + 1);
+  expect(ia.pedidos.at(-1)).toMatchObject({ reference: { lat: -28.34, lng: -49.62 } });
+  await expect(page.locator('[data-options] [data-origin]')).toContainText('Saindo de Bom Jardim');
 });
 
-test('"Serra Gaúcha" não é cidade no mapa: a tela pergunta a cidade, sem candidatos, e a busca roda em volta da cidade escrita', async ({
+test('a pergunta da IA na dúvida ("quero sair pra algum lugar legal"): o que fazer, com opções que o app procura; a resposta vai à segunda rodada', async ({
   page,
   context,
 }) => {
   test.setTimeout(150_000);
   await nominatim(page);
-  const mapa = await buscaNoMapa(context, () => [CAFE_SC]);
-  await page.route('**/functions/v1/plan-trip', (route) =>
-    respondSse(route, semPerguntas({ wants: CAFE, area: 'Serra Gaúcha', origin: 'Papanduva' })),
+  await buscaNoMapa(context, () => []);
+  const ia = await planejador(context, (body) =>
+    (body.answers ?? []).length === 0
+      ? rodada(
+          [],
+          passeio([], {
+            perguntas: [
+              {
+                text: 'O que vocês querem fazer?',
+                options: ['um café', 'uma cachoeira', 'um parque'],
+              },
+            ],
+          }),
+        )
+      : rodada(
+          achados([CAFE]),
+          passeio([passo(1, 'um café', ['p1'], { relacao: 'perto_de_casa' })]),
+        ),
   );
-  const user = await criarUsuario('Regiao');
+  await context.grantPermissions(['geolocation']);
+  await context.setGeolocation(MAJOR_VIEIRA);
+  const user = await criarUsuario('Duvida');
   await entrar(page, user.email);
-  await posicaoDecidida(page, 'declined');
-  await campo(page).fill('quero ir num café na Serra Gaúcha, saindo de Papanduva');
+  await posicaoDecidida(page, 'granted');
+  await campo(page).fill('domingo quero sair pra algum lugar legal, o que tem pra fazer?');
   await page.getByRole('button', { name: 'Montar a viagem' }).click();
-  const pergunta = page.locator('[data-place-ask="unknown"]');
-  await expect(pergunta).toBeVisible({ timeout: 30_000 });
-  await expect(pergunta).toContainText(
-    'Não achei “Serra Gaúcha” como cidade no mapa. Para qual cidade vocês vão?',
-  );
-  await expect(pergunta.getByRole('radio')).toHaveCount(0);
-  expect(mapa.pedidos).toHaveLength(0);
-  await pergunta.getByLabel('A cidade').fill('Canoinhas');
-  await pergunta.getByRole('button', { name: 'Procurar esta cidade' }).click();
-  await expect(page.locator('[data-option]')).toHaveCount(1, { timeout: 30_000 });
-  expect(mapa.pedidos[0]).toMatchObject({ area: { type: 'circle', lng: -50.39, lat: -26.18 } });
-  await expect(page.getByText(/de Canoinhas\./).first()).toBeVisible();
+  await expect(page.getByText('Tenho 1 pergunta antes de montar.')).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(page.getByText('O que vocês querem fazer?')).toBeVisible();
+  await page.getByRole('button', { name: 'um café' }).click();
+  await page.getByRole('button', { name: 'Procurar no mapa' }).click();
+  await expect(page.locator('[data-option]')).toHaveCount(1, { timeout: 20_000 });
+  expect(ia.pedidos[1]).toMatchObject({
+    questions: [{ text: 'O que vocês querem fazer?' }],
+    answers: ['um café'],
+  });
+  // a segunda rodada não pergunta de novo: o passo e a opção
+  await expect(page.locator('[data-step="1"]')).toContainText('Um café');
 });
 
-test('feirinha, café e cortar o cabelo em Canoinhas: os três estados, o resumo, a viagem com a parada sem local e <pendentes> na escrita', async ({
+test('feirinha, café e cortar o cabelo em Canoinhas pelo planejador: os passos em ordem, os três estados, o resumo, a viagem com a parada sem local, o place_id na escolhida e <pendentes> na escrita', async ({
   page,
   context,
 }) => {
   test.setTimeout(180_000);
   await nominatim(page);
   await rotaForjada(context);
-  // só o café existe no mapa de mentira; a feirinha e o salão, não
-  await buscaNoMapa(context, (body) =>
-    body.categories.includes('catering.cafe') ? [CAFE_SC] : [],
-  );
+  // as sugestões no corredor continuam pela Geoapify (vazias aqui)
+  await buscaNoMapa(context, () => []);
   const pedidos: PlanBody[] = [];
-  await page.route('**/functions/v1/plan-trip', (route) =>
-    respondSse(
-      route,
-      (body) =>
-        (body as PlanBody).step === 'ask'
-          ? perguntas([], {
-              wants: [
-                { words: 'feirinha', kind: 'event' },
-                { words: 'café', kind: 'food' },
-                { words: 'cortar o cabelo', kind: 'other' },
-              ],
-              area: 'Canoinhas SC',
-              origin: 'Major Vieira',
-            })
-          : escrita({
-              trip: { name: 'Café em Canoinhas', start_date: D1, end_date: D1 },
-              days: [
-                {
-                  date: D1,
-                  title: 'Café em Canoinhas',
-                  start: '09:00',
-                  stops: [{ ref: 'e1', note: 'o café da praça' }],
-                },
-              ],
-              suggestions: [],
-              quests: [],
-              checklist_before: ['Escolher onde fica a feirinha'],
-              checklist_pack: [],
-            }),
-      (body) => pedidos.push(body as PlanBody),
+  await escritor(
+    page,
+    {
+      trip: { name: 'Café em Canoinhas', start_date: D1, end_date: D1 },
+      days: [
+        {
+          date: D1,
+          title: 'Café em Canoinhas',
+          start: '09:00',
+          stops: [{ ref: 'e1', note: 'o café da praça' }],
+        },
+      ],
+      suggestions: [],
+      quests: [],
+      checklist_before: ['Escolher onde fica a feirinha'],
+      checklist_pack: [],
+    },
+    (body) => pedidos.push(body),
+  );
+  // o planejador: o café com dois candidatos, o salão com um, e a feirinha pendente com a pergunta
+  const ia = await planejador(context, () =>
+    rodada(
+      achados([CAFE, PADARIA, SALAO]),
+      passeio(
+        [
+          passo(2, 'café', ['p1', 'p2']),
+          passo(3, 'cortar o cabelo', ['p3']),
+          passo(1, 'feirinha', [], { achou: false }),
+        ],
+        { pendentes: [{ o_que: 'a feirinha', pergunta: 'Onde fica a feirinha?' }] },
+      ),
     ),
   );
+  await context.grantPermissions(['geolocation']);
+  await context.setGeolocation(MAJOR_VIEIRA);
   const user = await criarUsuario('Canoinhas');
   await entrar(page, user.email);
-  await posicaoDecidida(page, 'declined');
+  await posicaoDecidida(page, 'granted');
   await campo(page).fill(
     'iria na feirinha, tomar um cafe e levar a minha mulher cortar o cabelo, tudo isso em canoinhas sc',
   );
   await page.getByRole('button', { name: 'Montar a viagem' }).click();
 
-  // cada coisa pedida num estado, à vista: a feirinha e o salão pendentes, o café sem escolha ainda
-  await expect(page.locator('[data-option]')).toHaveCount(1, { timeout: 30_000 });
-  await expect(page.locator('[data-fate="pending"]')).toHaveCount(2);
-  await expect(page.locator('[data-summary]')).toHaveText(
-    '0 escolhidos · 1 sem escolha: Café · 2 pendentes: Feirinha, Cortar o cabelo',
+  // o andamento em palavras enquanto a IA procura, e nenhuma pergunta: a primeira rodada entregou
+  await expect(page.locator('[data-option]')).toHaveCount(3, { timeout: 30_000 });
+  expect(ia.pedidos).toHaveLength(1);
+  // os passos na ordem dita (a feirinha primeiro), cada um com "n de 3"; a feirinha sem candidato
+  const steps = page.locator('[data-step]');
+  await expect(steps).toHaveCount(3);
+  await expect(steps.nth(0)).toContainText('1 de 3 · Feirinha');
+  await expect(steps.nth(1)).toContainText('2 de 3 · Café');
+  await expect(steps.nth(2)).toContainText('3 de 3 · Cortar o cabelo');
+  await expect(page.getByText(/2 opções no mapa em Canoinhas/)).toBeVisible();
+  // os cartões do Google: a nota, o aberto agora, o fechado agora
+  const cafe = page.getByRole('button', { name: /^Café da Praça/ });
+  await expect(cafe).toContainText('4,6 · 212 avaliações');
+  await expect(cafe).toContainText('Aberto agora');
+  await expect(page.getByRole('button', { name: /^Padaria do Centro/ })).toContainText(
+    'Fechado agora',
   );
-  // "Tirar da viagem" o salão: tirado, com desfazer; e o café escolhido
+  // cada coisa pedida num estado, à vista: a feirinha pendente (com a pergunta), o café e o salão sem escolha
+  await expect(page.locator('[data-fate="pending"]')).toHaveCount(2);
+  await expect(page.locator('[data-pending-question]')).toContainText('Onde fica a feirinha?');
+  await expect(page.locator('[data-summary]')).toHaveText(
+    '0 escolhidos · 2 sem escolha: Café, Cortar o cabelo · 2 pendentes: Feirinha, A feirinha',
+  );
+  // "Tirar da viagem" o salão e o passo da feirinha sem candidato; a pergunta pendente fica; o café escolhido
   await page
     .getByRole('region', { name: 'Cortar o cabelo' })
     .getByRole('button', { name: 'Tirar da viagem' })
     .click();
-  await expect(page.getByRole('region', { name: 'Cortar o cabelo' })).toContainText(
-    'Tirado da viagem',
-  );
-  await page.getByRole('button', { name: /^Café da Praça/ }).click();
+  await page
+    .getByRole('region', { name: 'Feirinha' })
+    .getByRole('button', { name: 'Tirar da viagem' })
+    .click();
+  await cafe.click();
   await expect(page.locator('[data-summary]')).toHaveText(
-    '1 escolhido · 1 pendente: Feirinha · 1 tirado: Cortar o cabelo',
+    '1 escolhido · 1 pendente: A feirinha · 2 tirados: Feirinha, Cortar o cabelo',
   );
   await page.getByRole('button', { name: /^Traçar o caminho/ }).click();
 
@@ -455,36 +445,36 @@ test('feirinha, café e cortar o cabelo em Canoinhas: os três estados, o resumo
   await expect(page.getByRole('heading', { name: 'Revisar a viagem' })).toBeVisible({
     timeout: 30_000,
   });
-  await expect(page.locator('[data-checked="faltou"]')).toContainText('Feirinha');
-  await expect(page.getByRole('checkbox', { name: /^Feirinha/ })).toBeVisible();
-  // a revisão procura o pendente só pelo nome com a cidade, nunca pela cidade sozinha: sem local
+  await expect(page.locator('[data-checked="faltou"]')).toContainText('A feirinha');
+  await expect(page.getByRole('checkbox', { name: /^A feirinha/ })).toBeVisible();
   await expect(page.getByText('Sem local · dá para marcar depois')).toBeVisible({
     timeout: 20_000,
   });
+  await expect(page.getByText('Conferido no Google Maps')).toBeVisible();
+  await expect(page.locator('[data-map-attribution]')).toContainText('Dados do Google Maps');
   const escrita1 = pedidos.find((p) => p.step === 'plan');
   expect(escrita1?.places?.chosen.map((c) => c.name)).toEqual(['Café da Praça']);
   expect(escrita1?.places?.pending).toEqual([
-    { name: 'Feirinha', kind: 'event', why: 'not_found' },
+    { name: 'A feirinha', kind: 'other', why: 'not_found' },
   ]);
 
-  // a viagem nasce com o café com coordenada e a feirinha sem, e sem o salão
+  // a viagem nasce com o café com coordenada e o place_id do Google, a feirinha sem, e sem o salão
   await page.getByRole('button', { name: 'Criar a viagem' }).click();
   await expect(page).toHaveURL(/\/viagens\/[0-9a-f-]{36}\/detalhes$/);
   const tripId = page.url().split('/').at(-2) ?? '';
   await expect
     .poll(
       async () =>
-        (await linhas('stops', `trip_id=eq.${tripId}&select=name,lat&order=name`)).map((s) => [
-          s.name,
-          s.lat !== null,
-        ]),
+        (
+          await linhas('stops', `trip_id=eq.${tripId}&select=name,lat,google_place_id&order=name`)
+        ).map((s) => [s.name, s.lat !== null, s.google_place_id]),
       { timeout: 20_000 },
     )
     .toEqual([
-      ['Café da Praça', true],
-      ['Chegada em Major Vieira', true],
-      ['Feirinha', false],
-      ['Saída de Major Vieira', true],
+      ['A feirinha', false, null],
+      ['Café da Praça', true, 'g-cafe-praca'],
+      ['Chegada em Major Vieira, SC', true, null],
+      ['Saída de Major Vieira, SC', true, null],
     ]);
 });
 

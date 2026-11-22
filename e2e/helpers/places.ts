@@ -1,5 +1,5 @@
 import type { BrowserContext, Page, Route } from '@playwright/test';
-import type { Place, PlacesRequest } from '../../supabase/functions/_shared/places-schema.ts';
+import type { FindPlacesRequest, Place } from '../../supabase/functions/_shared/places-schema.ts';
 import { forgedRouteDay } from '../../src/features/lab/forged-stop.ts';
 
 /**
@@ -39,23 +39,30 @@ export function lugar(
 
 export type PlacesAnswer = Place[] | { status: number; code: string };
 
-/** A `find-places` respondida: cada pedido vai para `answer`, e os pedidos ficam guardados. */
+/**
+ * A `find-places` respondida: cada pedido vai para `answer` (a busca por tipo da Geoapify, ou a por
+ * texto no Google desde a fase 27: `'provider' in body`), e os pedidos ficam guardados.
+ */
 export async function buscaNoMapa(
   target: Page | BrowserContext,
-  answer: (body: PlacesRequest) => PlacesAnswer,
-): Promise<{ pedidos: PlacesRequest[] }> {
-  const pedidos: PlacesRequest[] = [];
+  answer: (body: FindPlacesRequest) => PlacesAnswer,
+): Promise<{ pedidos: FindPlacesRequest[] }> {
+  const pedidos: FindPlacesRequest[] = [];
   await target.route('**/functions/v1/find-places', async (route: Route) => {
     if (route.request().method() === 'OPTIONS') {
       await route.fulfill({ status: 204, headers: CORS });
       return;
     }
-    const body = route.request().postDataJSON() as PlacesRequest;
+    const body = route.request().postDataJSON() as FindPlacesRequest;
     pedidos.push(body);
     const out = answer(body);
     if (Array.isArray(out)) {
       await route.fulfill({
-        json: { provider: 'geoapify', fetched_at: new Date().toISOString(), places: out },
+        json: {
+          provider: 'provider' in body ? 'google' : 'geoapify',
+          fetched_at: new Date().toISOString(),
+          places: out,
+        },
         headers: CORS,
       });
       return;

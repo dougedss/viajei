@@ -237,7 +237,8 @@ const REACH_TEXT = {
   overnight: 'até amanhã (uma noite fora)',
 } as const;
 
-function contextLines(c: PlanContext, kind: PlanInput['kind']): string[] {
+/** O contexto que o app sabe, linha a linha, como dado (a conversa e o planejador da fase 27 usam). */
+export function contextLines(c: PlanContext, kind: PlanInput['kind']): string[] {
   const interests = c.interests.filter((i) => i !== 'no_dirt_road').map((i) => INTERESTS[i].label);
   const lines = [
     `hoje: ${withWeekday(c.today)}, agora ${c.now}`,

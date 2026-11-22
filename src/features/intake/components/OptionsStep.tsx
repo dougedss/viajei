@@ -1,7 +1,12 @@
 import { Check, Clock, MapPin, Route, Search, Star } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import type { StopKind } from '@shared/constants.ts';
-import { GEOAPIFY_ATTRIBUTION, GOOGLE_ATTRIBUTION, isGooglePlace } from '@shared/places-schema.ts';
+import {
+  GEOAPIFY_ATTRIBUTION,
+  GOOGLE_ATTRIBUTION,
+  GOOGLE_MAX_RADIUS_M,
+  isGooglePlace,
+} from '@shared/places-schema.ts';
 import { Button } from '@/components/ui/Button.tsx';
 import { Card } from '@/components/ui/Card.tsx';
 import { TextField } from '@/components/ui/TextField.tsx';
@@ -19,6 +24,7 @@ import {
 } from '../flow.ts';
 import type { PlaceHit, PlaceQuestion } from '../locate.ts';
 import { openingText } from '../opening.ts';
+import { ratingText, statusText } from '../option-text.ts';
 import { aboutMinutes, reachLabel, type MapOption } from '../search.ts';
 
 type Props = {
@@ -62,33 +68,6 @@ export function MapAttribution({ google = false }: { google?: boolean }) {
       </a>
     </p>
   );
-}
-
-/** "4,6 · 212 avaliações": a nota do Google com o número de avaliações (fase 27). */
-export function ratingText(
-  place: Pick<MapOption['place'], 'rating' | 'user_rating_count'>,
-): string | null {
-  if (place.rating === null || place.rating === undefined) return null;
-  const nota = place.rating.toLocaleString('pt-BR', {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  });
-  const n = place.user_rating_count ?? 0;
-  return n > 0 ? `${nota} · ${String(n)} ${n === 1 ? 'avaliação' : 'avaliações'}` : nota;
-}
-
-/** O que o lugar diz de si agora: aberto, fechado, fechado por um tempo, fechado de vez, ainda por abrir. */
-export function statusText(
-  place: Pick<MapOption['place'], 'open_now' | 'business_status'>,
-): { text: string; tone: 'ok' | 'warn' | 'off' } | null {
-  if (place.business_status === 'closed_permanently')
-    return { text: 'Fechado de vez', tone: 'off' };
-  if (place.business_status === 'closed_temporarily')
-    return { text: 'Fechado por um tempo', tone: 'warn' };
-  if (place.business_status === 'future_opening') return { text: 'Ainda não abriu', tone: 'warn' };
-  if (place.open_now === true) return { text: 'Aberto agora', tone: 'ok' };
-  if (place.open_now === false) return { text: 'Fechado agora', tone: 'warn' };
-  return null;
 }
 
 /** Um cartão de opção: o nome como está no mapa, a cidade, o tempo de carro e o horário se houver. */
@@ -210,19 +189,43 @@ function ByName({
   );
 }
 
+/** "1 de 3 · Café" com a relação do passo (o planejador, fase 27): o que a fase 26 mostra um por vez. */
+function StepHeading({ group, total }: { group: OptionGroup; total: number }) {
+  const title = group.label.charAt(0).toLocaleUpperCase('pt-BR') + group.label.slice(1);
+  if (!group.step) return <h2 className="label-caps text-accent-ink">{title}</h2>;
+  const when = {
+    '': null,
+    manha: 'de manhã',
+    almoco: 'no almoço',
+    tarde: 'à tarde',
+    noite: 'à noite',
+  }[group.step.hora_do_dia];
+  return (
+    <h2 className="label-caps text-accent-ink" data-step={group.step.ordem}>
+      {total > 1 ? `${String(group.step.ordem)} de ${String(total)} · ` : ''}
+      {title}
+      {when ? <span className="font-normal text-ink-2"> · {when}</span> : null}
+    </h2>
+  );
+}
+
 function Group({
   group,
   index,
   chosen,
+  steps,
   props,
 }: {
   group: OptionGroup;
   index: number;
   chosen: readonly string[];
+  /** quantos passos o planejador entregou (o "1 de 3") */
+  steps: number;
   props: Props;
 }) {
   const where = group.centerLabel ? ` de ${group.centerLabel}` : '';
-  const reach = `a até ${reachLabel(group.radiusKm)}${where}`;
+  // onde se procurou: em palavras, pelo passo do planejador; senão, pelo raio da busca por tipo
+  const reach = group.where ?? `a até ${reachLabel(group.radiusKm)}${where}`;
   const title = group.label.charAt(0).toLocaleUpperCase('pt-BR') + group.label.slice(1);
   const fate = groupFate(group, chosen);
   // o estado de cada vontade fica à vista (fase 25, D278): escolhida, sem escolha, pendente ou tirada
@@ -237,8 +240,9 @@ function Group({
       aria-label={title}
       data-option-group={group.status}
       data-fate={fate}
+      data-neighbors={group.step?.fora_da_cidade ? 'true' : undefined}
     >
-      <h2 className="label-caps text-accent-ink">{title}</h2>
+      <StepHeading group={group} total={steps} />
       {fate === 'removed' ? (
         <Card className="grid gap-2" role="status">
           <p className="text-[15px] text-ink-2">
@@ -250,6 +254,12 @@ function Group({
         </Card>
       ) : group.status === 'ok' ? (
         <>
+          {group.step?.fora_da_cidade && group.step.cidade ? (
+            <p className="text-[14px] font-semibold text-tight-ink" data-neighbors-note>
+              Nada em {group.step.cidade}; nos vizinhos há{' '}
+              {plural(group.options.length, 'opção', 'opções')}.
+            </p>
+          ) : null}
           <p className="text-[14px] text-ink-2">
             {plural(group.options.length, 'opção', 'opções')} no mapa {reach}. Escolha uma ou mais.
           </p>
@@ -267,6 +277,19 @@ function Group({
             </Button>
           ) : null}
         </>
+      ) : group.question ? (
+        // o pendente do planejador (fase 27): o que só a pessoa conhece, com a pergunta que resolve
+        <Card className="grid gap-3" role="status" data-pending-question>
+          <p className="text-[15px]">
+            {group.question}{' '}
+            <span className="text-ink-2">
+              Não está em mapa nenhum. Fica pendente: entra na viagem sem local, e dá para marcar o
+              local na revisão.
+            </span>
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">{remove}</div>
+          <ByName kind={group.search.kind} group={index} onByName={props.onByName} />
+        </Card>
       ) : group.status === 'none' ? (
         <Card className="grid gap-3" role="status">
           <p className="text-[15px]">
@@ -276,13 +299,16 @@ function Group({
             Fica pendente: entra na viagem sem local, e dá para marcar o local na revisão.
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
-            {group.radiusKm < 400 ? (
+            {group.radiusKm < (group.step ? GOOGLE_MAX_RADIUS_M / 1000 : 400) ? (
               <Button size="md" variant="secondary" onClick={() => props.onWider(index)}>
                 Procurar mais longe
               </Button>
             ) : null}
             {remove}
           </div>
+          {group.step ? (
+            <ByName kind={group.search.kind} group={index} onByName={props.onByName} />
+          ) : null}
         </Card>
       ) : (
         <Card className="grid gap-3" role="status">
@@ -566,6 +592,7 @@ export function OptionsStep(props: Props) {
           group={group}
           index={i}
           chosen={map.chosen}
+          steps={map.groups.filter((g) => g.step).length}
           props={props}
         />
       ))}

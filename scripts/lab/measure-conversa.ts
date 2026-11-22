@@ -72,16 +72,19 @@ function context(today: string, over: Partial<PlanContext> = {}): PlanContext {
   };
 }
 
-/** A rede da medição: as funções publicadas como o lab-a, e o Nominatim identificado, um por vez. */
 /** O que a medição conta da rede: as buscas no mapa, a falta de fonte, e cada cidade geocodificada. */
-type Calls = {
+export type Calls = {
   places: number;
   noSource: boolean;
   /** cada consulta de cidade pelo nome e os candidatos que voltaram (nome, classe e endereço) */
   geocoded: string[];
 };
 
-function labDeps(
+/**
+ * A rede da medição (e da bateria, fase 27): as funções publicadas como a conta do laboratório, e o
+ * Nominatim identificado, um por vez.
+ */
+export function labDeps(
   cfg: Pick<LabConfig, 'url' | 'publishableKey'>,
   a: Session,
   calls: Calls,

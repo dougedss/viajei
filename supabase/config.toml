@@ -451,6 +451,16 @@ enabled = true
 verify_jwt = true
 entrypoint = "./functions/find-places/index.ts"
 
+# plan-search (fase 27) é o planejador: a IA planeja a busca de lugares com ferramentas que a função
+# executa (a Text Search do Google pela GOOGLE_PLACES_API_KEY, a Geoapify de reserva, o tempo de carro
+# estimado) e entrega o passeio em passos; o app julga e a pessoa escolhe. Roda como o usuário
+# (verify_jwt ligado, RLS vale, a ANTHROPIC_API_KEY só nos secrets), em SSE como a plan-trip. Limite: 20
+# rodadas por pessoa em 24 h (200 para a conta do laboratório, que roda a bateria de pedidos).
+[functions.plan-search]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/plan-search/index.ts"
+
 # read-document (fase 18) lê a confirmação de uma reserva (o texto colado, ou o PDF ou o print que a
 # fila já subiu ao Storage) e a foto de uma nota, com a IA, e devolve a reserva ou o gasto preenchidos
 # em SSE, com o mesmo esqueleto da import-itinerary (como o usuário, RLS vale, o anexo lido do bucket

@@ -1,6 +1,14 @@
 import { join } from 'node:path';
 import { chromium, type Browser, type Page } from '@playwright/test';
 import { aiSse } from '../../e2e/helpers/import.ts';
+import {
+  achados,
+  lugarGoogle,
+  passeio,
+  passo,
+  planejadorSse,
+  rodada,
+} from '../../e2e/helpers/planner.ts';
 import { INTAKE_LABEL } from '../../src/features/intake/start.ts';
 import { DEVICE, enterPreview, QUIET, signInPage, TIMEOUT } from './app.ts';
 import { must } from './client.ts';
@@ -10,14 +18,15 @@ import type { ImportContext } from './app-import.ts';
 import { sleep } from './session.ts';
 
 /**
- * `app_conversa` (fase 17; refeito na fase 24): "quero sair hoje para um café colonial", na produção
- * ou no preview, sem leitura real da IA (a `plan-trip` respondida no próprio navegador, como no e2e) e
- * com o mapa de verdade: o lab-a, com a posição em Canela permitida no mapa, escreve no campo,
- * responde a pergunta de alcance, vê **as opções do mapa de verdade** (a `find-places`, pela Geoapify:
- * pelo menos uma), toca na mais perto, traça o caminho (a `route-day` e o corredor dela), vê a
- * revisão com as sugestões desligadas e cria a viagem com exatamente o escolhido; no fim, o expurgo do
- * laboratório a tira. Sem a chave da Geoapify (`no_source`), o cenário é pulado com o motivo. Em
- * `data`, só contagens, formas e tempos: nunca o pedido nem os nomes.
+ * `app_conversa` (fase 17; refeito na fase 24; o planejador na fase 27): "quero sair hoje para um café
+ * colonial", na produção ou no preview, sem leitura real da IA e sem o Google de verdade (o planejador
+ * `plan-search` e a escrita `plan-trip` respondidos no próprio navegador, como no e2e, com candidatos
+ * inventados perto de Canela) e com o mapa de verdade nas sugestões: o lab-a, com a posição em Canela
+ * permitida no mapa, escreve no campo, responde a pergunta de alcance, vê os candidatos do passo, toca
+ * no primeiro, traça o caminho (a `route-day` e o corredor dela, **as sugestões do mapa de verdade** pela
+ * `find-places`, pela Geoapify), vê a revisão com as sugestões desligadas e cria a viagem com exatamente
+ * o escolhido; no fim, o expurgo do laboratório a tira. Sem a chave da Geoapify (`no_source` nas
+ * sugestões), o cenário é pulado com o motivo. Em `data`, só contagens, formas e tempos: nunca o pedido.
  */
 const CANELA = { latitude: -29.3655, longitude: -50.8128 };
 const TEXTO = 'quero sair hoje para um café colonial';
@@ -38,6 +47,22 @@ function escrita(today: string): string {
   return aiSse(JSON.stringify(data), { data });
 }
 
+/** O planejador do laboratório: um passo com dois candidatos inventados perto de Canela. */
+function planejado(): string {
+  return planejadorSse(
+    rodada(
+      achados([
+        lugarGoogle('lab-cafe-1', 'Café Colonial do Laboratório', -29.3605, -50.8205, 'Canela'),
+        lugarGoogle('lab-cafe-2', 'Cuca & Café do Laboratório', -29.37, -50.8, 'Canela', {
+          rating: 4.3,
+          user_rating_count: 40,
+        }),
+      ]),
+      passeio([passo(1, 'café colonial', ['p1', 'p2'], { relacao: 'perto_de_casa', cidade: '' })]),
+    ),
+  );
+}
+
 /** A posição já permitida no mapa (D176): a pergunta do app, no Dexie do aparelho. */
 const GEO_CONSENT = `new Promise((resolve, reject) => {
   const req = indexedDB.open('viajei');
@@ -54,7 +79,7 @@ const GEO_CONSENT = `new Promise((resolve, reject) => {
 export async function appConversa(ctx: ImportContext, today: string): Promise<Check> {
   const { a, appUrl } = ctx;
   const startedAt = Date.now();
-  const data: Record<string, unknown> = { fonte: 'geoapify' };
+  const data: Record<string, unknown> = { fonte: 'planejador de mentira; sugestões pela geoapify' };
   const steps: { step: string; ok: boolean; detail?: string }[] = [];
   let browser: Browser | null = null;
   let page: Page | null = null;
@@ -112,16 +137,46 @@ export async function appConversa(ctx: ImportContext, today: string): Promise<Ch
         body: escrita(today),
       });
     });
+    // o planejador respondido aqui (fase 27): nenhuma IA e nenhum Google de verdade
+    await context.route('**/functions/v1/plan-search', async (route) => {
+      if (route.request().method() === 'OPTIONS') {
+        await route.fulfill({
+          status: 204,
+          headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' },
+        });
+        return;
+      }
+      const body = route.request().postDataJSON() as {
+        kind: string;
+        context: Record<string, unknown>;
+        reference: unknown;
+      };
+      data.planejador = {
+        tipo: body.kind,
+        posicao: body.context.position,
+        referencia: body.reference,
+        alcance: body.context.reach,
+      };
+      await route.fulfill({
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream', 'access-control-allow-origin': '*' },
+        body: planejado(),
+      });
+    });
     page = await context.newPage();
     page.setDefaultTimeout(TIMEOUT);
     const p = page;
-    const counts = { busca: 0, rota: 0, nominatim: 0 };
+    const counts = { busca: 0, rota: 0, nominatim: 0, semFonte: 0 };
     p.on('request', (r) => {
       const url = r.url();
       if (r.method() === 'OPTIONS') return;
       if (url.includes('/functions/v1/find-places')) counts.busca += 1;
       if (url.includes('/functions/v1/route-day')) counts.rota += 1;
       if (url.startsWith('https://nominatim.openstreetmap.org/')) counts.nominatim += 1;
+    });
+    // a Geoapify sem chave responde no_source (503) às buscas das sugestões
+    p.on('response', (r) => {
+      if (r.url().includes('/functions/v1/find-places') && r.status() === 503) counts.semFonte += 1;
     });
     await enterPreview(p, appUrl, ctx.bypass);
 
@@ -145,7 +200,7 @@ export async function appConversa(ctx: ImportContext, today: string): Promise<Ch
           throw new Error(`a posição não entrou: "${lead}"`);
       },
     );
-    await step('o dia: as opções do mapa de verdade, pelo menos uma', async () => {
+    await step('o dia: os candidatos do passo do planejador', async () => {
       // as opções do alcance mudam com a hora (fase 25, D275): a primeira que o app oferece
       await p
         .getByRole('group', { name: 'Quanto tempo vocês têm?' })
@@ -166,15 +221,15 @@ export async function appConversa(ctx: ImportContext, today: string): Promise<Ch
         .getAttribute('data-option-group');
       data.busca_estado = status;
       data.opcoes = await p.locator('[data-option]').count();
-      if (status === 'no_source') {
-        skip.reason =
-          'A busca no mapa respondeu no_source: a chave da Geoapify ainda não existe nos secrets.';
-        return;
-      }
-      if (status !== 'ok') throw new Error(`a busca no mapa: ${String(status)}`);
-      if ((data.opcoes as number) < 1) throw new Error('nenhuma opção na tela');
+      if (status !== 'ok') throw new Error(`o passo do planejador: ${String(status)}`);
+      if ((data.opcoes as number) !== 2) throw new Error('os dois candidatos não vieram à tela');
+      // os cartões do Google: a nota com as avaliações e a fonte no pé
+      const card = (await p.locator('[data-option]').first().textContent()) ?? '';
+      if (!card.includes('avaliações')) throw new Error('o cartão sem a nota do Google');
+      const foot = (await p.locator('[data-map-attribution]').textContent()) ?? '';
+      if (!foot.includes('Dados do Google Maps')) throw new Error('o pé sem a fonte do Google');
     });
-    await step('a mais perto: o caminho, a revisão com as sugestões desligadas', async () => {
+    await step('o primeiro: o caminho, as sugestões do mapa de verdade desligadas', async () => {
       await p.locator('[data-option]').first().click();
       const t0 = Date.now();
       await p.getByRole('button', { name: /^Traçar o caminho/ }).click();
@@ -192,6 +247,12 @@ export async function appConversa(ctx: ImportContext, today: string): Promise<Ch
       data.busca_chamadas = counts.busca;
       data.rota_chamadas = counts.rota;
       data.nominatim_buscas = counts.nominatim;
+      if (counts.semFonte > 0) {
+        skip.reason =
+          'As buscas das sugestões responderam no_source: a chave da Geoapify ainda não existe nos secrets.';
+        return;
+      }
+      if ((data.sugestoes as number) < 1) throw new Error('nenhuma sugestão do mapa de verdade');
     });
     await step('a viagem de hoje nasce e abre no mapa', async () => {
       await p.getByRole('button', { name: 'Criar a viagem' }).click();
@@ -250,7 +311,7 @@ export async function appConversa(ctx: ImportContext, today: string): Promise<Ch
     latency_ms: Date.now() - startedAt,
     detail: failed
       ? `${failed.step}: ${failed.detail ?? 'não aconteceu'}`
-      : `Saída de hoje pelas opções do mapa: ${String(data.opcoes)} opções em ${typeof data.busca_ms === 'number' ? `${(data.busca_ms / 1000).toFixed(1)} s` : '?'}, ${String(data.sugestoes)} sugestões desligadas, a viagem com exatamente o escolhido`,
+      : `Saída de hoje pelo planejador (de mentira): ${String(data.opcoes)} candidatos em ${typeof data.busca_ms === 'number' ? `${(data.busca_ms / 1000).toFixed(1)} s` : '?'}, ${String(data.sugestoes)} sugestões do mapa de verdade desligadas, a viagem com exatamente o escolhido`,
     data: { ...data, passos: steps },
   };
 }

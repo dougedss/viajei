@@ -145,7 +145,11 @@ export default function CriarViagemPage() {
             </>
           ),
           blocked: headerProblems(draft.header).length > 0 || (fromMap && !placed),
-          bottom: fromMap ? <MapAttribution /> : null,
+          bottom: fromMap ? (
+            <MapAttribution
+              google={imp.stored.review.days.some((d) => d.stops.some((s) => !!s.google_place_id))}
+            />
+          ) : null,
         }}
         onSaved={onSaved}
         onDiscarded={() => void toList()}
@@ -172,7 +176,7 @@ export default function CriarViagemPage() {
           <ConversationError
             copy={planErrorCopy(stage.phase, stage.step, new Date())}
             onRetry={() =>
-              void (stage.step === 'plan' && talk.conv
+              void (stage.step !== 'ask' && talk.conv
                 ? talk.retry()
                 : talk.start(talk.conv?.kind ?? 'plan', talk.conv?.text ?? imp.text))
             }
@@ -189,7 +193,7 @@ export default function CriarViagemPage() {
             onBack={() => void toList()}
           />
         ) : stage.kind === 'searching' ? (
-          <CheckingStep done={stage.done} total={stage.total} />
+          <CheckingStep done={stage.done} total={stage.total} note={stage.note ?? null} />
         ) : stage.kind === 'choosing' && talk.conv?.map ? (
           <OptionsStep
             map={talk.conv.map}
