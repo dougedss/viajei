@@ -91,7 +91,16 @@ export const install = {
       listeners.delete(listener);
     };
   },
-  getSnapshot: () => snapshot,
+  /**
+   * O retrato certo já na primeira leitura (fase 26, D307): o `useSyncExternalStore` lê o retrato no
+   * primeiro render e só se inscreve num efeito, depois da pintura; com o `start()` só na inscrição, o
+   * primeiro retrato dizia "não sabe instalar" e o convite entrava uma pintura depois, em cima da lista
+   * de viagens, empurrando-a (o CLS 0,212 do laboratório da produção, e antes o 0,16 intermitente).
+   */
+  getSnapshot: () => {
+    start();
+    return snapshot;
+  },
   /** Abre o pedido nativo (Android). */
   prompt: async (): Promise<'accepted' | 'dismissed' | 'unavailable'> => {
     if (!deferred) return 'unavailable';

@@ -299,9 +299,21 @@ test.describe('a lista de viagens pinta de uma vez', () => {
     await expect(page.getByRole('heading', { name: 'Suas viagens' })).toBeVisible({
       timeout: 20_000,
     });
+    // o que havia na tela no instante em que a lista pintou: o convite de instalar tem de estar lá,
+    // não entrar um render depois (D307: o laboratório da produção mediu 0,212 de CLS, porque o
+    // primeiro retrato da instalação dizia "não sabe instalar" até o efeito que se inscreve)
+    await page.addInitScript({
+      content: `new MutationObserver(function () {
+        if (window.__home) return;
+        if (document.querySelector('[data-home="ready"]')) {
+          window.__home = { instalar: !!document.querySelector('section[aria-label="Instalar o Viajei"]') };
+        }
+      }).observe(document, { childList: true, subtree: true });`,
+    });
     // a lista de novo, como o Lighthouse a abre: as viagens e a recebida já no aparelho
     await page.goto('/viagens');
     await expect(page.locator('[data-home="ready"]')).toBeVisible({ timeout: 20_000 });
+    expect(await page.evaluate('window.__home')).toEqual({ instalar: true });
     const instalar = page.getByRole('region', { name: 'Instalar o Viajei' });
     await expect(instalar).toBeVisible();
     await expect(instalar.getByRole('button', { name: 'Instalar o Viajei' })).toHaveAttribute(
