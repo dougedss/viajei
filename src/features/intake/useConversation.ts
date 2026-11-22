@@ -567,8 +567,10 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
       const to = nextStep(conv.map);
       if (to === null) return;
       const next: Conversation = { ...conv, map: advanceStep(conv.map, to), prepared: null };
-      await keep(next);
-      await ensureStep(next);
+      // o passo seguinte por procurar: o cartão "Procurando…" vem antes de qualquer pintura dele, e o
+      // passo só avança na conversa junto com o que a busca achou (nunca a tela do passo sem opções)
+      if (next.map?.groups[to]?.status === 'unsearched') await ensureStep(next);
+      else await keep(next);
     },
     /** "Voltar um passo" (fase 26): o passo anterior volta a ser o da vez; os seguintes recomeçam. */
     stepBack: () => {

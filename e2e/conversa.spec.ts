@@ -611,6 +611,10 @@ test('o passeio um passo de cada vez: só a cachoeira; escolhida, "Continuar" pr
   await expect(page.locator('[data-outing-time]')).toContainText('vocês têm');
   await continuar.click();
   await expect(page.locator('[data-step="2"]')).toContainText('2 de 2 · Café', { timeout: 30_000 });
+  const cafeSerra = page.getByRole('button', { name: /^Café da Serra/ });
+  await expect(cafeSerra).toBeVisible();
+  // o passo 2 nunca aparece sem as opções: nenhuma tela de "ainda não foram procuradas"
+  await expect(page.locator('[data-unsearched]')).toHaveCount(0);
   const buscas = mapa.pedidos.filter((p) => 'provider' in p);
   expect(buscas).toHaveLength(1);
   expect(buscas[0]).toMatchObject({
@@ -623,7 +627,6 @@ test('o passeio um passo de cada vez: só a cachoeira; escolhida, "Continuar" pr
   // o passo 1 feito, numa linha; o passo 2 com o que cada café acrescenta ao passeio
   await expect(page.locator('[data-steps-done]')).toContainText('Cachoeira Wiegand');
   await expect(page.locator('[data-step="1"]')).toHaveCount(0);
-  const cafeSerra = page.getByRole('button', { name: /^Café da Serra/ });
   await expect(cafeSerra).toContainText('de Cachoeira Wiegand');
   await expect(page.getByText(/opções? no mapa perto de Cachoeira Wiegand/)).toBeVisible();
   // o café perto da cachoeira cabe; o longe demais estoura o dia: marcado, esmaecido e ainda escolhível
