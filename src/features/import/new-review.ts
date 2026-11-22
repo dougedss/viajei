@@ -6,9 +6,12 @@ import { EMPTY_HEADER } from './format.ts';
 import { lastOrigin, proposeHeader } from './new-trip.ts';
 import { reviewOf, type ReviewStop } from './plan.ts';
 import type { Schedule } from '@/features/intake/assemble.ts';
+import type { OpeningPeriod } from '@shared/places-schema.ts';
 
 /** O rótulo do lugar confirmado no mapa (a revisão mostra; a atribuição do OSM vai junto). */
 export const OSM_LABEL = 'Conferido no mapa (OpenStreetMap)';
+/** O lugar escolhido entre os do Google (fase 27): a revisão diz a fonte. */
+export const GOOGLE_LABEL = 'Conferido no Google Maps';
 
 /**
  * A revisão da viagem nova (fase 17), do que foi lido: o cabeçalho do texto com as propostas para o
@@ -37,6 +40,10 @@ export async function newTripReview(
       osm?: Record<string, NonNullable<ReviewStop['osm']>>;
       /** as paradas pendentes, pela chave da revisão (fase 25, D278) */
       pending?: readonly string[];
+      /** o `place_id` do Google de cada lugar escolhido, pela chave da revisão (fase 27) */
+      google?: Record<string, string>;
+      /** os períodos de funcionamento de cada lugar do Google, para a conta do passeio (fase 27) */
+      hours?: Record<string, OpeningPeriod[]>;
     };
   },
 ): Promise<StoredReview> {
@@ -66,12 +73,21 @@ export async function newTripReview(
           stops: d.stops.map((s) => {
             const suggestion = options.plan?.suggestions[s.key] ?? null;
             const osm = options.plan?.osm?.[s.key] ?? null;
+            const google = options.plan?.google?.[s.key] ?? null;
+            const hours = options.plan?.hours?.[s.key] ?? null;
+            // o rótulo diz de onde veio o lugar: o Google (fase 27) ou o OpenStreetMap
             const located =
               s.geo?.status === 'found' && s.geo.via === 'file'
                 ? {
                     ...s,
-                    geo: { status: 'found' as const, label: OSM_LABEL, via: 'osm' as const },
+                    geo: {
+                      status: 'found' as const,
+                      label: google ? GOOGLE_LABEL : OSM_LABEL,
+                      via: 'osm' as const,
+                    },
                     osm,
+                    google_place_id: google,
+                    hours,
                   }
                 : s;
             // a regra de ouro: a sugestão nasce desligada, e só a pessoa a liga

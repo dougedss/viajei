@@ -110,9 +110,11 @@ export async function createStop(
     trip_day_id: tripDayId,
     position: positionAtEnd(siblings.map((s) => s.position)),
     ...stopColumns(values),
-    // a parada escrita à mão não tem o objeto do OSM (fase 23: só a conversa o traz)
+    // a parada escrita à mão não tem o objeto do OSM (fase 23) nem o lugar do Google (fase 27): só a
+    // conversa os traz
     osm_type: null,
     osm_id: null,
+    google_place_id: null,
     departed_at: null,
     done_at: null,
     done_by: null,
@@ -126,15 +128,15 @@ export async function createStop(
 }
 
 export async function updateStop(stopId: string, values: StopFormValues): Promise<void> {
-  // outro lugar (o nome ou a coordenada mudou): o objeto do OSM da conversa já não é o dele, e o
-  // cartão-postal se acha pelo nome e pela coordenada (fase 23)
+  // outro lugar (o nome ou a coordenada mudou): o objeto do OSM da conversa (fase 23) e o lugar do
+  // Google (fase 27) já não são os dele, e o cartão-postal se acha pelo nome e pela coordenada
   const before = await db.stops.get(stopId);
   const moved =
-    !!before?.osm_type &&
+    (!!before?.osm_type || !!before?.google_place_id) &&
     (before.name !== values.name || before.lat !== values.lat || before.lng !== values.lng);
   await mutate.patch('stops', stopId, {
     ...stopColumns(values),
-    ...(moved ? { osm_type: null, osm_id: null } : {}),
+    ...(moved ? { osm_type: null, osm_id: null, google_place_id: null } : {}),
   });
 }
 

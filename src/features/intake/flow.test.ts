@@ -89,6 +89,8 @@ function deps(over: Partial<FlowDeps> = {}) {
   const queries: string[] = [];
   const d: FlowDeps = {
     findPlaces: (r) => {
+      // a busca por texto no Google (fase 27) não entra na conversa de antes: vazia
+      if ('provider' in r) return Promise.resolve([]);
       requests.push(r);
       // as buscas das opções (cafés e restaurantes); as das sugestões (os marcos e o clássico)
       if (r.categories.includes('catering.cafe')) return Promise.resolve([TORTEN, MAHLZEIT]);
@@ -405,7 +407,9 @@ describe('a conversa nova: a escolha e o caminho', () => {
     const { d } = deps({
       findPlaces: (r) =>
         // o café tem opções; a feirinha e o salão, nenhuma
-        Promise.resolve(r.categories.includes('catering.cafe') ? [TORTEN, MAHLZEIT] : []),
+        Promise.resolve(
+          !('provider' in r) && r.categories.includes('catering.cafe') ? [TORTEN, MAHLZEIT] : [],
+        ),
     });
     const stage = await searchMap(
       input({

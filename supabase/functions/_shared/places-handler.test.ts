@@ -156,6 +156,7 @@ describe('find-places: a resposta', () => {
       cuisine: null,
       osm: { type: 'node', id: 4944605516 },
       distance_m: 1200,
+      provider: 'geoapify',
     });
     // a cozinha do OSM, quando vem: o café colonial sem "colonial" no nome (o Torten Paradies)
     expect(
@@ -258,5 +259,83 @@ describe('find-places: sem fonte, a cota e os erros', () => {
     const { d } = deps([json({ statusCode: 500, message: KEY }, 500)]);
     const res = await handlePlaces(post(circle), d);
     expect(await res.text()).not.toContain(KEY);
+  });
+});
+
+describe('find-places: a fonte do Google (fase 27)', () => {
+  const GOOGLE_KEY = 'AIzaChaveDeTesteDoGoogle0123456789';
+  const googleRequest = {
+    provider: 'google',
+    query: 'cabeleireiro em Canoinhas',
+    bias: { lat: -26.18, lng: -50.39, radius_m: 15_000 },
+    type: 'hair_salon',
+  };
+  const googlePlace = {
+    id: 'ChIJ-salao',
+    displayName: { text: 'Salão da Esquina' },
+    formattedAddress: 'R. Major Vieira, 10, Canoinhas - SC, Brasil',
+    addressComponents: [{ longText: 'Canoinhas', types: ['administrative_area_level_2'] }],
+    location: { latitude: -26.17, longitude: -50.39 },
+    types: ['hair_salon', 'point_of_interest'],
+    rating: 4.8,
+    userRatingCount: 57,
+    businessStatus: 'OPERATIONAL',
+  };
+
+  it('o pedido com provider google vai à Text Search com a chave do Google no cabeçalho; a resposta diz a fonte', async () => {
+    const { d, calls, logs } = deps([json({ places: [googlePlace] })], { googleKey: GOOGLE_KEY });
+    const res = await handlePlaces(post(googleRequest), d);
+    expect(res.status).toBe(200);
+    const body = placesResponseSchema.parse(await res.json());
+    expect(body.provider).toBe('google');
+    expect(body.places).toHaveLength(1);
+    expect(body.places[0]).toMatchObject({
+      name: 'Salão da Esquina',
+      city: 'Canoinhas',
+      rating: 4.8,
+      user_rating_count: 57,
+      provider: 'google',
+      google_place_id: 'ChIJ-salao',
+    });
+    expect(calls[0]?.url).toBe('https://places.googleapis.com/v1/places:searchText');
+    expect(calls[0]?.url).not.toContain(GOOGLE_KEY);
+    expect((calls[0]?.init?.headers as Record<string, string>)['X-Goog-Api-Key']).toBe(GOOGLE_KEY);
+    // o log: a forma do pedido e os números, nada da pessoa nem a chave
+    expect(logs).toEqual([
+      'find-places status=ok provider=google type=hair_salon bias=circle requests=1 places=1 ms=0',
+    ]);
+    expect(logs.join('\n')).not.toMatch(/cabeleireiro|Canoinhas|-50|-26|AIza/);
+  });
+
+  it('sem a chave do Google: no_source antes de gastar cota, mesmo com a chave da Geoapify', async () => {
+    const { d, calls, claims } = deps([], { googleKey: undefined });
+    const res = await handlePlaces(post(googleRequest), d);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ error: { code: 'no_source' } });
+    expect(claims()).toBe(0);
+    expect(calls).toEqual([]);
+  });
+
+  it('o 403 do Google é "sem fonte" (a API, o faturamento ou a restrição da chave); o 429 é a cota dele', async () => {
+    for (const [status, code] of [
+      [403, 'no_source'],
+      [429, 'provider_quota'],
+      [400, 'provider_failed'],
+    ] as const) {
+      const { d, logs } = deps([json({ error: { code: status, status: 'X' } }, status)], {
+        googleKey: GOOGLE_KEY,
+      });
+      const res = await handlePlaces(post(googleRequest), d);
+      expect(await res.json()).toMatchObject({ error: { code } });
+      expect(logs.join('\n')).not.toContain(GOOGLE_KEY);
+    }
+  });
+
+  it('a resposta de erro do Google nunca leva a chave', async () => {
+    const { d } = deps([json({ error: { code: 500, message: GOOGLE_KEY } }, 500)], {
+      googleKey: GOOGLE_KEY,
+    });
+    const res = await handlePlaces(post(googleRequest), d);
+    expect(await res.text()).not.toContain(GOOGLE_KEY);
   });
 });

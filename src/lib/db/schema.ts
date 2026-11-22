@@ -345,6 +345,9 @@ export class ViajeiDb extends Dexie {
     this.version(7).stores({
       landmarks: 'place_key, landmark_id, fetched_at',
     });
+    // v8 (fase 27): `stops.google_place_id`, uma coluna nova sem índice (o Dexie não precisa dela no
+    // esquema, mas a versão registra a forma do aparelho junto com a do servidor, a 0020)
+    this.version(8).stores({});
   }
 
   /** A tabela de uma linha sincronizada, pelo nome (tipada por `RowOf`). */

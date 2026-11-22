@@ -116,6 +116,7 @@ export async function registerAutoStop(input: {
     lng: start.center.lng,
     osm_type: null,
     osm_id: null,
+    google_place_id: null,
     travel_minutes_to_next: null,
     notes: null,
     url: null,

@@ -180,3 +180,34 @@ describe('o corredor e as sugestões', () => {
     expect(s.find((x) => x.place.id === 'zoo')?.fraction).toBeGreaterThan(0.9);
   });
 });
+
+describe('placesKey: a busca por texto no Google (fase 27)', () => {
+  const hash = (s: string) => s;
+  it('a chave pelas palavras e pelo círculo arredondado; outro texto ou outro tipo é outra chave', () => {
+    const base = {
+      provider: 'google' as const,
+      query: 'Café em Canoinhas',
+      bias: { lng: -50.3901, lat: -26.1799, radius_m: 15_000 },
+    };
+    const a = placesKey(base, hash);
+    const b = placesKey(
+      { ...base, query: 'café em canoinhas', bias: { ...base.bias, lng: -50.3904 } },
+      hash,
+    );
+    expect(a).toBe(b);
+    expect(a).toMatch(/^google\|cafe em canoinhas\|c:-50\.39,-26\.18,15\|-\|-\|0\|relevance\|20$/);
+    expect(placesKey({ ...base, type: 'cafe' }, hash)).not.toBe(a);
+    expect(placesKey({ ...base, query: 'padaria em Canoinhas' }, hash)).not.toBe(a);
+    expect(placesKey({ ...base, bias: null }, hash)).toContain('|-|');
+    // a busca por tipo de antes continua com a chave de antes
+    expect(
+      placesKey(
+        {
+          categories: ['catering.cafe'],
+          area: { type: 'circle', lng: -50.39, lat: -26.18, radius_m: 30_000 },
+        },
+        hash,
+      ),
+    ).toMatch(/^places\|/);
+  });
+});

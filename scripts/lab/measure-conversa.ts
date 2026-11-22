@@ -4,8 +4,8 @@ import {
   placesErrorSchema,
   placesResponseSchema,
   PLACES_FN,
+  type FindPlacesRequest,
   type Place,
-  type PlacesRequest,
 } from '../../supabase/functions/_shared/places-schema.ts';
 import {
   PLAN_FN,
@@ -128,7 +128,7 @@ function labDeps(
     }));
   };
   return {
-    findPlaces: async (request: PlacesRequest): Promise<Place[]> => {
+    findPlaces: async (request: FindPlacesRequest): Promise<Place[]> => {
       calls.places += 1;
       const res = await call(PLACES_FN, request);
       const json: unknown = await res.json().catch(() => null);

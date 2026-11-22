@@ -3,9 +3,9 @@ import {
   PLACES_FN,
   placesErrorSchema,
   placesResponseSchema,
+  type FindPlacesRequest,
   type Place,
   type PlacesErrorCode,
-  type PlacesRequest,
 } from '@shared/places-schema.ts';
 import { connectivity } from '@/lib/db/connectivity.ts';
 import { db } from '@/lib/db/schema.ts';
@@ -28,7 +28,7 @@ export class PlacesError extends Error {
   }
 }
 
-export async function findPlaces(request: PlacesRequest): Promise<Place[]> {
+export async function findPlaces(request: FindPlacesRequest): Promise<Place[]> {
   const key = placesKey(request, fnv64);
   const cached = await db.places.get(key);
   if (cached && placesFresh(cached.fetched_at, Date.now())) return cached.places;

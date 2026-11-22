@@ -1,7 +1,7 @@
-import { Check, MapPin, Route, Search } from 'lucide-react';
+import { Check, Clock, MapPin, Route, Search, Star } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import type { StopKind } from '@shared/constants.ts';
-import { GEOAPIFY_ATTRIBUTION } from '@shared/places-schema.ts';
+import { GEOAPIFY_ATTRIBUTION, GOOGLE_ATTRIBUTION, isGooglePlace } from '@shared/places-schema.ts';
 import { Button } from '@/components/ui/Button.tsx';
 import { Card } from '@/components/ui/Card.tsx';
 import { TextField } from '@/components/ui/TextField.tsx';
@@ -43,10 +43,14 @@ type Props = {
 
 const plural = (n: number, one: string, many: string) => `${String(n)} ${n === 1 ? one : many}`;
 
-/** O pé da tela: o mapa é do OpenStreetMap, e a busca é da Geoapify (a regra do plano gratuito). */
-export function MapAttribution() {
+/**
+ * O pé da tela: de onde vêm os lugares. O mapa é do OpenStreetMap e a busca por tipo é da Geoapify (a
+ * regra do plano gratuito); desde a fase 27, "Dados do Google Maps" quando há lugares do Google na tela.
+ */
+export function MapAttribution({ google = false }: { google?: boolean }) {
   return (
-    <p className="text-[13px] text-ink-2" data-map-attribution>
+    <p className="text-[13px] text-ink-2" data-map-attribution={google ? 'google' : 'osm'}>
+      {google ? `${GOOGLE_ATTRIBUTION} · ` : null}
       {OSM_ATTRIBUTION} ·{' '}
       <a
         href={GEOAPIFY_ATTRIBUTION.url}
@@ -58,6 +62,33 @@ export function MapAttribution() {
       </a>
     </p>
   );
+}
+
+/** "4,6 · 212 avaliações": a nota do Google com o número de avaliações (fase 27). */
+export function ratingText(
+  place: Pick<MapOption['place'], 'rating' | 'user_rating_count'>,
+): string | null {
+  if (place.rating === null || place.rating === undefined) return null;
+  const nota = place.rating.toLocaleString('pt-BR', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+  const n = place.user_rating_count ?? 0;
+  return n > 0 ? `${nota} · ${String(n)} ${n === 1 ? 'avaliação' : 'avaliações'}` : nota;
+}
+
+/** O que o lugar diz de si agora: aberto, fechado, fechado por um tempo, fechado de vez, ainda por abrir. */
+export function statusText(
+  place: Pick<MapOption['place'], 'open_now' | 'business_status'>,
+): { text: string; tone: 'ok' | 'warn' | 'off' } | null {
+  if (place.business_status === 'closed_permanently')
+    return { text: 'Fechado de vez', tone: 'off' };
+  if (place.business_status === 'closed_temporarily')
+    return { text: 'Fechado por um tempo', tone: 'warn' };
+  if (place.business_status === 'future_opening') return { text: 'Ainda não abriu', tone: 'warn' };
+  if (place.open_now === true) return { text: 'Aberto agora', tone: 'ok' };
+  if (place.open_now === false) return { text: 'Fechado agora', tone: 'warn' };
+  return null;
 }
 
 /** Um cartão de opção: o nome como está no mapa, a cidade, o tempo de carro e o horário se houver. */
@@ -72,6 +103,8 @@ function OptionCard({
 }) {
   const { place } = option;
   const about = `${aboutMinutes(option.minutes)} de carro`;
+  const rating = ratingText(place);
+  const status = statusText(place);
   return (
     // o nome acessível é o próprio texto do cartão (o nome, a cidade, o tempo e o horário): o que se
     // lê é o que se vê (WCAG 2.5.3)
@@ -84,8 +117,10 @@ function OptionCard({
         chosen
           ? 'bg-accent-soft shadow-[inset_0_0_0_2px_var(--color-accent)]'
           : 'bg-card shadow-[inset_0_0_0_1px_var(--color-line)]',
+        status?.tone === 'off' && 'opacity-70',
       )}
       data-option={place.id}
+      data-source={isGooglePlace(place) ? 'google' : 'geoapify'}
     >
       <span
         className={cx(
@@ -107,9 +142,34 @@ function OptionCard({
         <span className="text-[14px] text-ink-2">
           {[place.city, about].filter(Boolean).join(' · ')}
         </span>
+        {rating || status ? (
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px]">
+            {rating ? (
+              <span className="inline-flex items-center gap-1 text-ink-2" data-rating>
+                <Star className="size-3.5 shrink-0 text-tight-ink" aria-hidden="true" />
+                {rating}
+              </span>
+            ) : null}
+            {status ? (
+              <span
+                className={cx(
+                  'inline-flex items-center gap-1 font-semibold',
+                  status.tone === 'ok' && 'text-on-time-ink',
+                  status.tone === 'warn' && 'text-tight-ink',
+                  status.tone === 'off' && 'text-late-ink',
+                )}
+                data-status={status.tone}
+              >
+                <Clock className="size-3.5 shrink-0" aria-hidden="true" />
+                {status.text}
+              </span>
+            ) : null}
+          </span>
+        ) : null}
         {place.opening_hours ? (
           <span className="text-[13px] text-ink-2">
-            Horário no mapa: {openingText(place.opening_hours)}
+            {isGooglePlace(place) ? 'Horário: ' : 'Horário no mapa: '}
+            {isGooglePlace(place) ? place.opening_hours : openingText(place.opening_hours)}
           </span>
         ) : null}
       </span>
@@ -523,7 +583,9 @@ export function OptionsStep(props: Props) {
           Voltar ao texto
         </Button>
       </div>
-      <MapAttribution />
+      <MapAttribution
+        google={map.groups.some((g) => g.options.some((o) => isGooglePlace(o.place)))}
+      />
     </div>
   );
 }

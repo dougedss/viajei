@@ -2,7 +2,7 @@
 import type { StopKind } from '../../../supabase/functions/_shared/constants.ts';
 import { haversineM, type LngLat } from '../../../supabase/functions/_shared/geo.ts';
 import type { ImportData, ImportStop } from '../../../supabase/functions/_shared/import-schema.ts';
-import type { Place } from '../../../supabase/functions/_shared/places-schema.ts';
+import type { OpeningPeriod, Place } from '../../../supabase/functions/_shared/places-schema.ts';
 import type {
   PlanNamed,
   PlanPending,
@@ -195,6 +195,10 @@ export type Assembled = {
   osm: Record<string, OsmRef>;
   /** as chaves da revisão das paradas pendentes (fase 25, D278): sem local, a busca só pelo nome */
   pending: string[];
+  /** o `place_id` do Google de cada lugar escolhido, pela chave da revisão (fase 27, a decisão 4) */
+  google: Record<string, string>;
+  /** os períodos de funcionamento de cada lugar (o Google, fase 27), para a conta do passeio */
+  hours: Record<string, OpeningPeriod[]>;
 };
 
 export type OsmRef = { type: 'node' | 'way' | 'relation'; id: number };
@@ -335,6 +339,8 @@ export function assemble(input: AssembleInput): Assembled {
   const points: Record<string, ScheduleStop[]> = {};
   const suggestions: Assembled['suggestions'] = {};
   const osm: Assembled['osm'] = {};
+  const google: Assembled['google'] = {};
+  const hours: Assembled['hours'] = {};
   const pending: string[] = [];
   // a rota real liga os pontos ligados de saída: a origem, as escolhas na ordem e a volta
   const routed: string[] = [];
@@ -349,6 +355,9 @@ export function assemble(input: AssembleInput): Assembled {
       else if (Number.isFinite(slot.pick.place.lat)) routed.push(key);
       else pending.push(key);
       if (slot.pick.place.osm) osm[key] = slot.pick.place.osm;
+      if (slot.pick.place.google_place_id) google[key] = slot.pick.place.google_place_id;
+      if (slot.pick.place.hours && slot.pick.place.hours.length > 0)
+        hours[key] = slot.pick.place.hours;
       return {
         key,
         kind: slot.pick.kind,
@@ -428,6 +437,8 @@ export function assemble(input: AssembleInput): Assembled {
     points,
     osm,
     pending,
+    google,
+    hours,
   };
 }
 

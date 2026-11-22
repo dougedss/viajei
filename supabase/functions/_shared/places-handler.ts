@@ -1,43 +1,41 @@
 import { z } from 'zod';
+import { ProviderError, searchGoogle } from './google-places.ts';
 import {
+  findPlacesRequestSchema,
   PLACES_DAILY_LIMIT,
-  placesRequestSchema,
+  type GooglePlacesInput,
   type Place,
   type PlacesErrorCode,
   type PlacesInput,
+  type PlacesProvider,
   type PlacesResponse,
 } from './places-schema.ts';
 
 /**
- * O handler da `find-places` (fase 24), sem Deno e sem rede, como o da `plan-trip`: o `index.ts` liga
- * a chave, o banco da pessoa (a cota pela `edge_call`) e o `fetch`; o Vitest liga um `fetch` de
- * mentira. Cada palavra do nome é uma busca na Places API da Geoapify (o círculo por GET, o corredor
- * da rota por POST com a linha em GeoJSON e a faixa em metros), juntas pelo `place_id`. A chave vai
- * no cabeçalho `x-api-key`, nunca na URL, no log nem na resposta. Sem chave, `no_source` antes de
- * gastar cota: o app diz que não deu para buscar no mapa e oferece a busca por nome. O log é uma
- * linha de números e o código, nada da pessoa (nem a posição, nem as palavras).
+ * O handler da `find-places` (fase 24; o Google na fase 27), sem Deno e sem rede, como o da `plan-trip`:
+ * o `index.ts` liga as chaves, o banco da pessoa (a cota pela `edge_call`) e o `fetch`; o Vitest liga
+ * um `fetch` de mentira. Duas fontes, pelo pedido: **por tipo**, na Places API da Geoapify (cada
+ * palavra do nome é uma busca: o círculo por GET, o corredor da rota por POST com a linha em GeoJSON e
+ * a faixa em metros, juntas pelo `place_id`); **por texto**, na Text Search do Google
+ * (`_shared/google-places.ts`). As chaves vão nos cabeçalhos (`x-api-key`, `X-Goog-Api-Key`), nunca na
+ * URL, no log nem na resposta. Sem a chave da fonte pedida, `no_source` antes de gastar cota: o app
+ * segue pela outra fonte ou pela busca por nome. O log é uma linha de números e o código, nada da
+ * pessoa (nem a posição, nem as palavras).
  */
 export const GEOAPIFY_PLACES_URL = 'https://api.geoapify.com/v2/places';
 const TIMEOUT_MS = 15_000;
 
 export type PlacesDeps = {
+  /** a chave da Geoapify */
   key: string | undefined;
+  /** a chave do Google (fase 27) */
+  googleKey?: string | undefined;
   /** a cota da pessoa: `ok`, ou `limit` quando passou dos 60 em 24 h */
   claim: () => Promise<'ok' | 'limit'>;
   fetch: typeof fetch;
   log: (line: string) => void;
   now?: () => number;
 };
-
-class ProviderError extends Error {
-  readonly code: PlacesErrorCode;
-  readonly status: number;
-  constructor(code: PlacesErrorCode, status: number, detail: string) {
-    super(detail);
-    this.code = code;
-    this.status = status;
-  }
-}
 
 function fail(status: number, code: PlacesErrorCode, message: string): Response {
   return Response.json({ error: { code, message } }, { status });
@@ -111,6 +109,7 @@ export function placeOf(raw: unknown): Place | null {
         ? { type: osmType, id: r.osm_id }
         : null,
     distance_m: p.distance !== undefined && p.distance >= 0 ? p.distance : null,
+    provider: 'geoapify',
   };
 }
 
@@ -159,7 +158,7 @@ export function geoapifyRequest(
 }
 
 async function search(
-  deps: PlacesDeps,
+  deps: Pick<PlacesDeps, 'fetch'>,
   key: string,
   input: PlacesInput,
   name: string | null,
@@ -190,60 +189,76 @@ export function mergePlaces(lists: readonly (readonly Place[])[]): Place[] {
     : all;
 }
 
+/** A busca por tipo na Geoapify (fase 24), dada a chave. */
+export async function searchGeoapify(
+  deps: Pick<PlacesDeps, 'fetch'>,
+  key: string,
+  input: PlacesInput,
+): Promise<Place[]> {
+  const names = input.names.length > 0 ? input.names : [null];
+  return mergePlaces(await Promise.all(names.map((name) => search(deps, key, input, name))));
+}
+
+const MESSAGES: Readonly<Record<PlacesErrorCode, string>> = {
+  invalid_input: 'Pedido fora do formato esperado.',
+  no_source: 'A busca no mapa ainda não está ligada.',
+  daily_limit: `Você já fez ${String(PLACES_DAILY_LIMIT)} buscas no mapa hoje. Amanhã libera de novo.`,
+  provider_quota: 'A busca no mapa chegou ao limite de hoje. Tente mais tarde.',
+  provider_failed: 'O mapa não respondeu agora. Tente de novo em instantes.',
+  internal: 'Não deu para conferir o limite.',
+};
+
 export async function handlePlaces(req: Request, deps: PlacesDeps): Promise<Response> {
   const now = deps.now ?? Date.now;
   const startedAt = now();
   if (req.method !== 'POST') return fail(405, 'invalid_input', 'Use POST.');
-  const parsed = placesRequestSchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return fail(400, 'invalid_input', 'Pedido fora do formato esperado.');
+  const parsed = findPlacesRequestSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return fail(400, 'invalid_input', MESSAGES.invalid_input);
   const input = parsed.data;
+  const google = 'provider' in input;
+  const provider: PlacesProvider = google ? 'google' : 'geoapify';
+  // a forma do pedido, sem nada da pessoa (nem as palavras, nem a posição)
+  const shape = google
+    ? `provider=google type=${(input as GooglePlacesInput).type ?? '-'} bias=${(input as GooglePlacesInput).bias ? 'circle' : '-'}`
+    : `area=${(input as PlacesInput).area.type} categories=${String((input as PlacesInput).categories.length)} names=${String((input as PlacesInput).names.length)}`;
   const line = (status: string, places: number, requests: number) =>
     deps.log(
-      `find-places status=${status} area=${input.area.type} categories=${String(input.categories.length)} names=${String(input.names.length)} requests=${String(requests)} places=${String(places)} ms=${String(Math.round(now() - startedAt))}`,
+      `find-places status=${status} ${shape} requests=${String(requests)} places=${String(places)} ms=${String(Math.round(now() - startedAt))}`,
     );
 
-  if (!deps.key) {
+  const key = google ? deps.googleKey : deps.key;
+  if (!key) {
     line('no_source', 0, 0);
-    return fail(503, 'no_source', 'A busca no mapa ainda não está ligada.');
+    return fail(503, 'no_source', MESSAGES.no_source);
   }
   let claim: 'ok' | 'limit';
   try {
     claim = await deps.claim();
   } catch {
     line('internal', 0, 0);
-    return fail(500, 'internal', 'Não deu para conferir o limite.');
+    return fail(500, 'internal', MESSAGES.internal);
   }
   if (claim === 'limit') {
     line('daily_limit', 0, 0);
-    return fail(
-      429,
-      'daily_limit',
-      `Você já fez ${String(PLACES_DAILY_LIMIT)} buscas no mapa hoje. Amanhã libera de novo.`,
-    );
+    return fail(429, 'daily_limit', MESSAGES.daily_limit);
   }
 
-  const names = input.names.length > 0 ? input.names : [null];
+  const requests = google ? 1 : Math.max(1, (input as PlacesInput).names.length);
   try {
-    const key = deps.key;
-    const lists = await Promise.all(names.map((name) => search(deps, key, input, name)));
-    const places = mergePlaces(lists);
-    line('ok', places.length, names.length);
-    const body: PlacesResponse = {
-      provider: 'geoapify',
-      fetched_at: new Date(now()).toISOString(),
-      places,
-    };
+    const places = google
+      ? await searchGoogle(deps, key, input as GooglePlacesInput)
+      : await searchGeoapify(deps, key, input as PlacesInput);
+    line('ok', places.length, requests);
+    const body: PlacesResponse = { provider, fetched_at: new Date(now()).toISOString(), places };
     return Response.json(body, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     const e =
       err instanceof ProviderError ? err : new ProviderError('provider_failed', 502, 'internal');
-    line(e.code, 0, names.length);
-    const message =
-      e.code === 'no_source'
-        ? 'A busca no mapa ainda não está ligada.'
-        : e.code === 'provider_quota'
-          ? 'A busca no mapa chegou ao limite de hoje. Tente mais tarde.'
-          : 'O mapa não respondeu agora. Tente de novo em instantes.';
-    return fail(e.status, e.code, message);
+    line(
+      `${e.code}${e.code === 'provider_failed' ? `:${e.message.replace(/\s+/g, '_')}` : ''}`,
+      0,
+      requests,
+    );
+    return fail(e.status, e.code, MESSAGES[e.code]);
   }
 }

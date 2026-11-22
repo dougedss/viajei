@@ -24,6 +24,7 @@ import {
   setStopIncluded,
 } from '../review-edit.ts';
 import type { Schedule } from '@/features/intake/assemble.ts';
+import { hoursNotice } from '@/features/intake/hours.ts';
 import { reschedule } from '@/features/intake/reschedule.ts';
 import { CheckRow } from './CheckRow.tsx';
 
@@ -126,14 +127,31 @@ function SuggestionLine({ stop }: { stop: ReviewStop }) {
   );
 }
 
+/**
+ * O horário na conta do passeio (fase 27): com os períodos do Google, o aviso quando o roteiro chega
+ * antes de abrir ou depois de fechar. Nada sem período, nada sem horário previsto.
+ */
+function HoursLine({ stop, date }: { stop: ReviewStop; date: string }) {
+  const notice = hoursNotice(stop.hours, date, stop.time);
+  if (!notice || !stop.include) return null;
+  return (
+    <span className="inline-flex items-center gap-1 font-semibold text-tight-ink" data-hours-notice>
+      <AlertTriangle className="size-3.5 shrink-0" aria-hidden="true" />
+      {notice}
+    </span>
+  );
+}
+
 function StopRow({
   stop,
+  date,
   state,
   onToggle,
   onEdit,
   onChoose,
 }: {
   stop: ReviewStop;
+  date: string;
   state: GeoState | undefined;
   onToggle: (include: boolean) => void;
   onEdit: () => void;
@@ -157,6 +175,7 @@ function StopRow({
           <SuggestionLine stop={stop} />
           {stop.time === null && !stop.suggestion ? <span>sem horário no texto</span> : null}
           {stop.closes_at ? <span>fecha às {stop.closes_at}</span> : null}
+          <HoursLine stop={stop} date={date} />
           {stop.repeated === 'trip' ? (
             <Chip kind="warn">Já está no roteiro</Chip>
           ) : stop.repeated === 'text' ? (
@@ -308,6 +327,7 @@ export function ReviewStep({
                   <StopRow
                     key={stop.key}
                     stop={stop}
+                    date={day.date}
                     state={geo[stop.key]}
                     onToggle={(include) =>
                       onChange((r) => {

@@ -2,7 +2,11 @@
 import type { Interest, StopKind } from '../../../supabase/functions/_shared/constants.ts';
 import { haversineM, type LngLat } from '../../../supabase/functions/_shared/geo.ts';
 import { filled } from '../../lib/text/filled.ts';
-import type { Place, PlacesRequest } from '../../../supabase/functions/_shared/places-schema.ts';
+import type {
+  FindPlacesRequest,
+  Place,
+  PlacesRequest,
+} from '../../../supabase/functions/_shared/places-schema.ts';
 import type {
   PlanContext,
   PlanIntent,
@@ -99,8 +103,8 @@ export type MapStage = {
 export type GeoBias = { near: { lat: number; lng: number }; radiusKm: number };
 
 export type FlowDeps = {
-  /** a `find-places`; o erro traz o `code` (`no_source`, `offline`, `daily_limit`…) */
-  findPlaces: (request: PlacesRequest) => Promise<Place[]>;
+  /** a `find-places` (por tipo, ou por texto no Google desde a fase 27); o erro traz o `code` */
+  findPlaces: (request: FindPlacesRequest) => Promise<Place[]>;
   /** o Nominatim pelo nome; com o viés, a área preferida (um `viewbox` sem `bounded`) */
   geocode: (query: string, bias?: GeoBias) => Promise<SearchResult[]>;
   searchNear: (

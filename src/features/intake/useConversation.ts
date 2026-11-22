@@ -256,6 +256,8 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
           schedule: built.schedule,
           osm: built.osm,
           pending: built.pending,
+          google: built.google,
+          hours: built.hours,
         },
       },
     );

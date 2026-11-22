@@ -1,6 +1,13 @@
 // caminhos relativos: a medição do laboratório (`scripts/lab`) roda este módulo sem os atalhos
 import type { StopKind } from '../../../supabase/functions/_shared/constants.ts';
 import {
+  aboutMinutes,
+  driveMinutes,
+  radiusForHours,
+  ROAD_FACTOR,
+  round5,
+} from '../../../supabase/functions/_shared/drive.ts';
+import {
   cumulativeM,
   haversineM,
   projectOntoLine,
@@ -8,6 +15,7 @@ import {
   type LngLat,
 } from '../../../supabase/functions/_shared/geo.ts';
 import type {
+  FindPlacesRequest,
   Place,
   PlacesArea,
   PlacesRequest,
@@ -30,51 +38,9 @@ import {
  */
 
 // ----------------------------------------------------------------- o tempo de carro estimado
-/** A estrada não é linha reta: um fator que cobre as curvas das estradas do Sul. */
-export const ROAD_FACTOR = 1.3;
-/** As faixas de velocidade média, pela distância de estrada: a cidade, a estrada vicinal, a rodovia. */
-const BANDS: readonly { upToKm: number; kmh: number }[] = [
-  { upToKm: 15, kmh: 35 },
-  { upToKm: 60, kmh: 55 },
-  { upToKm: Number.POSITIVE_INFINITY, kmh: 75 },
-];
-
-const round5 = (min: number) => Math.max(5, Math.round(min / 5) * 5);
-
-/** Minutos de carro, por estimativa, para uma distância em linha reta (arredondados a 5). */
-export function driveMinutes(straightKm: number): number {
-  let road = straightKm * ROAD_FACTOR;
-  let from = 0;
-  let minutes = 0;
-  for (const band of BANDS) {
-    const stretch = Math.min(road, band.upToKm - from);
-    if (stretch <= 0) break;
-    minutes += (stretch / band.kmh) * 60;
-    road -= stretch;
-    from = band.upToKm;
-  }
-  return round5(minutes);
-}
-
-/** O raio (em linha reta) que se faz em tantas horas de carro, pela mesma estimativa. */
-export function radiusForHours(hours: number): number {
-  let lo = 1;
-  let hi = 800;
-  for (let i = 0; i < 30; i++) {
-    const mid = (lo + hi) / 2;
-    if (driveMinutes(mid) <= hours * 60) lo = mid;
-    else hi = mid;
-  }
-  return Math.round(lo);
-}
-
-/** "cerca de 40 min", "cerca de 1 h 20": a estimativa sempre dita como estimativa. */
-export function aboutMinutes(minutes: number): string {
-  if (minutes < 60) return `cerca de ${String(minutes)} min`;
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return `cerca de ${String(h)} h${m ? ` ${String(m).padStart(2, '0')}` : ''}`;
-}
+// a conta mora em `_shared/drive.ts` desde a fase 27: a ferramenta `tempo_de_carro` do planejador usa
+// a mesma estimativa dos cartões
+export { aboutMinutes, driveMinutes, radiusForHours, ROAD_FACTOR };
 
 /** "2 h", "40 min": o alcance de uma busca, para "Não achei café colonial a até 2 h de Pomerode". */
 export function reachLabel(radiusKm: number): string {
@@ -350,9 +316,25 @@ const r2 = (n: number) => n.toFixed(2);
 /**
  * A chave do cache de uma busca: as categorias e as palavras em ordem, o círculo e a proximidade
  * arredondados a ~1 km, e a linha do corredor a ~100 m. A mesma busca de outra hora cai na mesma
- * chave; a posição exata da pessoa nunca é a chave (é arredondada).
+ * chave; a posição exata da pessoa nunca é a chave (é arredondada). A busca por texto no Google
+ * (fase 27) tem a chave pelas palavras e pelo círculo, com o mesmo arredondamento.
  */
-export function placesKey(req: PlacesRequest, hash: (s: string) => string): string {
+export function placesKey(req: FindPlacesRequest, hash: (s: string) => string): string {
+  if ('provider' in req) {
+    const bias = req.bias
+      ? `c:${r2(req.bias.lng)},${r2(req.bias.lat)},${String(Math.round(req.bias.radius_m / 1000))}`
+      : '-';
+    return [
+      'google',
+      plain(req.query),
+      bias,
+      req.type ?? '-',
+      req.open_now ? 'aberto' : '-',
+      String(req.min_rating ?? 0),
+      req.rank ?? 'relevance',
+      String(req.limit ?? 20),
+    ].join('|');
+  }
   const area =
     req.area.type === 'circle'
       ? `c:${r2(req.area.lng)},${r2(req.area.lat)},${String(Math.round(req.area.radius_m / 1000))}`

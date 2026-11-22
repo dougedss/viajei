@@ -8,6 +8,7 @@ import type {
   ImportStop,
 } from '@shared/import-schema.ts';
 import { toE164 } from '@shared/phone.ts';
+import type { OpeningPeriod } from '@shared/places-schema.ts';
 import { contactsFromImport, listItemsFromImport } from '@/features/itinerary/import-rows.ts';
 import { datesBetween, planDays, sortStops } from '@/features/itinerary/rules.ts';
 import { reservationFromImport } from '@/features/reservations/import.ts';
@@ -47,6 +48,13 @@ export type ReviewStop = Keyed<ImportStop> & {
   suggestion?: { detour: number; city: string | null; night: boolean } | null;
   /** o objeto do OpenStreetMap do lugar escolhido na conversa (fase 23): vai para a parada */
   osm?: { type: 'node' | 'way' | 'relation'; id: number } | null;
+  /** o `place_id` do Google do lugar escolhido (fase 27, a decisão 4 do Douglas): vai para a parada */
+  google_place_id?: string | null;
+  /**
+   * os períodos de funcionamento do lugar (o Google, fase 27), para a conta do passeio: a revisão avisa
+   * quando o roteiro chega antes de abrir ou depois de fechar
+   */
+  hours?: OpeningPeriod[] | null;
   /**
    * o que a pessoa pediu e o mapa não achou (fase 25, D278): entra sem local, e a revisão só procura
    * pelo nome com a cidade, nunca pela cidade sozinha
@@ -332,6 +340,7 @@ export function planImport(review: Review, existing: Existing, ctx: PlanContext)
         lng: s.lng,
         osm_type: s.osm?.type ?? null,
         osm_id: s.osm?.id ?? null,
+        google_place_id: s.google_place_id ?? null,
         travel_minutes_to_next: s.travel_minutes_to_next,
         notes: s.notes,
         url: s.url,
