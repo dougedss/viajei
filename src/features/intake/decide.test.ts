@@ -45,6 +45,8 @@ describe('o campo: qual caminho', () => {
       'Bate-volta pra praia?',
       'bora dar uma volta hoje à tarde',
       'vamos sair já',
+      // "hj", como um leigo escreve (a rodada da bateria da fase 26)
+      'queria tomar um café bom hj',
     ]) {
       expect(decideIntake(text, true), text).toEqual(go('today'));
     }

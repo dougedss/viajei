@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   minutesOfReach,
   outingAccount,
+  startFor,
   overBudget,
   timeBudget,
   totalText,
@@ -136,5 +137,26 @@ describe('o tempo que a pessoa tem', () => {
     expect(overBudget(310, 300)).toBe(true);
     expect(overBudget(300, 300)).toBe(false);
     expect(overBudget(900, null)).toBe(false);
+  });
+});
+
+describe('a conta antes da escrita (D307)', () => {
+  it('sem o dia (uma viagem antes da escrita), o horário dos lugares não entra: nada de esperar abrir num dia suposto', () => {
+    const semDia = outingAccount({ home: HOME, stops: [CAFE], start: '08:00', date: null });
+    expect(semDia.wait).toBe(0);
+    expect(semDia.arrivals[0]).toMatchObject({ waited: 0, closed: false });
+    // com o dia (a saída de hoje, ou depois da escrita), entra
+    expect(
+      outingAccount({ home: HOME, stops: [CAFE], start: '08:00', date: '2026-12-05' }).wait,
+    ).toBeGreaterThan(0);
+  });
+
+  it('a hora de sair pela hora do dia do primeiro passo: o almoço às 11:30, a tarde ao meio-dia, a noite às 18:00; de manhã ou sem, as 08:00', () => {
+    expect(startFor('almoco')).toBe('11:30');
+    expect(startFor('tarde')).toBe('12:00');
+    expect(startFor('noite')).toBe('18:00');
+    expect(startFor('manha')).toBe('08:00');
+    expect(startFor(undefined)).toBe('08:00');
+    expect(startFor('', '09:15')).toBe('09:15');
   });
 });

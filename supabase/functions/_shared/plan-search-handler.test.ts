@@ -7,7 +7,7 @@ import { GOOGLE_PLACES_URL } from './google-places.ts';
 import type { ImportClose, ImportStore, OpenStream } from './import-handler.ts';
 import { SseDecoder, type ImportEvent } from './import-protocol.ts';
 import { PLAN_SEARCH_SYSTEM_PROMPT, planSearchSystemPrompt, TOOL_NAMES } from './plan-search-ai.ts';
-import { handlePlanSearch, type PlanSearchDeps } from './plan-search-handler.ts';
+import { handlePlanSearch, verdictWithin, type PlanSearchDeps } from './plan-search-handler.ts';
 import {
   PLAN_SEARCH_MAX_TURNS,
   planSearchResultSchema,
@@ -680,5 +680,24 @@ describe('plan-search: a bateria (gerar_pedidos e julgar)', () => {
       store: { isLab: () => Promise.resolve(true) },
     });
     expect(faltando.res.status).toBe(400);
+  });
+});
+
+describe('o veredito do juiz nos limites (fase 26)', () => {
+  it('mais de seis problemas e frases longas não perdem a nota: as listas ficam nas seis primeiras, as frases em 200', () => {
+    const longo = 'x'.repeat(300);
+    const v = verdictWithin({
+      nota: 4,
+      motivos: ['certo'],
+      problemas: [longo, 'a', 'b', 'c', 'd', 'e', 'f', ' ', 7],
+    }) as { nota: number; motivos: string[]; problemas: string[] };
+    expect(v.nota).toBe(4);
+    expect(v.problemas).toHaveLength(6);
+    expect(v.problemas[0]).toHaveLength(200);
+    expect(v.problemas.slice(1)).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(v.motivos).toEqual(['certo']);
+    // fora do molde, passa como veio (o schema recusa)
+    expect(verdictWithin(null)).toBeNull();
+    expect(verdictWithin('x')).toBe('x');
   });
 });

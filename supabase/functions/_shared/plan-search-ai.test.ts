@@ -151,6 +151,12 @@ describe('os prompts', () => {
       'a manhã (ou "antes do almoço", "cedo") 240; a tarde 300; até a noite ou o dia 600',
     );
     expect(p).toContain('"1:30 no máximo" é 90');
+    // as correções da rodada da bateria (D307): a hora do dia só quando dita; a cidade do pedido todo
+    // vale para todos os passos; as opções do tempo cabem o que foi pedido; o juiz em até seis itens
+    expect(p).toContain('"tomar um café", sem "da manhã", não diz hora');
+    expect(p).toContain('vale para todos os passos: todos são na_cidade');
+    expect(p).toContain('com dois ou mais lugares, nada abaixo de "2 horas"');
+    expect(BATTERY_JUDGE_SYSTEM_PROMPT).toContain('até 6 frases curtas');
     // a ordem das perguntas: o que impede a busca, a ordem, o tempo
     expect(p.indexOf('(1) o que impede a busca')).toBeLessThan(p.indexOf('(2) a ordem'));
     expect(p.indexOf('(2) a ordem')).toBeLessThan(p.indexOf('(3) o tempo'));

@@ -428,6 +428,40 @@ describe('a cidade que vale e o passeio de reserva', () => {
     expect(pickCity([], null)).toBeNull();
   });
 
+  it('o nome dito e o Brasil antes do mais perto (fase 26): "Gramado" de Santa Rosa não vira o lugar de outro nome mais perto, nem a homônima de fora', () => {
+    const SANTA_ROSA = { lat: -27.87, lng: -54.48 };
+    const hits = [
+      // o resultado mais perto, com outro nome (o que a rodada da bateria escolheu)
+      { name: 'Municipio de San Pedro', lat: -26.63, lng: -54.11, label: 'Misiones', br: false },
+      { name: 'Gramado', lat: -29.37, lng: -50.87, label: 'Gramado, RS, Brasil', br: true },
+    ];
+    expect(pickCity(hits, SANTA_ROSA, 'Gramado')?.label).toBe('Gramado, RS, Brasil');
+    // a homônima de fora mais perto e a do Brasil mais longe, as duas com o nome: a do Brasil
+    const homonimas = [
+      { name: 'Gramado', lat: -26.63, lng: -54.11, label: 'fora', br: false },
+      { name: 'Gramado', lat: -29.37, lng: -50.87, label: 'Gramado, RS', br: true },
+    ];
+    expect(pickCity(homonimas, SANTA_ROSA, 'gramado')?.label).toBe('Gramado, RS');
+    // o estado dito junto e o nome mais longo ainda casam; um erro de digitação ainda acha (o mais perto)
+    expect(pickCity(homonimas, SANTA_ROSA, 'Gramado RS')?.label).toBe('Gramado, RS');
+    expect(
+      pickCity(
+        [{ name: 'São Bento do Sul', lat: -26.25, lng: -49.38, label: 'SBS', br: true }],
+        MAJOR_VIEIRA,
+        'sao bento',
+      )?.label,
+    ).toBe('SBS');
+    expect(
+      pickCity(
+        [{ name: 'Canoinhas', lat: -26.18, lng: -50.39, label: 'Canoinhas', br: true }],
+        MAJOR_VIEIRA,
+        'Canoinas',
+      )?.label,
+    ).toBe('Canoinhas');
+    // sem referência, o nome dito primeiro
+    expect(pickCity(hits, null, 'Gramado')?.label).toBe('Gramado, RS, Brasil');
+  });
+
   it('sem entrega da IA, cada busca feita vira um passo com os candidatos dela; sem busca, uma pergunta', async () => {
     const net = network((q) => (q.startsWith('café') ? CAFES : []), {
       geocode: [geocodeHit('Canoinhas', CANOINHAS.lat, CANOINHAS.lng)],

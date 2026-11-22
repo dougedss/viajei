@@ -153,6 +153,8 @@ export type PassoDoApp = {
   circulos: readonly Circle[];
   candidatos: readonly Place[];
   fora_da_cidade: boolean;
+  /** como a busca do app terminou (o estado do grupo): só `ok` e `none` contam como medidos */
+  estado?: string;
 };
 
 /** A conta do tempo do passeio montado (fase 26): o total, o que a pessoa tinha, e a marca. */
@@ -378,8 +380,12 @@ export const TIPOS_CONTRARIOS: readonly { pedido: RegExp; tipos: readonly string
 export function cobrarPassoAPasso(saida: Saida): Cobranca[] {
   const out: Cobranca[] = [];
 
-  // 7. o passo seguinte: todo candidato do passo n+1 ao alcance da relação dele a partir da escolha do passo n
+  // 7. o passo seguinte: todo candidato do passo n+1 ao alcance da relação dele a partir da escolha do
+  //    passo n; e a busca tem de ter rodado (uma recusada pela cota não mede nada: falha, D307)
   const passos = saida.passos_app ?? [];
+  const naoRodou = passos.filter(
+    (p) => p.estado !== undefined && p.estado !== 'ok' && p.estado !== 'none',
+  );
   const fora = passos.flatMap((p) =>
     p.candidatos
       .filter((c) =>
@@ -391,13 +397,15 @@ export function cobrarPassoAPasso(saida: Saida): Cobranca[] {
   );
   out.push({
     nome: 'passo_seguinte',
-    ok: fora.length === 0,
+    ok: fora.length === 0 && naoRodou.length === 0,
     detalhe:
-      passos.length === 0
-        ? 'nenhum passo procurado pelo app (um passo só, ou nada escolhido no primeiro)'
-        : fora.length === 0
-          ? `${String(passos.length)} passo(s) procurado(s) pelo app, todos os candidatos ao alcance da relação`
-          : `fora do alcance da relação: ${fora.slice(0, 3).join(', ')}`,
+      naoRodou.length > 0
+        ? `a busca do app não rodou: ${naoRodou.map((p) => `passo ${String(p.ordem)} (${p.estado ?? '?'})`).join(', ')}`
+        : passos.length === 0
+          ? 'nenhum passo procurado pelo app (um passo só, ou nada escolhido no primeiro)'
+          : fora.length === 0
+            ? `${String(passos.length)} passo(s) procurado(s) pelo app, todos os candidatos ao alcance da relação`
+            : `fora do alcance da relação: ${fora.slice(0, 3).join(', ')}`,
   });
 
   // 8. a ordem mantida: as escolhas aparecem na viagem montada na ordem dos passos

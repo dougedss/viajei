@@ -44,6 +44,7 @@ import {
   searchStep,
   showMore,
   stageFromOuting,
+  stepGroups,
   stepSearchPlan,
   toggleChoice,
   widen,
@@ -54,7 +55,7 @@ import {
 import { declineGeo, grantGeo, readGeoConsent } from '@/features/travel-mode/queries.ts';
 import { gatherContext } from './gather.ts';
 import { placeKey, resolvePlace, type PlaceHit, type PlaceQuestion } from './locate.ts';
-import { timeBudget } from './outing-time.ts';
+import { startFor, timeBudget } from './outing-time.ts';
 import { planSearchRequestOf, streamPlanSearch } from './plan-search.ts';
 import { readReach, unreadReach } from './reach.ts';
 import { MAX_RADIUS_KM } from './search.ts';
@@ -107,6 +108,12 @@ function soon(now: Date): string {
   const c = Math.min(min, 23 * 60 + 45);
   return `${String(Math.floor(c / 60)).padStart(2, '0')}:${String(c % 60).padStart(2, '0')}`;
 }
+/** A hora do dia dita para o primeiro passo do passeio (a conta das opções sai no começo dela). */
+const firstDayTime = (map: MapStage | null) => {
+  const first = map ? stepGroups(map)[0] : undefined;
+  const dayTime = first === undefined ? undefined : map?.groups[first]?.step?.hora_do_dia;
+  return dayTime === '' ? undefined : dayTime;
+};
 const plusDay = (date: string) =>
   new Date(Date.parse(`${date}T12:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
 
@@ -595,8 +602,10 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
      */
     time: conv
       ? {
-          start: conv.kind === 'today' ? soon(new Date()) : '08:00',
-          date: conv.kind === 'today' ? conv.context.today : plusDay(conv.context.today),
+          // na saída de hoje, daqui a uns 15 min, hoje; numa viagem, o dia ainda não se sabe (sai da
+          // escrita) e a hora de sair segue a hora do dia dita para o primeiro passo (D307)
+          start: conv.kind === 'today' ? soon(new Date()) : startFor(firstDayTime(conv.map)),
+          date: conv.kind === 'today' ? conv.context.today : null,
           budget: timeBudget({
             answer: conv.time_answer ?? answersByTopic(conv.questions, conv.answers).reach ?? null,
             tempo_min: conv.plan?.tempo_min ?? null,

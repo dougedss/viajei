@@ -38,8 +38,12 @@ export type OutingInput = {
   stops: readonly OutingStop[];
   /** a hora de sair, "HH:MM" */
   start: string;
-  /** o dia do passeio, "AAAA-MM-DD" (o dia da semana dos horários) */
-  date: string;
+  /**
+   * o dia do passeio, "AAAA-MM-DD" (o dia da semana dos horários); **null quando ainda não se sabe**
+   * (uma viagem: o dia sai da escrita): aí o horário dos lugares não entra na conta (D307: a rodada da
+   * fase 26 esperou 6 h 40 um café abrir numa segunda que a pessoa não pediu, para um "domingo")
+   */
+  date: string | null;
 };
 
 export type Arrival = {
@@ -94,7 +98,7 @@ export function windowNotice(dayTime: DayTime | undefined, at: string): string |
 
 /** A conta do passeio todo: a estrada, a permanência, a espera pelo horário, e a hora de cada chegada. */
 export function outingAccount(input: OutingInput): OutingAccount {
-  const day = weekdayOf(input.date);
+  const day = input.date === null ? null : weekdayOf(input.date);
   let clock = toMin(input.start);
   let road = 0;
   let dwell = 0;
@@ -111,7 +115,7 @@ export function outingAccount(input: OutingInput): OutingAccount {
     const arrival = toHhmm(clock);
     let waited = 0;
     let closed = false;
-    if (stop.hours && stop.hours.length > 0) {
+    if (day !== null && stop.hours && stop.hours.length > 0) {
       const status = openStatusAt(stop.hours, day, arrival);
       if (status === 'closed') {
         const opens = nextOpening(stop.hours, day, clock % 1440);
@@ -141,6 +145,18 @@ export function outingAccount(input: OutingInput): OutingAccount {
     back = toHhmm(clock);
   }
   return { road, dwell, wait, total: road + dwell + wait, arrivals, back };
+}
+
+/**
+ * A hora de sair da conta das opções, antes da escrita (fase 26, D307): a do começo da janela da hora do
+ * dia dita para o primeiro passo ("almoçar" sai às 11:30; "à tarde" ao meio-dia; "à noite" às 18:00),
+ * para a conta não avisar "chega às 08:55, e vocês queriam no almoço" só porque supôs 08:00; sem hora
+ * do dia (ou de manhã), as 08:00 da montagem.
+ */
+export function startFor(firstDayTime: DayTime | undefined, fallback = '08:00'): string {
+  if (!firstDayTime || firstDayTime === 'manha') return fallback;
+  const from = DAY_TIME_WINDOWS[firstDayTime].from;
+  return `${String(Math.floor(from / 60)).padStart(2, '0')}:${String(from % 60).padStart(2, '0')}`;
 }
 
 // ------------------------------------------------------------------ o tempo que a pessoa tem

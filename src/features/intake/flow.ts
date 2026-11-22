@@ -1484,7 +1484,7 @@ export async function searchStep(
  */
 export function stageAccount(
   stage: MapStage,
-  time: { start: string; date: string },
+  time: { start: string; date: string | null },
 ): OutingAccount {
   const origin = stage.origin?.at ?? null;
   return outingAccount({

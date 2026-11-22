@@ -483,7 +483,7 @@ export class ToolState {
       label: (r.formatted ?? '').slice(0, 200),
       br: (r.country_code ?? '').toLowerCase() === 'br',
     }));
-    return pickCity(hits, reference);
+    return pickCity(hits, reference, said);
   }
 
   async #cityByGoogle(said: string): Promise<CityHit | null> {
@@ -537,7 +537,7 @@ export class ToolState {
           : null;
       })
       .filter((p): p is NonNullable<typeof p> => p !== null);
-    return pickCity(places, reference);
+    return pickCity(places, reference, said);
   }
 
   #register(place: Place, neighbor: boolean): string {
@@ -576,22 +576,50 @@ export class ToolState {
 }
 
 // ------------------------------------------------------------------------ as contas
+/** O Brasil, grosso modo, pela coordenada: a referência de quem pede está aqui? */
+const inBrazil = (p: { lat: number; lng: number }) =>
+  p.lat >= -34 && p.lat <= 6 && p.lng >= -74.5 && p.lng <= -34;
+
 /**
- * A cidade que vale (D276, D282): com referência, a mais perto a até 400 km; sem referência, a primeira
- * do Brasil (senão a primeira). Nenhuma plausível: nulo, e a IA pergunta.
+ * O nome do resultado é o que a pessoa disse? Sem acento, sem caixa, e sem o estado dito junto
+ * ("canoinhas sc" é Canoinhas; "sao bento" casa com "São Bento do Sul").
+ */
+function sameCity(name: string, said: string): boolean {
+  const n = plain(name);
+  const s = plain(said).replace(/[,-]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (n === '' || s === '') return false;
+  return n === s || s.startsWith(`${n} `) || n.startsWith(s);
+}
+
+/**
+ * A cidade que vale (D276, D282; revista na fase 26, D307): com referência, as plausíveis (a até
+ * 400 km), e entre elas **primeiro a que tem o nome dito**, depois **a do Brasil** quando quem pede está
+ * no Brasil, e só então a mais perto. Na rodada da fase 26, "Gramado" dito de Santa Rosa (RS) virou um
+ * "Municipio de San Pedro" mais perto, e a parada da cidade de destino foi parar lá: o mais perto, sozinho,
+ * não basta. Sem referência, a primeira do Brasil (senão a primeira). Nenhuma plausível: nulo, e a IA
+ * pergunta. O nome e o país ordenam; não recusam (um nome com erro de digitação ainda acha a cidade).
  */
 export function pickCity(
   hits: readonly (CityHit & { br: boolean })[],
   reference: { lat: number; lng: number } | null,
+  said = '',
 ): CityHit | null {
   const first = hits[0];
   if (!first) return null;
   const strip = ({ name, lat, lng, label }: CityHit) => ({ name, lat, lng, label });
-  if (!reference) return strip(hits.find((h) => h.br) ?? first);
+  const named = (h: CityHit) => (said !== '' && sameCity(h.name, said) ? 0 : 1);
+  if (!reference) {
+    const best = [...hits].sort((a, b) => named(a) - named(b) || Number(b.br) - Number(a.br))[0];
+    return strip(best ?? first);
+  }
+  const home = inBrazil(reference);
   const near = hits
     .map((h) => ({ h, d: km(reference, h) }))
     .filter((x) => x.d <= PLAUSIBLE_KM)
-    .sort((a, b) => a.d - b.d);
+    .sort(
+      (a, b) =>
+        named(a.h) - named(b.h) || (home ? Number(b.h.br) - Number(a.h.br) : 0) || a.d - b.d,
+    );
   return near[0] ? strip(near[0].h) : null;
 }
 

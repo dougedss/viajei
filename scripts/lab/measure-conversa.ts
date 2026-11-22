@@ -77,6 +77,8 @@ export type Calls = {
   places: number;
   /** as buscas por texto no Google feitas pelo app (o passo seguinte, fase 26): custam como as da IA */
   google?: number;
+  /** as buscas que a função recusou, pelo código (a cota `daily_limit`, a fonte): o que não foi medido */
+  recusadas?: Record<string, number>;
   noSource: boolean;
   /** cada consulta de cidade pelo nome e os candidatos que voltaram (nome, classe e endereço) */
   geocoded: string[];
@@ -142,6 +144,10 @@ export function labDeps(
         const err = placesErrorSchema.safeParse(json);
         const code = err.success ? err.data.error.code : 'internal';
         if (code === 'no_source') calls.noSource = true;
+        calls.recusadas = {
+          ...(calls.recusadas ?? {}),
+          [code]: (calls.recusadas?.[code] ?? 0) + 1,
+        };
         throw Object.assign(new Error(code), { code });
       }
       return placesResponseSchema.parse(json).places;

@@ -51,8 +51,8 @@ import { aboutMinutes, reachLabel, type MapOption } from '../search.ts';
 export type OptionsTime = {
   /** a hora de sair ("08:00" numa viagem; daqui a uns 15 min na saída de hoje) */
   start: string;
-  /** o dia do passeio */
-  date: string;
+  /** o dia do passeio; null numa viagem antes da escrita (o horário dos lugares não entra na conta) */
+  date: string | null;
   /** quanto tempo têm: os minutos (null é sem teto) e como a pessoa disse; null quando ninguém disse */
   budget: { minutes: number | null; label: string } | null;
   /** o tempo mudado na tela não foi entendido */

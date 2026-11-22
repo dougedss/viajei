@@ -110,7 +110,27 @@ export function planSearchParamsFor(
 }
 
 const parseGenerated: ParseDone = (json) => ({ data: generatedBatchSchema.parse(json) });
-const parseVerdict: ParseDone = (json) => ({ data: verdictSchema.parse(json) });
+/**
+ * O veredito do juiz, nos limites (fase 26): a saída estruturada não tem como limitar o tamanho das
+ * listas nem das frases (o `structuredSchema` tira `maxItems` e `maxLength`), e na rodada da fase 26,
+ * com o juiz lendo também a conta do tempo e os horários, três vereditos vieram com mais de seis
+ * problemas ou frases longas e caíram como `invalid`: a nota se perdia. Aqui as listas ficam nas seis
+ * primeiras e as frases nos 200 caracteres; a nota continua conferida pelo schema.
+ */
+export function verdictWithin(json: unknown): unknown {
+  if (typeof json !== 'object' || json === null) return json;
+  const v = json as Record<string, unknown>;
+  const list = (x: unknown) =>
+    Array.isArray(x)
+      ? x
+          .filter((t): t is string => typeof t === 'string')
+          .map((t) => t.trim().slice(0, 200))
+          .filter((t) => t !== '')
+          .slice(0, 6)
+      : x;
+  return { ...v, motivos: list(v.motivos), problemas: list(v.problemas) };
+}
+const parseVerdict: ParseDone = (json) => ({ data: verdictSchema.parse(verdictWithin(json)) });
 
 export async function handlePlanSearch(req: Request, deps: PlanSearchDeps): Promise<Response> {
   const now = deps.now ?? Date.now;

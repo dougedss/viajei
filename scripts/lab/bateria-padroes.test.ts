@@ -346,6 +346,19 @@ describe('as cobranças do passo a passo (fase 26)', () => {
     ).toBe(true);
   });
 
+  it('passo_seguinte: a busca do app recusada (a cota) não mede nada e falha; a que rodou e não achou passa', () => {
+    const recusada = { ...passoApp([]), estado: 'limit' };
+    const c = by(cobrarPassoAPasso(stepwise({ passos_app: [recusada] })), 'passo_seguinte');
+    expect(c?.ok).toBe(false);
+    expect(c?.detalhe).toBe('a busca do app não rodou: passo 2 (limit)');
+    expect(
+      by(
+        cobrarPassoAPasso(stepwise({ passos_app: [{ ...passoApp([]), estado: 'none' }] })),
+        'passo_seguinte',
+      )?.ok,
+    ).toBe(true);
+  });
+
   it('ordem_mantida: a viagem montada fora da ordem dos passos, ou sem uma escolha, falha; sem montagem, nada a conferir', () => {
     const invertida = stepwise({
       paradas: [

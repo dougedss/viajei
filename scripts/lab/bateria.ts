@@ -34,7 +34,7 @@ import {
 } from '../../src/features/intake/flow.ts';
 import { dayTimeNotice, hoursNotice } from '../../src/features/intake/hours.ts';
 import { answersByTopic } from '../../src/features/intake/flow.ts';
-import { overBudget, timeBudget } from '../../src/features/intake/outing-time.ts';
+import { overBudget, startFor, timeBudget } from '../../src/features/intake/outing-time.ts';
 import { reachOf, readReach, reachQuestion } from '../../src/features/intake/reach.ts';
 import type { Json } from '../../src/lib/supabase/database.types.ts';
 import { comRetentativa } from './retentativa.ts';
@@ -141,6 +141,7 @@ async function chooseStepByStep(
           circulos: plan.circles,
           candidatos: g.options.map((o) => o.place),
           fora_da_cidade: g.step.fora_da_cidade,
+          estado: g.status,
         });
       }
     }
@@ -303,6 +304,9 @@ export async function runBateria(
       buscas += result.numeros.buscas;
       let perguntasFeitas = result.passeio.perguntas.length;
       let rodadas = 1;
+      // as perguntas e as respostas que valem, como o app guarda: vão à escrita e à conta do tempo
+      let perguntasFinais = questions;
+      let respostasFinais = answers;
       // a IA perguntou e não entregou passo com candidato: a resposta (a primeira opção) e a segunda rodada
       if (
         result.passeio.perguntas.length > 0 &&
@@ -322,6 +326,8 @@ export async function runBateria(
         buscas += result.numeros.buscas;
         perguntasFeitas += result.passeio.perguntas.length;
         rodadas = 2;
+        perguntasFinais = qs;
+        respostasFinais = as;
       }
       const origin = {
         label: rotuloDaCidade(cidade),
@@ -355,6 +361,7 @@ export async function runBateria(
       };
       // a escolha passo a passo (fase 26): o primeiro de cada passo, o seguinte procurado em volta dele
       const googleAntes = calls.google ?? 0;
+      const recusadasAntes = { ...(calls.recusadas ?? {}) };
       const stepwise = await chooseStepByStep(stage, deps);
       const chosen = stepwise.map;
       const buscasDoApp = (calls.google ?? 0) - googleAntes;
@@ -381,31 +388,42 @@ export async function runBateria(
         circulos: p.circulos.length,
         candidatos: p.candidatos.slice(0, 6).map((c) => `${c.name}${c.city ? ` (${c.city})` : ''}`),
         achou: p.candidatos.length,
+        estado: p.estado,
       }));
       data.buscas_do_app = buscasDoApp;
-      // a conta do tempo, como a tela a mostra (a hora de sair da montagem; o dia do passeio)
-      const time = {
-        start: kind === 'today' ? '09:15' : '08:00',
-        date: kind === 'today' ? today : plusDay(today),
-      };
+      // a conta do tempo: o que a pessoa tem (a resposta que valeu, ou o que a IA leu do pedido)
       const budget = timeBudget({
-        answer: answersByTopic(questions, answers).reach ?? null,
+        answer: answersByTopic(perguntasFinais, respostasFinais).reach ?? null,
         tempo_min: result.passeio.tempo_min ?? null,
       });
-      const acc = chosen.chosen.length > 0 ? stageAccount(chosen, time) : null;
-      let conta: ContaDoTempo | null = acc
-        ? {
-            total_min: acc.total,
-            tempo_min: budget?.minutes ?? null,
-            estoura: budget ? overBudget(acc.total, budget.minutes) : false,
-            chegadas: acc.arrivals.map((a) => ({
-              nome: a.name,
-              hora: a.at,
-              aviso: a.outsideWindow ?? (a.closed ? `fechado às ${a.at}` : null),
-              fechada: a.closed,
-            })),
-          }
-        : null;
+      // a conta sai depois da escrita (D307): com a hora de sair e o dia que a viagem escrita tem, as
+      // mesmas da montagem e da revisão; sem escrita, a hora de sair da tela das opções e o dia sem
+      // horário (uma viagem) ou hoje
+      const contaDe = (start: string, date: string | null): ContaDoTempo | null => {
+        if (chosen.chosen.length === 0) return null;
+        const acc = stageAccount(chosen, { start, date });
+        return {
+          total_min: acc.total,
+          tempo_min: budget?.minutes ?? null,
+          estoura: budget ? overBudget(acc.total, budget.minutes) : false,
+          chegadas: acc.arrivals.map((a) => ({
+            nome: a.name,
+            hora: a.at,
+            aviso: a.outsideWindow ?? (a.closed ? `fechado às ${a.at}` : null),
+            fechada: a.closed,
+          })),
+        };
+      };
+      const primeiraHora = (() => {
+        const gi = stepGroups(chosen)[0];
+        const dt = gi === undefined ? '' : (chosen.groups[gi]?.step?.hora_do_dia ?? '');
+        return dt === '' ? undefined : dt;
+      })();
+      const time = {
+        start: kind === 'today' ? '09:15' : startFor(primeiraHora),
+        date: kind === 'today' ? today : plusDay(today),
+      };
+      let conta = contaDe(time.start, kind === 'today' ? today : null);
       let write: PlanWrite | null = null;
       let pendentes: string[] = [];
       let paradas: { nome: string; sem_local: boolean }[] | undefined;
@@ -423,8 +441,10 @@ export async function runBateria(
           step: 'plan',
           kind,
           text: pedido.texto,
-          questions: kind === 'today' ? questions : data.respostas ? [] : [],
-          answers: kind === 'today' ? answers : [],
+          // como o app (`planRequestOf`): as perguntas e as respostas da conversa vão à escrita (até a
+          // fase 26 a bateria só mandava as da saída de hoje, e a escrita não sabia "a manhã")
+          questions: perguntasFinais,
+          answers: respostasFinais,
           context: {
             ...contexto(today, cidade, kind === 'today'),
             reach: kind === 'today' ? 'day' : null,
@@ -468,6 +488,12 @@ export async function runBateria(
               return aviso ? [{ nome: st.name, hora: st.time ?? '', aviso }] : [];
             }),
           );
+          data.montagem = { paradas, avisos: avisos.map((a) => `${a.nome}: ${a.aviso}`) };
+          // a conta com a hora de sair e o dia da viagem escrita (os mesmos da revisão), e as chegadas
+          // com os avisos dela
+          const startDia = write.days[0]?.start ?? time.start;
+          const dia = built.data.days[0]?.date ?? null;
+          conta = contaDe(startDia, dia);
           if (conta) {
             conta = {
               ...conta,
@@ -477,7 +503,6 @@ export async function runBateria(
               }),
             };
           }
-          data.montagem = { paradas, avisos: avisos.map((a) => `${a.nome}: ${a.aviso}`) };
         }
         data.roteiro = write
           ? {
@@ -496,6 +521,16 @@ export async function runBateria(
         data.roteiro = 'nada escolhido: a escrita não rodou';
       }
       data.conta = conta;
+      // as buscas da `find-places` recusadas neste pedido (a cota, a fonte): o pedido quebra, porque o
+      // passo seguinte e as sugestões não foram medidos (na rodada da fase 26 a cota da conta do
+      // laboratório estava gasta e tudo saiu verde sem medir nada, D307)
+      const recusadas = Object.entries(calls.recusadas ?? {})
+        .map(([code, n]) => [code, n - (recusadasAntes[code] ?? 0)] as const)
+        .filter(([, n]) => n > 0);
+      if (recusadas.length > 0) {
+        data.buscas_recusadas = Object.fromEntries(recusadas);
+        quebrou ??= `buscas no mapa recusadas: ${recusadas.map(([c, n]) => `${String(n)} ${c}`).join(', ')}`;
+      }
       // as cobranças objetivas e o juiz
       const saida = {
         origem: { lat: cidade.lat, lng: cidade.lng },
