@@ -57,6 +57,17 @@ describe('findSecrets', () => {
     expect(findSecrets('href="https://www.geoapify.com/"')).toEqual([]);
   });
 
+  it('a chamada ao Google Places do navegador e a chave do Google (fase 27)', () => {
+    expect(
+      findSecrets('fetch("https://places.googleapis.com/v1/places:searchText")').map((h) => h.kind),
+    ).toEqual(['chave ou chamada do Google Places']);
+    // uma chave do Google tem a forma AIza mais 35 caracteres: montada aqui, nunca inteira no repositório
+    expect(findSecrets(`const k = "${'AIza' + fill(35)}"`)).toHaveLength(1);
+    expect(findSecrets('?key=AIzaQualquerCoisa')).toHaveLength(1);
+    // "Dados do Google Maps" e o link do maps.google.com não são chamada
+    expect(findSecrets('Dados do Google Maps https://maps.google.com/?cid=1')).toEqual([]);
+  });
+
   it('código comum não dispara', () => {
     expect(findSecrets('function d(a){return{kty:a,d:1}} const sk="sk-antes"')).toEqual([]);
   });

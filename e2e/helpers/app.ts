@@ -11,7 +11,7 @@ import { SENHA } from './users.ts';
  */
 export async function semMundoDeFora(context: BrowserContext): Promise<void> {
   await context.route(
-    /^https:\/\/(tile\.openstreetmap\.org|api\.open-meteo\.com|overpass-api\.de|api\.geoapify\.com)\//,
+    /^https:\/\/(tile\.openstreetmap\.org|api\.open-meteo\.com|overpass-api\.de|api\.geoapify\.com|places\.googleapis\.com)\//,
     (route) => route.abort('blockedbyclient'),
   );
 }

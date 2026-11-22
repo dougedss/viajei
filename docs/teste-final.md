@@ -961,6 +961,39 @@ a cidade conferida e os três estados estão provados na CI (Vitest, pgTAP, a fu
 
 Anotações:
 
+### 1.33 A fonte e o planejador · 15 min (fase 27) · sem prova até a viagem
+
+Como o 1.24 a 1.32, fica como documentação até a viagem (D284 em diante). O planejador (a IA com as
+ferramentas, o app julgando), os cartões do Google (a nota, o aberto agora, o horário), "em Canoinhas"
+dentro da cidade, o pendente com a pergunta e o `place_id` na parada estão provados na CI (Vitest, pgTAP,
+a função com entrada fixa, o `conversa.spec` e o `nova-viagem.spec`), na primeira chamada real ao Google
+e na rodada da bateria; o que falta é um celular de verdade.
+
+- [ ] **Um pedido de leigo, inteiro.** No celular, escreva "iria na feirinha, tomar um cafe e levar a
+  minha mulher cortar o cabelo, tudo isso em canoinhas sc" e toque em Montar a viagem: o cartão
+  "Procurando no mapa…" com o andamento em palavras ("Procurando lugares…", "Lugares encontrados;
+  seguindo…"); depois, os passos na ordem dita ("1 de 3 · Feirinha", "2 de 3 · Café", "3 de 3 · Cortar
+  o cabelo"), cada um com "N opções no mapa em Canoinhas"; os cartões com a nota e o número de avaliações
+  ("4,6 · 212 avaliações"), "Aberto agora" ou "Fechado agora", e o horário em texto; "Dados do Google
+  Maps" no pé, ao lado do OpenStreetMap e da Geoapify.
+- [ ] **O pendente com a pergunta.** A feirinha aparece como pendente com "Onde fica a feirinha?" e o
+  campo "Procurar pelo nome do lugar"; o resumo diz os estados; "Tirar da viagem" (e Desfazer) funciona.
+  Escolha um café e um salão, trace o caminho: a revisão diz "Conferido no Google Maps" nos escolhidos,
+  a feirinha "Sem local · dá para marcar depois", e, se o roteiro chega com o lugar fechado, o aviso
+  "Fechado às HH:MM: abre …" na parada.
+- [ ] **A pergunta na dúvida.** "domingo quero sair pra algum lugar legal, o que tem pra fazer?": a IA
+  pergunta "O que vocês querem fazer?" com opções de tipos de lugar (nunca o nome de uma região); escolha
+  uma e a segunda rodada entrega sem perguntar de novo.
+- [ ] **Os vizinhos ditos.** Um tipo que a cidade dita não tem ("sushi em Major Vieira"): "Nada em Major
+  Vieira; nos vizinhos há N opções", com as cidades nos cartões; "Procurar mais longe" alarga até 50 km.
+- [ ] **A saída de hoje pelo planejador.** "quero sair hoje para um café": a pergunta de alcance do app,
+  e os candidatos do Google com "Aberto agora".
+- [ ] **A viagem criada** leva o `place_id` do Google na parada escolhida (Detalhes → a parada → nada
+  muda na tela; é o que o chat da fase 29 vai usar).
+- [ ] **O VoiceOver** nos cartões com a nota e o estado, no cabeçalho do passo e no pendente com a pergunta.
+
+Anotações:
+
 ## Parte 2 · Android
 
 O mesmo percurso, mais curto: aqui está só o que muda no Android, e no fim o resto, item a item,
