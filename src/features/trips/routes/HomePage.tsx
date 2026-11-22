@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/toast-context.ts';
 import { IntakeField } from '@/features/intake/components/IntakeField.tsx';
 import { InstallCard } from '@/features/pwa/components/InstallCard.tsx';
 import { ReceivedSection } from '@/features/reservations/received/components/ReceivedSection.tsx';
+import { useReceivedReservations } from '@/features/reservations/received/queries.ts';
 import { useAcceptInvite, useDeclineInvite } from '../actions.ts';
 import { TripCard } from '../components/TripCard.tsx';
 import { usePendingInvites, useTrips } from '../queries.ts';
@@ -35,9 +36,16 @@ function useLaunchRedirect(ongoingId: string | undefined): void {
   }, [launch, ongoingId, navigate]);
 }
 
+/**
+ * A lista de viagens. **Pinta de uma vez** (fase 26, a 3.0): o que vem do aparelho (as viagens e as
+ * reservas recebidas, do Dexie) é esperado antes do primeiro quadro, para a seção que chega depois não
+ * empurrar a lista (o CLS 0,16 da produção); o convite de instalar pinta desde o começo em todo
+ * navegador que sabe instalar. Só os convites do servidor ainda chegam depois.
+ */
 export default function HomePage() {
   const invites = usePendingInvites();
   const trips = useTrips();
+  const received = useReceivedReservations();
   const accept = useAcceptInvite();
   const decline = useDeclineInvite();
   const toast = useToast();
@@ -45,11 +53,14 @@ export default function HomePage() {
   const ongoing = trips?.find((t) => tripStatus(t.trip, today) === 'ongoing');
   useLaunchRedirect(ongoing?.trip.id);
 
+  // as consultas do aparelho levam milissegundos: a lista nasce inteira, nada se desloca
+  if (trips === undefined || received === undefined) return null;
+
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-6" data-home="ready">
       <InstallCard />
       {/* o que chegou por e-mail e ainda não tem viagem (fase 18): a tela mais aberta mostra primeiro */}
-      <ReceivedSection />
+      <ReceivedSection rows={received} />
 
       {invites.data && invites.data.length > 0 ? (
         <section className="grid gap-3" aria-labelledby="h-convites">
@@ -125,7 +136,7 @@ export default function HomePage() {
         </h1>
         {/* a porta de entrada (fase 17): um campo no lugar do botão "Nova viagem" e do formulário */}
         <IntakeField />
-        {trips === undefined ? null : trips.length === 0 ? (
+        {trips.length === 0 ? (
           <EmptyState
             icon={Route}
             title="Nenhuma viagem ainda"

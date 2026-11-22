@@ -251,3 +251,82 @@ test('o perfil e a garagem pintam inteiros: o resumo das conquistas não empurra
     });
   }
 });
+
+/**
+ * A lista de viagens pinta de uma vez (fase 26, a 3.0): na produção, o Lighthouse marcava 0,16 de CLS
+ * na lista, intermitente, e o relatório inteiro mostrou a seção "Suas viagens" empurrada ~200 px por um
+ * bloco que entrava acima dela depois da primeira pintura (o convite de instalar, que chegava com o
+ * `beforeinstallprompt` do navegador; as reservas recebidas e os convites também chegam depois). Agora
+ * o convite de instalar pinta desde o começo em todo navegador que sabe instalar, e a casca espera as
+ * consultas do aparelho (as viagens e as recebidas) antes de pintar: nada se desloca.
+ */
+test.describe('a lista de viagens pinta de uma vez', () => {
+  // um Chromium de Android: não é iPhone, e tem o `beforeinstallprompt`
+  test.use({
+    userAgent:
+      'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+  });
+
+  test('o convite de instalar já está na primeira pintura, e o evento do navegador que chega depois não empurra a lista; a recebida nasce junto com a lista', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const user = await criarUsuario('Lista');
+    await viagemNaSerra(user.id, 30);
+    // uma reserva recebida por e-mail, ainda sem viagem: a seção "Reservas recebidas" fica acima da lista
+    const now = new Date().toISOString();
+    await inserir('received_reservations', [
+      {
+        id: uuidV4(),
+        user_id: user.id,
+        source: 'email',
+        source_id: `lista-${user.id}`,
+        type: 'hotel',
+        name: 'Pousada do Teste',
+        status: 'received',
+        files: [],
+        received_at: now,
+        created_at: now,
+        updated_at: now,
+        synced_at: now,
+        field_versions: {},
+      },
+    ]);
+    await page.goto('/entrar');
+    await page.getByLabel('E-mail').fill(user.email);
+    await page.getByLabel('Senha', { exact: true }).fill(SENHA);
+    await page.getByRole('button', { name: 'Entrar' }).click();
+    await expect(page.getByRole('heading', { name: 'Suas viagens' })).toBeVisible({
+      timeout: 20_000,
+    });
+    // a lista de novo, como o Lighthouse a abre: as viagens e a recebida já no aparelho
+    await page.goto('/viagens');
+    await expect(page.locator('[data-home="ready"]')).toBeVisible({ timeout: 20_000 });
+    const instalar = page.getByRole('region', { name: 'Instalar o Viajei' });
+    await expect(instalar).toBeVisible();
+    await expect(instalar.getByRole('button', { name: 'Instalar o Viajei' })).toHaveAttribute(
+      'data-install-prompt',
+      'menu',
+    );
+    await expect(page.getByRole('region', { name: 'Reservas recebidas' })).toBeVisible();
+    await expect(page.getByRole('article', { name: 'Pousada do Teste' })).toBeVisible();
+    const topoAntes = (await page.getByRole('heading', { name: 'Suas viagens' }).boundingBox())?.y;
+    // o navegador oferece a instalação depois da primeira pintura: o botão passa ao pedido nativo, e
+    // nada muda de lugar
+    await page.evaluate(`(() => {
+      const e = new Event('beforeinstallprompt', { cancelable: true });
+      e.prompt = () => Promise.resolve();
+      e.userChoice = Promise.resolve({ outcome: 'dismissed' });
+      window.dispatchEvent(e);
+    })()`);
+    await expect(instalar.getByRole('button', { name: 'Instalar o Viajei' })).toHaveAttribute(
+      'data-install-prompt',
+      'native',
+    );
+    const topoDepois = (await page.getByRole('heading', { name: 'Suas viagens' }).boundingBox())?.y;
+    expect(topoDepois).toBe(topoAntes);
+    const shifts = await page.evaluate<{ valor: number; quem: string }[]>(DESLOCAMENTOS);
+    const cls = shifts.reduce((acc, x) => acc + x.valor, 0);
+    expect(cls, `layout shifts da lista: ${JSON.stringify(shifts)}`).toBeLessThan(CLS_MAXIMO);
+  });
+});

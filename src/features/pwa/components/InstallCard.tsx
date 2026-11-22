@@ -8,6 +8,14 @@ import { dismissInstall, install, installDismissed, useInstall } from '@/lib/pwa
 /**
  * Convite para instalar, na tela inicial. Android: abre o pedido nativo. iPhone: folha com os dois
  * toques. Some quando já está instalado ou por 7 dias quando a pessoa dispensa.
+ *
+ * Pinta na primeira vez (fase 26, a 3.0): até a fase 27 o cartão só aparecia quando o navegador
+ * disparava `beforeinstallprompt`, que chega quando o Chromium quer, às vezes depois da primeira
+ * pintura, e aí o cartão entrava no topo e empurrava a lista de viagens inteira (o CLS 0,16 da lista
+ * na produção, intermitente desde 18/11). Agora o cartão aparece desde o primeiro quadro em todo
+ * navegador que sabe instalar (o iPhone, ou um que tenha o evento); o toque usa o pedido nativo
+ * quando o navegador já o ofereceu e, senão, mostra o caminho pelo menu do navegador. Nada empurra
+ * nada, e a seção não se esconde.
  */
 type Props = {
   /** a frase que liga a instalação a outra coisa (ex.: os avisos, que no iPhone só chegam instalado) */
@@ -18,12 +26,12 @@ type Props = {
 };
 
 export function InstallCard({ lead, persistent = false, onDismiss }: Props) {
-  const { installed, canPrompt, ios } = useInstall();
+  const { installed, canPrompt, supported, ios } = useInstall();
   const [dismissed, setDismissed] = useState(() => !persistent && installDismissed());
   const [sheet, setSheet] = useState(false);
   const toast = useToast();
 
-  if (installed || dismissed || (!canPrompt && !ios)) return null;
+  if (installed || dismissed || (!supported && !canPrompt && !ios)) return null;
 
   const dismiss = () => {
     if (!persistent) dismissInstall();
@@ -60,8 +68,10 @@ export function InstallCard({ lead, persistent = false, onDismiss }: Props) {
       </div>
       <Button
         size="md"
+        data-install-prompt={canPrompt ? 'native' : 'menu'}
         onClick={() => {
-          if (ios) {
+          // o pedido nativo só quando o navegador já o ofereceu; senão, o caminho pelo menu
+          if (ios || !canPrompt) {
             setSheet(true);
             return;
           }
@@ -75,27 +85,45 @@ export function InstallCard({ lead, persistent = false, onDismiss }: Props) {
       <Sheet
         open={sheet}
         onClose={() => setSheet(false)}
-        title="Adicionar à Tela de Início"
-        description="No Safari, são dois toques."
+        title={ios ? 'Adicionar à Tela de Início' : 'Instalar pelo menu do navegador'}
+        description={
+          ios
+            ? 'No Safari, são dois toques.'
+            : 'O navegador ainda não ofereceu a instalação por aqui.'
+        }
       >
-        <ol className="grid gap-3 mv-text-16">
-          <li className="flex items-center gap-3">
-            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-ink">
-              <Share className="size-5" aria-hidden="true" />
-            </span>
-            <span>
-              Toque em <b>Compartilhar</b>, na barra de baixo.
-            </span>
-          </li>
-          <li className="flex items-center gap-3">
-            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-ink">
-              <SquarePlus className="size-5" aria-hidden="true" />
-            </span>
-            <span>
-              Escolha <b>Adicionar à Tela de Início</b> e confirme.
-            </span>
-          </li>
-        </ol>
+        {ios ? (
+          <ol className="grid gap-3 mv-text-16">
+            <li className="flex items-center gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-ink">
+                <Share className="size-5" aria-hidden="true" />
+              </span>
+              <span>
+                Toque em <b>Compartilhar</b>, na barra de baixo.
+              </span>
+            </li>
+            <li className="flex items-center gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-ink">
+                <SquarePlus className="size-5" aria-hidden="true" />
+              </span>
+              <span>
+                Escolha <b>Adicionar à Tela de Início</b> e confirme.
+              </span>
+            </li>
+          </ol>
+        ) : (
+          <ol className="grid gap-3 mv-text-16">
+            <li className="flex items-center gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-ink">
+                <Smartphone className="size-5" aria-hidden="true" />
+              </span>
+              <span>
+                Abra o menu do navegador (os três pontos) e toque em <b>Instalar app</b> ou{' '}
+                <b>Adicionar à tela inicial</b>.
+              </span>
+            </li>
+          </ol>
+        )}
         <Button variant="secondary" onClick={() => setSheet(false)}>
           Entendi
         </Button>

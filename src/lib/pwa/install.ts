@@ -16,11 +16,21 @@ export type InstallSnapshot = {
   installed: boolean;
   /** o navegador ofereceu o pedido nativo (Android) */
   canPrompt: boolean;
+  /**
+   * o navegador sabe oferecer o pedido nativo (o Chromium tem `onbeforeinstallprompt`): o convite
+   * pinta na primeira vez, antes de o evento chegar, e não empurra a lista depois (fase 26, a 3.0)
+   */
+  supported: boolean;
   ios: boolean;
 };
 
 let deferred: BeforeInstallPromptEvent | null = null;
-let snapshot: InstallSnapshot = { installed: false, canPrompt: false, ios: false };
+let snapshot: InstallSnapshot = {
+  installed: false,
+  canPrompt: false,
+  supported: false,
+  ios: false,
+};
 const listeners = new Set<() => void>();
 let started = false;
 
@@ -30,6 +40,11 @@ export function isStandalone(): boolean {
     window.matchMedia('(display-mode: standalone)').matches ||
     (navigator as Navigator & { standalone?: boolean }).standalone === true
   );
+}
+
+/** O navegador implementa o `beforeinstallprompt` (o Chromium, no Android e no computador). */
+export function supportsInstallPrompt(): boolean {
+  return typeof window !== 'undefined' && 'onbeforeinstallprompt' in window;
 }
 
 export function isIOS(): boolean {
@@ -48,7 +63,12 @@ function set(patch: Partial<InstallSnapshot>) {
 function start() {
   if (started || typeof window === 'undefined') return;
   started = true;
-  snapshot = { installed: isStandalone(), canPrompt: false, ios: isIOS() };
+  snapshot = {
+    installed: isStandalone(),
+    canPrompt: false,
+    supported: supportsInstallPrompt(),
+    ios: isIOS(),
+  };
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferred = e as BeforeInstallPromptEvent;

@@ -19,6 +19,11 @@ import { filesOf, useReceivedReservations } from '../queries.ts';
 type Props = {
   /** na tela de Reservas de uma viagem: "Pôr nesta viagem" vai direto para ela */
   tripId?: string;
+  /**
+   * as recebidas já lidas pela tela de cima (a lista de viagens, fase 26, a 3.0): a casca espera a
+   * consulta do aparelho antes de pintar, e esta seção nasce junto com a lista, sem empurrá-la
+   */
+  rows?: ReceivedReservation[] | undefined;
 };
 
 /**
@@ -27,8 +32,9 @@ type Props = {
  * tela de Reservas de uma viagem, vai para ela. "Dispensar" tira da lista. Nada aparece quando não
  * há recebidas.
  */
-export function ReceivedSection({ tripId }: Props) {
-  const received = useReceivedReservations();
+export function ReceivedSection({ tripId, rows }: Props) {
+  const live = useReceivedReservations();
+  const received = rows ?? live;
   const trips = useTrips();
   const { session } = useSession();
   const online = useOnline();
