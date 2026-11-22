@@ -436,7 +436,7 @@ test('feirinha, café e cortar o cabelo em Canoinhas pelo planejador: os passos 
     .getByRole('button', { name: 'Tirar da viagem' })
     .click();
   await page
-    .getByRole('region', { name: 'Feirinha' })
+    .getByRole('region', { name: 'Feirinha', exact: true })
     .getByRole('button', { name: 'Tirar da viagem' })
     .click();
   await cafe.click();
