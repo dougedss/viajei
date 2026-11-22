@@ -18,12 +18,23 @@ import {
   type Verdict,
 } from '../../supabase/functions/_shared/plan-search-protocol.ts';
 import { isToday } from '../../src/features/intake/today-rule.ts';
+import { assemble } from '../../src/features/intake/assemble.ts';
 import {
+  advanceStep,
+  currentStep,
+  nextStep,
   prepare,
+  searchStep,
+  stageAccount,
   stageFromOuting,
+  stepGroups,
+  stepSearchPlan,
   toggleChoice,
   type MapStage,
 } from '../../src/features/intake/flow.ts';
+import { dayTimeNotice, hoursNotice } from '../../src/features/intake/hours.ts';
+import { answersByTopic } from '../../src/features/intake/flow.ts';
+import { overBudget, timeBudget } from '../../src/features/intake/outing-time.ts';
 import { reachOf, readReach, reachQuestion } from '../../src/features/intake/reach.ts';
 import type { Json } from '../../src/lib/supabase/database.types.ts';
 import { comRetentativa } from './retentativa.ts';
@@ -39,6 +50,8 @@ import {
   semente,
   type Cidade,
   type Cobranca,
+  type ContaDoTempo,
+  type PassoDoApp,
 } from './bateria-padroes.ts';
 import { ok } from './client.ts';
 import type { LabConfig } from './env.ts';
@@ -51,14 +64,15 @@ import { log, type Session } from './session.ts';
  * pedidos **novos a cada rodada**, com os padrões girando, pelo planejador de verdade (a `plan-search`
  * publicada: a IA com as ferramentas, o Google atrás da função), como o lab-b (a cota do laboratório,
  * D283), **fora do deploy** (sob pedido, nunca portão da CI). Para cada pedido: a rodada do
- * planejador (e a segunda, se a IA perguntou), o primeiro candidato de cada passo escolhido, o caminho
- * com as sugestões da Geoapify de verdade, a escrita pela `plan-trip`, as seis cobranças objetivas
- * (`bateria-padroes.ts`) e a nota do juiz (uma leitura da IA que lê o roteiro contra o pedido). Tudo
- * fica em `lab_runs` (`source: bateria`) e em `lab_checks` (um `pedido_NN` por pedido, com `data`), que
- * o painel `/lab` mostra "para sempre ir melhorando e analisá-los". A rodada fica vermelha quando uma
- * cobrança objetiva falha; a nota do juiz é número, não portão. Teto de custo por rodada: a rodada para
- * quando estoura. Os pedidos são inventados pela IA a partir dos padrões, saindo de cidades reais do
- * Sul; nenhum dado de pessoa.
+ * planejador (e a segunda, se a IA perguntou), **a escolha passo a passo como o app** (fase 26: o
+ * primeiro candidato do passo 1, o passo seguinte procurado pela mesma função do app em volta dele, e
+ * assim até o fim), a conta do tempo, o caminho com as sugestões da Geoapify de verdade, a escrita pela
+ * `plan-trip`, a montagem (pura), as doze cobranças objetivas (`bateria-padroes.ts`) e a nota do juiz
+ * (uma leitura da IA que lê o roteiro contra o pedido). Tudo fica em `lab_runs` (`source: bateria`) e
+ * em `lab_checks` (um `pedido_NN` por pedido, com `data`), que o painel `/lab` mostra "para sempre ir
+ * melhorando e analisá-los". A rodada fica vermelha quando uma cobrança objetiva falha; a nota do juiz
+ * é número, não portão. Teto de custo por rodada: a rodada para quando estoura. Os pedidos são
+ * inventados pela IA a partir dos padrões, saindo de cidades reais do Sul; nenhum dado de pessoa.
  */
 /** O teto de uma rodada (IA mais Google): para antes do pedido que o estouraria. */
 export const BATERIA_TETO_USD = 1.5;
@@ -69,6 +83,8 @@ export const BATERIA_TETO_USD = 1.5;
 export const GOOGLE_USD_POR_BUSCA = 0.035;
 
 const s = (ms: number | null) => (ms === null ? '—' : `${(ms / 1000).toFixed(1)} s`);
+const plusDay = (date: string) =>
+  new Date(Date.parse(`${date}T12:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
 const usd = (v: number) => v.toFixed(4);
 
 type Pedido = { texto: string; cidade_saida: string; padrao: string };
@@ -89,12 +105,51 @@ function contexto(today: string, cidade: Cidade, today_kind: boolean): PlanConte
   };
 }
 
-/** A primeira opção de cada passo, como uma pessoa que toca no primeiro cartão. */
-function chooseFirst(map: MapStage): MapStage {
-  return map.groups.reduce(
-    (m, g) => (g.options[0] ? toggleChoice(m, g.options[0].place.id) : m),
-    map,
-  );
+/** A primeira opção de um passo, como uma pessoa que toca no primeiro cartão. */
+function chooseFirstOf(map: MapStage, group: number): MapStage {
+  const first = map.groups[group]?.options[0];
+  return first ? toggleChoice(map, first.place.id) : map;
+}
+
+/**
+ * A escolha passo a passo, como o app (fase 26): o primeiro candidato do passo da vez; o passo seguinte
+ * procurado pela mesma função do app em volta dele (a `find-places` do Google de verdade), e assim até o
+ * fim. Devolve o mapa escolhido e o que cada busca do app fez, para as cobranças.
+ */
+async function chooseStepByStep(
+  start: MapStage,
+  deps: ReturnType<typeof labDeps>,
+): Promise<{ map: MapStage; passos: PassoDoApp[] }> {
+  let map = start;
+  const passos: PassoDoApp[] = [];
+  for (let guard = 0; guard < 8; guard++) {
+    const current = currentStep(map);
+    if (current === null) break;
+    if (map.groups[current]?.status === 'unsearched') {
+      const plan = stepSearchPlan(map, current);
+      map = await searchStep(map, current, deps);
+      const g = map.groups[current];
+      if (g?.step && plan) {
+        passos.push({
+          ordem: g.step.ordem,
+          o_que: g.label,
+          relacao: g.step.relacao,
+          cidade: g.step.cidade,
+          anterior: plan.previous
+            ? { name: plan.previous.name, lat: plan.previous.at[1], lng: plan.previous.at[0] }
+            : null,
+          circulos: plan.circles,
+          candidatos: g.options.map((o) => o.place),
+          fora_da_cidade: g.step.fora_da_cidade,
+        });
+      }
+    }
+    map = chooseFirstOf(map, current);
+    const next = nextStep(map);
+    if (next === null) break;
+    map = advanceStep(map, next);
+  }
+  return { map, passos };
 }
 
 /** A resposta a uma pergunta: a primeira opção, ou "tanto faz" quando é livre. */
@@ -224,6 +279,8 @@ export async function runBateria(
       };
       const planejar = (qs: PlanQuestion[], as: string[]): PlanSearchRequest => ({
         kind,
+        // o passo a passo (fase 26): a IA procura só o passo 1; a bateria procura os seguintes como o app
+        passo_a_passo: true,
         text: pedido.texto,
         questions: qs,
         answers: as,
@@ -296,15 +353,63 @@ export async function runBateria(
         origem: result.passeio.origem,
         referencias_sem_lugar: dropped,
       };
-      // a escolha (o primeiro de cada passo), o caminho e a escrita
-      const chosen = chooseFirst(stage);
+      // a escolha passo a passo (fase 26): o primeiro de cada passo, o seguinte procurado em volta dele
+      const googleAntes = calls.google ?? 0;
+      const stepwise = await chooseStepByStep(stage, deps);
+      const chosen = stepwise.map;
+      const buscasDoApp = (calls.google ?? 0) - googleAntes;
+      google += buscasDoApp * GOOGLE_USD_POR_BUSCA;
+      buscas += buscasDoApp;
       const escolhidos = chosen.chosen.map(
         (id) =>
-          stage.groups.flatMap((g) => g.options).find((o) => o.place.id === id)?.place.name ?? id,
+          chosen.groups.flatMap((g) => g.options).find((o) => o.place.id === id)?.place.name ?? id,
       );
+      const escolhasPorPasso = stepGroups(chosen).map((gi) => {
+        const g = chosen.groups[gi];
+        return {
+          ordem: g?.step?.ordem ?? 0,
+          nomes: (g?.options ?? [])
+            .filter((o) => chosen.chosen.includes(o.place.id))
+            .map((o) => o.place.name),
+        };
+      });
+      data.passo_a_passo = stepwise.passos.map((p) => ({
+        ordem: p.ordem,
+        o_que: p.o_que,
+        relacao: p.relacao,
+        em_volta_de: p.anterior?.name ?? null,
+        circulos: p.circulos.length,
+        candidatos: p.candidatos.slice(0, 6).map((c) => `${c.name}${c.city ? ` (${c.city})` : ''}`),
+        achou: p.candidatos.length,
+      }));
+      data.buscas_do_app = buscasDoApp;
+      // a conta do tempo, como a tela a mostra (a hora de sair da montagem; o dia do passeio)
+      const time = {
+        start: kind === 'today' ? '09:15' : '08:00',
+        date: kind === 'today' ? today : plusDay(today),
+      };
+      const budget = timeBudget({
+        answer: answersByTopic(questions, answers).reach ?? null,
+        tempo_min: result.passeio.tempo_min ?? null,
+      });
+      const acc = chosen.chosen.length > 0 ? stageAccount(chosen, time) : null;
+      let conta: ContaDoTempo | null = acc
+        ? {
+            total_min: acc.total,
+            tempo_min: budget?.minutes ?? null,
+            estoura: budget ? overBudget(acc.total, budget.minutes) : false,
+            chegadas: acc.arrivals.map((a) => ({
+              nome: a.name,
+              hora: a.at,
+              aviso: a.outsideWindow ?? (a.closed ? `fechado às ${a.at}` : null),
+              fechada: a.closed,
+            })),
+          }
+        : null;
       let write: PlanWrite | null = null;
       let pendentes: string[] = [];
-      if (chosen.chosen.length > 0) {
+      let paradas: { nome: string; sem_local: boolean }[] | undefined;
+      if (chosen.chosen.length > 0 || chosen.destination) {
         const t1 = Date.now();
         const prepared = await prepare(chosen, { interests: [], learned: [] }, deps);
         pendentes = prepared.missing.map((m) => m.name);
@@ -332,6 +437,48 @@ export async function runBateria(
         const pw = w.outcome === 'done' ? planWriteSchema.safeParse(w.data) : null;
         write = pw?.success ? pw.data : null;
         if (!write) quebrou = `a escrita não rodou: ${w.outcome} ${w.code ?? ''}`.trim();
+        if (write) {
+          // a montagem, pura, como o app faz: a ordem das paradas, os pendentes sem local, os avisos
+          const built = assemble({
+            origin: chosen.origin,
+            chosen: prepared.picks,
+            chosenFractions: prepared.chosenFractions,
+            suggestions: prepared.suggestions,
+            nights: [],
+            legs: prepared.legs,
+            missing: prepared.missing,
+            write,
+            firstDate: time.date,
+            defaultStart: time.start,
+          });
+          paradas = built.data.days.flatMap((d, di) =>
+            d.stops.flatMap((st, si) => {
+              const key = `d${String(di)}s${String(si)}`;
+              if (st.kind === 'origin' || built.suggestions[key]) return [];
+              return [{ nome: st.name, sem_local: st.lat === null }];
+            }),
+          );
+          // os avisos da revisão (o horário do lugar, a hora do dia) entram na conta que o juiz lê
+          const avisos = built.data.days.flatMap((d, di) =>
+            d.stops.flatMap((st, si) => {
+              const key = `d${String(di)}s${String(si)}`;
+              const aviso =
+                hoursNotice(built.hours[key], d.date, st.time) ??
+                dayTimeNotice(built.dayTimes[key], st.time);
+              return aviso ? [{ nome: st.name, hora: st.time ?? '', aviso }] : [];
+            }),
+          );
+          if (conta) {
+            conta = {
+              ...conta,
+              chegadas: conta.chegadas.map((c) => {
+                const a = avisos.find((x) => x.nome === c.nome);
+                return a ? { ...c, hora: a.hora || c.hora, aviso: a.aviso } : c;
+              }),
+            };
+          }
+          data.montagem = { paradas, avisos: avisos.map((a) => `${a.nome}: ${a.aviso}`) };
+        }
         data.roteiro = write
           ? {
               nome: write.trip.name,
@@ -348,6 +495,7 @@ export async function runBateria(
       } else {
         data.roteiro = 'nada escolhido: a escrita não rodou';
       }
+      data.conta = conta;
       // as cobranças objetivas e o juiz
       const saida = {
         origem: { lat: cidade.lat, lng: cidade.lng },
@@ -357,6 +505,10 @@ export async function runBateria(
         respostas: Array.isArray(data.respostas) ? (data.respostas as string[]) : [],
         write,
         pendentes: [...pendentes, ...result.passeio.pendentes.map((p) => p.o_que)],
+        passos_app: stepwise.passos,
+        escolhas: escolhasPorPasso,
+        ...(paradas ? { paradas } : {}),
+        conta,
       };
       cobrancas.push(...cobrar(saida));
       const julgar: PlanSearchRequest = {
@@ -379,6 +531,12 @@ export async function runBateria(
         `"${pedido.texto}"`,
         `${String(result.passeio.passos.length)} passo(s), ${String(result.lugares.length)} lugar(es) (${result.numeros.fonte}), ${String(result.passeio.pendentes.length)} pendente(s), ${String(perguntasFeitas)} pergunta(s)`,
         `juiz ${nota === null ? '—' : String(nota)}/10`,
+        ...(conta
+          ? [
+              `tempo ${String(conta.total_min)} min${conta.tempo_min === null ? '' : ` de ${String(conta.tempo_min)}${conta.estoura ? ' (estoura)' : ''}`}`,
+            ]
+          : []),
+        ...(buscasDoApp > 0 ? [`${String(buscasDoApp)} busca(s) do app`] : []),
         falhas.length > 0
           ? `FALHOU: ${falhas.map((c) => `${c.nome} (${c.detalhe})`).join('; ')}`
           : 'cobranças verdes',

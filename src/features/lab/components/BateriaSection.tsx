@@ -1,6 +1,7 @@
 import { format } from 'date-fns';
 import { CircleCheck, CircleMinus, CircleX, Gavel } from 'lucide-react';
 import { z } from 'zod';
+import { minutesText } from '@shared/day-span.ts';
 import { Card } from '@/components/ui/Card.tsx';
 import { cx } from '@/lib/cx.ts';
 import type { BateriaRunRow } from '../queries.ts';
@@ -41,6 +42,27 @@ const checkSchema = z.looseObject({
     })
     .optional(),
   escolhidos: z.array(z.string()).optional(),
+  // o passo a passo (fase 26): os passos que o app procurou em volta da escolha anterior e a conta do tempo
+  passo_a_passo: z
+    .array(
+      z.looseObject({
+        ordem: z.number(),
+        o_que: z.string(),
+        relacao: z.string(),
+        em_volta_de: z.string().nullable().optional(),
+        candidatos: z.array(z.string()),
+        achou: z.number().optional(),
+      }),
+    )
+    .optional(),
+  conta: z
+    .looseObject({
+      total_min: z.number(),
+      tempo_min: z.number().nullable(),
+      estoura: z.boolean(),
+    })
+    .nullable()
+    .optional(),
   roteiro: z
     .union([
       z.string(),
@@ -141,6 +163,30 @@ function Pedido({ check }: { check: BateriaRunRow['lab_checks'][number] }) {
             </li>
           ))}
         </ul>
+      ) : null}
+      {data?.passo_a_passo && data.passo_a_passo.length > 0 ? (
+        <ul className="grid gap-0.5 text-[13px]" data-passo-a-passo>
+          {data.passo_a_passo.map((p) => (
+            <li key={`app-${String(p.ordem)}`} className="text-ink-2">
+              <span className="font-semibold text-ink">
+                {p.ordem}. {p.o_que}
+              </span>{' '}
+              procurado pelo app{' '}
+              {p.em_volta_de ? `em volta de ${p.em_volta_de}` : 'perto de onde sai'} ({p.relacao}){' '}
+              {p.candidatos.length > 0
+                ? `· ${p.candidatos.slice(0, 4).join('; ')}${(p.achou ?? p.candidatos.length) > 4 ? ` (+${String((p.achou ?? p.candidatos.length) - 4)})` : ''}`
+                : '· não achou'}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {data?.conta ? (
+        <p className="text-[13px] text-ink-2" data-conta>
+          o passeio dá {minutesText(data.conta.total_min)}
+          {data.conta.tempo_min === null
+            ? ' (sem tempo dito)'
+            : `; a pessoa tem ${minutesText(data.conta.tempo_min)}${data.conta.estoura ? ': estoura, marcado' : ': cabe'}`}
+        </p>
       ) : null}
       {data?.roteiro ? (
         <p className="text-[13px] text-ink-2">

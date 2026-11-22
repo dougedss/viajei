@@ -1,8 +1,15 @@
 import { readFileSync } from 'node:fs';
+import { minutesText } from '../../supabase/functions/_shared/day-span.ts';
 import { haversineM } from '../../supabase/functions/_shared/geo.ts';
 import { inCity } from '../../supabase/functions/_shared/google-places.ts';
-import type { FoundPlace, Outing } from '../../supabase/functions/_shared/plan-search-protocol.ts';
+import type { Place } from '../../supabase/functions/_shared/places-schema.ts';
+import type {
+  FoundPlace,
+  Outing,
+  StepRelation,
+} from '../../supabase/functions/_shared/plan-search-protocol.ts';
 import type { PlanWrite } from '../../supabase/functions/_shared/plan-protocol.ts';
+import type { Circle } from '../../supabase/functions/_shared/search-circles.ts';
 import { decodeInts, decodeLine } from '../../src/lib/geo/codec.ts';
 
 /**
@@ -135,6 +142,29 @@ export function cidadePeloRotulo(cidades: readonly Cidade[], rotulo: string): Ci
 // -------------------------------------------------------------------------- as cobranças
 export type Cobranca = { nome: string; ok: boolean; detalhe: string };
 
+/** Um passo que o app procurou em volta da escolha anterior (fase 26): onde, e o que achou. */
+export type PassoDoApp = {
+  ordem: number;
+  o_que: string;
+  relacao: StepRelation;
+  cidade: string;
+  /** o lugar escolhido no passo anterior (o centro da relação) */
+  anterior: { name: string; lat: number; lng: number } | null;
+  circulos: readonly Circle[];
+  candidatos: readonly Place[];
+  fora_da_cidade: boolean;
+};
+
+/** A conta do tempo do passeio montado (fase 26): o total, o que a pessoa tinha, e a marca. */
+export type ContaDoTempo = {
+  total_min: number;
+  /** o tempo que têm, em minutos; null sem teto ou sem tempo dito */
+  tempo_min: number | null;
+  estoura: boolean;
+  /** cada parada com a hora prevista e, quando há, o aviso do horário ou da hora do dia */
+  chegadas: readonly { nome: string; hora: string; aviso: string | null; fechada: boolean }[];
+};
+
 /** O que saiu de um pedido, o que as cobranças olham. */
 export type Saida = {
   /** de onde a pessoa saiu (a cidade da lista) */
@@ -149,6 +179,14 @@ export type Saida = {
   write: PlanWrite | null;
   /** o que ficou pendente e foi para a escrita (os nomes) */
   pendentes: readonly string[];
+  // --------------------------------------------------------------- o passo a passo (fase 26)
+  /** os passos que o app procurou em volta da escolha anterior */
+  passos_app?: readonly PassoDoApp[];
+  /** as escolhas por passo, na ordem dita (os nomes), para a ordem da viagem montada */
+  escolhas?: readonly { ordem: number; nomes: readonly string[] }[];
+  /** as paradas da viagem montada, na ordem, sem a saída, a chegada e as sugestões */
+  paradas?: readonly { nome: string; sem_local: boolean }[];
+  conta?: ContaDoTempo | null;
 };
 
 /** O Brasil, grosso modo, pela coordenada. */
@@ -297,8 +335,186 @@ export function cobrar(saida: Saida): Cobranca[] {
       detalhe: saida.write ? 'sem pendente: nada a conferir' : 'a escrita não rodou',
     });
   }
+  out.push(...cobrarPassoAPasso(saida));
   return out;
 }
+
+/** O candidato está ao alcance da relação: dentro de um dos círculos da busca, com a folga do viés do Google. */
+const TOLERANCIA = 1.25;
+const dentroDosCirculos = (p: { lat: number; lng: number }, circulos: readonly Circle[]) =>
+  circulos.some((c) => haversineM([c.lng, c.lat], [p.lng, p.lat]) <= c.radius_m * TOLERANCIA);
+
+/**
+ * Os tipos do Google que contradizem o que foi pedido (a lista curta registrada, D305): o resto é do
+ * juiz. A chave casa com as palavras do passo ("café", "cafe", "sorvete"...).
+ */
+export const TIPOS_CONTRARIOS: readonly { pedido: RegExp; tipos: readonly string[] }[] = [
+  {
+    pedido: /\bcaf[eé]|cafeteria|cafezinho/i,
+    tipos: [
+      'grocery_store',
+      'supermarket',
+      'convenience_store',
+      'gas_station',
+      'market',
+      'acai_shop',
+    ],
+  },
+  { pedido: /sorvet|gelato/i, tipos: ['acai_shop', 'juice_shop', 'grocery_store', 'supermarket'] },
+  { pedido: /padaria|p[aã]o\b/i, tipos: ['supermarket', 'gas_station', 'convenience_store'] },
+  {
+    pedido: /almo[cç]|jantar|restaurante|comer/i,
+    tipos: ['gas_station', 'convenience_store', 'grocery_store', 'supermarket'],
+  },
+  { pedido: /pizza/i, tipos: ['gas_station', 'grocery_store', 'supermarket'] },
+];
+
+/**
+ * As cobranças do passo a passo (fase 26, a 3.5), objetivas, ao lado das seis da D293: o passo seguinte
+ * ao alcance da relação; a ordem dos passos mantida na viagem montada; o tempo que cabe (ou a marca de
+ * que estoura); o horário (nenhuma escolha fechada na hora prevista sem o aviso); o pendente que vira
+ * parada sem local; o tipo (nenhum candidato cujo tipo principal contradiga o pedido).
+ */
+export function cobrarPassoAPasso(saida: Saida): Cobranca[] {
+  const out: Cobranca[] = [];
+
+  // 7. o passo seguinte: todo candidato do passo n+1 ao alcance da relação dele a partir da escolha do passo n
+  const passos = saida.passos_app ?? [];
+  const fora = passos.flatMap((p) =>
+    p.candidatos
+      .filter((c) =>
+        p.relacao === 'na_cidade'
+          ? !p.fora_da_cidade && c.city !== null && !inCity(c, p.cidade)
+          : !dentroDosCirculos(c, p.circulos),
+      )
+      .map((c) => `${c.name} (passo ${String(p.ordem)}, ${p.relacao})`),
+  );
+  out.push({
+    nome: 'passo_seguinte',
+    ok: fora.length === 0,
+    detalhe:
+      passos.length === 0
+        ? 'nenhum passo procurado pelo app (um passo só, ou nada escolhido no primeiro)'
+        : fora.length === 0
+          ? `${String(passos.length)} passo(s) procurado(s) pelo app, todos os candidatos ao alcance da relação`
+          : `fora do alcance da relação: ${fora.slice(0, 3).join(', ')}`,
+  });
+
+  // 8. a ordem mantida: as escolhas aparecem na viagem montada na ordem dos passos
+  const escolhas = saida.escolhas ?? [];
+  const paradas = (saida.paradas ?? []).map((p) => plainName(p.nome));
+  const posicoes = [...escolhas]
+    .sort((a, b) => a.ordem - b.ordem)
+    .flatMap((e) =>
+      e.nomes.map((n) => ({ ordem: e.ordem, at: paradas.indexOf(plainName(n)), nome: n })),
+    );
+  const perdidas = posicoes.filter((p) => p.at < 0);
+  const desordem = posicoes.some((p, i) => {
+    const anterior = posicoes.slice(0, i).filter((q) => q.at >= 0 && q.ordem < p.ordem);
+    return p.at >= 0 && anterior.some((q) => q.at > p.at);
+  });
+  out.push({
+    nome: 'ordem_mantida',
+    ok: saida.paradas === undefined || (perdidas.length === 0 && !desordem),
+    detalhe:
+      saida.paradas === undefined
+        ? 'a viagem não foi montada: nada a conferir'
+        : perdidas.length > 0
+          ? `escolha fora da viagem montada: ${perdidas.map((p) => p.nome).join(', ')}`
+          : desordem
+            ? `a viagem montada não segue a ordem dos passos: ${(saida.paradas ?? []).map((p) => p.nome).join(' → ')}`
+            : `as paradas seguem a ordem dos passos (${String(posicoes.length)} escolha(s))`,
+  });
+
+  // 9. o tempo: com tempo dito, a conta cabe, ou a marca "estoura" está registrada (o juiz lê)
+  const conta = saida.conta ?? null;
+  out.push({
+    nome: 'tempo',
+    ok: tempoEmOrdem(conta),
+    detalhe: !conta
+      ? 'sem conta (nada escolhido)'
+      : conta.tempo_min === null
+        ? `o passeio dá ${minutesText(conta.total_min)}; sem tempo dito (ou sem teto)`
+        : conta.total_min <= conta.tempo_min
+          ? `o passeio dá ${minutesText(conta.total_min)} e cabe em ${minutesText(conta.tempo_min)}`
+          : conta.estoura
+            ? `o passeio dá ${minutesText(conta.total_min)} e estoura ${minutesText(conta.tempo_min)}: marcado`
+            : `estoura ${minutesText(conta.tempo_min)} sem a marca`,
+  });
+
+  // 10. o horário: nenhuma parada fechada na hora prevista sem o aviso
+  const semAviso = (conta?.chegadas ?? []).filter((c) => c.fechada && !c.aviso);
+  out.push({
+    nome: 'horario',
+    ok: semAviso.length === 0,
+    detalhe:
+      semAviso.length === 0
+        ? `${String((conta?.chegadas ?? []).filter((c) => c.fechada).length)} parada(s) fechada(s) na hora prevista, todas com aviso`
+        : `fechada na hora prevista sem aviso: ${semAviso.map((c) => `${c.nome} às ${c.hora}`).join(', ')}`,
+  });
+
+  // 11. o pendente vira parada: o que ficou pendente está na viagem montada sem coordenada
+  const semLocal = (saida.paradas ?? []).filter((p) => p.sem_local).map((p) => plainName(p.nome));
+  const pendentesPerdidos =
+    saida.paradas === undefined
+      ? []
+      : saida.pendentes.filter(
+          (n) => !semLocal.some((s) => s.includes(plainName(n)) || plainName(n).includes(s)),
+        );
+  out.push({
+    nome: 'pendente_vira_parada',
+    ok: pendentesPerdidos.length === 0,
+    detalhe:
+      saida.paradas === undefined
+        ? 'a viagem não foi montada: nada a conferir'
+        : saida.pendentes.length === 0
+          ? 'nada pendente'
+          : pendentesPerdidos.length === 0
+            ? `${String(saida.pendentes.length)} pendente(s) na viagem como parada sem local`
+            : `pendente fora da viagem: ${pendentesPerdidos.join(', ')}`,
+  });
+
+  // 12. o tipo: nenhum candidato entregue cujo tipo principal contradiga o pedido (a lista curta)
+  const contrarios = [
+    ...saida.passeio.passos.map((p) => ({
+      o_que: p.o_que,
+      candidatos: p.candidatos
+        .map((ref) => saida.lugares.find((f) => f.ref === ref)?.place)
+        .filter((x): x is Place => x !== undefined),
+    })),
+    ...passos.map((p) => ({ o_que: p.o_que, candidatos: p.candidatos })),
+  ].flatMap(({ o_que, candidatos }) => {
+    const regra = TIPOS_CONTRARIOS.find((t) => t.pedido.test(o_que));
+    if (!regra) return [];
+    return candidatos
+      .filter((c) => c.categories[0] !== undefined && regra.tipos.includes(c.categories[0]))
+      .map((c) => `${c.name} (${c.categories[0] ?? '?'} ≠ ${o_que})`);
+  });
+  out.push({
+    nome: 'tipo',
+    ok: contrarios.length === 0,
+    detalhe:
+      contrarios.length === 0
+        ? 'nenhum candidato de tipo contrário ao pedido (pela lista curta; o resto é do juiz)'
+        : `tipo contrário ao pedido: ${contrarios.slice(0, 3).join(', ')}`,
+  });
+  return out;
+}
+
+/** O tempo está em ordem: sem conta, sem tempo dito, cabe, ou estoura com a marca. */
+function tempoEmOrdem(conta: ContaDoTempo | null): boolean {
+  const tem = conta?.tempo_min ?? null;
+  if (conta === null || tem === null) return true;
+  return conta.total_min <= tem || conta.estoura;
+}
+
+const plainName = (s: string) =>
+  s
+    .toLocaleLowerCase('pt-BR')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 /** O que saiu, em texto, para o juiz ler contra o pedido (só nomes públicos de lugares). */
 export function roteiroParaJuiz(saida: Saida, escolhidos: readonly string[]): string {
@@ -326,9 +542,32 @@ export function roteiroParaJuiz(saida: Saida, escolhidos: readonly string[]): st
   }
   for (const r of saida.respostas ?? []) lines.push(`a pessoa respondeu: ${r}`);
   if (saida.passeio.destino) lines.push(`destino: ${saida.passeio.destino}`);
+  for (const p of saida.passos_app ?? []) {
+    lines.push(
+      `passo ${String(p.ordem)} procurado pelo app ${p.anterior ? `em volta de ${p.anterior.name}` : 'perto de onde sai'} (${p.relacao}): ${
+        p.candidatos.length > 0
+          ? p.candidatos
+              .slice(0, 8)
+              .map((c) => `${c.name}${c.city ? ` (${c.city})` : ''}`)
+              .join('; ')
+          : 'não achou'
+      }`,
+    );
+  }
   lines.push(
     `escolhidos (o primeiro candidato de cada passo): ${escolhidos.join('; ') || 'nenhum'}`,
   );
+  const conta = saida.conta;
+  if (conta) {
+    lines.push(
+      `a conta do tempo: o passeio dá ${minutesText(conta.total_min)}${conta.tempo_min === null ? ' (sem tempo dito)' : ` e a pessoa tem ${minutesText(conta.tempo_min)}${conta.estoura ? ': ESTOURA, marcado na tela' : ': cabe'}`}`,
+    );
+    for (const c of conta.chegadas) {
+      lines.push(
+        `chegada prevista: ${c.nome} às ${c.hora}${c.aviso ? ` · aviso: ${c.aviso}` : ''}${c.fechada ? ' · fechado nessa hora' : ''}`,
+      );
+    }
+  }
   const w = saida.write;
   if (w) {
     lines.push(

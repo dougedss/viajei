@@ -75,6 +75,8 @@ function context(today: string, over: Partial<PlanContext> = {}): PlanContext {
 /** O que a medição conta da rede: as buscas no mapa, a falta de fonte, e cada cidade geocodificada. */
 export type Calls = {
   places: number;
+  /** as buscas por texto no Google feitas pelo app (o passo seguinte, fase 26): custam como as da IA */
+  google?: number;
   noSource: boolean;
   /** cada consulta de cidade pelo nome e os candidatos que voltaram (nome, classe e endereço) */
   geocoded: string[];
@@ -133,6 +135,7 @@ export function labDeps(
   return {
     findPlaces: async (request: FindPlacesRequest): Promise<Place[]> => {
       calls.places += 1;
+      if ('provider' in request) calls.google = (calls.google ?? 0) + 1;
       const res = await call(PLACES_FN, request);
       const json: unknown = await res.json().catch(() => null);
       if (!res.ok) {

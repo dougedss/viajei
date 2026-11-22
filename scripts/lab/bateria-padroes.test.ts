@@ -6,11 +6,13 @@ import {
   cidadesDaRodada,
   cidadesDoSul,
   cobrar,
+  cobrarPassoAPasso,
   embaralhar,
   PADROES,
   padroesDaRodada,
   roteiroParaJuiz,
   semente,
+  TIPOS_CONTRARIOS,
   type Saida,
 } from './bateria-padroes.ts';
 
@@ -116,9 +118,9 @@ describe('as cidades reais do Sul', () => {
 });
 
 describe('as cobranças', () => {
-  it('tudo certo: as seis verdes', () => {
+  it('tudo certo: as seis verdes (e as do passo a passo, sem nada a conferir, também)', () => {
     const out = cobrar(saida());
-    expect(out.map((c) => [c.nome, c.ok])).toEqual([
+    expect(out.slice(0, 6).map((c) => [c.nome, c.ok])).toEqual([
       ['alcance', true],
       ['nada_some', true],
       ['ordem', true],
@@ -126,6 +128,7 @@ describe('as cobranças', () => {
       ['brasil', true],
       ['escrita', true],
     ]);
+    expect(out.slice(6).every((c) => c.ok)).toBe(true);
   });
 
   it('um candidato longe (Mafra de Portugal) cai no alcance e no Brasil; a cidade errada cai na cidade', () => {
@@ -226,6 +229,240 @@ describe('as cobranças', () => {
     );
     expect(roteiroParaJuiz(saida({ write: null }), [])).toContain(
       'viagem escrita: não houve (nada escolhido)',
+    );
+  });
+});
+
+/** As cobranças do passo a passo (fase 26, a 3.5), caso a caso, sobre saídas fixas. */
+describe('as cobranças do passo a passo (fase 26)', () => {
+  const WIEGAND = place('g-w', 'Cachoeira Alta', 'José Boiteux', -26.95, -49.65);
+  const PERTO = place('g-p', 'Café da Serra', 'José Boiteux', -26.9, -49.6);
+  const LONGE = place('g-l', 'Café do Vale', 'Canoinhas', -26.2, -50.4);
+  const passoApp = (candidatos = [PERTO]) => ({
+    ordem: 2,
+    o_que: 'café',
+    relacao: 'perto_do_anterior' as const,
+    cidade: '',
+    anterior: { name: 'Cachoeira Alta', lat: -26.95, lng: -49.65 },
+    circulos: [{ lat: -26.95, lng: -49.65, radius_m: 15_000 }],
+    candidatos,
+    fora_da_cidade: false,
+  });
+  const stepwise = (over: Partial<Saida> = {}): Saida =>
+    saida({
+      lugares: [{ ref: 'p1', place: WIEGAND }],
+      passeio: outing({
+        passos: [
+          {
+            ordem: 1,
+            o_que: 'cachoeira',
+            relacao: 'perto_de_casa',
+            cidade: '',
+            hora_do_dia: '',
+            candidatos: ['p1'],
+            achou: true,
+            fora_da_cidade: false,
+          },
+          {
+            ordem: 2,
+            o_que: 'café',
+            relacao: 'perto_do_anterior',
+            cidade: '',
+            hora_do_dia: '',
+            candidatos: [],
+            achou: false,
+            fora_da_cidade: false,
+          },
+        ],
+        pendentes: [{ o_que: 'a feirinha', pergunta: 'Onde fica a feirinha?' }],
+      }),
+      passos_app: [passoApp()],
+      escolhas: [
+        { ordem: 1, nomes: ['Cachoeira Alta'] },
+        { ordem: 2, nomes: ['Café da Serra'] },
+      ],
+      paradas: [
+        { nome: 'Cachoeira Alta', sem_local: false },
+        { nome: 'Café da Serra', sem_local: false },
+        { nome: 'A feirinha', sem_local: true },
+      ],
+      conta: {
+        total_min: 250,
+        tempo_min: 300,
+        estoura: false,
+        chegadas: [
+          { nome: 'Cachoeira Alta', hora: '09:10', aviso: null, fechada: false },
+          { nome: 'Café da Serra', hora: '10:55', aviso: null, fechada: false },
+        ],
+      },
+      ...over,
+    });
+  const by = (c: ReturnType<typeof cobrar>, nome: string) => c.find((x) => x.nome === nome);
+
+  it('tudo certo: as doze verdes (as seis da D293 e as seis desta fase)', () => {
+    const out = cobrar(stepwise());
+    expect(out.map((c) => c.nome)).toEqual([
+      'alcance',
+      'nada_some',
+      'ordem',
+      'cidade',
+      'brasil',
+      'escrita',
+      'passo_seguinte',
+      'ordem_mantida',
+      'tempo',
+      'horario',
+      'pendente_vira_parada',
+      'tipo',
+    ]);
+    expect(out.every((c) => c.ok)).toBe(true);
+  });
+
+  it('passo_seguinte: o candidato fora do círculo da relação falha; na cidade, o de fora da cidade falha, salvo dito como vizinho', () => {
+    const fora = by(
+      cobrarPassoAPasso(stepwise({ passos_app: [passoApp([PERTO, LONGE])] })),
+      'passo_seguinte',
+    );
+    expect(fora?.ok).toBe(false);
+    expect(fora?.detalhe).toContain('Café do Vale');
+    const cidade = {
+      ...passoApp([LONGE]),
+      relacao: 'na_cidade' as const,
+      cidade: 'Canoinhas',
+      circulos: [{ lat: -26.18, lng: -50.39, radius_m: 25_000 }],
+    };
+    expect(by(cobrarPassoAPasso(stepwise({ passos_app: [cidade] })), 'passo_seguinte')?.ok).toBe(
+      true,
+    );
+    const errada = { ...cidade, candidatos: [PERTO] };
+    expect(by(cobrarPassoAPasso(stepwise({ passos_app: [errada] })), 'passo_seguinte')?.ok).toBe(
+      false,
+    );
+    expect(
+      by(
+        cobrarPassoAPasso(stepwise({ passos_app: [{ ...errada, fora_da_cidade: true }] })),
+        'passo_seguinte',
+      )?.ok,
+    ).toBe(true);
+  });
+
+  it('ordem_mantida: a viagem montada fora da ordem dos passos, ou sem uma escolha, falha; sem montagem, nada a conferir', () => {
+    const invertida = stepwise({
+      paradas: [
+        { nome: 'Café da Serra', sem_local: false },
+        { nome: 'Cachoeira Alta', sem_local: false },
+        { nome: 'A feirinha', sem_local: true },
+      ],
+    });
+    expect(by(cobrarPassoAPasso(invertida), 'ordem_mantida')?.ok).toBe(false);
+    const perdida = stepwise({ paradas: [{ nome: 'Cachoeira Alta', sem_local: false }] });
+    expect(by(cobrarPassoAPasso(perdida), 'ordem_mantida')?.detalhe).toContain('Café da Serra');
+    const semMontagem: Saida = { ...stepwise() };
+    delete semMontagem.paradas;
+    expect(by(cobrarPassoAPasso(semMontagem), 'ordem_mantida')?.ok).toBe(true);
+  });
+
+  it('tempo: cabe; estoura com a marca passa; estoura sem a marca falha; sem tempo dito, nada a cobrar', () => {
+    const cabe = stepwise();
+    expect(by(cobrarPassoAPasso(cabe), 'tempo')?.detalhe).toContain('cabe em 5 h');
+    const marcado = stepwise({ conta: { ...cabe.conta!, total_min: 400, estoura: true } });
+    expect(by(cobrarPassoAPasso(marcado), 'tempo')).toMatchObject({ ok: true });
+    expect(by(cobrarPassoAPasso(marcado), 'tempo')?.detalhe).toContain('marcado');
+    const semMarca = stepwise({ conta: { ...cabe.conta!, total_min: 400, estoura: false } });
+    expect(by(cobrarPassoAPasso(semMarca), 'tempo')?.ok).toBe(false);
+    const semTempo = stepwise({ conta: { ...cabe.conta!, tempo_min: null } });
+    expect(by(cobrarPassoAPasso(semTempo), 'tempo')?.ok).toBe(true);
+  });
+
+  it('horario: a parada fechada na hora prevista precisa do aviso', () => {
+    const base = stepwise();
+    const fechada = (aviso: string | null) =>
+      stepwise({
+        conta: {
+          ...base.conta!,
+          chegadas: [{ nome: 'Café da Serra', hora: '20:10', aviso, fechada: true }],
+        },
+      });
+    expect(by(cobrarPassoAPasso(fechada(null)), 'horario')?.ok).toBe(false);
+    expect(
+      by(cobrarPassoAPasso(fechada('Fechado às 20:10: abre 08:00–19:00')), 'horario')?.ok,
+    ).toBe(true);
+  });
+
+  it('pendente_vira_parada: o pendente tem de estar na viagem montada sem local', () => {
+    const semPendente = stepwise({
+      paradas: [
+        { nome: 'Cachoeira Alta', sem_local: false },
+        { nome: 'Café da Serra', sem_local: false },
+      ],
+    });
+    const c = by(cobrarPassoAPasso(semPendente), 'pendente_vira_parada');
+    expect(c?.ok).toBe(false);
+    expect(c?.detalhe).toContain('A feirinha');
+    expect(by(cobrarPassoAPasso(stepwise()), 'pendente_vira_parada')?.ok).toBe(true);
+  });
+
+  it('tipo: uma banca de produtos coloniais como café, ou um açaí como sorvete, falha; o resto é do juiz', () => {
+    const banca = { ...LONGE, name: 'Banca da Colônia', categories: ['grocery_store', 'food'] };
+    const out = cobrarPassoAPasso(stepwise({ passos_app: [passoApp([PERTO, banca])] }));
+    expect(by(out, 'tipo')?.ok).toBe(false);
+    expect(by(out, 'tipo')?.detalhe).toContain('Banca da Colônia (grocery_store ≠ café)');
+    const acai = stepwise({
+      lugares: [
+        { ref: 'p1', place: { ...PERTO, name: 'Açaí da Praça', categories: ['acai_shop'] } },
+      ],
+      passeio: outing({
+        passos: [
+          {
+            ordem: 1,
+            o_que: 'tomar um sorvete',
+            relacao: 'perto_de_casa',
+            cidade: '',
+            hora_do_dia: '',
+            candidatos: ['p1'],
+            achou: true,
+            fora_da_cidade: false,
+          },
+        ],
+      }),
+      passos_app: [],
+    });
+    expect(by(cobrarPassoAPasso(acai), 'tipo')?.ok).toBe(false);
+    // um restaurante como "comida caseira" não está na lista curta: fica para o juiz
+    const caseira = stepwise({
+      passos_app: [passoApp([{ ...PERTO, categories: ['restaurant'] }])],
+    });
+    expect(by(cobrarPassoAPasso(caseira), 'tipo')?.ok).toBe(true);
+    expect(TIPOS_CONTRARIOS.some((t) => t.pedido.test('o melhor cafe que tiver'))).toBe(true);
+  });
+
+  it('o roteiro para o juiz leva os passos do app, a conta do tempo, as chegadas e os avisos', () => {
+    const texto = roteiroParaJuiz(
+      stepwise({
+        conta: {
+          total_min: 400,
+          tempo_min: 300,
+          estoura: true,
+          chegadas: [
+            {
+              nome: 'Café da Serra',
+              hora: '13:25',
+              aviso: 'Pedido de manhã; o roteiro chega às 13:25',
+              fechada: false,
+            },
+          ],
+        },
+      }),
+      ['Cachoeira Alta', 'Café da Serra'],
+    );
+    expect(texto).toContain(
+      'passo 2 procurado pelo app em volta de Cachoeira Alta (perto_do_anterior): Café da Serra (José Boiteux)',
+    );
+    expect(texto).toContain(
+      'a conta do tempo: o passeio dá 6 h 40 e a pessoa tem 5 h: ESTOURA, marcado na tela',
+    );
+    expect(texto).toContain(
+      'chegada prevista: Café da Serra às 13:25 · aviso: Pedido de manhã; o roteiro chega às 13:25',
     );
   });
 });

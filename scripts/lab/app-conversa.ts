@@ -148,11 +148,14 @@ export async function appConversa(ctx: ImportContext, today: string): Promise<Ch
       }
       const body = route.request().postDataJSON() as {
         kind: string;
+        passo_a_passo?: boolean;
         context: Record<string, unknown>;
         reference: unknown;
       };
       data.planejador = {
         tipo: body.kind,
+        // o passo a passo (fase 26): o app diz que procura os passos seguintes
+        passo_a_passo: body.passo_a_passo ?? false,
         posicao: body.context.position,
         referencia: body.reference,
         alcance: body.context.reach,
@@ -166,11 +169,16 @@ export async function appConversa(ctx: ImportContext, today: string): Promise<Ch
     page = await context.newPage();
     page.setDefaultTimeout(TIMEOUT);
     const p = page;
-    const counts = { busca: 0, rota: 0, nominatim: 0, semFonte: 0 };
+    const counts = { busca: 0, google: 0, rota: 0, nominatim: 0, semFonte: 0 };
     p.on('request', (r) => {
       const url = r.url();
       if (r.method() === 'OPTIONS') return;
-      if (url.includes('/functions/v1/find-places')) counts.busca += 1;
+      if (url.includes('/functions/v1/find-places')) {
+        counts.busca += 1;
+        // nenhum `app_*` chama o Google (a armadilha da fase 26): um passo só, e a busca por tipo
+        const body = r.postData() ?? '';
+        if (body.includes('"provider":"google"')) counts.google += 1;
+      }
       if (url.includes('/functions/v1/route-day')) counts.rota += 1;
       if (url.startsWith('https://nominatim.openstreetmap.org/')) counts.nominatim += 1;
     });
@@ -245,6 +253,8 @@ export async function appConversa(ctx: ImportContext, today: string): Promise<Ch
         }
       }
       data.busca_chamadas = counts.busca;
+      data.google_chamadas = counts.google;
+      if (counts.google > 0) throw new Error('o app chamou o Google de verdade no laboratório');
       data.rota_chamadas = counts.rota;
       data.nominatim_buscas = counts.nominatim;
       if (counts.semFonte > 0) {
