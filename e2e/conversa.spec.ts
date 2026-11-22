@@ -487,3 +487,61 @@ test('feirinha, café e cortar o cabelo em Canoinhas: os três estados, o resumo
       ['Saída de Major Vieira', true],
     ]);
 });
+
+/**
+ * O CLS da `nova_viagem` (fase 27, a 3.0): o laboratório da produção da 25 mediu 0,136 no cartão da
+ * pergunta, e o relatório do Lighthouse disse a causa: "Web font loaded" (a tela pintava na fonte do
+ * sistema e trocava para a Barlow um instante depois, empurrando o cartão). Agora as fontes começam a
+ * carregar junto com o app e a casca de quem entrou espera por elas: ao recarregar a tela da conversa, o
+ * texto já nasce na Barlow e nada se desloca.
+ */
+const DESLOCAMENTOS = `new Promise((resolve) => {
+  const out = [];
+  new PerformanceObserver((list) => {
+    for (const e of list.getEntries()) {
+      if (e.hadRecentInput) continue;
+      const quem = (e.sources || [])
+        .map((s) => (s.node && s.node.nodeType === 1 ? s.node.tagName.toLowerCase() + '.' + String(s.node.className).slice(0, 60) : '?'))
+        .join(' | ');
+      out.push({ valor: e.value, quem });
+    }
+  }).observe({ type: 'layout-shift', buffered: true });
+  setTimeout(() => resolve(out), 300);
+})`;
+
+test('a tela da conversa recarregada pinta com as fontes no lugar: nenhum deslocamento do cartão da pergunta', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await nominatim(page);
+  const user = await criarUsuario('Fontes');
+  await entrar(page, user.email);
+  // a saída de hoje até as perguntas do app (sem IA), com "Agora não" ao cartão da posição: o mesmo
+  // caminho do Lighthouse do laboratório
+  await campo(page).fill('quero sair hoje');
+  await page.getByRole('button', { name: 'Montar a viagem' }).click();
+  await page
+    .getByRole('region', { name: 'Usar a posição do celular' })
+    .getByRole('button', { name: 'Agora não' })
+    .click();
+  await expect(page.getByText(/^Tenho \d perguntas? antes de montar\.$/)).toBeVisible({
+    timeout: 20_000,
+  });
+  // a tela de novo, como o Lighthouse a abre: a conversa guardada no aparelho
+  await page.reload();
+  const lead = page.getByText(/^Tenho \d perguntas? antes de montar\.$/);
+  await expect(lead).toBeVisible({ timeout: 20_000 });
+  // as fontes do app estavam prontas quando o texto pintou
+  expect(
+    await page.evaluate<boolean>(
+      `document.fonts.check('600 22px "Barlow Condensed"') && document.fonts.check('400 16px Barlow')`,
+    ),
+  ).toBe(true);
+  const shifts = await page.evaluate<{ valor: number; quem: string }[]>(DESLOCAMENTOS);
+  const cls = shifts.reduce((acc, x) => acc + x.valor, 0);
+  expect(cls, `layout shifts da conversa: ${JSON.stringify(shifts)}`).toBeLessThan(0.05);
+  expect(
+    shifts.filter((s) => s.quem.includes('rounded-card')),
+    `o cartão da pergunta se deslocou: ${JSON.stringify(shifts)}`,
+  ).toEqual([]);
+});
