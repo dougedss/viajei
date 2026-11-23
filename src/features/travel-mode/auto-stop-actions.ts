@@ -117,6 +117,8 @@ export async function registerAutoStop(input: {
     osm_type: null,
     osm_id: null,
     google_place_id: null,
+    // a parada que se registrou sozinha nunca é objetivo: é um fato do caminho (fase 28)
+    objective: false,
     travel_minutes_to_next: null,
     notes: null,
     url: null,

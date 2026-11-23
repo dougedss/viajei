@@ -103,6 +103,29 @@ describe('importar numa viagem vazia', () => {
     expect(plan.dayPatches[0]?.changes).toEqual({ title: 'Papanduva → Serra Gaúcha' });
   });
 
+  it('o objetivo do trecho (fase 28) vai para a parada só quando a revisão o marcou', () => {
+    const review = reviewOf(fromAi, existing());
+    const first = review.days[0]?.stops[2];
+    if (!first) throw new Error('sem a terceira parada do primeiro dia');
+    const marked = {
+      ...review,
+      days: review.days.map((d, i) =>
+        i === 0
+          ? {
+              ...d,
+              stops: d.stops.map((st) => (st.key === first.key ? { ...st, objective: true } : st)),
+            }
+          : d,
+      ),
+    };
+    const plan = planImport(marked, existing(), ctx());
+    expect(plan.stops.filter((st) => st.objective).map((st) => st.name)).toEqual([first.name]);
+    // a importação, o formato do Viajei e o pedido para outras IAs não sabem do campo: tudo `false`
+    expect(planImport(review, existing(), ctx()).stops.every((st) => st.objective === false)).toBe(
+      true,
+    );
+  });
+
   it('sem horário no texto continua sem horário; nada é inventado', () => {
     const plan = planImport(reviewOf(fromAi, existing()), existing(), ctx());
     for (const [i, stop] of plan.stops.entries()) {

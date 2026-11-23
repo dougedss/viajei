@@ -182,6 +182,12 @@ export type AssembleInput = {
   firstDate: string;
   /** a hora de sair quando a IA não disse */
   defaultStart: string;
+  /**
+   * o destino que a pessoa disse ("vou pra Curitiba"), pelo nome da cidade (fase 28): o objetivo do
+   * trecho. Quando a cidade entra como parada (D304), é ela; quando não entra porque um lugar escolhido
+   * fica nela (D313, a correção do sushi), é o último lugar escolhido nela
+   */
+  destination?: string | null;
 };
 
 /** O que a revisão recebe: o roteiro, as sugestões por chave (desligadas) e os horários para refazer. */
@@ -205,6 +211,11 @@ export type Assembled = {
   hours: Record<string, OpeningPeriod[]>;
   /** a hora do dia dita para cada lugar (fase 26), pela chave da revisão: o aviso quando o roteiro chega fora */
   dayTimes: Record<string, DayTime>;
+  /**
+   * as chaves da revisão das paradas que são o objetivo do trecho (fase 28, D318): o mapa da viagem
+   * mostra um trecho por vez, até o destino que a pessoa disse
+   */
+  objective: string[];
 };
 
 export type OsmRef = { type: 'node' | 'way' | 'relation'; id: number };
@@ -225,6 +236,36 @@ const stopOf = (p: PlacePick, note: string | null): ImportStop => ({
   lat: coord(p.place.lat),
   lng: coord(p.place.lng),
 });
+
+/** "Curitiba, PR" e "curitiba" são a mesma cidade: o nome antes da vírgula, sem caixa e sem acento. */
+const cityKey = (name: string) =>
+  (name.split(',')[0] ?? '')
+    .trim()
+    .toLocaleLowerCase('pt-BR')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '');
+
+/**
+ * O objetivo do trecho (fase 28, D318): a parada do destino dito (o lugar `destination:` da conversa,
+ * D304); sem ela, e com o destino dito, o último lugar escolhido na cidade dele (D313: "buscar sushi em
+ * Canoinhas" não ganha a parada da cidade, e o objetivo é o sushi). Nunca uma sugestão nem um pendente.
+ */
+function objectiveKeys(slots: readonly (readonly Slot[])[], destination: string | null): string[] {
+  const picks = slots.flatMap((day, d) =>
+    day.flatMap((slot, i) =>
+      slot.type === 'pick' && !slot.suggestion && !slot.pick.place.id.startsWith('missing:')
+        ? [{ key: `d${String(d)}s${String(i)}`, place: slot.pick.place }]
+        : [],
+    ),
+  );
+  const said = picks.filter((p) => p.place.id.startsWith('destination:'));
+  if (said.length > 0) return said.map((p) => p.key);
+  if (!destination) return [];
+  const city = cityKey(destination);
+  const inCity = picks.filter((p) => p.place.city !== null && cityKey(p.place.city) === city);
+  const last = inCity.at(-1);
+  return last ? [last.key] : [];
+}
 
 type Slot =
   | { type: 'origin'; name: string; at: LngLat }
@@ -448,6 +489,7 @@ export function assemble(input: AssembleInput): Assembled {
     google,
     hours,
     dayTimes,
+    objective: objectiveKeys(slots, input.destination ?? null),
   };
 }
 

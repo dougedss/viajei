@@ -63,6 +63,11 @@ export type ReviewStop = Keyed<ImportStop> & {
   pending?: boolean;
   /** a hora do dia que a pessoa disse para este passo (fase 26): a revisão avisa quando o roteiro chega fora */
   day_time?: DayTime | null;
+  /**
+   * o objetivo do trecho (fase 28, D318): o destino que a pessoa disse na conversa. Vai para a parada
+   * (`stops.objective`), e o mapa da viagem mostra um trecho por vez até ele
+   */
+  objective?: boolean;
 };
 export type ReviewDay = {
   date: string;
@@ -344,6 +349,7 @@ export function planImport(review: Review, existing: Existing, ctx: PlanContext)
         osm_type: s.osm?.type ?? null,
         osm_id: s.osm?.id ?? null,
         google_place_id: s.google_place_id ?? null,
+        objective: s.objective ?? false,
         travel_minutes_to_next: s.travel_minutes_to_next,
         notes: s.notes,
         url: s.url,

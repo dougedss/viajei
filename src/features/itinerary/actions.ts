@@ -110,11 +110,12 @@ export async function createStop(
     trip_day_id: tripDayId,
     position: positionAtEnd(siblings.map((s) => s.position)),
     ...stopColumns(values),
-    // a parada escrita à mão não tem o objeto do OSM (fase 23) nem o lugar do Google (fase 27): só a
-    // conversa os traz
+    // a parada escrita à mão não tem o objeto do OSM (fase 23), o lugar do Google (fase 27) nem o
+    // objetivo do trecho (fase 28): só a conversa os traz
     osm_type: null,
     osm_id: null,
     google_place_id: null,
+    objective: false,
     departed_at: null,
     done_at: null,
     done_by: null,

@@ -117,6 +117,7 @@ export function makeStop(over: Partial<Stop> = {}): Stop {
     osm_type: null,
     osm_id: null,
     google_place_id: null,
+    objective: false,
     travel_minutes_to_next: null,
     notes: null,
     url: null,

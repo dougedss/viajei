@@ -47,6 +47,8 @@ export async function newTripReview(
       hours?: Record<string, OpeningPeriod[]>;
       /** a hora do dia dita para cada lugar, pela chave da revisão (fase 26) */
       dayTimes?: Record<string, DayTime>;
+      /** as chaves da revisão das paradas que são o objetivo do trecho (fase 28, D318) */
+      objective?: readonly string[];
     };
   },
 ): Promise<StoredReview> {
@@ -95,10 +97,14 @@ export async function newTripReview(
                     day_time: dayTime,
                   }
                 : s;
+            // o objetivo do trecho (fase 28): o destino dito, marcado na parada
+            const marked = options.plan?.objective?.includes(s.key)
+              ? { ...located, objective: true }
+              : located;
             // a regra de ouro: a sugestão nasce desligada, e só a pessoa a liga
-            if (suggestion) return { ...located, suggestion, include: false };
+            if (suggestion) return { ...marked, suggestion, include: false };
             // o pendente (fase 25): a revisão só o procura pelo nome com a cidade
-            return options.plan?.pending?.includes(s.key) ? { ...located, pending: true } : located;
+            return options.plan?.pending?.includes(s.key) ? { ...marked, pending: true } : marked;
           }),
         })),
       }

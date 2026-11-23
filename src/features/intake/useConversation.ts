@@ -423,6 +423,7 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
       write: parsed.data,
       firstDate: today ? c.context.today : plusDay(c.context.today),
       defaultStart: today ? soon(new Date()) : '08:00',
+      destination: map.destination?.name ?? null,
     });
     const stored = await newTripReview(
       built.data,
@@ -441,6 +442,7 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
           google: built.google,
           hours: built.hours,
           dayTimes: built.dayTimes,
+          objective: built.objective,
         },
       },
     );

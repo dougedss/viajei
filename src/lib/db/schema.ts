@@ -261,7 +261,8 @@ export type LandmarkEntry = {
  * 5 (fase 24): a store `places`, o cache das buscas de lugares por tipo. Versão 6 (fase 18): as
  * tabelas por pessoa `inbox_addresses` e `received_reservations`, a store `shares` (o que chegou pelo
  * Compartilhar do Android) e o cache `cnpj` (o estabelecimento da nota). Versão 7 (fase 23): o catálogo
- * dos cartões-postais neste aparelho (`landmarks`). Caches recalculáveis
+ * dos cartões-postais neste aparelho (`landmarks`). Versão 8 (fase 27): `stops.google_place_id`. Versão 9
+ * (fase 28): `stops.objective`, com as paradas que já estavam no aparelho em `false`. Caches recalculáveis
  * (`routes`, `geocode`, `places`, `cnpj`, `landmarks`, `travel_state`, `blobs`, `weather`) nunca sincronizam. A
  * `outbox` nunca é apagada sem ter sido enviada; a `uploads` também não, pelo mesmo motivo.
  */
@@ -348,6 +349,18 @@ export class ViajeiDb extends Dexie {
     // v8 (fase 27): `stops.google_place_id`, uma coluna nova sem índice (o Dexie não precisa dela no
     // esquema, mas a versão registra a forma do aparelho junto com a do servidor, a 0020)
     this.version(8).stores({});
+    // v9 (fase 28): `stops.objective`, o objetivo do trecho (a 0021), sem índice. As paradas que já
+    // estavam no aparelho nasceram sem a coluna: ganham `false`, como o servidor as tem
+    this.version(9)
+      .stores({})
+      .upgrade((tx) =>
+        tx
+          .table<Stop, string>('stops')
+          .toCollection()
+          .modify((stop) => {
+            if (typeof stop.objective !== 'boolean') stop.objective = false;
+          }),
+      );
   }
 
   /** A tabela de uma linha sincronizada, pelo nome (tipada por `RowOf`). */

@@ -262,6 +262,52 @@ describe('a viagem nasce do que foi escolhido', () => {
     expect(assemble(input()).dayTimes).toEqual({});
   });
 
+  it('o destino dito sai marcado como o objetivo do trecho (fase 28); sem destino, nada', () => {
+    // "vou pra Pomerode": a cidade de destino como parada (D304), depois do café
+    const DESTINO: PlacePick = {
+      ref: 'e2',
+      place: { ...place('destination:Pomerode', 'Pomerode', -49.177, -26.74, ['locality']) },
+      kind: 'city',
+    };
+    const built = assemble(
+      input({
+        chosen: [TORTEN, DESTINO],
+        chosenFractions: [0.5, 0.9],
+        destination: 'Pomerode',
+        write: write({
+          days: [
+            {
+              date: '2026-11-21',
+              title: 'Cucas e cafés',
+              start: '12:30',
+              stops: [
+                { ref: 'e1', note: null },
+                { ref: 'e2', note: null },
+              ],
+            },
+          ],
+        }),
+      }),
+    );
+    const stops = built.data.days[0]?.stops ?? [];
+    const at = stops.findIndex((s) => s.name === 'Pomerode');
+    expect(at).toBeGreaterThan(0);
+    expect(built.objective).toEqual([`d0s${String(at)}`]);
+    expect(assemble(input()).objective).toEqual([]);
+  });
+
+  it('sem a parada da cidade (D313), o objetivo é o último lugar escolhido nela; nunca uma sugestão', () => {
+    // "buscar sushi em Canoinhas": a cidade não vira parada, e o objetivo é o lugar escolhido nela
+    const built = assemble(input({ destination: 'pomerode, SC' }));
+    const stops = built.data.days[0]?.stops ?? [];
+    const torten = stops.findIndex((s) => s.name === 'Torten Paradies');
+    expect(built.objective).toEqual([`d0s${String(torten)}`]);
+    // o museu e o zoológico também são de Pomerode, mas são sugestões: nunca objetivo
+    expect(stops.some((s) => s.name === 'Bioparque Zoo Pomerode')).toBe(true);
+    // um destino em outra cidade, sem parada dela, não marca nada
+    expect(assemble(input({ destination: 'Blumenau' })).objective).toEqual([]);
+  });
+
   it('uma viagem só com a saída e a chegada não tem lugar', () => {
     expect(
       hasPlace([
