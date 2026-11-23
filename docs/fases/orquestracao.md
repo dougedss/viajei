@@ -967,4 +967,144 @@ _(preenchido pelo orquestrador em 20/11, ~19h50 UTC, a partir do transcript, do 
   lista). Fora do git até o commit de fechamento da fase, junto com este relatório.
 
 ### Sessão
-_(a abrir pelo Douglas num chat novo; a preencher no próximo passo)_
+- Sessão `c5864832-489e-45cb-8e01-dff34ed65f68`, aberta pelo Douglas com o prompt colado às 19h21 UTC de 22/11, nesta
+  pasta, na branch `fase-26` (de `origin/main` em `0460200`). Às 23h38 UTC ainda estava aberta, esperando a CI da
+  `main` em `42bafc1`. **597 respostas: 275 no Fable 5.1** (até o `/model opus` do Douglas às 20h11 UTC) **e 322 no
+  Opus 5.5**; uma compactação (23h10 UTC). Saída: 1,10 M de tokens no Fable e 0,39 M no Opus; cache lido 130,5 M +
+  240,3 M; criado 4,78 M + 2,02 M. 319 chamadas Bash, 10 `git commit`, 11 `git push`.
+- Mensagens do Douglas (4): o prompt (19h21); **às 19h30 UTC, uma regra nova, entregue no meio de um turno**: "Sempre e
+  registre essa regra, quando vc terminar a parte de escrever o codigo e entrar nos teste. Deve me avisar para eu
+  alterar o modelo. pois preciso tirar do fable e colocar para o opus, para nao gastar atoa" (a sessão a gravou na
+  memória `feedback-avisar-troca-de-modelo.md` às 19h33 UTC e avisou na passagem do código aos testes); o `/model opus`
+  (20h11); "ok, pode seguir" (23h34, depois de a sessão avisar que outra sessão estava escrevendo na pasta; ela
+  respondeu que não abre a fase seguinte, que não existia `fase-28.md`, e que a 26 só tinha a CI da `main` em aberto).
+- Commits (10, de `d56296f` a `42bafc1`; 49 arquivos, +4.996/−332 sobre `0460200`): `d56296f` 3.0 (20h23 UTC),
+  `ee0e904` 3.1, `bfe2df4` 3.1 a 3.4, `231cb67` 3.5, **`d435dc2` `fase 26: o passeio um passo de cada vez`** (20h25, o
+  fechamento com a documentação: o push em lote com tudo), `5a41486` 3.6 (20h47, os dois e2e novos com os dados certos),
+  `10f7d0b` 3.2 (21h07, "Continuar" nunca pinta o passo seguinte sem as opções), `2a1d478` 3.5 (21h24, o que a rodada
+  única da bateria mostrou, corrigido com teste), `ec2301c` 3.0 de novo (22h33, o convite de instalar no primeiro
+  retrato), `42bafc1` D307 (23h08, só documentação).
+- A CI na branch: `d435dc2` run 45066483493 **vermelha** (os dois e2e novos, por dados dos próprios testes);
+  `5a41486` run 45068460466 verde com 1 instável (o e2e de dois passos: um defeito do app, corrigido em `10f7d0b`);
+  `10f7d0b` run 45070293973 verde; `2a1d478` run 45071970043 verde; `ec2301c` run 45078367265 verde; `42bafc1` run
+  45081636527 verde. Na `main`: `2a1d478` run 45073685622 verde; `ec2301c` run 45080021764 verde; `42bafc1` run
+  45083522783 verde (23h29–23h49 UTC). Os números de testes estão na D307 (1.617 Vitest em 177 arquivos; 82 Playwright).
+- O hospedado (pela D307; o orquestrador não conferiu no painel): a `plan-search` **v2 às 21h07 UTC e v3 às 21h43 UTC**;
+  a `find-places` (v7) e a `plan-trip` (v10) sem mudança; nenhuma migration; nenhum secret.
+- **A bateria, uma rodada** (run 45070487237, em `10f7d0b`, 21h09–21h16 UTC, semente `2026-11-22#3`): 10 de 10 nas doze
+  cobranças objetivas, juiz 4,6/10 (três vereditos `invalid`), US$ 1,43 contado a cheio (IA US$ 0,76; 19 buscas do
+  Google, das quais 14 chegaram ao Google). **O passo seguinte pelo app não foi medido:** a conta do laboratório tinha
+  gastado as 60 chamadas da `find-places` das 24 h nas duas rodadas da 27 (`daily_limit`), e a bateria não contava a
+  recusa. Mediu que a IA procura só o passo 1, pergunta a ordem quando não dita (4 de 4) e não pergunta quando dita
+  (1 de 1), que o destino entra como parada e que a escrita roda (a primeira rodada em que ela rodou pelo planejador).
+  Os defeitos que a rodada mostrou foram corrigidos com teste em `2a1d478`, **sem segunda rodada** (a regra nova).
+- **Os merges** (fast-forward, com a CI verde no sha): `2a1d478` às 21h43 UTC; `ec2301c` às 22h51 UTC; `42bafc1` às
+  23h29 UTC.
+- **O laboratório da produção, uma vez** (run 45074657940, em `2a1d478`, 21h54–22h29 UTC, máquina que conta): **40
+  verdes, 1 vermelho: o Lighthouse da lista de viagens, performance 81 e CLS 0,212 nas três execuções** (a 3.0 piorou o
+  que queria tirar: o convite de instalar entrava sempre um render depois, porque o `useSyncExternalStore` lia o retrato
+  antes do `start()`). Corrigido depois do laboratório (`ec2301c`), **sem outro laboratório**: o número fica para o
+  agendado de 23/11. Nenhum laboratório no preview. A `medir-desempenho` rodou uma vez (run 45060951865, 19h28 UTC) para
+  a 3.0, pela exceção da seção 1 do prompt.
+- Desvios do prompt: nenhum de regra. A sessão começou no Fable 5.1 (o Douglas a abriu assim) e passou ao Opus às 20h11
+  UTC, pela regra nova dele; a 3.0 precisou de uma segunda correção depois do laboratório, provada só pela CI, como a
+  regra manda. Às 23h08 UTC o Douglas abriu outro chat na mesma pasta (abaixo); a sessão da 26 viu as mudanças dele no
+  `git status` e não tocou nelas.
+
+### Portão de saída (conferido às ~23h50 UTC de 22/11 pelo orquestrador, a pedido do Douglas: "proxima")
+- fase 26 na `main`: sim, **`42bafc1`** (o código até `ec2301c`; o `42bafc1` só a D307), igual à `origin/fase-26` e à
+  pasta. A CI da `main` verde em `ec2301c` (run 45080021764) e em `42bafc1` (run 45083522783, verde às 23h49 UTC).
+- o último laboratório da produção (run 45074657940, em `2a1d478`): vermelho só no Lighthouse da lista de viagens
+  (CLS 0,212), corrigido depois em `ec2301c` **sem laboratório novo**. **Vira o primeiro item da fase 28 (a 3.0): ler o
+  agendado de 23/11** (o cron é `7 6 * * *`, 06h07 UTC, e o lab.yml diz que ele costuma disparar 7 a 10 h depois; o de
+  22/11 rodou às 14h28 UTC). Até as 23h50 UTC de 22/11 não havia laboratório depois de `ec2301c`.
+- `docs/decisoes.md` até a **D309** (D299 a D309, conferidas pelos títulos; a D307 traz os números, a D309 o que ficou
+  sem prova e sem conferir); o prompt mestre **v15** (a linha da 26 "feita" na seção 12; a regra 17 "na dúvida,
+  perguntar"); `docs/teste-final.md` 1.34; o README (3 linhas em `d435dc2`); `fase-26.md` e `orquestracao.md`
+  commitados em `d435dc2` como estavam.
+- memória do projeto atualizada depois da fase 26: sim, pela sessão (`viajei-projeto.md`: o parágrafo "Fase 26 fechada"
+  e a descrição, 23h29 UTC; `MEMORY.md`) e a regra nova `feedback-avisar-troca-de-modelo.md`; completada pelo orquestrador
+  (o parágrafo "Fase 28 aberta").
+- o custo da fase (D307): US$ 0,78 de IA e 14 buscas do Google (US$ 0,49 a cheio, dentro das 1.000 grátis do mês), do
+  teto de US$ 3,00.
+- **O que ficou sem medir** (D309): o CLS da lista na produção depois de `ec2301c`; a busca do passo seguinte pelo app
+  com o Google de verdade (e por isso o custo de uma conversa de dois passos); o efeito das correções da rodada
+  (provadas só pela CI); `'onbeforeinstallprompt' in window` num Android de verdade; as horas de cada parte do dia
+  (a tabela da D303 é a suposição do orquestrador, decidida pela sessão e não pelo Douglas).
+- **Pendências do Douglas:** a cota da `find-places` para a conta do laboratório (precisa republicar a `find-places`;
+  ficou fora da seção 2 da 26, D307: sem ela, uma rodada da bateria no mesmo dia de outra não mede o passo seguinte);
+  o `.env.example` (modificado desde 22/11, não commitado; não lido); apagar `fase-23`, `fase-25`, `fase-27` e `fase-26`
+  no remoto; a bateria no cron; "os que falharam voltam"; girar ou não a chave do Google. As três linhas do plano com a
+  regra antiga do laboratório (13, 170 e 240), que a sessão da 27 ofereceu corrigir e não corrigiu, o orquestrador
+  corrigiu neste passo (a 13 com a regra nova; a 170 e a 240 marcadas como a regra da época).
+- **Outra sessão na pasta, que não é fase:** às 23h08 UTC o Douglas abriu o chat `4c49a9fe` (Fable 5.2) com três
+  capturas da tela das opções e da revisão de uma ida a um sushi em Canoinhas (a conta dava 4 h 10 e chegada às 22:10
+  para 25 min de estrada) e, às 23h17, disse "pode, aceito sugestões. pode fazer aqui! e a estimativa deveria vir da
+  api do google e nao calculo com chute". Esse chat está escrevendo **na pasta, na branch `fase-26`, sem commit até as
+  23h50 UTC**: uma função nova `drive-times` (a Routes API do Google: `_shared/drive-handler.ts`, `drive-schema.ts`,
+  `google-routes.ts`, `functions/drive-times/`), mudanças em `plan-search-*.ts`, `plan-ai.ts`, `config.toml`,
+  `secrets.ts`, `package.json`, e no app (`intake/assemble.ts`, `flow.ts`, `locate.ts`, `outing-time.ts`,
+  `reschedule.ts`, `search.ts`, `useConversation.ts`, `drive-times.ts`, `useReviewDrive.ts`, `OptionsStep.tsx`,
+  `CriarViagemPage.tsx`, `import/plan.ts`, `ReviewStep.tsx`, `lab/forged-stop.ts`), nos scripts do laboratório
+  (`bateria.ts`, `app-conversa.ts`, `measure-conversa.ts`) e no `e2e/helpers/places.ts`; ele mesmo chama a decisão de
+  "D310". Pelo que ele disse ao Douglas às 23h12, a regra da D304 (a cidade de destino como parada, 1 h 30) também está
+  em revisão ali. **A fase 28 não pode começar nesta pasta enquanto esse trabalho não estiver commitado e fora dela**
+  (o portão de entrada abaixo e a seção 1 do `fase-28.md` dizem como conferir).
+
+## Fase 28 · O mapa por trechos
+
+### Portão de entrada (aberto às ~00h00 UTC de 23/11, a pedido do Douglas: "proxima")
+- fase 26 na `main`: sim, `42bafc1`, com o portão de saída conferido acima. As dependências da 28 (a 22 e a 24) estão
+  na `main` desde 15/11 e 16/11; o objetivo que ela lê vem da 26 (D304: a cidade de destino como parada `city`, pela
+  `PlacePick` do slot `destination`; **nada disso sobrevive na viagem salva**: na parada fica só o `kind`). A ordem
+  23 → 25 → 27 → 26 → 28 → 29 → 19 → 20 → 21 (o plano, desde 21/11): o Douglas pediu "proxima" às ~23h40 UTC de
+  22/11 sem objeção, e o orquestrador abriu a 28.
+- o último laboratório na produção (45074657940, em `2a1d478`): vermelho só no Lighthouse da lista de viagens (CLS
+  0,212), corrigido depois em `ec2301c` sem laboratório novo: **é a 3.0 do prompt** (ler o agendado de 23/11; a
+  `medir-desempenho` uma vez só se ele não tiver rodado até o merge).
+- `docs/decisoes.md` até a D309. **As D da fase 28 começam na primeira D livre na `origin/main` da hora** (o chat da
+  correção do tempo de carro, abaixo, já chama a dela de D310). Migration: **só se o objetivo for guardado na parada**
+  (o prompt recomenda guardar: uma coluna booleana em `stops`, a whitelist do `sync_push`, o pgTAP, o Dexie v9), a
+  primeira livre (a `0021`, se a correção não criou uma). **Nenhuma função republicada, nenhum secret, nada de IA nem
+  de Google; teto US$ 0,50** (o laboratório da produção, uma vez).
+- memória do projeto atualizada depois da fase 26: sim (pela sessão; o orquestrador acrescentou o parágrafo "Fase 28
+  aberta" e a nota do chat da correção).
+- **As duas regras de 22/11 estão no prompt:** o laboratório uma vez, na produção, depois do merge (`feedback-laboratorio-
+  uma-vez.md`) e **o aviso ao Douglas para trocar o modelo do Fable para o Opus na passagem do código aos testes**
+  (`feedback-avisar-troca-de-modelo.md`, dita por ele às 19h30 UTC de 22/11 ao chat da 26).
+- **A pasta não está livre:** o chat `4c49a9fe` (a correção do tempo de carro pela Routes API do Google, Fable 5.2,
+  aberto às 23h08 UTC de 22/11) estava escrevendo nela, na branch `fase-26`, sem commit, às 23h50 UTC (24 arquivos
+  modificados e 9 novos, entre eles `intake/assemble.ts`, `flow.ts` e `lab/forged-stop.ts`, que a 28 também toca). **O
+  prompt da 28 manda conferir o `git status` antes de tudo e parar se houver trabalho de outra sessão**; o Douglas só
+  deve colá-lo quando esse chat tiver commitado, dado push e mergeado (ou quando ele decidir fechar aquele trabalho).
+  A 28 parte da `origin/main` da hora, inclusive do que a correção mudar no destino (`destinationIsStop()`).
+- `docs/fases/fase-28.md` escrito às ~00h00 UTC de 23/11 pelo orquestrador (160 linhas), a partir do plano (a fase 28;
+  os itens 9 a 13 de 21/11 e o descartado; a decisão 1 e a 8 de 15/11; "A ordem"), da ideia
+  `docs/ideias/2026-11-21-o-mapa-por-trechos.md` (inteira), das D215, D216, D217, D220, D222, D233, D234, D258, D265,
+  D266, D304, D299 a D309, D174 a D180, D47, D29, da memória (as duas regras de 22/11) e de um levantamento do código
+  em `42bafc1` por um agente de varredura (`world/layout.ts`, `camera.ts`, `WorldSection.tsx`, `WorldHud.tsx`,
+  `car-position.ts`, `replay.ts`; `lib/geo/segments.ts`, `municipalities*.ts`, `project.ts`, `catchup.ts`;
+  `travel-mode/rules.ts`, `actions.ts`, `ViagemPage.tsx`, `live-rules.ts`, `NowBar.tsx`, `CatchupCards.tsx`,
+  `AgoraHeader.tsx`; `memories/rules.ts`; `itinerary/*`; `intake/flow.ts` e `assemble.ts` em edição; os e2e
+  `ida-e-volta.spec`, `maquete.spec`, `tela.spec`; `scripts/lab/app.ts`, `run.ts`, `lab.yml`). **O desenho
+  recomendado:** um módulo puro `legsOf(stops)` (o objetivo dito; a volta como último trecho; sem objetivo, a regra de
+  reserva: dois trechos divididos na parada mais longe de casa, ou um só sem volta; "cachoeira e café" cai na regra de
+  reserva); **o objetivo guardado na parada** (a coluna booleana, gravada pelo app em `assemble.ts` a partir do slot
+  `destination`, sem mudar a `plan-trip`; a importação não aprende o campo); o `WorldSection` monta o `buildLayout` do
+  trecho da vez com a rota cortada (`routeSlice`, pelos `legs` guardados; sem `legs` que batam, sem rota) e a leitura
+  do lugar do trecho, de modo que a câmera de repouso enquadra o trecho sozinha e a casa aparece uma vez por tela; a
+  fração do carro é a do trecho; a troca de trecho derivada do `done_at` do objetivo e segurada enquanto o "Como
+  foi?" está aberto (`legToShow`), o desfazer volta; o indicador "ida · volta" / "1 de 3" com o espiar e
+  `data-world-leg`; a `PositionLine` fala do trecho com o total do dia menor; o "Rever o dia" toca os trechos em
+  sequência; a cidade de passagem "a que a estrada atravessa" como "a rota passa a até R do centro" (R pela população,
+  2 km + 1 km por 100 mil, entre 2 e 10 km; ou 3 km fixo), uma vez por nome e UF no trecho, até três por trecho; o
+  e2e `trechos.spec` no molde do `ida-e-volta.spec`; o `app_maquete` com uma ida e volta e as capturas dos dois
+  trechos; o laboratório da produção uma vez. **Marcado como não conferido:** se os `legs` guardados bastam para
+  cortar a rota em toda viagem; como o `useLandmarkSync` lida com chave de cidade repetida; o corpo do `assemble()` e
+  do `useConversation.ts` (em edição); que a casa e a cidade entram duas vezes **na tela** (leitura do código e o
+  print do Douglas, não uma renderização); a distância da câmera num trecho de duas paradas; a hora em que o agendado
+  de 23/11 roda; as populações dos municípios do caso de teste (o prompt manda ler o dado embutido). Fora do git até o
+  commit de fechamento da fase, junto com este relatório e o plano.
+
+### Sessão
+_(a abrir pelo Douglas num chat novo, quando a pasta estiver livre; a preencher no próximo passo)_

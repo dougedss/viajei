@@ -10,7 +10,9 @@ Douglas dispensar; um commit `fase N: ...` por fase; `docs/decisoes.md` continua
 **A autorização antecipada vale para todas as fases** (o Douglas, 08/11: "todos os prompts precisam
 receber todas as permissões, pois eu não vou estar presente para autorizar nada"). Cada `fase-N.md`
 traz a seção 2 de `docs/fases/fase-12.md`: publicar o plano e seguir sem ok; o hospedado com o
-`--dry-run` lido; o fast-forward na `main` com a CI e o laboratório do preview verdes naquele sha;
+`--dry-run` lido; o fast-forward na `main` com a CI verde naquele sha (desde 22/11/2026, o laboratório roda
+uma vez por fase, na produção, depois do merge, e nenhum no preview: a regra do Douglas de 22/11, na memória
+`feedback-laboratorio-uma-vez.md`);
 `git revert` se a produção quebrar; e os limites de segurança, que nenhum ok desfaz (senha, contas,
 `.env*`, segredos no client, secrets e painéis, dados reais fora do expurgo, `--force`, outra conta,
 mensagem a outras sessões, gasto extra). Um chat que precisar quebrar um limite para seguir, para e
@@ -167,7 +169,8 @@ como os chips dos dias).
 **13.3 O que o teste do Douglas achar.** Cada item com a tela, o aparelho, o que foi feito e o que
 era esperado.
 
-Testes: CI, laboratório no preview, merge, laboratório na produção. Decisões: uma D para cada defeito,
+Testes: CI, laboratório no preview, merge, laboratório na produção (a regra da época; desde 22/11/2026 o
+laboratório é um só, na produção, depois do merge). Decisões: uma D para cada defeito,
 com a causa.
 
 ---
@@ -237,7 +240,8 @@ estamos juntos, nada aparece. Nada de nomes nem rastros: só o carro.
 - O chunk da maquete e o fps (D64) se medem de novo; os números vão para a D.
 
 Testes: Vitest do layout e da câmera; e2e do mapa como tela da viagem e dos redirecionamentos;
-laboratório (preview e produção); o teste final nos aparelhos ganha um bloco. Decisões: a tela, a
+laboratório (preview e produção, a regra da época; desde 22/11/2026, um só, na produção, depois do merge); o
+teste final nos aparelhos ganha um bloco. Decisões: a tela, a
 câmera, as miniaturas, as rotas.
 
 ---

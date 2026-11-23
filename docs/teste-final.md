@@ -1023,6 +1023,32 @@ falta é um celular de verdade.
 - [ ] **O VoiceOver** no cabeçalho do passo, na linha dos passos feitos, nos cartões com o desvio e a
   marca do tempo, e em "Voltar um passo".
 
+### 1.35 O mapa por trechos · 15 min (fase 28) · sem prova até a viagem
+
+Como o 1.24 a 1.34, fica como documentação até a viagem (D317 em diante). Os trechos, o objetivo na
+parada, a rota cortada, o carro no trecho, a troca depois do "Como foi?", o indicador, a linha do trecho,
+o "Rever o dia" por trechos e as cidades atravessadas estão provados na CI (Vitest, o pgTAP 23 e o
+`trechos.spec`, na maquete do SwiftShader com o GPS falso) e no laboratório da produção (as capturas
+`maquete-ida.png` e `maquete-volta.png`); o que falta é um celular de verdade numa ida e volta.
+
+- [ ] **A ida.** Crie pela conversa uma ida e volta com destino ("vou pra Canoinhas tomar um café e
+  volto"). No dia, ao sair de casa: a casa embaixo, o destino em cima, as paradas do caminho no meio; a
+  casa **uma vez** na tela; no alto, o indicador "ida · volta" com "ida" marcado.
+- [ ] **A linha do trecho.** No "Agora", com o GPS: "N% do trecho até Canoinhas", e menor ao lado "M% do
+  caminho do dia"; a porcentagem do trecho sobe com o carro.
+- [ ] **A cidade atravessada.** As cidades de passagem da tela são as que a estrada atravessa, cada uma
+  uma vez; nenhuma cidade que fica a quilômetros da estrada.
+- [ ] **A chegada e o "Como foi?".** O Chegamos! no destino abre o "Como foi?": enquanto ele está aberto,
+  o mapa continua na ida; ao fechar, a maquete se constrói de novo com a volta (o destino embaixo, a casa
+  em cima). O "Desfazer" da chegada volta à ida.
+- [ ] **Espiar.** Um toque em "ida" mostra a ida feita (os nós concluídos marcados, o carro no destino);
+  um toque em "volta", ou 20 s sem tocar, volta à volta.
+- [ ] **O "Rever o dia".** Toca a ida e depois a volta, cada uma no mapa dela; o "Pular" encerra tudo.
+- [ ] **Sem destino.** Uma viagem antiga de ida e volta (ou importada) divide no lugar mais longe de casa;
+  uma viagem que não volta (só ida) continua um mapa só, como antes.
+- [ ] **O VoiceOver** no indicador: "Trechos do dia", "Ida, até Canoinhas, o trecho da vez" e o estado de
+  pressionado.
+
 ## Parte 2 · Android
 
 O mesmo percurso, mais curto: aqui está só o que muda no Android, e no fim o resto, item a item,
