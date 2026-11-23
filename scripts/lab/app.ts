@@ -9,6 +9,7 @@ import {
   type Page,
   type Worker,
 } from '@playwright/test';
+import { forgedRouteDay } from '../../src/features/lab/forged-stop.ts';
 import { ROLAGEM_LATERAL } from '../../src/features/lab/guards.ts';
 import type { LabScenario } from '../../src/features/lab/scenarios.ts';
 import type { Check } from './evaluate.ts';
@@ -806,6 +807,8 @@ const PILULAS_SOB_A_BARRA = `(() => {
 export function appMaquete(
   app: App,
   seeded: { ok: boolean; detail: string } | null = null,
+  /** a viagem de ida e volta da fase 28 (`app-trechos.ts`), ou o motivo de não haver */
+  trechos: { tripId: string } | { error: string } | null = null,
 ): Promise<Check> {
   const { page, target } = app;
   const info: Record<string, unknown> = { peca_semeada: seeded?.ok ?? false };
@@ -828,7 +831,7 @@ export function appMaquete(
   return runSteps(
     app,
     'app_maquete',
-    'A maquete montou com o dia inteiro e todas as pílulas, de dia e de noite; o toque no carro aproximou e voltou; a folha abriu; o "Rever o dia" andou',
+    'A maquete montou com o dia inteiro e todas as pílulas, de dia e de noite; o toque no carro aproximou e voltou; a folha abriu; o "Rever o dia" andou; a ida e volta mostrou um trecho por vez',
     [
       [
         'a maquete monta com um motor de verdade',
@@ -979,6 +982,75 @@ export function appMaquete(
             mediana: sorted[Math.floor(sorted.length / 2)] ?? null,
             max: sorted.at(-1) ?? null,
           };
+        },
+      ],
+      [
+        'uma ida e volta: a ida até o ponto mais longe e, espiada, a volta (fase 28)',
+        async () => {
+          if (!trechos || 'error' in trechos)
+            throw new Error(`sem a viagem de ida e volta: ${trechos?.error ?? 'não preparada'}`);
+          // a estrada forjada do e2e, respondida aqui: nenhuma chamada nova de verdade à rota
+          const cors = {
+            'access-control-allow-origin': '*',
+            'access-control-allow-methods': 'POST, OPTIONS',
+            'access-control-allow-headers': 'authorization, apikey, content-type, x-client-info',
+          };
+          await page.route('**/functions/v1/route-day', async (route) => {
+            if (route.request().method() === 'OPTIONS') {
+              await route.fulfill({ status: 204, headers: cors });
+              return;
+            }
+            const body = route.request().postDataJSON() as { waypoints: [number, number][] };
+            await route.fulfill({ json: forgedRouteDay(body.waypoints), headers: cors });
+          });
+          try {
+            const t0 = Date.now();
+            await page.goto(`${target.appUrl}/viagens/${trechos.tripId}`);
+            await page.getByRole('heading', { name: 'Agora' }).waitFor();
+            await world.waitFor({ timeout: WORLD_TIMEOUT });
+            await page
+              .getByText('Montando a maquete…')
+              .waitFor({ state: 'hidden', timeout: WORLD_TIMEOUT });
+            await page
+              .locator('[data-pill][data-placed]')
+              .first()
+              .waitFor({ timeout: WORLD_TIMEOUT });
+            const leg = () => world.getAttribute('data-world-leg');
+            const legScene = async (want: string) => {
+              await until(leg, (v) => v === want, `a maquete não mostrou o trecho ${want}`);
+              const total = await hud.locator('[data-pill]').count();
+              const emCena = await until(
+                () => hud.locator('[data-pill]:not([hidden])').count(),
+                (n) => n === total,
+                `pílulas fora de cena no trecho ${want} (de ${String(total)})`,
+              );
+              return {
+                pilulas_total: total,
+                pilulas_em_cena: emCena,
+                cidades: await hud.locator('[data-passing-place]').count(),
+              };
+            };
+            const ida = await legScene('1/2');
+            info.trechos_ms = Date.now() - t0;
+            // a casa uma vez por tela: a saída e o mirante na ida, sem a chegada
+            if (ida.pilulas_total !== 2)
+              throw new Error(`a ida tem ${String(ida.pilulas_total)} pílulas, e não 2`);
+            await page.waitForTimeout(2_500);
+            await shot('maquete-ida.png');
+            // o indicador espia a volta: a maquete se constrói de novo, com o mirante embaixo
+            await page
+              .getByRole('group', { name: 'Trechos do dia' })
+              .getByRole('button', { name: /^Volta/ })
+              .click();
+            const volta = await legScene('2/2');
+            if (volta.pilulas_total !== 2)
+              throw new Error(`a volta tem ${String(volta.pilulas_total)} pílulas, e não 2`);
+            await page.waitForTimeout(3_500);
+            await shot('maquete-volta.png');
+            info.trechos = { ida, volta };
+          } finally {
+            await page.unroute('**/functions/v1/route-day');
+          }
         },
       ],
       [

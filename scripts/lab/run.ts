@@ -59,6 +59,7 @@ import {
 import { appProgressao, appRetrospectiva, type ProgressContext } from './app-progress.ts';
 import { appGaragem } from './app-garagem.ts';
 import { appParadaAuto } from './app-parada.ts';
+import { prepareTrechos } from './app-trechos.ts';
 import { roadScenarios, ROAD_SCENARIOS } from './app-road.ts';
 import { appConversa } from './app-conversa.ts';
 import { appEmailRecebido } from './app-email.ts';
@@ -936,7 +937,11 @@ async function main(): Promise<number> {
           // o cartão-postal semeado (fase 23): a estufa à mão, publicada, no lugar do destino do
           // laboratório (um lugar do laboratório, nunca um de verdade), pelo gerador simulado: custo zero
           const seeded = await seedLabLandmark(a);
-          appChecks.push(await appMaquete(app, seeded));
+          // a ida e volta da fase 28: uma viagem fixa do lab-a, a maquete por trechos
+          const trechos = await prepareTrechos(a).catch((e: unknown) => ({
+            error: e instanceof Error ? e.message : String(e),
+          }));
+          appChecks.push(await appMaquete(app, seeded, trechos));
           log(`app: ${appChecks.map((c) => `${c.scenario} ${c.status}`).join(', ')}`);
         } else if (app) {
           appChecks.push(
