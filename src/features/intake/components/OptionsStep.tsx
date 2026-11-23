@@ -25,27 +25,33 @@ import { StopKindIcon } from '@/features/itinerary/components/StopKindIcon.tsx';
 import { KIND_TEXT } from '@/features/itinerary/stop-kinds.ts';
 import { cx } from '@/lib/cx.ts';
 import { OSM_ATTRIBUTION } from '@/lib/geocode/nominatim.ts';
+import { dwellOf } from '../assemble.ts';
 import {
   canBuild,
   canContinue,
   currentStep,
+  destinationIsStop,
   groupFate,
   nextStep,
+  optionDrive,
+  orderedPicks,
   previousStep,
   stageAccount,
   stepGroups,
   summaryOf,
   toggleChoice,
+  type DriveStatus,
   type MapStage,
   type NamedEntry,
+  type OptionDrive,
   type OptionGroup,
 } from '../flow.ts';
 import type { PlaceHit, PlaceQuestion } from '../locate.ts';
 import { openingText } from '../opening.ts';
 import { ratingText, statusText } from '../option-text.ts';
-import { overBudget, totalText, type OutingAccount } from '../outing-time.ts';
+import { overBudget, startText, totalText, type OutingAccount } from '../outing-time.ts';
 import { UNREAD_REACH_HINT } from '../reach.ts';
-import { aboutMinutes, reachLabel, type MapOption } from '../search.ts';
+import { aboutMinutes, reachLabel, straightText, type MapOption } from '../search.ts';
 
 /** O tempo do passeio para a conta das opções (fase 26, a 3.3). */
 export type OptionsTime = {
@@ -57,6 +63,8 @@ export type OptionsTime = {
   budget: { minutes: number | null; label: string } | null;
   /** o tempo mudado na tela não foi entendido */
   unread: boolean;
+  /** a saída de hoje: a hora de sair é o mais cedo que dá (uma hora dita só a atrasa) */
+  earliest?: boolean;
 };
 
 type Props = {
@@ -87,6 +95,10 @@ type Props = {
   onBackTo?: (group: number) => void;
   /** o tempo mudado na tela ("mais tempo", fase 26) */
   onTime?: (answer: string) => void;
+  /** "mudar" o tempo num lugar escolhido (D312), pelo id do lugar */
+  onDwell?: (placeId: string, minutes: number) => void;
+  /** "Tentar de novo" na medição do tempo de carro que não respondeu (D310) */
+  onMeasure?: () => void;
 };
 
 const plural = (n: number, one: string, many: string) => `${String(n)} ${n === 1 ? one : many}`;
@@ -125,30 +137,39 @@ type CardAccount = {
 /**
  * Um cartão de opção: o nome como está no mapa, a cidade, o tempo de carro e o horário se houver; num
  * passo seguinte (fase 26), o que o lugar acrescenta ao passeio e o total se for escolhido; o que
- * estoura o tempo aparece marcado e esmaecido, e continua escolhível (a pessoa manda).
+ * estoura o tempo aparece marcado e esmaecido, e continua escolhível (a pessoa manda). **O tempo de
+ * carro é o medido pelo Google** (D310); enquanto não foi medido (ou se a medição não respondeu), o
+ * cartão mostra a distância em linha reta, dita como o que é, e nenhum tempo.
  */
 function OptionCard({
   option,
+  drive,
   chosen,
   account,
   onToggle,
 }: {
   option: MapOption;
+  drive: OptionDrive;
   chosen: boolean;
   account?: CardAccount | null;
   onToggle: () => void;
 }) {
   const { place } = option;
-  const about = `${aboutMinutes(option.minutes)} de carro`;
+  const about =
+    drive.minutes !== null
+      ? `${aboutMinutes(drive.minutes)} de carro`
+      : `a ${straightText(option.km)}`;
   const rating = ratingText(place);
   const status = statusText(place);
   const adds = option.fromPrevious
     ? [
-        `a ${aboutMinutes(option.fromPrevious.minutes)} de ${option.fromPrevious.name}`,
-        option.detour === undefined
+        drive.fromPrevious !== null
+          ? `a ${aboutMinutes(drive.fromPrevious)} de ${option.fromPrevious.name}`
+          : `a ${straightText(option.fromPrevious.km)} de ${option.fromPrevious.name}`,
+        drive.detour === null
           ? null
-          : option.detour > 0
-            ? `+${minutesText(option.detour)} de estrada`
+          : drive.detour > 0
+            ? `+${minutesText(drive.detour)} de estrada`
             : 'no caminho',
       ].filter((x): x is string => x !== null)
     : null;
@@ -169,6 +190,7 @@ function OptionCard({
       data-option={place.id}
       data-source={isGooglePlace(place) ? 'google' : 'geoapify'}
       data-over={account?.over ? 'true' : undefined}
+      data-drive={drive.minutes !== null || drive.fromPrevious !== null ? 'measured' : 'unmeasured'}
     >
       <span
         className={cx(
@@ -284,13 +306,16 @@ function ByName({
 function StepHeading({ group, total }: { group: OptionGroup; total: number }) {
   const title = capital(group.label);
   if (!group.step) return <h2 className="label-caps text-accent-ink">{title}</h2>;
-  const when = {
-    '': null,
-    manha: 'de manhã',
-    almoco: 'no almoço',
-    tarde: 'à tarde',
-    noite: 'à noite',
-  }[group.step.hora_do_dia];
+  // a hora exata dita vale acima da parte do dia (D311): "às 18:00", não "à noite"
+  const when = group.step.hora
+    ? `às ${group.step.hora}`
+    : {
+        '': null,
+        manha: 'de manhã',
+        almoco: 'no almoço',
+        tarde: 'à tarde',
+        noite: 'à noite',
+      }[group.step.hora_do_dia];
   return (
     <h2 className="label-caps text-accent-ink" data-step={group.step.ordem}>
       {total > 1 ? `${String(group.step.ordem)} de ${String(total)} · ` : ''}
@@ -376,6 +401,7 @@ function Group({
             <OptionCard
               key={o.place.id}
               option={o}
+              drive={optionDrive(props.map, o)}
               chosen={chosen.includes(o.place.id)}
               account={accounts?.get(o.place.id) ?? null}
               onToggle={() => props.onToggle(o.place.id)}
@@ -516,11 +542,9 @@ function PlaceAsk({
             >
               <span className="text-[16px] font-semibold">
                 {o.name}
-                {o.minutes !== null ? (
-                  <span className="font-normal text-ink-2">
-                    {' '}
-                    · a {aboutMinutes(o.minutes)} de carro
-                  </span>
+                {o.km !== null ? (
+                  // a distância em linha reta: um fato; o tempo de carro até lá ninguém mediu (D310)
+                  <span className="font-normal text-ink-2"> · a {straightText(o.km)}</span>
                 ) : null}
               </span>
               <span className="text-[13px] break-words text-ink-2">{o.address}</span>
@@ -715,20 +739,132 @@ function TimeAsk({
   );
 }
 
+/** O tempo num lugar escolhido, para a linha "1 h 15 em Café do Relógio · mudar" (D312). */
+type Stay = {
+  /** o id do lugar (a chave do que a pessoa mudar) */
+  id: string;
+  name: string;
+  minutes: number;
+  /** ninguém disse quanto tempo: é o padrão do tipo de lugar, e a tela diz que o app supôs */
+  assumed: boolean;
+};
+const STAY_OPTIONS = [15, 30, 45, 60, 90, 120, 180];
+
 /**
- * O total à vista (fase 26, a 3.3): "O passeio dá cerca de 4 h 10: 2 h 40 de estrada e 1 h 30 nos
- * lugares", ao lado de "vocês têm a tarde, cerca de 5 h"; o que estoura, dito; e "Mudar o tempo".
+ * O tempo em cada lugar escolhido (D312): o que a pessoa disse no pedido ("buscar" são 15 min), o que
+ * ela mudou aqui, ou o padrão do tipo de lugar, **dito como suposição do app**. "mudar" abre as opções.
+ * Antes, toda parada de comida valia 1 h 15 sem a tela dizer nem deixar mudar.
+ */
+function Stays({ stays, onDwell }: { stays: readonly Stay[]; onDwell?: Props['onDwell'] }) {
+  const [open, setOpen] = useState<string | null>(null);
+  if (stays.length === 0) return null;
+  return (
+    <ul className="grid gap-1.5" aria-label="Tempo em cada lugar" data-stays>
+      {stays.map((stay) => (
+        <li key={stay.id} className="grid gap-1.5 text-[14px]" data-stay={stay.minutes}>
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-ink-2">
+            <span className="min-w-0 break-words">
+              <span className="font-semibold text-ink">{minutesText(stay.minutes)}</span> em{' '}
+              {stay.name}
+              {stay.assumed ? <span data-stay-assumed> · o app supôs</span> : null}
+            </span>
+            {onDwell ? (
+              <button
+                type="button"
+                aria-label={`Mudar o tempo em ${stay.name}`}
+                aria-expanded={open === stay.id}
+                className="min-h-8 font-semibold text-accent-ink underline"
+                onClick={() => setOpen(open === stay.id ? null : stay.id)}
+              >
+                mudar
+              </button>
+            ) : null}
+          </span>
+          {open === stay.id && onDwell ? (
+            <span
+              className="flex flex-wrap gap-2"
+              role="group"
+              aria-label={`Quanto tempo em ${stay.name}`}
+            >
+              {STAY_OPTIONS.map((minutes) => (
+                <button
+                  key={minutes}
+                  type="button"
+                  aria-pressed={stay.minutes === minutes}
+                  onClick={() => {
+                    onDwell(stay.id, minutes);
+                    setOpen(null);
+                  }}
+                  className={cx(
+                    'min-h-11 rounded-full px-3 text-[15px] font-semibold',
+                    stay.minutes === minutes
+                      ? 'bg-accent-soft text-ink shadow-[inset_0_0_0_1.5px_var(--color-accent)]'
+                      : 'bg-paper text-ink-2 shadow-[inset_0_0_0_1px_var(--color-line)]',
+                  )}
+                >
+                  {minutesText(minutes)}
+                </button>
+              ))}
+            </span>
+          ) : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+const UNMEASURED: Readonly<Record<DriveStatus, string>> = {
+  offline: 'Sem internet para medir o tempo de estrada. O total do passeio aparece quando voltar.',
+  limit: 'A medição do tempo de estrada chegou ao limite de hoje. O passeio segue sem o total.',
+  no_source: 'Não deu para medir o tempo de estrada agora. O passeio segue sem o total.',
+  failed: 'Não deu para medir o tempo de estrada agora. O passeio segue sem o total.',
+};
+
+/**
+ * O total à vista (fase 26, a 3.3): "O passeio dá cerca de 1 h 05: 50 min de estrada e 15 min nos
+ * lugares", ao lado de "vocês têm a tarde, cerca de 5 h"; a hora de sair que a conta usou, com a hora
+ * dita que a definiu ("Saída às 17:35, para estar em Sushi Yume às 18:00", D311); o tempo em cada lugar,
+ * com "mudar" (D312); o que estoura, dito; e "Mudar o tempo". **Sem a estrada medida, não há total**
+ * (D310): a tela diz que está medindo, ou que não deu, com "Tentar de novo".
  */
 function OutingTime({
   account,
   time,
+  status,
+  stays,
   onTime,
+  onDwell,
+  onMeasure,
 }: {
-  account: OutingAccount;
+  account: OutingAccount | null;
   time: OptionsTime;
+  status: DriveStatus | null;
+  stays: readonly Stay[];
   onTime?: Props['onTime'];
+  onDwell?: Props['onDwell'];
+  onMeasure?: Props['onMeasure'];
 }) {
   const [changing, setChanging] = useState(false);
+  if (!account) {
+    return (
+      <Card
+        className="grid gap-2"
+        role="status"
+        data-outing-time={status ? 'unmeasured' : 'measuring'}
+      >
+        <p className="flex items-start gap-2 text-[15px]">
+          <Hourglass className="mt-0.5 size-4 shrink-0 text-accent-ink" aria-hidden="true" />
+          <span>{status ? UNMEASURED[status] : 'Medindo o tempo de estrada…'}</span>
+        </p>
+        {status && onMeasure ? (
+          <Button size="sm" variant="secondary" onClick={onMeasure}>
+            Tentar de novo
+          </Button>
+        ) : null}
+        <Stays stays={stays} onDwell={onDwell} />
+      </Card>
+    );
+  }
   const budget = time.budget;
   const over = budget ? overBudget(account.total, budget.minutes) : false;
   const have = budget
@@ -742,7 +878,11 @@ function OutingTime({
         <Hourglass className="mt-0.5 size-4 shrink-0 text-accent-ink" aria-hidden="true" />
         <span>
           <span className="font-semibold">{totalText(account)}</span>
-          {have ? <span className="text-ink-2">; {have}.</span> : null}
+          {have ? <span className="text-ink-2">; {have}.</span> : <span>.</span>}
+          <span className="text-ink-2" data-outing-start={account.anchor ? 'said' : 'default'}>
+            {' '}
+            {startText(account)}.
+          </span>
           {account.back ? (
             <span className="text-ink-2"> Chegada em casa por volta das {account.back}.</span>
           ) : null}
@@ -756,6 +896,10 @@ function OutingTime({
       {account.arrivals
         .flatMap((a) => [
           ...(a.outsideWindow ? [a.outsideWindow] : []),
+          ...(a.late ? [a.late] : []),
+          ...(a.early > 0
+            ? [`${a.name}: chegada às ${a.at}, ${minutesText(a.early)} antes da hora dita`]
+            : []),
           ...(a.closed ? [`${a.name} estará fechado às ${a.at}`] : []),
           ...(a.waited > 0 ? [`${a.name}: espera de ${minutesText(a.waited)} até abrir`] : []),
         ])
@@ -764,6 +908,7 @@ function OutingTime({
             {w}
           </p>
         ))}
+      <Stays stays={stays} onDwell={onDwell} />
       {onTime ? (
         changing ? (
           <TimeAsk unread={time.unread} onTime={onTime} onClose={() => setChanging(false)} />
@@ -823,7 +968,10 @@ function DoneStep({
   );
 }
 
-/** O que cada candidato do passo da vez faz com o tempo, se for escolhido (fase 26). */
+/**
+ * O que cada candidato do passo da vez faz com o tempo, se for escolhido (fase 26). O candidato cujo
+ * trecho ainda não foi medido fica sem a conta (D310): o cartão não mostra um total de chute.
+ */
 function cardAccounts(
   map: MapStage,
   group: OptionGroup,
@@ -835,12 +983,14 @@ function cardAccounts(
     const chosen = map.chosen.includes(o.place.id);
     const stage = chosen ? map : toggleChoice(map, o.place.id);
     const acc = stageAccount(stage, time);
+    if (!acc) continue;
     const mine = acc.arrivals.find((a) => a.name === o.place.name);
     out.set(o.place.id, {
       total: acc.total,
       over: time.budget ? overBudget(acc.total, time.budget.minutes) : false,
       warnings: [
         ...(mine?.outsideWindow ? [mine.outsideWindow] : []),
+        ...(mine?.late ? [mine.late] : []),
         ...(mine?.closed ? [`Fechado às ${mine.at}`] : []),
       ],
     });
@@ -911,7 +1061,10 @@ export function OptionsStep(props: Props) {
     );
   }
   const current = currentStep(map);
-  const google = map.groups.some((g) => g.options.some((o) => isGooglePlace(o.place)));
+  // os lugares do Google, ou o tempo de carro medido por ele (D310): a fonte fica dita no pé
+  const google =
+    map.groups.some((g) => g.options.some((o) => isGooglePlace(o.place))) ||
+    Object.keys(map.drive ?? {}).length > 0;
   const stepsTotal = map.groups.filter((g) => g.step).length;
   const buildLabel = (n: number) =>
     n > 1 ? `Traçar o caminho por ${String(n)} lugares` : 'Traçar o caminho';
@@ -967,7 +1120,15 @@ export function OptionsStep(props: Props) {
   const next = nextStep(map);
   const previous = previousStep(map);
   const others = map.groups.flatMap((g, i) => (g.step ? [] : [{ g, i }]));
-  const account = time && summaryOf(map).chosen > 0 ? stageAccount(map, time) : null;
+  const hasChoice = summaryOf(map).chosen > 0;
+  const account = time && hasChoice ? stageAccount(map, time) : null;
+  // o tempo em cada lugar que vai para a viagem, na ordem do passeio (D312)
+  const stays: Stay[] = orderedPicks(map, map.origin?.at ?? null).map((p) => ({
+    id: p.place.id,
+    name: p.place.name,
+    minutes: dwellOf(p),
+    assumed: p.dwell === undefined,
+  }));
   const accounts = group ? cardAccounts(map, group, time) : null;
   // nada cabe: todos os candidatos do passo da vez estouram, e nada dele foi escolhido
   const nothingFits =
@@ -1010,7 +1171,17 @@ export function OptionsStep(props: Props) {
       {map.named.map((entry, i) => (
         <Named key={`${entry.named.name}-${String(i)}`} entry={entry} index={i} props={props} />
       ))}
-      {account && time ? <OutingTime account={account} time={time} onTime={props.onTime} /> : null}
+      {hasChoice && time ? (
+        <OutingTime
+          account={account}
+          time={time}
+          status={map.driveStatus ?? null}
+          stays={stays}
+          onTime={props.onTime}
+          onDwell={props.onDwell}
+          onMeasure={props.onMeasure}
+        />
+      ) : null}
       {group ? (
         <Group
           group={group}
@@ -1076,7 +1247,7 @@ export function OptionsStep(props: Props) {
             </p>
             <Button disabled={!canBuild(map)} onClick={props.onBuild}>
               <Route className="size-5" aria-hidden="true" />
-              {buildLabel(summaryOf(map).chosen + (map.destination ? 1 : 0))}
+              {buildLabel(summaryOf(map).chosen + (destinationIsStop(map) ? 1 : 0))}
             </Button>
           </>
         )}

@@ -41,6 +41,12 @@ export type StepRelation = (typeof STEP_RELATIONS)[number];
 export const DAY_TIMES = ['', 'manha', 'almoco', 'tarde', 'noite'] as const;
 export type DayTime = (typeof DAY_TIMES)[number];
 
+/** Uma hora dita, "HH:MM" em 24 h; '' quando a pessoa não disse hora nenhuma. */
+export const SAID_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+const saidTimeSchema = z.union([z.literal(''), z.string().regex(SAID_TIME)]);
+/** O teto do tempo num lugar que a IA pode ler do pedido (um dia inteiro num parque). */
+export const MAX_STAY_MINUTES = 12 * 60;
+
 /** Uma referência curta de lugar que uma ferramenta devolveu nesta rodada: `p1`, `p2`… */
 export const PLACE_REF = /^p\d{1,3}$/;
 
@@ -90,6 +96,18 @@ export const stepSchema = z.object({
   buscado: z.boolean().optional(),
   /** quantos candidatos as ferramentas devolveram e a IA deixou de fora por não serem do tipo pedido */
   descartados: z.number().int().min(0).optional(),
+  // ------------------------------------------------- o que a pessoa disse do tempo (D311 e D312)
+  /**
+   * a hora exata que a pessoa disse para **estar no lugar** deste passo ("quero estar no sushi às
+   * 18:00"); '' (ou ausente) quando não disse. A conta do passeio e os horários do roteiro partem dela:
+   * a hora de sair é calculada para trás
+   */
+  hora: saidTimeSchema.optional(),
+  /**
+   * os minutos que a pessoa disse, ou deixou claro, que fica no lugar ("buscar", "pegar", "retirar" são
+   * 15); 0 (ou ausente) quando não disse: o app usa o padrão do tipo, mostra na tela e deixa mudar
+   */
+  permanencia_min: z.number().int().min(0).max(MAX_STAY_MINUTES).optional(),
 });
 export type PlanStep = z.infer<typeof stepSchema>;
 
@@ -122,6 +140,8 @@ export const outingSchema = z.object({
     .min(0)
     .max(24 * 60)
     .optional(),
+  /** a hora de sair de casa que a pessoa disse ("saindo às 8"); '' (ou ausente) quando não disse (D311) */
+  saida: saidTimeSchema.optional(),
 });
 export type Outing = z.infer<typeof outingSchema>;
 

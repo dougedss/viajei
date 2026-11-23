@@ -59,7 +59,7 @@ describe('o tempo de carro estimado (fase 24)', () => {
 
 describe('as opções', () => {
   const cafe = searchFor({ words: 'café colonial', kind: 'food' });
-  it('só o que tem a palavra no nome, sem repetir, as mais perto primeiro, com o tempo', () => {
+  it('só o que tem a palavra no nome, sem repetir, as mais perto primeiro, com a distância (o tempo é o medido, D310)', () => {
     const opts = optionsFor(
       [
         place('a', 'Torten Paradies Café Colonial', -49.172, -26.74),
@@ -72,7 +72,8 @@ describe('as opções', () => {
       PAPANDUVA,
     );
     expect(opts.map((o) => o.place.id)).toEqual(['e', 'b', 'a']);
-    expect(opts[1]?.minutes).toBeGreaterThan(100);
+    expect(opts[1]?.km).toBeGreaterThan(80);
+    expect(opts[1]).not.toHaveProperty('minutes');
     expect(opts.every((o) => o.kind === 'food')).toBe(true);
   });
 

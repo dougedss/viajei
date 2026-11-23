@@ -23,7 +23,8 @@ import {
   setLooseDestination,
   setStopIncluded,
 } from '../review-edit.ts';
-import type { Schedule } from '@/features/intake/assemble.ts';
+import { minutesText } from '@shared/day-span.ts';
+import { DWELL_MINUTES, type Schedule } from '@/features/intake/assemble.ts';
 import { dayTimeNotice, hoursNotice } from '@/features/intake/hours.ts';
 import { reschedule } from '@/features/intake/reschedule.ts';
 import { CheckRow } from './CheckRow.tsx';
@@ -48,7 +49,10 @@ type Props = {
   onChoose: (key: string) => void;
   onSave: () => void;
   onDiscard: () => void;
-  /** a conversa da fase 24: os horários para refazer quando uma sugestão é ligada */
+  /**
+   * a conversa da fase 24: os horários para refazer quando a pessoa liga ou desliga uma parada (desde
+   * a correção de 22/11/2026, qualquer parada, não só a sugestão)
+   */
   schedule?: Schedule | null;
 };
 
@@ -110,15 +114,20 @@ function Place({
   return <span>Localizando…</span>;
 }
 
-/** "Sugestão · cerca de 10 min de desvio · Pomerode": o que vale a pena no caminho, desligado. */
+/**
+ * "Sugestão · cerca de 10 min de desvio · Pomerode": o que vale a pena no caminho, desligado. O desvio
+ * é o medido (D310); sem medida, a linha não diz número nenhum.
+ */
 function SuggestionLine({ stop }: { stop: ReviewStop }) {
   const s = stop.suggestion;
   if (!s) return null;
-  const parts = [
-    s.night ? 'Para dormir' : 'Sugestão',
-    s.night ? null : `cerca de ${String(s.detour)} min de desvio`,
-    s.city,
-  ].filter(Boolean);
+  const detour =
+    s.night || s.detour === null
+      ? null
+      : s.detour > 0
+        ? `cerca de ${String(s.detour)} min de desvio`
+        : 'no caminho';
+  const parts = [s.night ? 'Para dormir' : 'Sugestão', detour, s.city].filter(Boolean);
   return (
     <>
       <span className="font-semibold text-accent-ink">{parts.join(' · ')}</span>
@@ -164,6 +173,7 @@ function StopRow({
   stop,
   date,
   state,
+  schedule,
   onToggle,
   onEdit,
   onChoose,
@@ -171,10 +181,17 @@ function StopRow({
   stop: ReviewStop;
   date: string;
   state: GeoState | undefined;
+  /** a conversa: a conta dos horários (o tempo em cada lugar, D312) */
+  schedule: Schedule | null;
   onToggle: (include: boolean) => void;
   onEdit: () => void;
   onChoose: () => void;
 }) {
+  // o tempo no lugar que a conta dos horários usou, à vista (D312); a saída e a chegada não ficam
+  const stay =
+    schedule && stop.include && stop.kind !== 'origin' && stop.kind !== 'transit'
+      ? (schedule.dwell?.[stop.key] ?? DWELL_MINUTES[stop.kind])
+      : null;
   return (
     <CheckRow
       checked={stop.include}
@@ -191,7 +208,15 @@ function StopRow({
       detail={
         <>
           <SuggestionLine stop={stop} />
-          {stop.time === null && !stop.suggestion ? <span>sem horário no texto</span> : null}
+          {stop.time === null && !stop.suggestion && stop.include ? (
+            // na conversa, a parada sem horário é a que ficou depois de um trecho sem medida (D310)
+            <span>
+              {schedule ? 'sem horário: falta medir a estrada até aqui' : 'sem horário no texto'}
+            </span>
+          ) : null}
+          {stay !== null && stay > 0 ? (
+            <span data-stay={stay}>cerca de {minutesText(stay)} no lugar</span>
+          ) : null}
           {stop.closes_at ? <span>fecha às {stop.closes_at}</span> : null}
           <HoursLine stop={stop} date={date} />
           {stop.repeated === 'trip' ? (
@@ -347,13 +372,13 @@ export function ReviewStep({
                     stop={stop}
                     date={day.date}
                     state={geo[stop.key]}
+                    schedule={schedule}
                     onToggle={(include) =>
                       onChange((r) => {
                         const next = setStopIncluded(r, stop.key, include);
-                        // ligar uma sugestão a põe na ordem do caminho e refaz os horários do dia
-                        return stop.suggestion && schedule
-                          ? reschedule(next, schedule, day.date)
-                          : next;
+                        // na conversa, ligar ou desligar qualquer parada refaz os horários do dia:
+                        // desmarcar uma parada deixava as seguintes com a hora de quando ela existia
+                        return schedule ? reschedule(next, schedule, day.date) : next;
                       })
                     }
                     onEdit={() => onEditStop(stop.key)}

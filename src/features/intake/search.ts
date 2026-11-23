@@ -32,9 +32,11 @@ import {
 } from './places.ts';
 
 /**
- * As contas da busca no mapa (fase 24), puras: o alcance, o tempo de carro estimado das opções, a
- * ordem do caminho entre as escolhas, o corredor da rota e as sugestões ordenadas pelo desvio. Tudo é
- * estimativa e a tela diz "cerca de"; a rota real (a `route-day`) só para o que foi escolhido.
+ * As contas da busca no mapa (fase 24), puras: o alcance, a ordem do caminho entre as escolhas, o
+ * corredor da rota e as sugestões ordenadas pelo desvio. **Nenhum tempo de carro mostrado sai daqui**
+ * (D310): o que a tela mostra é o tempo medido pelo Google (`drive-times`); a estimativa em linha reta
+ * (`driveMinutes`) fica só para o que não é mostrado como tempo de um trecho: o raio de uma busca e a
+ * escolha das sugestões.
  */
 
 // ----------------------------------------------------------------- o tempo de carro estimado
@@ -59,19 +61,27 @@ export const widerRadius = (km: number): number => Math.min(MAX_RADIUS_KM, km * 
 
 // ------------------------------------------------------------------------------ as opções
 /**
- * Uma opção do mapa num cartão: o lugar como está no mapa, a distância e o tempo estimado de onde se
- * sai e, num passo seguinte (fase 26), o que o lugar acrescenta ao passeio: a distância do lugar
- * escolhido no passo anterior e o desvio (ir do anterior ao candidato e dele ao próximo ponto fixo,
- * menos ir direto), em minutos, pela mesma estimativa.
+ * Uma opção do mapa num cartão: o lugar como está no mapa e a distância em linha reta de onde se sai
+ * (um fato, que o cartão mostra enquanto o tempo de carro não foi medido); num passo seguinte (fase 26),
+ * de onde se vem (o lugar escolhido no passo anterior) e para onde se vai depois (o próximo ponto fixo:
+ * o destino, ou casa), para o cartão dizer o que o lugar acrescenta ao passeio. O tempo de carro e o
+ * desvio não moram aqui: saem da tabela dos tempos medidos pelo Google (`optionDrive`, D310).
  */
 export type MapOption = {
   place: Place;
   km: number;
-  minutes: number;
   kind: StopKind;
-  fromPrevious?: { name: string; km: number; minutes: number };
-  detour?: number;
+  /** `at` ausente numa conversa guardada por uma versão de antes: o cartão fica sem o tempo */
+  fromPrevious?: { name: string; km: number; at?: LngLat };
+  /** o próximo ponto fixo depois deste passo (o destino, ou casa); null quando não há */
+  next?: LngLat | null;
 };
+
+/** "a 22 km em linha reta": a distância que se sabe sem medir a estrada, dita como o que é. */
+export function straightText(km: number): string {
+  const text = km < 10 ? km.toFixed(1).replace('.', ',') : Math.round(km).toLocaleString('pt-BR');
+  return `${text} km em linha reta`;
+}
 
 /** Quantas opções a tela mostra de cada vez; "Mais opções" mostra as seguintes. */
 export const OPTIONS_SHOWN = 6;
@@ -81,7 +91,7 @@ const SAME_PLACE_M = 300;
 /**
  * As opções de uma vontade: só os lugares cujo nome tem a palavra que se buscou (a Places filtra por
  * nome de um jeito que pode ser largo), sem repetir o mesmo lugar, os mais perto de onde se sai
- * primeiro, com o tempo de carro estimado.
+ * primeiro.
  */
 export function optionsFor(
   places: readonly Place[],
@@ -101,11 +111,11 @@ export function optionsFor(
     if (dup || out.some((o) => o.place.id === place.id)) continue;
     const km = haversineM(from, [place.lng, place.lat]) / 1000;
     const order = haversineM(sortFrom, [place.lng, place.lat]);
-    out.push({ place, km, minutes: driveMinutes(km), kind: search.kind, order });
+    out.push({ place, km, kind: search.kind, order });
   }
   return out
     .sort((a, b) => a.order - b.order)
-    .map((o) => ({ place: o.place, km: o.km, minutes: o.minutes, kind: o.kind }));
+    .map((o) => ({ place: o.place, km: o.km, kind: o.kind }));
 }
 
 /**
@@ -235,13 +245,16 @@ export function corridorArea(geometry: readonly LngLat[]): PlacesArea {
   return { type: 'corridor', line: corridorLine(geometry), buffer_m: CORRIDOR_BUFFER_M };
 }
 
-/** O desvio do carro até um lugar fora da rota e de volta, por estimativa, em minutos. */
+/**
+ * O desvio do carro até um lugar fora da rota e de volta, por estimativa, em minutos: só para escolher
+ * e ordenar as sugestões; o desvio que a tela mostra é o medido (`prepare`, D310).
+ */
 const DETOUR_KMH = 45;
 export function detourMinutes(offRouteM: number): number {
   return round5(((2 * (offRouteM / 1000) * ROAD_FACTOR) / DETOUR_KMH) * 60);
 }
 
-/** Uma sugestão: o lugar do mapa, o desvio estimado e onde ele cai na rota (para entrar na ordem). */
+/** Uma sugestão: o lugar do mapa, o desvio estimado (o critério da escolha) e onde ele cai na rota. */
 export type Suggestion = {
   place: Place;
   kind: StopKind;

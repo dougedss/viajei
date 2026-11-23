@@ -93,3 +93,26 @@ export function postoFix(i: number): { latitude: number; longitude: number } {
     FORGED.posto.y + Math.cos(i * 2.3) * 3,
   );
 }
+
+/**
+ * A `drive-times` respondida (D310): o tempo de carro de cada par pela mesma estrada reta da rota
+ * forjada (a linha entre os dois pontos, a 22 m/s), para o e2e e o `app_conversa` do laboratório não
+ * chamarem o Google. Um par no mesmo ponto dá zero.
+ */
+export function forgedDriveTimes(
+  pairs: readonly {
+    from: { lat: number; lng: number };
+    to: { lat: number; lng: number };
+  }[],
+) {
+  return {
+    provider: 'google',
+    fetched_at: new Date().toISOString(),
+    times: pairs.map(({ from, to }) => {
+      const dx = (to.lng - from.lng) * M_PER_DEG * COS;
+      const dy = (to.lat - from.lat) * M_PER_DEG;
+      const meters = Math.hypot(dx, dy);
+      return { duration_s: Math.round(meters / 22), distance_m: Math.round(meters) };
+    }),
+  };
+}

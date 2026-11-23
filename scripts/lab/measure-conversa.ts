@@ -1,4 +1,10 @@
 import { appendFile } from 'node:fs/promises';
+import {
+  DRIVE_FN,
+  driveErrorSchema,
+  drivePair,
+  driveResponseSchema,
+} from '../../supabase/functions/_shared/drive-schema.ts';
 import { haversineM, viewboxAround, type LngLat } from '../../supabase/functions/_shared/geo.ts';
 import {
   placesErrorSchema,
@@ -82,6 +88,10 @@ export type Calls = {
   noSource: boolean;
   /** cada consulta de cidade pelo nome e os candidatos que voltaram (nome, classe e endereço) */
   geocoded: string[];
+  /** os pares de tempo de carro medidos no Google pela `drive-times` (D310): cada par é um elemento cobrado */
+  medidos?: number;
+  /** as medições de tempo de carro que a função recusou, pelo código (a fonte, a cota) */
+  semMedida?: Record<string, number>;
 };
 
 /**
@@ -177,6 +187,24 @@ export function labDeps(
       if (!res.ok) return null;
       const parsed = routeResponseSchema.safeParse(await res.json().catch(() => null));
       return parsed.success ? parsed.data : null;
+    },
+    // o tempo de carro medido (D310): a `drive-times` publicada, como o app
+    drive: async (pairs) => {
+      const res = await call(DRIVE_FN, {
+        pairs: pairs.map(([from, to]) => drivePair(from, to)),
+      });
+      const json: unknown = await res.json().catch(() => null);
+      if (!res.ok) {
+        const err = driveErrorSchema.safeParse(json);
+        const code = err.success ? err.data.error.code : 'internal';
+        calls.semMedida = {
+          ...(calls.semMedida ?? {}),
+          [code]: (calls.semMedida?.[code] ?? 0) + 1,
+        };
+        throw Object.assign(new Error(code), { code });
+      }
+      calls.medidos = (calls.medidos ?? 0) + pairs.length;
+      return driveResponseSchema.parse(json).times;
     },
   };
 }

@@ -1,8 +1,19 @@
 // caminhos relativos: a medição do laboratório (`scripts/lab`) roda este módulo, com a rede dela
 import type { Interest, StopKind } from '../../../supabase/functions/_shared/constants.ts';
+import {
+  DRIVE_MAX_PAIRS,
+  driveKey,
+  measuredMinutes,
+  missingPairs,
+  samePoint,
+  tableAmong,
+  tableOf,
+  type DriveTable,
+  type DriveTime,
+} from '../../../supabase/functions/_shared/drive-schema.ts';
 import { haversineM, type LngLat } from '../../../supabase/functions/_shared/geo.ts';
 import { filled } from '../../lib/text/filled.ts';
-import { withinCity } from '../../../supabase/functions/_shared/google-places.ts';
+import { inCity, withinCity } from '../../../supabase/functions/_shared/google-places.ts';
 import { kindOfGoogleTypes } from '../../../supabase/functions/_shared/google-types.ts';
 import {
   GOOGLE_MAX_RADIUS_M,
@@ -37,7 +48,7 @@ import type {
   PlanWant,
   QuestionTopic,
 } from '../../../supabase/functions/_shared/plan-protocol.ts';
-import { placesForAi, type Legs, type PlacePick } from './assemble.ts';
+import { dwellOf, placesForAi, type Legs, type PlacePick } from './assemble.ts';
 import { placeKey, resolvePlace, type PlaceHit, type PlaceQuestion } from './locate.ts';
 import { outingAccount, type OutingAccount } from './outing-time.ts';
 import { confirmNamed, type NamedState, type SearchResult } from './named.ts';
@@ -48,7 +59,7 @@ import {
   corridorArea,
   cuisineRequest,
   DESTINATION_RADIUS_M,
-  driveMinutes,
+  MAX_DETOUR_MIN,
   MAX_RADIUS_KM,
   nightOptions,
   OPTIONS_SHOWN,
@@ -126,7 +137,14 @@ export type StepInfo = {
   centro?: Point | null;
   /** quantos candidatos a IA deixou de fora por não serem do tipo pedido (fase 26) */
   descartados?: number;
+  /** a hora exata que a pessoa disse para estar no lugar deste passo, "HH:MM" (D311) */
+  hora?: string;
+  /** os minutos no lugar que a pessoa disse ou deixou claro ("buscar" são 15), D312; 0: não disse */
+  permanencia?: number;
 };
+
+/** Por que a medição do tempo de carro não respondeu (a tela diz, e oferece tentar de novo). */
+export type DriveStatus = 'offline' | 'limit' | 'no_source' | 'failed';
 
 /** A relação depende do lugar escolhido no passo anterior: a busca só pode rodar quando chegar a vez. */
 export const dependsOnPrevious = (relacao: StepRelation): boolean =>
@@ -165,6 +183,18 @@ export type MapStage = {
   destination?: { name: string; at: LngLat } | null;
   /** o aviso de "Voltar um passo": as opções do passo seguinte vão ser procuradas de novo */
   notice?: string | null;
+  /**
+   * os tempos de carro medidos pelo Google (D310), por par de pontos, em segundos (`null`: sem estrada).
+   * É de onde saem o "X min de carro" dos cartões e a estrada da conta; o par que não está aqui não foi
+   * medido, e a tela não mostra tempo para ele
+   */
+  drive?: Record<string, number | null>;
+  /** a medição não respondeu: por quê; a tela diz e oferece tentar de novo (null: respondeu) */
+  driveStatus?: DriveStatus | null;
+  /** os minutos em cada lugar que a pessoa mudou na tela, pelo id do lugar (D312) */
+  dwell?: Record<string, number>;
+  /** a hora de sair de casa que a pessoa disse, "HH:MM" (D311); null quando não disse */
+  departure?: string | null;
 };
 
 /** O viés de uma busca pelo nome: a área preferida em volta de um ponto (D276). */
@@ -184,6 +214,11 @@ export type FlowDeps = {
   route: (
     waypoints: LngLat[],
   ) => Promise<{ geometry: LngLat[]; legs: { distance_m: number; duration_s: number }[] } | null>;
+  /**
+   * a `drive-times` (D310): o tempo de carro que o Google mediu em cada par, na ordem dos pares (`null`
+   * no par sem estrada); o erro traz o `code`, como o da `find-places`
+   */
+  drive: (pairs: readonly (readonly [LngLat, LngLat])[]) => Promise<(DriveTime | null)[]>;
   onProgress?: (done: number, total: number) => void;
 };
 
@@ -573,11 +608,45 @@ export function destinationPosition(stage: Pick<MapStage, 'groups' | 'destinatio
 }
 
 /**
+ * A cidade de destino dita vira parada? Só quando **nenhum lugar escolhido fica nela** (a correção de
+ * 22/11/2026, revê a D304): "vou pra Joinville" sem lugar em Joinville tem a cidade como parada; em
+ * "buscar sushi em Canoinhas" a cidade é só onde o sushi fica, e uma parada "Canoinhas" de 1 h 30 antes
+ * dele era um lugar que a pessoa não pediu. A cidade do lugar é a do endereço dele no mapa.
+ */
+export function destinationIsStop(
+  stage: Pick<MapStage, 'groups' | 'named' | 'chosen' | 'destination'>,
+): boolean {
+  const destination = stage.destination;
+  if (!destination) return false;
+  const inside = (place: Pick<Place, 'city'>) => inCity(place, destination.name);
+  const chosenThere = stage.groups.some((g) =>
+    g.options.some((o) => stage.chosen.includes(o.place.id) && inside(o.place)),
+  );
+  const namedThere = stage.named.some((n, i) => {
+    const place = namedPlace(n, i);
+    return place !== null && inside(place);
+  });
+  return !chosenThere && !namedThere;
+}
+
+/** "Mudar" o tempo num lugar (D312): os minutos que a pessoa escolheu valem acima do dito e do padrão. */
+export function setDwell(stage: MapStage, placeId: string, minutes: number): MapStage {
+  return { ...stage, dwell: { ...stage.dwell, [placeId]: Math.max(0, Math.round(minutes)) } };
+}
+
+/**
  * Os lugares que vão para a viagem, com a origem de cada um: as escolhas (`e1`…, pelos passos na ordem
- * dita quando o planejador os deu, senão na ordem do toque), o destino como parada de cidade (também
- * uma `e`: a `plan-trip` só aceita `e`, `n` e `s`) e os nomeados confirmados (`n1`…).
+ * dita quando o planejador os deu, senão na ordem do toque), o destino como parada de cidade quando
+ * nenhuma escolha fica nele (também uma `e`: a `plan-trip` só aceita `e`, `n` e `s`) e os nomeados
+ * confirmados (`n1`…). Cada um leva o tempo no lugar que a pessoa disse ou mudou (D312) e, nas escolhas
+ * de um passo com hora dita, a hora (D311).
  */
 export function pickSlots(stage: MapStage): PickSlot[] {
+  // os minutos no lugar: o que a pessoa mudou na tela, senão o que ela disse no pedido (0: não disse)
+  const stay = (id: string, said?: number): { dwell?: number } => {
+    const minutes = stage.dwell?.[id] ?? (said !== undefined && said > 0 ? said : undefined);
+    return minutes === undefined ? {} : { dwell: minutes };
+  };
   const options = new Map(
     stage.groups.flatMap((g, i) => g.options.map((o) => [o.place.id, { o, group: i }] as const)),
   );
@@ -600,7 +669,8 @@ export function pickSlots(stage: MapStage): PickSlot[] {
   const choices: PickSlot[] = chosenIds.flatMap((id, i) => {
     const hit = options.get(id);
     if (!hit) return [];
-    const dayTime = stage.groups[hit.group]?.step?.hora_do_dia;
+    const step = stage.groups[hit.group]?.step;
+    const dayTime = step?.hora_do_dia;
     return [
       {
         pick: {
@@ -608,6 +678,8 @@ export function pickSlots(stage: MapStage): PickSlot[] {
           place: hit.o.place,
           kind: hit.o.kind,
           ...(dayTime ? { dayTime } : {}),
+          ...stay(id, step?.permanencia),
+          ...(step?.hora ? { atTime: step.hora } : {}),
         },
         group: hit.group,
         position: positionOf(hit.group),
@@ -615,26 +687,28 @@ export function pickSlots(stage: MapStage): PickSlot[] {
       },
     ];
   });
-  const destination: PickSlot[] = stage.destination
-    ? [
-        {
-          pick: {
-            ref: `e${String(choices.length + 1)}`,
-            place: destinationPlace(stage.destination),
-            kind: 'city',
+  const destination: PickSlot[] =
+    stage.destination && destinationIsStop(stage)
+      ? [
+          {
+            pick: {
+              ref: `e${String(choices.length + 1)}`,
+              place: destinationPlace(stage.destination),
+              kind: 'city',
+              ...stay(`destination:${stage.destination.name}`),
+            },
+            group: null,
+            position: destinationPosition(stage),
+            kind: 'destination' as const,
           },
-          group: null,
-          position: destinationPosition(stage),
-          kind: 'destination' as const,
-        },
-      ]
-    : [];
+        ]
+      : [];
   const named: PickSlot[] = stage.named.flatMap((n, i) => {
     const place = namedPlace(n, i);
     return place
       ? [
           {
-            pick: { ref: `n${String(i + 1)}`, place, kind: n.named.kind },
+            pick: { ref: `n${String(i + 1)}`, place, kind: n.named.kind, ...stay(place.id) },
             group: null,
             position: null,
             kind: 'named' as const,
@@ -649,6 +723,12 @@ export function pickSlots(stage: MapStage): PickSlot[] {
 export function picksOf(stage: MapStage): PlacePick[] {
   return pickSlots(stage).map((s) => s.pick);
 }
+
+const withoutTime = (pick: PlacePick): PlacePick => {
+  const rest = { ...pick };
+  delete rest.atTime;
+  return rest;
+};
 
 /**
  * A ordem final (fase 26, revê a D230): a dos passos, como a pessoa disse; `bestOrder` só ordena o que
@@ -694,10 +774,11 @@ export function orderedPicks(stage: MapStage, start: LngLat | null): PlacePick[]
             nextFixed(position),
           )
         : [0];
-    for (const i of order) {
+    for (const [n, i] of order.entries()) {
       const slot = mine[i];
       if (!slot) continue;
-      out.push(slot.pick);
+      // a hora dita é a de chegar ao passo: vale para o primeiro lugar dele, não para os seguintes
+      out.push(n === 0 ? slot.pick : withoutTime(slot.pick));
       cursor = at(slot.pick.place);
     }
   }
@@ -801,12 +882,12 @@ export function summaryOf(stage: MapStage): {
   ];
   const of = (fate: Fate) => fates.filter(([f]) => f === fate).map(([, name]) => name);
   return {
-    // o destino não é uma escolha: vai dito à parte
+    // o destino não é uma escolha: vai dito à parte, e só quando é uma parada (nenhuma escolha nele)
     chosen: pickSlots(stage).filter((s) => s.kind !== 'destination').length,
     unchosen: of('unchosen'),
     pending: of('pending'),
     removed: of('removed'),
-    destination: stage.destination?.name ?? null,
+    destination: destinationIsStop(stage) ? (stage.destination?.name ?? null) : null,
   };
 }
 
@@ -828,8 +909,16 @@ export function canBuild(stage: MapStage): boolean {
 export type Prepared = {
   picks: PlacePick[];
   chosenFractions: number[];
-  suggestions: (PlacePick & { detour: number; fraction: number })[];
+  /** o desvio é o medido (D310); null quando a medição não respondeu: a revisão não mostra número */
+  suggestions: (PlacePick & { detour: number | null; fraction: number })[];
+  /** os trechos por índice: só num caminho guardado antes da D310 (o novo traz `drive`) */
   legs: Legs | null;
+  /**
+   * os tempos de carro medidos, por par de pontos (D310): os trechos do caminho e os de cada sugestão
+   * (para o desvio, e para a revisão refazer os horários quando a pessoa liga uma). O trecho que só
+   * aparece na revisão (duas sugestões ligadas juntas, uma escolha desmarcada) é medido lá, na hora
+   */
+  drive?: Record<string, number | null>;
   places: PlanPlaces;
   missing: PlanNamed[];
   /** o destino principal (o mais longe de casa): onde procurar onde dormir, se for preciso */
@@ -839,9 +928,15 @@ export type Prepared = {
 };
 
 /**
- * Da escolha ao caminho: a ordem mais curta, a rota real (a `route-day`) da saída pelas escolhas até
- * casa, ou a linha reta quando ela não responde, e as sugestões no corredor dela e perto do destino
- * (o que a pessoa gosta mais o clássico de turismo), ordenadas pelo desvio.
+ * Da escolha ao caminho: a ordem dos passos, a rota traçada (a `route-day`: o desenho e o corredor das
+ * sugestões) da saída pelas escolhas até casa, ou a linha reta quando ela não responde, e as sugestões
+ * no corredor dela e perto do destino (o que a pessoa gosta mais o clássico de turismo).
+ *
+ * **O tempo de carro de cada trecho é o medido pelo Google** (D310), o mesmo que a tela das opções
+ * mostrou; o trecho que o Google não mediu fica com o tempo da rota traçada (também é estrada de
+ * verdade), e sem os dois fica sem tempo: a revisão mostra a parada sem horário, nunca uma estimativa.
+ * O desvio de cada sugestão também é medido: ir do ponto anterior a ela e dela ao seguinte, menos ir
+ * direto. A estimativa em linha reta só escolhe quais sugestões vale medir.
  */
 export async function prepare(
   stage: MapStage,
@@ -857,7 +952,23 @@ export async function prepare(
     ...picks.map((p) => at(p.place)),
     ...(origin ? [origin] : []),
   ];
-  const route = waypoints.length >= 2 ? await deps.route(waypoints).catch(() => null) : null;
+  const chain = waypoints.flatMap((p, i): [LngLat, LngLat][] => {
+    const next = waypoints[i + 1];
+    return next ? [[p, next]] : [];
+  });
+  const [route, chainTimes] = await Promise.all([
+    waypoints.length >= 2 ? deps.route(waypoints).catch(() => null) : Promise.resolve(null),
+    measurePairs(stage.drive, chain, deps),
+  ]);
+  const table: Record<string, number | null> = { ...stage.drive, ...chainTimes.added };
+  // o trecho que o Google não mediu fica com o tempo da rota traçada
+  chain.forEach(([a, b], i) => {
+    const leg = route?.legs[i];
+    const key = driveKey(a, b);
+    if (leg && typeof table[key] !== 'number' && !samePoint(a, b)) table[key] = leg.duration_s;
+  });
+  const minutes = (a: LngLat | null, b: LngLat | null) =>
+    a && b ? measuredMinutes(table, a, b) : null;
   const geometry = route?.geometry ?? waypoints;
 
   // onde cada escolha cai na rota, pelos trechos (a saída no começo e a volta no fim)
@@ -894,24 +1005,70 @@ export async function prepare(
     ]);
     for (const r of runs) if (r.status === 'fulfilled') found.push(...r.value);
   }
-  const suggestions = suggestionsFor(
+
+  // as sugestões: escolhidas pelo desvio em linha reta (o critério), com o desvio de verdade medido.
+  // Cada uma entra depois da última escolha que vem antes dela no caminho (a regra da montagem): o
+  // desvio é ir desse ponto a ela e dela ao ponto seguinte, menos ir direto
+  const candidates = suggestionsFor(
     found,
     geometry,
     picks.map((p) => p.place),
     liked,
-  ).map((s, i) => ({
-    ref: `s${String(i + 1)}`,
-    place: s.place,
-    kind: s.kind,
-    detour: s.detour,
-    fraction: s.fraction,
-  }));
+  ).map((s) => {
+    const anchor = picks.reduce(
+      (index, _, i) => ((chosenFractions[i] ?? 0) <= s.fraction ? i : index),
+      -1,
+    );
+    const before = picks[anchor];
+    const after = picks[anchor + 1];
+    return {
+      s,
+      here: at(s.place),
+      anchor,
+      before: before ? at(before.place) : origin,
+      after: after ? at(after.place) : origin,
+    };
+  });
+  const detourPairs: [LngLat, LngLat][] = [];
+  for (const c of candidates) {
+    if (c.before) detourPairs.push([c.before, c.here]);
+    if (c.after) detourPairs.push([c.here, c.after]);
+  }
+  if (detourPairs.length > 0) {
+    Object.assign(table, (await measurePairs(table, detourPairs, deps)).added);
+  }
+  const suggestions = candidates
+    .map((c) => {
+      const to = minutes(c.before, c.here);
+      const onward = minutes(c.here, c.after);
+      const direct = minutes(c.before, c.after);
+      const detour =
+        to !== null && onward !== null && direct !== null
+          ? Math.max(0, to + onward - direct)
+          : null;
+      return { place: c.s.place, kind: c.s.kind, detour, fraction: c.s.fraction };
+    })
+    // o desvio medido que passa do teto já não é "no caminho"; o que não se mediu fica, sem número
+    .filter((s) => s.detour === null || s.detour <= MAX_DETOUR_MIN)
+    .map((s, i) => ({ ref: `s${String(i + 1)}`, ...s }));
+
+  const last = picks.at(-1);
   return {
     picks,
     chosenFractions,
     suggestions,
-    legs,
-    places: placesForAi(picks, suggestions, legs, origin !== null, pendingForAi(stage)),
+    legs: null,
+    drive: tableAmong(table, [...waypoints, ...candidates.map((c) => c.here)]),
+    places: placesForAi(
+      picks,
+      suggestions,
+      picks.map((p, i) => {
+        const previous = picks[i - 1];
+        return minutes(previous ? at(previous.place) : origin, at(p.place));
+      }),
+      origin && last ? minutes(at(last.place), origin) : null,
+      pendingForAi(stage),
+    ),
     missing: pendingOf(stage),
     destination,
     routed: route !== null,
@@ -1023,8 +1180,9 @@ export async function addNamed(
 // ------------------------------------------------------------- o planejador (fase 27)
 /**
  * Os cartões dos lugares que o planejador achou: na ordem em que a IA os pôs (os melhores primeiro),
- * sem repetir, com o tempo de carro de onde se sai; o tipo do app pelos tipos do Google (ou pelas
- * categorias da Geoapify, na fonte de reserva).
+ * sem repetir, com a distância em linha reta de onde se sai; o tipo do app pelos tipos do Google (ou
+ * pelas categorias da Geoapify, na fonte de reserva). O tempo de carro não é calculado aqui: é medido
+ * (`measureStage`) e lido da tabela na hora de pintar (`optionDrive`, D310).
  */
 export function optionsFromPlaces(
   places: readonly Place[],
@@ -1045,25 +1203,148 @@ export function optionsFromPlaces(
     const kind = isGooglePlace(place)
       ? kindOfGoogleTypes(place.categories)
       : kindOfCategories(place.categories);
-    const option: MapOption = { place, km, minutes: driveMinutes(km), kind };
+    const option: MapOption = { place, km, kind };
     if (around) {
-      const fromKm = haversineM(around.previous.at, here) / 1000;
       option.fromPrevious = {
         name: around.previous.name,
-        km: fromKm,
-        minutes: driveMinutes(fromKm),
+        km: haversineM(around.previous.at, here) / 1000,
+        at: around.previous.at,
       };
-      if (around.next) {
-        // o desvio: ir do anterior ao candidato e dele ao próximo ponto fixo, menos ir direto
-        const direct = driveMinutes(haversineM(around.previous.at, around.next) / 1000);
-        const via =
-          option.fromPrevious.minutes + driveMinutes(haversineM(here, around.next) / 1000);
-        option.detour = Math.max(0, via - direct);
-      }
+      option.next = around.next;
     }
     out.push(option);
   }
   return out;
+}
+
+/**
+ * O desvio em linha reta de um candidato de um passo seguinte, em km (ir do anterior a ele e dele ao
+ * próximo ponto fixo, menos ir direto): **só para ordenar os cartões**, nunca mostrado; o desvio que a
+ * tela mostra é o medido (`optionDrive`).
+ */
+function straightDetourKm(option: MapOption): number {
+  const previous = option.fromPrevious;
+  if (!previous?.at || !option.next) return previous?.km ?? option.km;
+  const here: LngLat = [option.place.lng, option.place.lat];
+  const via = haversineM(previous.at, here) + haversineM(here, option.next);
+  return Math.max(0, via - haversineM(previous.at, option.next)) / 1000;
+}
+
+// ---------------------------------------------------- o tempo de carro medido (D310)
+/** O que o cartão de uma opção mostra do tempo de carro, lido da tabela dos tempos medidos. */
+export type OptionDrive = {
+  /** de onde se sai até o lugar, em minutos; null sem medida (o cartão mostra a distância em linha reta) */
+  minutes: number | null;
+  /** do lugar escolhido no passo anterior até este; null sem medida ou sem passo anterior */
+  fromPrevious: number | null;
+  /**
+   * o que o lugar acrescenta de estrada: ir do anterior a ele e dele ao próximo ponto fixo, menos ir
+   * direto; null sem medida ou sem próximo ponto
+   */
+  detour: number | null;
+};
+
+export function optionDrive(
+  stage: Pick<MapStage, 'origin' | 'drive'>,
+  option: MapOption,
+): OptionDrive {
+  const here: LngLat = [option.place.lng, option.place.lat];
+  const minutes = (a: LngLat | null | undefined, b: LngLat | null | undefined) =>
+    a && b ? measuredMinutes(stage.drive, a, b) : null;
+  const previous = option.fromPrevious?.at;
+  const fromPrevious = minutes(previous, here);
+  const onward = minutes(here, option.next);
+  const direct = minutes(previous, option.next);
+  return {
+    minutes: minutes(stage.origin?.at, here),
+    fromPrevious,
+    detour:
+      fromPrevious !== null && onward !== null && direct !== null
+        ? Math.max(0, fromPrevious + onward - direct)
+        : null,
+  };
+}
+
+/**
+ * Os pares de pontos cujo tempo de carro a tela das opções precisa agora: os trechos do passeio com o
+ * que já está escolhido (de casa, entre as escolhas na ordem, a volta); o cartão de cada candidato à
+ * vista (de casa até ele; num passo seguinte, do lugar anterior até ele, dele ao próximo ponto fixo e o
+ * caminho direto, para o desvio); e, no passo a passo, o passeio com cada candidato do passo da vez
+ * escolhido ("Daria 1 h 20 no total").
+ */
+export function neededPairs(stage: MapStage): [LngLat, LngLat][] {
+  const home = stage.origin?.at ?? null;
+  const pairs: [LngLat, LngLat][] = [];
+  const chain = (s: MapStage) => {
+    const points = [
+      ...(home ? [home] : []),
+      ...orderedPicks(s, home).map((p) => at(p.place)),
+      ...(home ? [home] : []),
+    ];
+    points.forEach((p, i) => {
+      const next = points[i + 1];
+      if (next) pairs.push([p, next]);
+    });
+  };
+  chain(stage);
+  const current = currentStep(stage);
+  const groups = current === null ? stage.groups : [stage.groups[current]];
+  for (const g of groups) {
+    if (g?.status !== 'ok' || g.removed) continue;
+    for (const o of g.options.slice(0, g.shown)) {
+      const here = at(o.place);
+      const previous = o.fromPrevious?.at;
+      if (previous) {
+        pairs.push([previous, here]);
+        if (o.next) pairs.push([here, o.next], [previous, o.next]);
+      } else if (home) pairs.push([home, here]);
+      // "Daria X no total": só o passo a passo mostra a conta por cartão
+      if (current !== null && !stage.chosen.includes(o.place.id)) {
+        chain(toggleChoice(stage, o.place.id));
+      }
+    }
+  }
+  return pairs;
+}
+
+const driveStatusOf = (err: unknown): DriveStatus => {
+  const code = (err as { code?: string } | null)?.code;
+  if (code === 'offline') return 'offline';
+  if (code === 'no_source') return 'no_source';
+  if (code === 'daily_limit' || code === 'provider_quota') return 'limit';
+  return 'failed';
+};
+
+/**
+ * Mede no Google os pares que a tabela ainda não tem (em pedidos de até `DRIVE_MAX_PAIRS`): devolve o
+ * que entrou e, se a medição não respondeu, por quê. Nunca lança: o que não se mediu fica sem tempo.
+ */
+export async function measurePairs(
+  table: DriveTable | null | undefined,
+  pairs: readonly (readonly [LngLat, LngLat])[],
+  deps: Pick<FlowDeps, 'drive'>,
+): Promise<{ added: Record<string, number | null>; status: DriveStatus | null }> {
+  const missing = missingPairs(table, pairs);
+  const added: Record<string, number | null> = {};
+  try {
+    for (let i = 0; i < missing.length; i += DRIVE_MAX_PAIRS) {
+      const chunk = missing.slice(i, i + DRIVE_MAX_PAIRS);
+      Object.assign(added, tableOf(chunk, await deps.drive(chunk)));
+    }
+    return { added, status: null };
+  } catch (err) {
+    return { added, status: driveStatusOf(err) };
+  }
+}
+
+/** A tela das opções com o tempo de carro medido: o que falta medir entra na tabela dela. */
+export async function measureStage(
+  stage: MapStage,
+  deps: Pick<FlowDeps, 'drive'>,
+): Promise<MapStage> {
+  const { added, status } = await measurePairs(stage.drive, neededPairs(stage), deps);
+  if (Object.keys(added).length === 0 && status === (stage.driveStatus ?? null)) return stage;
+  return { ...stage, drive: { ...stage.drive, ...added }, driveStatus: status };
 }
 
 /** Onde se procurou, em palavras, pela relação do passo. */
@@ -1122,6 +1403,8 @@ export function stageFromOuting(
       ...(p.busca ? { busca: p.busca } : {}),
       ...(p.centro !== undefined ? { centro: p.centro } : {}),
       ...(p.descartados !== undefined ? { descartados: p.descartados } : {}),
+      ...(p.hora ? { hora: p.hora } : {}),
+      ...(p.permanencia_min ? { permanencia: p.permanencia_min } : {}),
     };
     // o app procura este passo quando chegar a vez: a relação depende da escolha anterior (depois do
     // passo 1), ou a IA não o procurou (o passo a passo)
@@ -1184,6 +1467,7 @@ export function stageFromOuting(
       nowhere: !from && groups.length === 0,
       ...(stepwise && first !== undefined ? { step: first } : {}),
       ...(destination ? { destination } : {}),
+      ...(result.passeio.saida ? { departure: result.passeio.saida } : {}),
     },
     dropped,
   };
@@ -1455,9 +1739,11 @@ export async function searchStep(
       ? withinCity(merged, plan.cityFilter)
       : { places: merged, neighbors: false };
     const around = plan.previous ? { previous: plan.previous, next: plan.next } : undefined;
+    // a ordem dos cartões de um passo seguinte: o menor desvio em linha reta primeiro (um critério de
+    // ordem; o tempo que cada cartão mostra é o medido)
     const options = optionsFromPlaces(scoped.places, from, around).sort((a, b) =>
       around
-        ? (a.detour ?? a.fromPrevious?.minutes ?? 0) - (b.detour ?? b.fromPrevious?.minutes ?? 0) ||
+        ? straightDetourKm(a) - straightDetourKm(b) ||
           (a.fromPrevious?.km ?? 0) - (b.fromPrevious?.km ?? 0)
         : 0,
     );
@@ -1479,14 +1765,18 @@ export async function searchStep(
 
 /**
  * A conta do passeio todo para o que está escolhido (fase 26, a 3.3): de casa ao passo 1, entre os
- * passos na ordem, do último a casa, mais a permanência e o que o horário impõe. A tela a mostra desde
- * o passo 1 e a refaz para cada candidato ("se for escolhido").
+ * passos na ordem, do último a casa, mais o tempo em cada lugar e o que o horário impõe. A tela a mostra
+ * desde o passo 1 e a refaz para cada candidato ("se for escolhido"). A estrada é a medida (D310): **null
+ * enquanto algum trecho não foi medido**. A hora que a pessoa disse para estar num lugar fixa a chegada
+ * nele, e a hora de sair dita por ela fica (D311); `earliest` é a saída de hoje (não se sai antes de agora).
  */
 export function stageAccount(
   stage: MapStage,
-  time: { start: string; date: string | null },
-): OutingAccount {
+  time: { start: string; date: string | null; earliest?: boolean },
+): OutingAccount | null {
   const origin = stage.origin?.at ?? null;
+  // a hora de sair que a pessoa disse fica; senão, a da tela (que uma hora dita de um lugar recalcula)
+  const said = filled(stage.departure);
   return outingAccount({
     home: origin,
     stops: orderedPicks(stage, origin).map((p) => ({
@@ -1495,9 +1785,13 @@ export function stageAccount(
       at: Number.isFinite(p.place.lat) ? ([p.place.lng, p.place.lat] as LngLat) : null,
       hours: p.place.hours ?? null,
       ...(p.dayTime ? { dayTime: p.dayTime } : {}),
+      dwell: dwellOf(p),
+      atTime: p.atTime ?? null,
     })),
-    start: time.start,
+    start: said ?? time.start,
+    startRule: said ? 'said' : time.earliest ? 'earliest' : 'default',
     date: time.date,
+    drive: (a, b) => measuredMinutes(stage.drive, a, b),
   });
 }
 

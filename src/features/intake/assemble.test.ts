@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { driveKey } from '@shared/drive-schema.ts';
+import type { LngLat } from '@shared/geo.ts';
 import type { Place } from '@shared/places-schema.ts';
 import type { PlanWrite } from '@shared/plan-protocol.ts';
 import {
@@ -170,15 +172,50 @@ describe('a viagem nasce do que foi escolhido', () => {
     expect(out.data.checklist_before).toEqual(['Conferir se abre no sábado']);
   });
 
-  it('ligar uma sugestão refaz os horários pela estimativa nos trechos novos', () => {
+  it('ligar uma sugestão: o trecho novo sem medida deixa os horários seguintes sem hora; medido, a hora certa (D310)', () => {
     const out = assemble(input());
     const points = out.points['2026-11-21'] ?? [];
     const on = points.filter((p) => p.key !== 'd0s1');
-    const times = scheduleDay(on, '12:30', out.schedule);
-    expect(times.get('d0s2')?.time).toBe('14:35');
-    // café → zoo pela estimativa (perto), zoo → casa pela estimativa: a chegada passa das 17:50
-    expect(times.get('d0s3')?.time).toBe('15:55');
-    expect(Number((times.get('d0s4')?.time ?? '').replace(':', ''))).toBeGreaterThan(1750);
+    const unmeasured = scheduleDay(on, '12:30', out.schedule);
+    expect(unmeasured.get('d0s2')?.time).toBe('14:35');
+    // café → zoo e zoo → casa nunca foram medidos: sem hora, nunca uma estimativa
+    expect(unmeasured.get('d0s3')?.time).toBeNull();
+    expect(unmeasured.get('d0s4')?.time).toBeNull();
+    const at = (p: Place): LngLat => [p.lng, p.lat];
+    const home: LngLat = [-50.144, -26.37];
+    const measured = scheduleDay(on, '12:30', {
+      ...out.schedule,
+      drive: {
+        [driveKey(at(TORTEN.place), at(ZOO.place))]: 300,
+        [driveKey(at(ZOO.place), home)]: 7_200,
+      },
+    });
+    // 14:35 no café, 75 min lá, 5 min ao zoo → 15:55; 90 min no zoo, 2 h de volta → 19:25
+    expect(measured.get('d0s3')?.time).toBe('15:55');
+    expect(measured.get('d0s4')?.time).toBe('19:25');
+  });
+
+  it('o tempo dito num lugar e a hora dita entram nos horários; a hora de sair dita fica', () => {
+    const fixed = assemble(input({ chosen: [{ ...TORTEN, dwell: 15, atTime: '15:00' }] }));
+    // 15:00 no café, menos 2 h 05 de estrada: sair às 12:55 (o "12:30" da escrita não vale)
+    expect(fixed.data.days[0]?.stops.map((s) => s.time)).toEqual([
+      '12:55',
+      null,
+      '15:00',
+      null,
+      '17:15',
+    ]);
+    expect(fixed.schedule).toMatchObject({ dwell: { d0s2: 15 }, fixed: { d0s2: '15:00' } });
+    const said = assemble(input({ chosen: [{ ...TORTEN, atTime: '15:00' }], saidStart: '11:00' }));
+    // saindo às 11:00, chega às 13:05 e espera até as 15:00
+    expect(said.data.days[0]?.stops.map((s) => s.time)).toEqual([
+      '11:00',
+      null,
+      '15:00',
+      null,
+      '18:15',
+    ]);
+    expect(said.schedule.startRule).toEqual({ '2026-11-21': 'said' });
   });
 
   it('numa viagem de mais de um dia, onde dormir vira sugestão no fim de cada dia que não é o último', () => {
@@ -204,22 +241,21 @@ describe('a viagem nasce do que foi escolhido', () => {
       ['Saída de Papanduva, SC', 'Torten Paradies', 'Pousada'],
       ['Chegada em Papanduva, SC'],
     ]);
-    expect(out.suggestions.d0s2).toEqual({ detour: 0, city: 'Pomerode', night: true });
+    // a hospedagem não tem desvio medido: sem número (D310), nunca um zero de mentira
+    expect(out.suggestions.d0s2).toEqual({ detour: null, city: 'Pomerode', night: true });
   });
 
-  it('o que vai para a IA: as escolhas com o tempo de carro e as sugestões com o desvio, como dado', () => {
-    const places = placesForAi(
-      [TORTEN],
-      [ZOO],
-      [{ duration_s: 7_500 }, { duration_s: 7_200 }],
-      true,
-    );
+  it('o que vai para a IA: as escolhas com o tempo de carro medido e as sugestões com o desvio, como dado', () => {
+    const places = placesForAi([TORTEN], [ZOO], [125], 120);
     // sem pendentes, nada a mais (o app de antes continua lendo o mesmo pedido)
     expect(places).not.toHaveProperty('pending');
     expect(
-      placesForAi([TORTEN], [], null, true, [{ name: 'Feirinha', kind: 'event', why: 'not_found' }])
-        .pending,
+      placesForAi([TORTEN], [], [null], null, [
+        { name: 'Feirinha', kind: 'event', why: 'not_found' },
+      ]).pending,
     ).toEqual([{ name: 'Feirinha', kind: 'event', why: 'not_found' }]);
+    // sem medida, a IA não recebe tempo nenhum
+    expect(placesForAi([TORTEN], [], [null], null).chosen[0]?.minutes).toBeNull();
     expect(places).toEqual({
       chosen: [
         {

@@ -22,6 +22,7 @@ import { assemble } from '../../src/features/intake/assemble.ts';
 import {
   advanceStep,
   currentStep,
+  measureStage,
   nextStep,
   prepare,
   searchStep,
@@ -150,6 +151,8 @@ async function chooseStepByStep(
     if (next === null) break;
     map = advanceStep(map, next);
   }
+  // o tempo de carro do que ficou escolhido, medido como o app mede (D310): a conta sai dele
+  map = await measureStage(map, deps);
   return { map, passos };
 }
 
@@ -401,7 +404,13 @@ export async function runBateria(
       // horário (uma viagem) ou hoje
       const contaDe = (start: string, date: string | null): ContaDoTempo | null => {
         if (chosen.chosen.length === 0) return null;
-        const acc = stageAccount(chosen, { start, date });
+        const acc = stageAccount(chosen, {
+          start,
+          date,
+          earliest: kind === 'today',
+        });
+        // a estrada sem medida não tem conta (D310): o juiz lê "sem conta", nunca um total de chute
+        if (!acc) return null;
         return {
           total_min: acc.total,
           tempo_min: budget?.minutes ?? null,
@@ -409,7 +418,7 @@ export async function runBateria(
           chegadas: acc.arrivals.map((a) => ({
             nome: a.name,
             hora: a.at,
-            aviso: a.outsideWindow ?? (a.closed ? `fechado às ${a.at}` : null),
+            aviso: a.outsideWindow ?? a.late ?? (a.closed ? `fechado às ${a.at}` : null),
             fechada: a.closed,
           })),
         };
@@ -465,7 +474,9 @@ export async function runBateria(
             chosenFractions: prepared.chosenFractions,
             suggestions: prepared.suggestions,
             nights: [],
-            legs: prepared.legs,
+            ...(prepared.drive ? { drive: prepared.drive } : { legs: prepared.legs }),
+            saidStart: chosen.departure ?? null,
+            today: kind === 'today',
             missing: prepared.missing,
             write,
             firstDate: time.date,

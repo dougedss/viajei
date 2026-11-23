@@ -15,6 +15,7 @@ import {
   TIME_QUESTION_TEXT,
   TOOL_NAMES,
   topicOf,
+  saidTime,
 } from './plan-search-ai.ts';
 import { planSearchRequestSchema } from './plan-search-protocol.ts';
 
@@ -244,6 +245,8 @@ describe('a mensagem e a entrega', () => {
           achou: true,
           busca,
           descartados: -2,
+          hora: '18h',
+          permanencia_min: 900,
         },
         {
           ordem: 1,
@@ -255,6 +258,8 @@ describe('a mensagem e a entrega', () => {
           achou: true,
           busca: { palavras: 'café', tipo_google: 'cafe', aberto_agora: false, nota_minima: 4 },
           descartados: 1,
+          hora: 'às seis',
+          permanencia_min: 15,
         },
       ],
       pendentes: [
@@ -271,8 +276,22 @@ describe('a mensagem e a entrega', () => {
       destino: '',
       origem: 'Papanduva',
       tempo_min: 2_000,
+      saida: '8:30',
     });
     expect(out.origem).toBe('Papanduva');
+    // a hora dita como o app a guarda (D311): "18h" é 18:00, "8:30" é 08:30; o que não é hora fica vazio
+    expect(out.saida).toBe('08:30');
+    expect(out.passos.map((p) => p.hora)).toEqual(['18:00', '']);
+    // o tempo no lugar (D312), no teto de 12 h
+    expect(out.passos.map((p) => p.permanencia_min)).toEqual([720, 15]);
+    expect(['18:00', '7', '7:05', '24:00', '18:60', 'meio-dia'].map(saidTime)).toEqual([
+      '18:00',
+      '07:00',
+      '07:05',
+      '',
+      '',
+      '',
+    ]);
     // o tempo nos limites de um dia
     expect(out.tempo_min).toBe(1_440);
     // as palavras vazias caem no o_que; a nota mínima no teto 5; os descartados nunca negativos

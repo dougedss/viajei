@@ -33,11 +33,14 @@ const PATTERNS: readonly { kind: SecretKind; re: RegExp }[] = [
   // a chave da Geoapify é um hexadecimal de 32 sem prefixo: o que se procura é a chamada do
   // navegador (o host da API) e a chave na URL; a busca é só da função `find-places` (fase 24)
   { kind: 'chave ou chamada da Geoapify', re: /api\.geoapify\.com|apiKey=[0-9a-f]{32}/g },
-  // a Places API (New) do Google (fase 27) é só da função: o host no client e a chave (que começa por
-  // AIza) em qualquer lugar são proibidos
+  // a Places API (New) do Google (fase 27) e a Routes API (D310) são só das funções: o host no client
+  // e a chave (que começa por AIza) em qualquer lugar são proibidos
   {
     kind: 'chave ou chamada do Google Places',
-    re: new RegExp(`places\\.googleapis\\.com|\\bAIza${B64URL}{35}\\b|[?&]key=AIza`, 'g'),
+    re: new RegExp(
+      `places\\.googleapis\\.com|routes\\.googleapis\\.com|\\bAIza${B64URL}{35}\\b|[?&]key=AIza`,
+      'g',
+    ),
   },
 ];
 

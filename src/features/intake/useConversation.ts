@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import { driveKey } from '@shared/drive-schema.ts';
 import type { LngLat } from '@shared/geo.ts';
 import type { ImportEvent } from '@shared/import-protocol.ts';
 import { PLAN_FN, planWriteSchema } from '@shared/plan-protocol.ts';
@@ -26,6 +27,7 @@ import {
   saveConversation,
   type Conversation,
 } from './conversation.ts';
+import { driveTimes } from './drive-times.ts';
 import { findPlaces } from './find-places.ts';
 import {
   addNamed,
@@ -34,6 +36,9 @@ import {
   answersByTopic,
   backTo,
   currentStep,
+  measurePairs,
+  measureStage,
+  neededPairs,
   nextStep,
   nightsNear,
   pickNamed,
@@ -42,6 +47,7 @@ import {
   questionsAfter,
   removeWant,
   searchStep,
+  setDwell,
   showMore,
   stageFromOuting,
   stepGroups,
@@ -71,6 +77,11 @@ import { todayQuestions } from './today.ts';
  * uma leitura só escreve a viagem sobre o que foi escolhido (a `plan-trip`); e a revisão da fase 10
  * cria a viagem ao salvar. A conversa mora no aparelho: fechar o app nas opções ou na revisão não
  * pergunta nem busca de novo. Sair da tela corta a leitura.
+ *
+ * **O tempo de carro é medido** (a correção de 22/11/2026, D310): a cada mudança nas opções, o app pede
+ * à `drive-times` os pares que a tela precisa e ainda não tem (de casa a cada candidato, entre as
+ * escolhas, a volta), e o que voltou fica na conversa. Enquanto um trecho não foi medido, o cartão
+ * mostra a distância em linha reta e a conta do passeio espera; nenhum tempo é estimado.
  */
 type ErrorPhase = Extract<ImportPhase, { kind: 'error' }>;
 const errorPhase = (code: ErrorPhase['code'], retryAt: string | null = null): ErrorPhase => ({
@@ -125,6 +136,10 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
   const session = useRef<ImportSession>(IDLE);
   const abort = useRef<AbortController | null>(null);
   const mounted = useRef(false);
+  /** a conversa como está agora: a medição do tempo de carro chega depois, e junta no que houver */
+  const latest = useRef<Conversation | null>(null);
+  /** os pares que já estão a caminho do Google: não se pede o mesmo duas vezes */
+  const measuring = useRef(new Set<string>());
   /** a conversa que espera a resposta à pergunta de posição (fase 25) */
   const pendingStart = useRef<{ kind: 'plan' | 'today'; text: string } | null>(null);
 
@@ -140,18 +155,43 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
   }, []);
 
   const keep = async (next: Conversation) => {
+    latest.current = next;
     setConv(next);
     await saveConversation(next);
   };
 
-  /** A rede da conversa: a busca pela função, o Nominatim pela fila, a rota pela função. */
+  /** A rede da conversa: a busca pela função, o Nominatim pela fila, a rota e o tempo de carro pelas funções. */
   const deps = (onProgress?: FlowDeps['onProgress']): FlowDeps => ({
     findPlaces,
     geocode: (q, bias) => geocodePlace(q, bias ?? null),
     searchNear: (q, center, radiusKm) => searchNear(q, center, radiusKm),
     route: (waypoints: LngLat[]) => requestRoute(waypoints).catch(() => null),
+    drive: driveTimes,
     ...(onProgress ? { onProgress } : {}),
   });
+
+  /**
+   * Mede no Google o que a tela das opções precisa e ainda não tem (D310). O resultado entra na
+   * conversa **como ela estiver quando voltar** (a pessoa pode ter escolhido outra coisa no meio): só
+   * a tabela dos tempos muda. Sem resposta, a conversa guarda por quê, a tela diz, e a medição só
+   * roda de novo num gesto (outra escolha, ou "Tentar de novo").
+   */
+  const measure = async () => {
+    const map = latest.current?.map;
+    if (!map) return;
+    const pairs = neededPairs(map).filter(([a, b]) => !measuring.current.has(driveKey(a, b)));
+    const keys = pairs.map(([a, b]) => driveKey(a, b));
+    for (const key of keys) measuring.current.add(key);
+    const { added, status } = await measurePairs(map.drive, pairs, deps());
+    for (const key of keys) measuring.current.delete(key);
+    const now = latest.current;
+    if (!now?.map) return;
+    if (Object.keys(added).length === 0 && status === (now.map.driveStatus ?? null)) return;
+    await keep({
+      ...now,
+      map: { ...now.map, drive: { ...now.map.drive, ...added }, driveStatus: status },
+    });
+  };
 
   /**
    * O passo da vez (fase 26): se ainda não foi procurado, a busca do app pela relação dele, com o
@@ -169,20 +209,31 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
       total: 1,
       note: `Procurando ${label}${plan ? ` ${plan.where}` : ''}…`,
     });
-    const searched = await searchStep(map, step, deps());
+    // o tempo de carro das opções vem medido junto: os cartões já pintam com ele
+    const searched = await measureStage(await searchStep(map, step, deps()), deps());
     await keep({ ...c, map: searched, prepared: null });
     setStage({ kind: 'choosing' });
   };
 
+  // um gesto nas opções limpa o "não deu para medir": a medição tenta de novo com o que mudou
   const setMap = (change: (m: MapStage) => MapStage) => {
     if (!conv?.map) return;
-    void keep({ ...conv, map: change(conv.map), prepared: null });
+    void keep({ ...conv, map: { ...change(conv.map), driveStatus: null }, prepared: null });
   };
+
+  // as opções mudaram (uma escolha, "mais opções", o tempo num lugar): mede o que falta
+  const shownMap = conv?.map ?? null;
+  const choosing = stage.kind === 'choosing';
+  useEffect(() => {
+    if (choosing && shownMap && !shownMap.driveStatus) void measure();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a medição lê a conversa pelo `latest`
+  }, [shownMap, choosing]);
 
   useEffect(() => {
     let alive = true;
     void loadConversation().then((c) => {
       if (!alive) return;
+      latest.current = c;
       setConv(c);
       // de volta à tela: as opções e as perguntas continuam; a leitura que estava no meio, não
       if (c?.map) {
@@ -386,8 +437,10 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
     const reference: LngLat | null = planned.center
       ? [planned.center.lng, planned.center.lat]
       : null;
-    const { stage: map, dropped } = stageFromOuting(result, origin.origin, reference);
+    const { stage: judged, dropped } = stageFromOuting(result, origin.origin, reference);
     if (dropped > 0) console.info(`[conversa] ${String(dropped)} referência(s) da IA sem lugar`);
+    // o tempo de carro das opções do passo 1, medido antes de a tela pintar (D310)
+    const map = await measureStage(judged, deps());
     const next = { ...planned, map, prepared: null };
     await keep(next);
     setStage({ kind: 'choosing' });
@@ -418,7 +471,10 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
       chosenFractions: prepared.chosenFractions,
       suggestions: prepared.suggestions,
       nights,
-      legs: prepared.legs,
+      // um caminho guardado por uma versão de antes traz os trechos por índice; o novo, a tabela
+      ...(prepared.drive ? { drive: prepared.drive } : { legs: prepared.legs }),
+      saidStart: map.departure ?? null,
+      today,
       missing: prepared.missing,
       write: parsed.data,
       firstDate: today ? c.context.today : plusDay(c.context.today),
@@ -608,6 +664,8 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
           // escrita) e a hora de sair segue a hora do dia dita para o primeiro passo (D307)
           start: conv.kind === 'today' ? soon(new Date()) : startFor(firstDayTime(conv.map)),
           date: conv.kind === 'today' ? conv.context.today : null,
+          // na saída de hoje não se sai antes de agora: a hora dita de um lugar só atrasa a saída
+          earliest: conv.kind === 'today',
           budget: timeBudget({
             answer: conv.time_answer ?? answersByTopic(conv.questions, conv.answers).reach ?? null,
             tempo_min: conv.plan?.tempo_min ?? null,
@@ -615,6 +673,10 @@ export function useConversation(uid: string | null, onReview: () => Promise<void
           unread: !!conv.time_answer && readReach(conv.time_answer) === null,
         }
       : null,
+    /** "mudar" o tempo num lugar escolhido (D312): vale acima do dito no pedido e do padrão do tipo. */
+    setDwell: (placeId: string, minutes: number) => setMap((m) => setDwell(m, placeId, minutes)),
+    /** "Tentar de novo" na medição do tempo de carro que não respondeu (D310). */
+    measureAgain: () => setMap((m) => m),
     pick: (index: number, pick: NamedEntry['pick']) => setMap((m) => pickNamed(m, index, pick)),
     /** "Tirar da viagem" uma vontade sem opção, e o desfazer (fase 25, D278). */
     remove: (group: number, removed: boolean) => setMap((m) => removeWant(m, group, removed)),

@@ -1,6 +1,10 @@
 // caminhos relativos: a medição do laboratório (`scripts/lab`) roda este módulo sem os atalhos
 import type { StopKind } from '../../../supabase/functions/_shared/constants.ts';
-import { haversineM, type LngLat } from '../../../supabase/functions/_shared/geo.ts';
+import {
+  measuredMinutes,
+  type DriveTable,
+} from '../../../supabase/functions/_shared/drive-schema.ts';
+import type { LngLat } from '../../../supabase/functions/_shared/geo.ts';
 import type { ImportData, ImportStop } from '../../../supabase/functions/_shared/import-schema.ts';
 import type { OpeningPeriod, Place } from '../../../supabase/functions/_shared/places-schema.ts';
 import type { DayTime } from '../../../supabase/functions/_shared/plan-search-protocol.ts';
@@ -12,7 +16,6 @@ import type {
   PlanWrite,
 } from '../../../supabase/functions/_shared/plan-protocol.ts';
 import { mainCategory } from './places.ts';
-import { driveMinutes } from './search.ts';
 
 /**
  * A viagem nasce do que foi escolhido (fase 24), pura: das escolhas da pessoa, dos lugares que ela
@@ -23,15 +26,32 @@ import { driveMinutes } from './search.ts';
  * escreve sobre o que veio por referência, e o que ela devolver fora disso sai aqui (`reconcile`).
  * O que é fato (o lugar, a coordenada, o tempo de carro, o horário de funcionamento) vem do mapa e da
  * rota; o que é texto (o nome da viagem, a frase de cada lugar, as missões, as listas) vem da IA.
+ *
+ * Desde a correção de 22/11/2026: o tempo de carro é o **medido** pelo Google (D310; o trecho sem
+ * medida fica sem horário, nunca com uma estimativa); a hora que a pessoa disse para estar num lugar
+ * fixa a chegada nele, e a hora de sair é calculada para trás (D311); o tempo em cada lugar é o que ela
+ * disse ou mudou na tela, senão o padrão do tipo (D312).
  */
 
 /**
  * Um lugar que vai para a viagem: a escolha (`e`), o nomeado (`n`) ou a sugestão (`s`); desde a fase 26,
  * a hora do dia dita para o passo dele ("de manhã"), para a revisão avisar quando o roteiro chega fora.
  */
-export type PlacePick = { ref: string; place: Place; kind: StopKind; dayTime?: DayTime };
+export type PlacePick = {
+  ref: string;
+  place: Place;
+  kind: StopKind;
+  dayTime?: DayTime;
+  /** os minutos no lugar que a pessoa disse ou mudou na tela (D312); sem isto, o padrão do tipo */
+  dwell?: number;
+  /** a hora que a pessoa disse para estar neste lugar, "HH:MM" (D311) */
+  atTime?: string;
+};
 
-/** A permanência padrão por tipo, em minutos: dá os horários; a pessoa ajusta na revisão. */
+/**
+ * A permanência padrão por tipo, em minutos: vale quando a pessoa não disse quanto tempo fica; a tela
+ * das opções a mostra em cada lugar escolhido e deixa mudar (D312).
+ */
 export const DWELL_MINUTES: Readonly<Record<StopKind, number>> = {
   origin: 0,
   transit: 0,
@@ -44,6 +64,10 @@ export const DWELL_MINUTES: Readonly<Record<StopKind, number>> = {
   fuel: 15,
   other: 60,
 };
+
+/** Os minutos num lugar: o que a pessoa disse ou mudou, senão o padrão do tipo. */
+export const dwellOf = (p: { kind: StopKind; dwell?: number | undefined }): number =>
+  p.dwell ?? DWELL_MINUTES[p.kind];
 
 /** O lugar do mapa como dado para a IA: a referência, o nome do mapa, a cidade, a categoria. */
 export function placeForAi(p: PlacePick, minutes: number | null): PlanPlace {
@@ -60,29 +84,36 @@ export function placeForAi(p: PlacePick, minutes: number | null): PlanPlace {
   };
 }
 
-/** Os minutos de carro de cada trecho da rota (a origem, as escolhas na ordem, a volta). */
-export type Legs = readonly { duration_s: number }[];
-const legMinutes = (legs: Legs | null, i: number): number | null => {
+/**
+ * Os trechos da rota por índice (a origem, as escolhas na ordem, a volta): o formato de antes da D310,
+ * que um caminho guardado por uma versão anterior ainda traz. O caminho novo leva a tabela dos tempos
+ * medidos (`drive`), e os trechos saem dela pelos pontos.
+ */
+export type Legs = readonly ({ duration_s: number } | null)[];
+const legMinutes = (legs: Legs | null | undefined, i: number): number | null => {
   const s = legs?.[i]?.duration_s;
   return s === undefined ? null : Math.max(5, Math.round(s / 60 / 5) * 5);
 };
 
 /**
- * O que vai para a leitura que escreve: as escolhas com o tempo de carro, as sugestões com o desvio e,
- * desde a fase 25 (D278), o que a pessoa pediu e não entrou, como dado, para a IA não escrever sobre
- * isso como se estivesse no roteiro.
+ * O que vai para a leitura que escreve: as escolhas com o tempo de carro até cada uma (medido; null
+ * quando não se mediu, e a IA não recebe tempo nenhum), as sugestões com o desvio e, desde a fase 25
+ * (D278), o que a pessoa pediu e não entrou, como dado, para a IA não escrever sobre isso como se
+ * estivesse no roteiro.
  */
 export function placesForAi(
   chosen: readonly PlacePick[],
-  suggestions: readonly (PlacePick & { detour: number })[],
-  legs: Legs | null,
-  home: boolean,
+  suggestions: readonly (PlacePick & { detour: number | null })[],
+  /** os minutos de carro até cada escolha, desde o ponto anterior (a saída na primeira) */
+  minutes: readonly (number | null)[],
+  /** os minutos da volta para casa; null sem casa ou sem medida */
+  homeMinutes: number | null,
   pending: readonly PlanPending[] = [],
 ): PlanPlaces {
   return {
-    chosen: chosen.map((p, i) => placeForAi(p, legMinutes(legs, i))),
+    chosen: chosen.map((p, i) => placeForAi(p, minutes[i] ?? null)),
     suggestions: suggestions.map((s) => placeForAi(s, s.detour)),
-    home_minutes: home ? legMinutes(legs, chosen.length) : null,
+    home_minutes: homeMinutes,
     ...(pending.length > 0 ? { pending: [...pending] } : {}),
   };
 }
@@ -122,40 +153,127 @@ const toHhmm = (min: number) => {
 
 /** Um ponto do dia para a conta dos horários: a chave da revisão, o tipo e onde fica. */
 export type ScheduleStop = { key: string; kind: StopKind; lat: number | null; lng: number | null };
-/** O que a revisão guarda para refazer os horários no aparelho ao ligar uma sugestão. */
+/** O que a revisão guarda para refazer os horários no aparelho ao ligar ou desligar uma parada. */
 export type Schedule = {
-  /** a hora de sair de cada dia */
+  /** a hora de sair de cada dia (quando nenhuma hora dita a recalcula) */
   starts: Readonly<Record<string, string>>;
-  /** os minutos de carro que a rota real deu, por par de chaves ("d0s0>d0s1") */
+  /**
+   * os minutos de carro por par de chaves ("d0s0>d0s1"): o formato de antes da D310 (uma revisão
+   * guardada por uma versão anterior); a montagem nova deixa vazio e usa `drive`
+   */
   legs: Readonly<Record<string, number>>;
+  /**
+   * os tempos de carro medidos, por par de pontos (D310): a revisão refaz os horários com eles quando a
+   * pessoa liga ou desliga uma parada; o trecho que não está aqui não se sabe
+   */
+  drive?: DriveTable;
+  /** os minutos em cada lugar que não são o padrão do tipo, pela chave da revisão (D312) */
+  dwell?: Readonly<Record<string, number>>;
+  /** a hora dita para estar num lugar, pela chave da revisão (D311): a saída do dia é calculada para trás */
+  fixed?: Readonly<Record<string, string>>;
+  /**
+   * o que a hora de sair de um dia é, pela data: `said`, a pessoa disse a hora de sair, e ela fica;
+   * `earliest` (a saída de hoje), o mais cedo que dá. Sem isto, a hora dita de um lugar a recalcula
+   */
+  startRule?: Readonly<Record<string, 'said' | 'earliest'>>;
 };
 
-/** O tempo de carro entre dois pontos: o da rota real quando houve, senão a estimativa. */
+/**
+ * O tempo de carro entre dois pontos do dia: o medido (pelos pontos, D310), ou o trecho guardado pelas
+ * chaves numa revisão de antes. **Null quando não se sabe** (um ponto sem lugar, um trecho sem medida):
+ * a conta dos horários não chuta.
+ */
 export function travelBetween(a: ScheduleStop, b: ScheduleStop, schedule: Schedule): number | null {
-  const real = schedule.legs[`${a.key}>${b.key}`];
-  if (real !== undefined) return real;
+  const byKey = schedule.legs[`${a.key}>${b.key}`];
+  if (byKey !== undefined) return byKey;
   if (a.lat === null || a.lng === null || b.lat === null || b.lng === null) return null;
-  return driveMinutes(haversineM([a.lng, a.lat], [b.lng, b.lat]) / 1000);
+  return measuredMinutes(schedule.drive, [a.lng, a.lat], [b.lng, b.lat]);
+}
+
+const located = (s: ScheduleStop) => s.lat !== null && s.lng !== null;
+const stayOf = (s: ScheduleStop, schedule: Schedule) =>
+  schedule.dwell?.[s.key] ?? DWELL_MINUTES[s.kind];
+
+/**
+ * A hora de sair de um dia, em minutos: a primeira parada com hora dita fixa a chegada nela, e a saída
+ * é a hora dita menos a estrada e o tempo nos lugares até lá (D311); sem hora dita, com a hora de sair
+ * dita pela pessoa, ou sem medida de um trecho até lá, a hora de sair do dia.
+ */
+function dayStart(
+  stops: readonly ScheduleStop[],
+  start: string,
+  schedule: Schedule,
+  rule: 'default' | 'said' | 'earliest',
+): number {
+  const fallback = toMin(start);
+  if (rule === 'said' || !schedule.fixed) return fallback;
+  let offset = 0;
+  let last: ScheduleStop | null = null;
+  for (const stop of stops) {
+    if (located(stop)) {
+      if (last) {
+        const leg = travelBetween(last, stop, schedule);
+        if (leg === null) return fallback;
+        offset += leg;
+      }
+      last = stop;
+    }
+    const said = schedule.fixed[stop.key];
+    if (said) {
+      const wanted = toMin(said) - offset;
+      // na saída de hoje não se sai antes de agora: a hora dita só atrasa a saída
+      return rule === 'earliest' ? Math.max(fallback, wanted) : wanted;
+    }
+    offset += stayOf(stop, schedule);
+  }
+  return fallback;
 }
 
 /**
- * Os horários de um dia: a hora de sair, e cada parada seguinte no fim da anterior (a permanência do
- * tipo) mais o tempo de carro do trecho. Devolve, por chave, o horário e os minutos até a próxima.
+ * Os horários de um dia: a hora de sair (a do dia, ou a calculada para trás de uma hora dita), e cada
+ * parada seguinte no fim da anterior (o tempo no lugar) mais o tempo de carro medido do trecho. Chegar
+ * antes de uma hora dita é esperar por ela. A parada sem lugar (pendente) não tem estrada: fica na
+ * hora em que se chegaria nela sem sair do lugar anterior, e o trecho seguinte é medido do último ponto
+ * com lugar. **Depois de um trecho sem medida, os horários ficam sem hora** (null), até uma hora dita
+ * dizer de novo onde o dia está. Devolve, por chave, o horário e os minutos até a próxima.
  */
 export function scheduleDay(
   stops: readonly ScheduleStop[],
   start: string,
   schedule: Schedule,
-): Map<string, { time: string; travel: number | null }> {
-  const out = new Map<string, { time: string; travel: number | null }>();
-  let at = toMin(start);
-  stops.forEach((stop, i) => {
+  rule: 'default' | 'said' | 'earliest' = 'default',
+): Map<string, { time: string | null; travel: number | null }> {
+  const out = new Map<string, { time: string | null; travel: number | null }>();
+  let clock: number | null = dayStart(stops, start, schedule, rule);
+  let last: ScheduleStop | null = null;
+  for (const [i, stop] of stops.entries()) {
+    if (located(stop)) {
+      if (last && clock !== null) {
+        const leg = travelBetween(last, stop, schedule);
+        clock = leg === null ? null : clock + leg;
+      }
+      last = stop;
+    }
+    const said = schedule.fixed?.[stop.key];
+    if (said) {
+      const target = toMin(said);
+      clock = clock === null ? target : Math.max(clock, sameDay(target, clock));
+    }
     const next = stops[i + 1];
-    const travel = next ? travelBetween(stop, next, schedule) : null;
-    out.set(stop.key, { time: toHhmm(at), travel });
-    at += DWELL_MINUTES[stop.kind] + (travel ?? 0);
-  });
+    out.set(stop.key, {
+      time: clock === null ? null : toHhmm(clock),
+      travel: next ? travelBetween(stop, next, schedule) : null,
+    });
+    if (clock !== null) clock += stayOf(stop, schedule);
+  }
   return out;
+}
+
+/** A hora dita no dia em que o relógio está (a que ficou mais de 12 h para trás é a do dia seguinte). */
+function sameDay(target: number, clock: number): number {
+  let t = target + Math.floor(clock / 1440) * 1440;
+  if (t + 720 < clock) t += 1440;
+  return t;
 }
 
 // ------------------------------------------------------------------------------ a montagem
@@ -164,14 +282,20 @@ export type AssembleInput = {
   origin: { label: string; at: LngLat } | null;
   /** as escolhas e os nomeados confirmados, na ordem do caminho */
   chosen: readonly PlacePick[];
-  /** as sugestões do caminho, com o desvio e onde caem na rota (de 0 a 1) */
-  suggestions: readonly (PlacePick & { detour: number; fraction: number })[];
+  /** as sugestões do caminho, com o desvio medido (null sem medida) e onde caem na rota (de 0 a 1) */
+  suggestions: readonly (PlacePick & { detour: number | null; fraction: number })[];
   /** onde cada escolha cai na rota (de 0 a 1), na mesma ordem */
   chosenFractions: readonly number[];
   /** onde dormir: as hospedagens perto do destino, sugestões no fim de cada dia que não é o último */
   nights: readonly PlacePick[];
-  /** os trechos da rota real: da saída a cada escolha, e a volta */
-  legs: Legs | null;
+  /** os trechos por índice de um caminho guardado antes da D310; o caminho novo manda `drive` */
+  legs?: Legs | null;
+  /** os tempos de carro medidos, por par de pontos (D310): os horários saem deles */
+  drive?: DriveTable;
+  /** a hora de sair que a pessoa disse ("saindo às 8", D311); vale no primeiro dia, acima da IA */
+  saidStart?: string | null;
+  /** a saída de hoje: a hora de sair é o mais cedo que dá (uma hora dita só a atrasa) */
+  today?: boolean;
   /**
    * os lugares que a pessoa nomeou e o mapa não achou: ela disse, então entram (a regra de ouro), sem
    * coordenada, no fim do último dia antes da chegada; a revisão procura de novo e a tela diz
@@ -180,7 +304,7 @@ export type AssembleInput = {
   write: PlanWrite;
   /** o dia da viagem quando a IA não disse (amanhã numa viagem, hoje na saída de hoje) */
   firstDate: string;
-  /** a hora de sair quando a IA não disse */
+  /** a hora de sair quando nem a pessoa nem a IA disseram */
   defaultStart: string;
   /**
    * o destino que a pessoa disse ("vou pra Curitiba"), pelo nome da cidade (fase 28): o objetivo do
@@ -194,7 +318,7 @@ export type AssembleInput = {
 export type Assembled = {
   data: ImportData;
   trip: { name: string | null; start_date: string; end_date: string; origin: string | null };
-  suggestions: Record<string, { detour: number; city: string | null; night: boolean }>;
+  suggestions: Record<string, { detour: number | null; city: string | null; night: boolean }>;
   schedule: Schedule;
   /** as chaves de cada ponto do dia, na ordem, com o tipo e o lugar (para refazer os horários) */
   points: Record<string, ScheduleStop[]>;
@@ -307,7 +431,8 @@ export function assemble(input: AssembleInput): Assembled {
   }
   const detours = new Map(input.suggestions.map((s) => [s.ref, s.detour]));
   const suggestionMeta = (p: PlacePick, night: boolean) => ({
-    detour: detours.get(p.ref) ?? 0,
+    // o desvio medido; a hospedagem e a sugestão sem medida ficam sem número (a tela não chuta)
+    detour: detours.get(p.ref) ?? null,
     city: p.place.city,
     night,
   });
@@ -389,6 +514,8 @@ export function assemble(input: AssembleInput): Assembled {
   const google: Assembled['google'] = {};
   const hours: Assembled['hours'] = {};
   const dayTimes: Assembled['dayTimes'] = {};
+  const dwell: Record<string, number> = {};
+  const fixed: Record<string, string> = {};
   const pending: string[] = [];
   // a rota real liga os pontos ligados de saída: a origem, as escolhas na ordem e a volta
   const routed: string[] = [];
@@ -407,6 +534,9 @@ export function assemble(input: AssembleInput): Assembled {
       if (slot.pick.place.hours && slot.pick.place.hours.length > 0)
         hours[key] = slot.pick.place.hours;
       if (slot.pick.dayTime) dayTimes[key] = slot.pick.dayTime;
+      if (slot.pick.dwell !== undefined) dwell[key] = slot.pick.dwell;
+      // a hora dita é de uma escolha da pessoa: uma sugestão não fixa hora nenhuma
+      if (slot.pick.atTime && !slot.suggestion) fixed[key] = slot.pick.atTime;
       return {
         key,
         kind: slot.pick.kind,
@@ -415,23 +545,44 @@ export function assemble(input: AssembleInput): Assembled {
       };
     });
   });
-  // sem origem, a rota começa na primeira escolha: o trecho 0 da rota é saída → primeira escolha
-  const offset = input.origin ? 0 : 1;
-  for (let i = 0; i + 1 < routed.length; i++) {
-    const m = legMinutes(input.legs, i + offset);
-    if (m !== null) legs[`${routed[i] ?? ''}>${routed[i + 1] ?? ''}`] = m;
+  // um caminho guardado antes da D310 traz os trechos por índice (a saída, as escolhas, a volta): viram
+  // os trechos pelas chaves, como antes; o caminho novo traz a tabela dos tempos medidos, pelos pontos
+  if (input.legs && !input.drive) {
+    // sem origem, a rota começa na primeira escolha: o trecho 0 da rota é saída → primeira escolha
+    const offset = input.origin ? 0 : 1;
+    for (let i = 0; i + 1 < routed.length; i++) {
+      const m = legMinutes(input.legs, i + offset);
+      if (m !== null) legs[`${routed[i] ?? ''}>${routed[i + 1] ?? ''}`] = m;
+    }
   }
 
   const starts: Record<string, string> = {};
+  const startRule: Record<string, 'said' | 'earliest'> = {};
   dates.forEach((date, d) => {
-    starts[date] = write.days[d]?.start ?? input.defaultStart;
+    // a hora de sair que a pessoa disse vale acima da que a IA escreveu (D311), no primeiro dia
+    const said = d === 0 ? (input.saidStart ?? null) : null;
+    starts[date] = said ?? write.days[d]?.start ?? input.defaultStart;
+    if (said) startRule[date] = 'said';
+    else if (input.today && d === 0) startRule[date] = 'earliest';
   });
-  const schedule: Schedule = { starts, legs };
+  const schedule: Schedule = {
+    starts,
+    legs,
+    ...(input.drive ? { drive: input.drive } : {}),
+    ...(Object.keys(dwell).length > 0 ? { dwell } : {}),
+    ...(Object.keys(fixed).length > 0 ? { fixed } : {}),
+    ...(Object.keys(startRule).length > 0 ? { startRule } : {}),
+  };
 
   const days = slots.map((day, d) => {
     const date = dates[d] ?? start;
     const on = (points[date] ?? []).filter((p) => !suggestions[p.key]);
-    const times = scheduleDay(on, starts[date] ?? input.defaultStart, schedule);
+    const times = scheduleDay(
+      on,
+      starts[date] ?? input.defaultStart,
+      schedule,
+      startRule[date] ?? 'default',
+    );
     return {
       date,
       title: write.days[d]?.title ?? null,

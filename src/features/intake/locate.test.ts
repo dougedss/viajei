@@ -46,8 +46,10 @@ describe('a cidade conferida (fase 25, D276): plausível a até 400 km de onde a
     expect(mafra.kind).toBe('far');
     const pt = mafra.kind === 'far' ? mafra.options[0] : null;
     expect(pt?.address).toBe('Mafra, Lisboa, Portugal');
-    // a cerca de 146 h de carro, como a tela de 20/11 dizia
-    expect(pt?.minutes).toBeGreaterThan(140 * 60);
+    // a distância em linha reta, um fato (a tela de 20/11 dizia "a cerca de 146 h" de carro, que
+    // ninguém mediu: D310)
+    expect(pt?.km).toBeGreaterThan(7_000);
+    expect(pt).not.toHaveProperty('minutes');
   });
 
   it('mais de um plausível, longe um do outro: a escolha (o molde da D229); perto um do outro: o mesmo lugar', () => {

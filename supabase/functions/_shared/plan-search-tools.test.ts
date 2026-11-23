@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GOOGLE_PLACES_URL } from './google-places.ts';
+import { GOOGLE_ROUTE_MATRIX_URL } from './google-routes.ts';
 import { TOOL_NAMES } from './plan-search-ai.ts';
 import { PLAN_SEARCH_MAX_SEARCHES, PLAN_SEARCH_MAX_TOOL_CALLS } from './plan-search-protocol.ts';
 import { outingFromSearches, pickCity, routeCircles, ToolState } from './plan-search-tools.ts';
@@ -56,7 +57,11 @@ const geocodeHit = (city: string, lat: number, lon: number, country_code = 'br')
 type Call = { url: string; body: Record<string, unknown> | null; headers: Record<string, string> };
 function network(
   answer: (textQuery: string) => unknown[] | { status: number },
-  options: { geocode?: unknown[]; geoapifyPlaces?: unknown[] } = {},
+  options: {
+    geocode?: unknown[];
+    geoapifyPlaces?: unknown[];
+    routes?: unknown[] | { status: number };
+  } = {},
 ) {
   const calls: Call[] = [];
   const fetch: typeof globalThis.fetch = (input, init) => {
@@ -69,6 +74,19 @@ function network(
         Array.isArray(out)
           ? Response.json({ places: out })
           : Response.json({ error: { code: out.status, status: 'X' } }, { status: out.status }),
+      );
+    }
+    // a Routes API (D310): um elemento medido por par, 25 min e 26 km, se o teste não disser outra coisa
+    if (url.startsWith(GOOGLE_ROUTE_MATRIX_URL)) {
+      const routes = options.routes ?? [
+        { status: {}, duration: '1480s', distanceMeters: 26_100, condition: 'ROUTE_EXISTS' },
+      ];
+      return Promise.resolve(
+        Array.isArray(routes)
+          ? Response.json(routes)
+          : Response.json([{ error: { code: routes.status, status: 'PERMISSION_DENIED' } }], {
+              status: routes.status,
+            }),
       );
     }
     if (url.includes('/v1/geocode/search')) {
@@ -398,20 +416,47 @@ describe('localizar_nome e tempo_de_carro', () => {
     expect(none.content).toContain('Não achei "a casa da minha mãe"');
   });
 
-  it('o tempo de carro é a estimativa da D228, dita como estimativa', async () => {
-    const s = state(network(() => []));
-    const result = await s.run(TOOL_NAMES.drive, {
-      de_lat: -26.37,
-      de_lng: -50.33,
-      para_lat: -26.18,
-      para_lng: -50.39,
+  it('o tempo de carro é o medido pelo Google (D310), dito como medido; sem a fonte, a IA ouve que não deu e que não estime', async () => {
+    const trip = { de_lat: -26.37, de_lng: -50.33, para_lat: -26.18, para_lng: -50.39 };
+    const net = network(() => []);
+    const s = state(net);
+    const result = await s.run(TOOL_NAMES.drive, trip);
+    expect(result).toEqual({
+      is_error: false,
+      content: '25 min de carro (26 km de estrada, medido pelo Google, sem o trânsito da hora)',
     });
-    expect(result.is_error).toBe(false);
-    expect(result.content).toMatch(/^cerca de \d+ min de carro \(estimativa: 22 km em linha reta/);
+    expect(s.routes).toBe(1);
+    const call = net.calls.find((c) => c.url.startsWith(GOOGLE_ROUTE_MATRIX_URL));
+    expect(call?.headers['X-Goog-Api-Key']).toBe(GOOGLE_KEY);
+    expect(call?.body).toMatchObject({ travelMode: 'DRIVE', routingPreference: 'TRAFFIC_UNAWARE' });
     expect(
       (await s.run(TOOL_NAMES.drive, { de_lat: 0, de_lng: 0, para_lat: -26, para_lng: -50 }))
         .is_error,
     ).toBe(true);
+    // sem estrada entre os dois: dito
+    const noRoad = state(
+      network(() => [], { routes: [{ status: {}, condition: 'ROUTE_NOT_FOUND' }] }),
+    );
+    expect((await noRoad.run(TOOL_NAMES.drive, trip)).content).toBe(
+      'O Google não achou estrada entre esses dois pontos.',
+    );
+    // a chave recusada pela Routes API: não deu para medir, e a ferramenta não chuta; a próxima nem
+    // tenta de novo
+    const deniedNet = network(() => [], { routes: { status: 403 } });
+    const denied = state(deniedNet);
+    const first = await denied.run(TOOL_NAMES.drive, trip);
+    expect(first.is_error).toBe(true);
+    expect(first.content).toContain('Não deu para medir o tempo de carro agora. Não estime');
+    await denied.run(TOOL_NAMES.drive, trip);
+    expect(deniedNet.calls.filter((c) => c.url.startsWith(GOOGLE_ROUTE_MATRIX_URL))).toHaveLength(
+      1,
+    );
+    // sem a chave do Google: nenhuma chamada, a mesma resposta
+    const keyless = network(() => []);
+    expect(
+      (await state(keyless, { googleKey: undefined }).run(TOOL_NAMES.drive, trip)).is_error,
+    ).toBe(true);
+    expect(keyless.calls).toHaveLength(0);
   });
 });
 

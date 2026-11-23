@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { driveKey } from '@shared/drive-schema.ts';
 import type { Place } from '@shared/places-schema.ts';
 import { parseStoredReview } from '@/features/import/draft.ts';
 import { newTripReview } from '@/features/import/new-review.ts';
 import { setStopIncluded } from '@/features/import/review-edit.ts';
 import { assemble, type PlacePick } from './assemble.ts';
-import { reschedule } from './reschedule.ts';
+import { reschedule, unmeasuredLegs } from './reschedule.ts';
 
 const place = (
   id: string,
@@ -92,17 +93,39 @@ describe('a revisão da conversa nova (fase 24)', () => {
     expect(back?.review.days[0]?.stops[2]?.suggestion).toEqual(stops[2]?.suggestion);
   });
 
-  it('ligar a sugestão a põe na ordem do caminho e refaz os horários do dia; desligar volta', async () => {
+  it('ligar a sugestão a põe na ordem do caminho e refaz os horários do dia; o trecho novo espera a medida; desligar volta', async () => {
     const stored = await review();
     const schedule = stored.schedule;
     if (!schedule) throw new Error('sem horários');
     const before = stored.review.days[0]?.stops.map((s) => s.time);
     expect(before).toEqual(['12:30', '14:35', null, '17:50']);
     const on = reschedule(setStopIncluded(stored.review, 'd0s2', true), schedule, '2026-11-21');
-    const times = on.days[0]?.stops.map((s) => s.time);
-    expect(times?.[2]).toBe('15:55');
-    expect(times?.[3] && times[3] > '17:50').toBe(true);
-    const off = reschedule(setStopIncluded(on, 'd0s2', false), schedule, '2026-11-21');
+    // café → zoo e zoo → casa não foram medidos: sem hora (D310), e a tela sabe o que medir
+    expect(on.days[0]?.stops.map((s) => s.time)).toEqual(['12:30', '14:35', null, null]);
+    expect(unmeasuredLegs(on, schedule).map((l) => driveKey(...l.pair))).toEqual([
+      driveKey([-49.172, -26.74], [-49.175, -26.73]),
+      driveKey([-49.175, -26.73], [-50.144, -26.37]),
+    ]);
+    const measured = {
+      ...schedule,
+      drive: {
+        [driveKey([-49.172, -26.74], [-49.175, -26.73])]: 300,
+        [driveKey([-49.175, -26.73], [-50.144, -26.37])]: 7_200,
+      },
+    };
+    const done = reschedule(on, measured, '2026-11-21');
+    expect(done.days[0]?.stops.map((s) => s.time)).toEqual(['12:30', '14:35', '15:55', '19:25']);
+    expect(unmeasuredLegs(done, measured)).toEqual([]);
+    const off = reschedule(setStopIncluded(done, 'd0s2', false), measured, '2026-11-21');
     expect(off.days[0]?.stops.map((s) => s.time)).toEqual(before);
+  });
+
+  it('desmarcar uma parada que não é sugestão também refaz o dia: as seguintes não ficam com a hora de antes', async () => {
+    const stored = await review();
+    const schedule = stored.schedule;
+    if (!schedule) throw new Error('sem horários');
+    const off = reschedule(setStopIncluded(stored.review, 'd0s1', false), schedule, '2026-11-21');
+    // sem o café, a casa é logo depois da saída (o mesmo ponto): a chegada às 12:30
+    expect(off.days[0]?.stops.map((s) => s.time)).toEqual(['12:30', null, null, '12:30']);
   });
 });
