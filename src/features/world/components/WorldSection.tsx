@@ -944,9 +944,12 @@ function WorldStage(p: StageProps) {
           />
         </div>
       ) : null}
-      {/* a faixa de cima: clima, diagnóstico, fora da rota e "+N paradas" à esquerda; "Rever o dia"
-          ou o "Pular" do replay à direita (a barra do "Agora" ocupa o pé da maquete, fase 14) */}
-      <div className="pointer-events-none absolute inset-x-3 top-2 flex items-start justify-between gap-2">
+      {/* a faixa de cima: os trechos, clima, diagnóstico, fora da rota e "+N paradas" à esquerda;
+          "Rever o dia" ou o "Pular" do replay à direita (a barra do "Agora" ocupa o pé da maquete, fase
+          14). Por cima das pílulas (fase 28): a pílula mais alta pode subir até a faixa (a âncora fica a
+          `HUD_TOP` + 40 px, e os botões descem até 56), e o toque no indicador ou no "Rever o dia" não
+          pode cair nela */}
+      <div className="pointer-events-none absolute inset-x-3 top-2 z-40 flex items-start justify-between gap-2">
         <div className="flex flex-wrap items-start gap-2">
           {/* os trechos do dia (fase 28): "ida · volta", ou o número de cada um; um toque espia */}
           <LegIndicator
