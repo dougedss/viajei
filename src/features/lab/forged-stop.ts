@@ -95,9 +95,17 @@ export function postoFix(i: number): { latitude: number; longitude: number } {
 }
 
 /**
- * A `drive-times` respondida (D310): o tempo de carro de cada par pela mesma estrada reta da rota
- * forjada (a linha entre os dois pontos, a 22 m/s), para o e2e e o `app_conversa` do laboratório não
- * chamarem o Google. Um par no mesmo ponto dá zero.
+ * A velocidade da estrada forjada do tempo de carro, em linha reta: 12 m/s (uns 43 km/h), o que a
+ * estrada de verdade dá no interior do Sul medida assim (os 22 km em linha reta de Major Vieira ao
+ * Sushi Yume, 25 min pelo Google em 22/11/2026, dão uns 15 m/s; as serras, menos). A 22 m/s, a da rota
+ * forjada, o café de Florianópolis cabia no dia do e2e do passo a passo, que foi escrito para estourar.
+ */
+export const FORGED_DRIVE_MPS = 12;
+
+/**
+ * A `drive-times` respondida (D310): o tempo de carro de cada par pela linha reta entre os dois pontos,
+ * a `FORGED_DRIVE_MPS`, para o e2e e o `app_conversa` do laboratório não chamarem o Google. Um par no
+ * mesmo ponto dá zero.
  */
 export function forgedDriveTimes(
   pairs: readonly {
@@ -112,7 +120,7 @@ export function forgedDriveTimes(
       const dx = (to.lng - from.lng) * M_PER_DEG * COS;
       const dy = (to.lat - from.lat) * M_PER_DEG;
       const meters = Math.hypot(dx, dy);
-      return { duration_s: Math.round(meters / 22), distance_m: Math.round(meters) };
+      return { duration_s: Math.round(meters / FORGED_DRIVE_MPS), distance_m: Math.round(meters) };
     }),
   };
 }
