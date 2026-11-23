@@ -321,6 +321,9 @@ function DayView({
   // a parada cujo "Como foi?" vai abrir (o Chegamos! pelo toque, até a folha fechar): a maquete segura o
   // trecho do objetivo até lá (fase 28, a decisão 12), sem trocar e voltar no 1,2 s da espera da folha
   const [promptHold, setPromptHold] = useState<string | null>(null);
+  // a folha que já abriu e fechou: aquele "Como foi?" aconteceu, e o cartão que fica de lembrete dele
+  // não segura mais o trecho (no Chegamos! pelo GPS não há folha, e o cartão é o "Como foi?")
+  const [closedSheet, setClosedSheet] = useState<string | null>(null);
   const [reservationId, setReservationId] = useState<string | null>(null);
   // o momento calmo da tela: fechar a folha "Como foi?" (até o próximo Partiu!). Os cartões que já
   // esperavam na fila nesse instante saem aí; os outros esperam.
@@ -598,7 +601,9 @@ function DayView({
     memory: promptStop !== null,
     retro,
   });
-  const hold = heldBySheet ?? (card === 'memory' && promptStop ? promptStop.id : null);
+  const hold =
+    heldBySheet ??
+    (card === 'memory' && promptStop && promptStop.id !== closedSheet ? promptStop.id : null);
 
   return (
     <>
@@ -826,6 +831,7 @@ function DayView({
         stop={sheetStop}
         uid={uid}
         onClose={() => {
+          setClosedSheet(memoryStopId);
           setMemoryStopId(null);
           setPromptHold(null);
           setCalmSince(Date.now());
@@ -834,6 +840,7 @@ function DayView({
           sheetStop
             ? () => {
                 // a nota do posto (fase 18): a folha "Como foi?" fecha e o gasto abre pela nota
+                setClosedSheet(memoryStopId);
                 setMemoryStopId(null);
                 setPromptHold(null);
                 setExpenseDraft({
