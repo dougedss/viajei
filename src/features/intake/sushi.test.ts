@@ -299,6 +299,7 @@ describe('"buscar sushi em Canoinhas e voltar para casa, estar lá às 18:00" (o
       write: WRITE,
       firstDate: '2026-11-23',
       defaultStart: '08:00',
+      destination: chosen.destination?.name ?? null,
     });
     expect(
       built.data.days[0]?.stops.map((s) => [s.name, s.time, s.travel_minutes_to_next]),
@@ -307,6 +308,9 @@ describe('"buscar sushi em Canoinhas e voltar para casa, estar lá às 18:00" (o
       [SUSHI.name, '18:00', 25],
       ['Chegada em Major Vieira, SC', '18:40', null],
     ]);
+    // o objetivo do trecho (fase 28, D318) é o sushi, o lugar escolhido na cidade dita: sem a parada
+    // da cidade, a maquete vai até ele e volta
+    expect(built.objective).toEqual(['d0s1']);
     expect(built.schedule.fixed).toEqual({ d0s1: '18:00' });
     expect(built.schedule.dwell).toEqual({ d0s1: 15 });
   });
