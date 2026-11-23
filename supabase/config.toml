@@ -453,13 +453,24 @@ entrypoint = "./functions/find-places/index.ts"
 
 # plan-search (fase 27) é o planejador: a IA planeja a busca de lugares com ferramentas que a função
 # executa (a Text Search do Google pela GOOGLE_PLACES_API_KEY, a Geoapify de reserva, o tempo de carro
-# estimado) e entrega o passeio em passos; o app julga e a pessoa escolhe. Roda como o usuário
+# medido pela Routes API do Google) e entrega o passeio em passos; o app julga e a pessoa escolhe. Roda como o usuário
 # (verify_jwt ligado, RLS vale, a ANTHROPIC_API_KEY só nos secrets), em SSE como a plan-trip. Limite: 20
 # rodadas por pessoa em 24 h (200 para a conta do laboratório, que roda a bateria de pedidos).
 [functions.plan-search]
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/plan-search/index.ts"
+
+# drive-times (a correção de 22/11/2026, D310) mede o tempo de carro entre pares de pontos pela Routes
+# API do Google (computeRouteMatrix, sem trânsito): o "X min de carro" das opções e a estrada da conta
+# do passeio, no lugar da estimativa em linha reta. Roda como o usuário (verify_jwt ligado, RLS vale,
+# sem chave secreta do Supabase); a GOOGLE_PLACES_API_KEY existe só em `supabase secrets`, e a Routes
+# API precisa estar ligada no projeto do Google e na restrição da chave. Sem a chave, responde
+# `no_source`. Limite: 200 medições por pessoa em 24 h, até 60 pares cada.
+[functions.drive-times]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/drive-times/index.ts"
 
 # read-document (fase 18) lê a confirmação de uma reserva (o texto colado, ou o PDF ou o print que a
 # fila já subiu ao Storage) e a foto de uma nota, com a IA, e devolve a reserva ou o gasto preenchidos

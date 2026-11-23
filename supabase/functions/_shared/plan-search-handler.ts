@@ -507,6 +507,7 @@ class PlanSearchRun {
         `turns=${String(turns)}`,
         `calls=${String(state.calls)}`,
         `searches=${String(state.requests)}`,
+        `routes=${String(state.routes)}`,
         `places=${String(state.found.length)}`,
         `source=${state.provider}`,
         `end=${ending}`,

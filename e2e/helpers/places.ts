@@ -1,11 +1,12 @@
 import type { BrowserContext, Page, Route } from '@playwright/test';
+import type { DriveRequest } from '../../supabase/functions/_shared/drive-schema.ts';
 import type { FindPlacesRequest, Place } from '../../supabase/functions/_shared/places-schema.ts';
-import { forgedRouteDay } from '../../src/features/lab/forged-stop.ts';
+import { forgedDriveTimes, forgedRouteDay } from '../../src/features/lab/forged-stop.ts';
 
 /**
- * A busca no mapa e a rota da conversa nova (fase 24), respondidas no navegador como a `plan-trip`
- * (nenhuma chamada de verdade na CI: nem a Geoapify, nem a `route-day`). Os lugares são inventados
- * para o teste, com nomes de lugares públicos.
+ * A busca no mapa, a rota e o tempo de carro da conversa nova (fase 24; o tempo medido desde a D310),
+ * respondidos no navegador como a `plan-trip` (nenhuma chamada de verdade na CI: nem a Geoapify, nem o
+ * Google, nem a `route-day`). Os lugares são inventados para o teste, com nomes de lugares públicos.
  */
 const CORS = {
   'access-control-allow-origin': '*',
@@ -40,13 +41,46 @@ export function lugar(
 export type PlacesAnswer = Place[] | { status: number; code: string };
 
 /**
+ * A `drive-times` respondida (D310): o tempo de carro de cada par pela estrada reta forjada (a mesma
+ * conta da `rotaForjada`), ou o erro que `answer` devolver (a medição que não respondeu). Os pedidos
+ * ficam guardados. Quem chama `buscaNoMapa` já a tem; chamar de novo, depois, troca a resposta.
+ */
+export async function tempoDeCarro(
+  target: Page | BrowserContext,
+  answer?: (body: DriveRequest) => { status: number; code: string } | null,
+): Promise<{ pedidos: DriveRequest[] }> {
+  const pedidos: DriveRequest[] = [];
+  await target.route('**/functions/v1/drive-times', async (route: Route) => {
+    if (route.request().method() === 'OPTIONS') {
+      await route.fulfill({ status: 204, headers: CORS });
+      return;
+    }
+    const body = route.request().postDataJSON() as DriveRequest;
+    pedidos.push(body);
+    const refused = answer?.(body) ?? null;
+    if (refused) {
+      await route.fulfill({
+        status: refused.status,
+        json: { error: { code: refused.code, message: 'Não deu para medir o tempo de carro.' } },
+        headers: CORS,
+      });
+      return;
+    }
+    await route.fulfill({ json: forgedDriveTimes(body.pairs), headers: CORS });
+  });
+  return { pedidos };
+}
+
+/**
  * A `find-places` respondida: cada pedido vai para `answer` (a busca por tipo da Geoapify, ou a por
- * texto no Google desde a fase 27: `'provider' in body`), e os pedidos ficam guardados.
+ * texto no Google desde a fase 27: `'provider' in body`), e os pedidos ficam guardados. O tempo de
+ * carro das opções (`drive-times`) também fica respondido, pela estrada forjada.
  */
 export async function buscaNoMapa(
   target: Page | BrowserContext,
   answer: (body: FindPlacesRequest) => PlacesAnswer,
 ): Promise<{ pedidos: FindPlacesRequest[] }> {
+  await tempoDeCarro(target);
   const pedidos: FindPlacesRequest[] = [];
   await target.route('**/functions/v1/find-places', async (route: Route) => {
     if (route.request().method() === 'OPTIONS') {

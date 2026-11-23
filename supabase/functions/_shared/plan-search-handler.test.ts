@@ -219,6 +219,8 @@ const STEP = (over: Record<string, unknown> = {}) => ({
   achou: true,
   busca: { palavras: 'café', tipo_google: 'cafe', aberto_agora: false, nota_minima: 0 },
   descartados: 0,
+  hora: '',
+  permanencia_min: 0,
   ...over,
 });
 const DELIVER = (over: Record<string, unknown> = {}) => ({
@@ -244,6 +246,7 @@ const DELIVER = (over: Record<string, unknown> = {}) => ({
     destino: '',
     origem: '',
     tempo_min: 0,
+    saida: '',
     ...over,
   },
 });
@@ -355,7 +358,7 @@ describe('plan-search: o laço com as ferramentas', () => {
     // o log: números e códigos, nada da pessoa, nada da chave
     expect(logs).toHaveLength(1);
     expect(logs[0]).toMatch(
-      /^plan-search id=\S+ status=succeeded error=- .* turns=2 calls=2 searches=2 places=3 source=google end=delivered in=4600 out=550 ms=\d+$/,
+      /^plan-search id=\S+ status=succeeded error=- .* turns=2 calls=2 searches=2 routes=0 places=3 source=google end=delivered in=4600 out=550 ms=\d+$/,
     );
     expect(logs.join('\n')).not.toMatch(/canoinhas|cabelo|AIza|chave-geoapify/i);
   });

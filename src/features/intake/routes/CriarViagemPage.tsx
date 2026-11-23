@@ -28,6 +28,7 @@ import { originLabelOf } from '../conversation.ts';
 import { planErrorCopy } from '../messages.ts';
 import { startOf, type IntakeBack } from '../start.ts';
 import { useConversation } from '../useConversation.ts';
+import { useReviewDrive } from '../useReviewDrive.ts';
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const BACK: IntakeBack = { focusIntake: true };
@@ -75,6 +76,8 @@ export default function CriarViagemPage() {
   const phase = imp.session.phase;
   const targets = imp.stored ? geoTargets(imp.stored.review) : previewTargets(imp.preview);
   const geo = useGeocoding(targets);
+  // o trecho que aparece quando a pessoa liga ou desliga uma parada da revisão é medido na hora (D310)
+  useReviewDrive(imp);
 
   if (!imp.loaded || !talk.loaded || entry === null) return <Splash />;
   if (entry === 'leave') return <Navigate to="/viagens" replace state={BACK} />;
@@ -219,6 +222,8 @@ export default function CriarViagemPage() {
             onStepBack={talk.stepBack}
             onBackTo={talk.backTo}
             onTime={talk.setTime}
+            onDwell={talk.setDwell}
+            onMeasure={talk.measureAgain}
           />
         ) : (
           <Card className="grid gap-2" aria-live="polite" data-thinking={stage.kind}>

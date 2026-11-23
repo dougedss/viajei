@@ -10,6 +10,7 @@ import {
   rodada,
 } from '../../e2e/helpers/planner.ts';
 import { INTAKE_LABEL } from '../../src/features/intake/start.ts';
+import { forgedDriveTimes } from '../../src/features/lab/forged-stop.ts';
 import { DEVICE, enterPreview, QUIET, signInPage, TIMEOUT } from './app.ts';
 import { must } from './client.ts';
 import { dropLabTrip } from './drop.ts';
@@ -166,10 +167,28 @@ export async function appConversa(ctx: ImportContext, today: string): Promise<Ch
         body: planejado(),
       });
     });
+    const counts = { busca: 0, google: 0, rota: 0, nominatim: 0, semFonte: 0, medidas: 0 };
+    // o tempo de carro respondido aqui (D310): nenhum `app_*` chama o Google; a estrada reta forjada
+    await context.route('**/functions/v1/drive-times', async (route) => {
+      if (route.request().method() === 'OPTIONS') {
+        await route.fulfill({
+          status: 204,
+          headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' },
+        });
+        return;
+      }
+      const body = route.request().postDataJSON() as {
+        pairs: Parameters<typeof forgedDriveTimes>[0];
+      };
+      counts.medidas += 1;
+      await route.fulfill({
+        json: forgedDriveTimes(body.pairs),
+        headers: { 'access-control-allow-origin': '*' },
+      });
+    });
     page = await context.newPage();
     page.setDefaultTimeout(TIMEOUT);
     const p = page;
-    const counts = { busca: 0, google: 0, rota: 0, nominatim: 0, semFonte: 0 };
     p.on('request', (r) => {
       const url = r.url();
       if (r.method() === 'OPTIONS') return;
@@ -256,6 +275,8 @@ export async function appConversa(ctx: ImportContext, today: string): Promise<Ch
       data.google_chamadas = counts.google;
       if (counts.google > 0) throw new Error('o app chamou o Google de verdade no laboratório');
       data.rota_chamadas = counts.rota;
+      // as medições de tempo de carro que o app pediu (respondidas aqui, sem o Google)
+      data.medidas_chamadas = counts.medidas;
       data.nominatim_buscas = counts.nominatim;
       if (counts.semFonte > 0) {
         skip.reason =

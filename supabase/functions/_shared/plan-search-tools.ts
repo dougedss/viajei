@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { driveMinutes } from './drive.ts';
 import { googleRequest, ProviderError, searchGoogle, withinCity } from './google-places.ts';
+import { driveTimes } from './google-routes.ts';
 import { isGoogleType } from './google-types.ts';
 import { searchGeoapify } from './places-handler.ts';
 import {
@@ -44,7 +44,8 @@ export { routeCircles };
  * `fetch` e as chaves vêm por injeção; o Vitest liga um `fetch` de mentira): `procurar_lugares` (a
  * Text Search do Google, dentro de uma cidade, perto de um ponto ou em círculos ao longo de um caminho;
  * sem o Google, a Geoapify pelas palavras), `localizar_nome` (o lugar nomeado, ou uma cidade, para
- * ter as coordenadas) e `tempo_de_carro` (a estimativa da D228). A IA recebe **só o resumo** de cada
+ * ter as coordenadas) e `tempo_de_carro` (o tempo medido pelo Google, a Routes API, desde a D310: sem
+ * a fonte, a ferramenta diz que não deu para medir, e nunca estima). A IA recebe **só o resumo** de cada
  * lugar (uma referência curta, o nome, a cidade, a nota, o aberto agora, a distância); os lugares
  * inteiros ficam guardados para o app, pela referência: **só vale candidato que voltou daqui nesta
  * rodada**. Os tetos (chamadas e buscas) viram respostas de erro para a IA, nunca um 504.
@@ -150,6 +151,10 @@ export class ToolState {
   readonly searches: SearchMade[] = [];
   calls = 0;
   requests = 0;
+  /** as medições de tempo de carro feitas no Google (a Routes API), para o log */
+  routes = 0;
+  /** a Routes API sem chave ou recusada: a ferramenta diz que não deu para medir */
+  noRoutes = false;
   provider: PlacesProvider | 'none' = 'none';
   /** o Google sem chave ou com a chave recusada: a fonte de reserva respondeu (ou nada) */
   noSource = false;
@@ -218,7 +223,7 @@ export class ToolState {
         case TOOL_NAMES.locate:
           return await this.#locate(input);
         case TOOL_NAMES.drive:
-          return this.#drive(input);
+          return await this.#drive(input);
         default:
           return { is_error: true, content: `Ferramenta desconhecida: ${name.slice(0, 40)}.` };
       }
@@ -374,18 +379,46 @@ export class ToolState {
   }
 
   // -------------------------------------------------------------------- tempo_de_carro
-  #drive(raw: unknown): ToolResult {
+  /**
+   * O tempo de carro entre dois pontos, **medido** pelo Google (D310): nunca a estimativa em linha reta.
+   * Sem a chave, com a Routes API recusada ou sem resposta, a ferramenta diz que não deu para medir e
+   * proíbe o chute; sem estrada entre os dois, diz isso.
+   */
+  async #drive(raw: unknown): Promise<ToolResult> {
     const parsed = driveToolSchema.safeParse(raw);
     if (!parsed.success) return invalid(parsed.error);
     const d = parsed.data;
     if (!isPoint(d.de_lat, d.de_lng) || !isPoint(d.para_lat, d.para_lng)) {
       return { is_error: true, content: 'Dê os dois pontos com lat e lng.' };
     }
-    const dist = km({ lat: d.de_lat, lng: d.de_lng }, { lat: d.para_lat, lng: d.para_lng });
-    const minutes = driveMinutes(dist);
+    const unmeasured: ToolResult = {
+      is_error: true,
+      content:
+        'Não deu para medir o tempo de carro agora. Não estime por conta própria: siga sem esse tempo (o app mede depois e mostra à pessoa).',
+    };
+    const { googleKey, fetch } = this.#deps;
+    if (!googleKey || this.noRoutes) {
+      this.noRoutes = true;
+      return unmeasured;
+    }
+    this.routes += 1;
+    let time;
+    try {
+      const measured = await driveTimes({ fetch }, googleKey, [
+        { from: { lat: d.de_lat, lng: d.de_lng }, to: { lat: d.para_lat, lng: d.para_lng } },
+      ]);
+      time = measured.times[0] ?? null;
+    } catch (err) {
+      if (err instanceof ProviderError && err.code === 'no_source') this.noRoutes = true;
+      return unmeasured;
+    }
+    if (!time) {
+      return { is_error: false, content: 'O Google não achou estrada entre esses dois pontos.' };
+    }
+    const minutes = Math.max(1, Math.round(time.duration_s / 60));
     return {
       is_error: false,
-      content: `cerca de ${String(minutes)} min de carro (estimativa: ${fmtKm(dist)} km em linha reta, pelas estradas do Sul)`,
+      content: `${String(minutes)} min de carro (${fmtKm(time.distance_m / 1000)} km de estrada, medido pelo Google, sem o trânsito da hora)`,
     };
   }
 

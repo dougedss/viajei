@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { haversineM } from '@shared/geo.ts';
 import type { FindPlacesRequest, Place, PlacesRequest } from '@shared/places-schema.ts';
 import { EMPTY_INTENT, type PlanIntent } from '@shared/plan-protocol.ts';
 import type { FoundPlace, Outing, PlanStep } from '@shared/plan-search-protocol.ts';
@@ -10,7 +11,9 @@ import {
   canContinue,
   currentStep,
   destinationPosition,
+  measureStage,
   nextStep,
+  optionDrive,
   orderedPicks,
   pendingForAi,
   pendingOf,
@@ -120,6 +123,14 @@ function deps(over: Partial<FlowDeps> = {}) {
         geometry: w,
         legs: w.slice(1).map(() => ({ distance_m: 140_000, duration_s: 7_500 })),
       }),
+    // o tempo "medido" de mentira (D310): a linha reta a 15 m/s, para a ordem dos cartões fazer sentido
+    drive: (pairs) =>
+      Promise.resolve(
+        pairs.map(([a, b]) => {
+          const m = haversineM(a, b);
+          return { duration_s: Math.round(m / 15), distance_m: Math.round(m * 1.3) };
+        }),
+      ),
     ...over,
   };
   return { d, requests, queries };
@@ -148,12 +159,17 @@ describe('a conversa nova: as opções do mapa (fase 24)', () => {
     expect(stage.groups).toHaveLength(1);
     const g = stage.groups[0];
     expect(g?.status).toBe('ok');
-    // os mais perto de Pomerode primeiro (a área pedida), com o tempo de carro de Papanduva
+    // os mais perto de Pomerode primeiro (a área pedida), com a distância de Papanduva; o tempo de
+    // carro só depois de medido (D310)
     expect(g?.options.map((o) => o.place.name)).toEqual([
       'Torten Paradies Café Colonial',
       'Mahlzeit Café Colonial',
     ]);
-    expect(g?.options[0]?.minutes).toBeGreaterThan(100);
+    expect(g?.options[0]?.km).toBeGreaterThan(80);
+    const option = g?.options[0];
+    expect(option && optionDrive(stage, option).minutes).toBeNull();
+    const measured = await measureStage(stage, d);
+    expect(option && optionDrive(measured, option).minutes).toBeGreaterThan(60);
     expect(requests[0]).toMatchObject({
       categories: ['catering.cafe', 'catering.restaurant'],
       names: ['colonial'],
@@ -294,7 +310,8 @@ describe('a conversa nova: as opções do mapa (fase 24)', () => {
     const asked = await searchMap(base, d);
     expect(asked.ask).toMatchObject({ said: 'Mafra', role: 'area', kind: 'far' });
     expect(asked.ask?.options.map((o) => o.address)).toEqual(['Mafra, Lisboa, Portugal']);
-    expect(asked.ask?.options[0]?.minutes).toBeGreaterThan(100 * 60);
+    // a distância em linha reta, nunca um tempo de carro que ninguém mediu (D310)
+    expect(asked.ask?.options[0]?.km).toBeGreaterThan(7_000);
     expect(asked.groups).toEqual([]);
     expect(requests).toHaveLength(0);
     // a pessoa escolheu: a busca roda em volta do que ela escolheu, sem perguntar de novo
@@ -536,8 +553,12 @@ describe('a conversa nova: a escolha e o caminho', () => {
     expect(prepared.picks.map((p) => p.place.id)).toEqual(['torten']);
     expect(prepared.suggestions.map((s) => s.place.id)).toEqual(['zoo']);
     expect(prepared.chosenFractions).toEqual([0.5]);
-    expect(prepared.places.chosen[0]).toMatchObject({ ref: 'e1', minutes: 125 });
-    expect(prepared.places.home_minutes).toBe(125);
+    // o tempo de carro é o medido (D310: a linha reta a 15 m/s no Google de mentira), não o da rota
+    // traçada (2 h 05): a rota dá o desenho e o corredor
+    expect(prepared.places.chosen[0]).toMatchObject({ ref: 'e1', minutes: 115 });
+    expect(prepared.places.home_minutes).toBe(115);
+    // o desvio da sugestão também é medido
+    expect(prepared.suggestions[0]?.detour).toEqual(expect.any(Number));
     // depois das duas buscas das opções, as quatro das sugestões: os marcos e o clássico, no corredor
     // e em volta do destino
     const kinds = requests.slice(2).map((r) => r.area.type);
@@ -545,14 +566,34 @@ describe('a conversa nova: a escolha e o caminho', () => {
     expect(requests.slice(2).some((r) => r.categories.includes('entertainment.zoo'))).toBe(true);
   });
 
-  it('sem rota (a route-day não respondeu): a linha reta, e as sugestões ainda vêm', async () => {
+  it('sem rota (a route-day não respondeu): a linha reta no desenho, o tempo medido, e as sugestões ainda vêm', async () => {
     const { d } = deps({ route: () => Promise.resolve(null) });
     const stage = toggleChoice(await searchMap(input(), d), 'torten');
     const prepared = await prepare(stage, { interests: [], learned: [] }, d);
     expect(prepared.routed).toBe(false);
     expect(prepared.legs).toBeNull();
-    expect(prepared.places.chosen[0]?.minutes).toBeNull();
+    expect(prepared.places.chosen[0]?.minutes).toBe(115);
     expect(prepared.suggestions.length).toBeGreaterThan(0);
+  });
+
+  it('sem a rota e sem a medida, nenhum tempo: a escrita não recebe minuto e a sugestão fica sem desvio', async () => {
+    const { d } = deps({
+      route: () => Promise.resolve(null),
+      drive: () => Promise.reject(Object.assign(new Error('x'), { code: 'no_source' })),
+    });
+    const stage = toggleChoice(await searchMap(input(), d), 'torten');
+    const prepared = await prepare(stage, { interests: [], learned: [] }, d);
+    expect(prepared.places.chosen[0]?.minutes).toBeNull();
+    expect(prepared.places.home_minutes).toBeNull();
+    expect(prepared.suggestions.every((s) => s.detour === null)).toBe(true);
+  });
+
+  it('a rota traçada cobre o trecho que o Google não mediu (também é estrada de verdade)', async () => {
+    const { d } = deps({ drive: (pairs) => Promise.resolve(pairs.map(() => null)) });
+    const stage = toggleChoice(await searchMap(input(), d), 'torten');
+    const prepared = await prepare(stage, { interests: [], learned: [] }, d);
+    expect(prepared.places.chosen[0]?.minutes).toBe(125);
+    expect(prepared.places.home_minutes).toBe(125);
   });
 });
 
@@ -744,10 +785,17 @@ describe('o passeio um passo de cada vez (fase 26): a busca do passo seguinte pe
     // o mais perto da cachoeira primeiro, com o que acrescenta ao passeio
     expect(g?.options.map((o) => o.place.id)).toEqual(['g-cafe-perto', 'g-cafe-longe']);
     expect(g?.options[0]?.fromPrevious).toMatchObject({ name: 'Cachoeira Wiegand' });
-    expect(g?.options[0]?.fromPrevious?.minutes).toBeLessThan(
-      g?.options[1]?.fromPrevious?.minutes ?? 0,
-    );
-    expect(g?.options[0]?.detour).toBeDefined();
+    expect(g?.options[0]?.fromPrevious?.km).toBeLessThan(g?.options[1]?.fromPrevious?.km ?? 0);
+    // o tempo do anterior e o desvio são os medidos (D310): nada antes da medida
+    const [perto, longe] = g?.options ?? [];
+    if (!perto || !longe) throw new Error('sem opções');
+    expect(optionDrive(next, perto)).toEqual({ minutes: null, fromPrevious: null, detour: null });
+    // a tela mede o passo da vez (o app chega aqui com o passo 2 já como o da vez)
+    const measured = await measureStage({ ...next, step: 1 }, d);
+    const a = optionDrive(measured, perto);
+    const b = optionDrive(measured, longe);
+    expect(a.fromPrevious).toBeLessThan(b.fromPrevious ?? 0);
+    expect(a.detour).not.toBeNull();
     expect(next.notice ?? null).toBeNull();
   });
 
@@ -996,11 +1044,16 @@ describe('o passeio um passo de cada vez (fase 26): continuar, voltar, a ordem e
       HOME,
     );
     const chosen = toggleChoice(stage, WIEGAND.id);
-    const acc = stageAccount(chosen, { start: '08:00', date: '2026-12-05' });
-    expect(acc.dwell).toBe(90);
-    expect(acc.road).toBeGreaterThan(60);
-    expect(acc.arrivals[0]?.outsideWindow).toMatch(/vocês queriam à noite$/);
-    const more = toggleChoice(await searchStep({ ...chosen, step: 1 }, 1, d), LONGE.id);
-    expect(stageAccount(more, { start: '08:00', date: '2026-12-05' }).dwell).toBe(165);
+    // sem a estrada medida, não há conta (D310)
+    expect(stageAccount(chosen, { start: '08:00', date: '2026-12-05' })).toBeNull();
+    const acc = stageAccount(await measureStage(chosen, d), { start: '08:00', date: '2026-12-05' });
+    expect(acc?.dwell).toBe(90);
+    expect(acc?.road).toBeGreaterThan(60);
+    expect(acc?.arrivals[0]?.outsideWindow).toMatch(/vocês queriam à noite$/);
+    const more = await measureStage(
+      toggleChoice(await searchStep({ ...chosen, step: 1 }, 1, d), LONGE.id),
+      d,
+    );
+    expect(stageAccount(more, { start: '08:00', date: '2026-12-05' })?.dwell).toBe(165);
   });
 });

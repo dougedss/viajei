@@ -1,21 +1,21 @@
 // caminhos relativos: a medição do laboratório (`scripts/lab`) roda este módulo sem os atalhos
 import { haversineM, type LngLat } from '../../../supabase/functions/_shared/geo.ts';
 import { MAX_CHOICES, SAME_PLACE_M, type SearchResult } from './named.ts';
-import { driveMinutes, MAX_RADIUS_KM } from './search.ts';
+import { MAX_RADIUS_KM } from './search.ts';
 
 /**
  * A cidade conferida (fase 25, D276): o que o geocodificador devolve para "Mafra" ou "Joinville" é
  * conferido pela distância ao ponto de referência (a posição, ou a origem resolvida) antes de valer.
  * Plausível é o que está ao alcance máximo das opções (a D228, 400 km); um resultado em outro país ou
  * além disso **nunca é usado em silêncio**: sem nenhum plausível, a tela pergunta com os candidatos e
- * a distância ("Mafra, Portugal · a cerca de 146 h"). Com mais de um plausível a mais de 2 km um do
+ * a distância em linha reta ("Mafra, Portugal · a 8.900 km em linha reta": um fato, não um tempo de
+ * carro que ninguém mediu, D310). Com mais de um plausível a mais de 2 km um do
  * outro, a escolha na tela, nunca o chute (o molde da D229). `countrycodes=br` não entra: o Uruguai é
  * viagem legítima; o país é sinal de dúvida, não restrição. Puro.
  */
 export type PlaceHit = SearchResult & {
-  /** a distância ao ponto de referência, em km, e o tempo de carro estimado; null sem referência */
+  /** a distância em linha reta ao ponto de referência, em km; null sem referência */
   km: number | null;
-  minutes: number | null;
 };
 
 export type PlaceResolution =
@@ -76,7 +76,7 @@ export function resolvePlace(
   // mesmo nome não contam (D282); sem nenhuma cidade, a pessoa diz qual é (D283)
   const hits: PlaceHit[] = results.filter(isCity).map((r) => {
     const km = reference ? haversineM(reference, at(r)) / 1000 : null;
-    return { ...r, km, minutes: km === null ? null : driveMinutes(km) };
+    return { ...r, km };
   });
   if (hits.length === 0) return { kind: 'unknown' };
   const byDistance = [...hits].sort((a, b) => (a.km ?? 0) - (b.km ?? 0));

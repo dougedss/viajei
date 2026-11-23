@@ -446,6 +446,7 @@ ${DATA_RULES}
 - days[].stops: todas as escolhas, cada uma uma vez, na ordem em que vieram, divididas pelos dias. Nenhuma sugestão em days: quem decide se uma sugestão entra é a pessoa.
 - suggestions: uma entrada por sugestão de <sugestoes>, com a note.
 - note: uma frase curta do porquê do lugar, verdadeira e sem inventar fato ("café colonial da colonização alemã", "o zoológico mais antigo de Santa Catarina" só se você souber). Nada de telefone, preço, horário de funcionamento, reserva ou nota de avaliação.
+- Nenhuma hora no texto: nem na note, nem no título, nem nas listas, nem nas missões ("às 19:00", "chegar 18h", não). Os horários do roteiro são a conta do app, com o tempo de carro medido e a hora que a pessoa disse; uma hora escrita por você pode contradizê-los.
 - A saída de casa e a volta o app põe: não escreva.
 
 ## O texto só fala do que existe
@@ -459,7 +460,7 @@ ${DATA_RULES}
 
 ## Os dias (days)
 - Um item por data, em ordem, de start_date a end_date.
-- start: a hora de sair (de casa no primeiro dia; de onde dormiram nos outros), HH:MM, pensando nos lugares e nos tempos de carro: o café colonial à tarde, o parque de manhã. Na saída de hoje, a partir de agora (a hora do contexto), arredondada para a frente.
+- start: a hora de sair (de casa no primeiro dia; de onde dormiram nos outros), HH:MM, pensando nos lugares e nos tempos de carro: o café colonial à tarde, o parque de manhã. Na saída de hoje, a partir de agora (a hora do contexto), arredondada para a frente. Quando a pessoa disse a hora de sair ou a de estar num lugar, o app faz a conta a partir dela e o seu start só vale nos outros dias.
 - title: o tema do dia, curto ("Cucas e cafés", "Cânions e cascatas").
 - Um dia de estrada não passa de umas 6 horas ao volante. Nada que dependa de pressa.
 

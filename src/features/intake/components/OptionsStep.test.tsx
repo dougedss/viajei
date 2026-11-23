@@ -1,7 +1,9 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { driveKey } from '@shared/drive-schema.ts';
+import type { LngLat } from '@shared/geo.ts';
 import type { Place } from '@shared/places-schema.ts';
-import type { MapStage, OptionGroup } from '../flow.ts';
+import { neededPairs, type MapStage, type OptionGroup } from '../flow.ts';
 import { ratingText, statusText } from '../option-text.ts';
 import { MapAttribution, OptionsStep } from './OptionsStep.tsx';
 
@@ -55,15 +57,30 @@ const group = (places: Place[]): OptionGroup => ({
   center: [-50.39, -26.18],
   centerLabel: 'Canoinhas',
   radiusKm: 30,
-  options: places.map((place) => ({ place, km: 12, minutes: 20, kind: 'food' as const })),
+  options: places.map((place) => ({ place, km: 12, kind: 'food' as const })),
   shown: 6,
 });
+const HOME: LngLat = [-50.33, -26.37];
 const stage = (groups: OptionGroup[]): MapStage => ({
-  origin: { label: 'Major Vieira, SC', at: [-50.33, -26.37] },
+  origin: { label: 'Major Vieira, SC', at: HOME },
   groups,
   named: [],
   chosen: [],
   nowhere: false,
+});
+const at = (p: Place): LngLat => [p.lng, p.lat];
+/**
+ * A tela com o tempo de carro já medido (D310): cada par que ela precisa, com os minutos de `minutes`
+ * (pelos pontos), ou 20 min quando `minutes` não diz.
+ */
+const measured = (
+  map: MapStage,
+  minutes: (a: LngLat, b: LngLat) => number | undefined = () => undefined,
+): MapStage => ({
+  ...map,
+  drive: Object.fromEntries(
+    neededPairs(map).map(([a, b]) => [driveKey(a, b), (minutes(a, b) ?? 20) * 60]),
+  ),
 });
 const noop = () => undefined;
 const props = (map: MapStage) => ({
@@ -83,7 +100,7 @@ const props = (map: MapStage) => ({
 
 describe('OptionsStep: os cartões do Google (fase 27)', () => {
   it('a nota com as avaliações, "Aberto agora", o horário em texto e a fonte no pé', () => {
-    render(<OptionsStep {...props(stage([group([google()])]))} />);
+    render(<OptionsStep {...props(measured(stage([group([google()])])))} />);
     const card = screen.getByRole('button', { name: /^Café da Praça/ });
     expect(card.getAttribute('data-source')).toBe('google');
     expect(card.textContent).toContain('4,6 · 212 avaliações');
@@ -95,6 +112,14 @@ describe('OptionsStep: os cartões do Google (fase 27)', () => {
       'Dados do Google Maps · Dados © colaboradores do OpenStreetMap',
     );
     expect(foot.textContent).toContain('Powered by Geoapify');
+  });
+
+  it('sem o tempo medido, o cartão diz a distância em linha reta e nenhum tempo de carro (D310)', () => {
+    render(<OptionsStep {...props(stage([group([google()])]))} />);
+    const card = screen.getByRole('button', { name: /^Café da Praça/ });
+    expect(card.textContent).toContain('a 12 km em linha reta');
+    expect(card.textContent).not.toContain('min de carro');
+    expect(card.getAttribute('data-drive')).toBe('unmeasured');
   });
 
   it('"Fechado agora" e o fechado de vez, marcados; sem nota, nada se inventa', () => {
@@ -341,49 +366,77 @@ describe('OptionsStep: um passo de cada vez (fase 26)', () => {
 
   it('o total à vista com o que a pessoa tem; cada candidato diz o total se for escolhido e o que estoura fica marcado; nada cabe oferece mais tempo', () => {
     const onTime = vi.fn();
+    // a estrada medida (D310): casa ↔ cachoeira 40; cachoeira → café perto 15, dele a casa 35 (o
+    // desvio: 15 + 35 − 40 = 10); cachoeira → café longe 170, dele a casa 210
+    const road = (a: LngLat, b: LngLat) => {
+      const pair = driveKey(a, b);
+      const table: Record<string, number> = {
+        [driveKey(HOME, at(CACHOEIRA))]: 40,
+        [driveKey(at(CACHOEIRA), HOME)]: 40,
+        [driveKey(at(CACHOEIRA), at(CAFE_PERTO))]: 15,
+        [driveKey(at(CAFE_PERTO), HOME)]: 35,
+        [driveKey(at(CACHOEIRA), at(CAFE_LONGE))]: 170,
+        [driveKey(at(CAFE_LONGE), HOME)]: 210,
+      };
+      return table[pair];
+    };
+    const around = { name: 'Cachoeira Alta', at: at(CACHOEIRA) };
     const { rerender } = render(
       <OptionsStep
         {...props(
-          stepwise({
-            step: 1,
-            chosen: ['g-cach'],
-            groups: [
-              stepGroup('cachoeira', 1, [CACHOEIRA], {}, { relacao: 'perto_de_casa' }),
-              {
-                ...stepGroup('café', 2, [CAFE_PERTO, CAFE_LONGE]),
-                // como a busca do passo seguinte entrega: o que cada lugar acrescenta ao passeio
-                options: [
-                  {
-                    place: CAFE_PERTO,
-                    km: 30,
-                    minutes: 45,
-                    kind: 'food' as const,
-                    fromPrevious: { name: 'Cachoeira Alta', km: 7, minutes: 15 },
-                    detour: 10,
-                  },
-                  {
-                    place: CAFE_LONGE,
-                    km: 200,
-                    minutes: 180,
-                    kind: 'food' as const,
-                    fromPrevious: { name: 'Cachoeira Alta', km: 190, minutes: 170 },
-                    detour: 0,
-                  },
-                ],
-              },
-            ],
-          }),
+          measured(
+            stepwise({
+              step: 1,
+              chosen: ['g-cach'],
+              groups: [
+                stepGroup('cachoeira', 1, [CACHOEIRA], {}, { relacao: 'perto_de_casa' }),
+                {
+                  ...stepGroup('café', 2, [CAFE_PERTO, CAFE_LONGE]),
+                  // como a busca do passo seguinte entrega: de onde se vem e para onde se vai depois
+                  options: [
+                    {
+                      place: CAFE_PERTO,
+                      km: 30,
+                      kind: 'food' as const,
+                      fromPrevious: { ...around, km: 7 },
+                      next: HOME,
+                    },
+                    {
+                      place: CAFE_LONGE,
+                      km: 200,
+                      kind: 'food' as const,
+                      fromPrevious: { ...around, km: 190 },
+                      next: HOME,
+                    },
+                  ],
+                },
+              ],
+            }),
+            road,
+          ),
         )}
         time={TIME}
         onTime={onTime}
+        onDwell={vi.fn()}
         onStepBack={vi.fn()}
       />,
     );
+    // a cachoeira e a volta: 80 min de estrada e 75 no lugar (o tipo do cartão)
     const total = screen.getByText(/^O passeio dá cerca de/);
+    expect(total.textContent).toBe(
+      'O passeio dá cerca de 2 h 35: 1 h 20 de estrada e 1 h 15 nos lugares',
+    );
     expect(total.parentElement?.textContent).toContain('vocês têm a tarde, cerca de 5 h');
+    expect(total.parentElement?.textContent).toContain('Saída às 08:00');
+    // o tempo em cada lugar, dito como suposição do app, com "mudar" (D312)
+    expect(
+      screen.getByText(/1 h 15/, { selector: '[data-stays] span.font-semibold' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Mudar o tempo em Cachoeira Alta' })).toBeTruthy();
     const perto = screen.getByRole('button', { name: /^Café da Serra/ });
     expect(perto.getAttribute('data-over')).toBeNull();
-    expect(perto.textContent).toMatch(/Daria \d+ h( \d\d)? no total/);
+    // 40 + 15 + 35 de estrada e 75 + 75 nos lugares
+    expect(perto.textContent).toContain('Daria 4 h no total');
     expect(perto.textContent).toContain('a cerca de 15 min de Cachoeira Alta · +10 min de estrada');
     const longe = screen.getByRole('button', { name: /^Café do Vale/ });
     expect(longe.getAttribute('data-over')).toBe('true');
@@ -395,14 +448,17 @@ describe('OptionsStep: um passo de cada vez (fase 26)', () => {
     rerender(
       <OptionsStep
         {...props(
-          stepwise({
-            step: 1,
-            chosen: ['g-cach'],
-            groups: [
-              stepGroup('cachoeira', 1, [CACHOEIRA], {}, { relacao: 'perto_de_casa' }),
-              stepGroup('café', 2, [CAFE_LONGE]),
-            ],
-          }),
+          measured(
+            stepwise({
+              step: 1,
+              chosen: ['g-cach'],
+              groups: [
+                stepGroup('cachoeira', 1, [CACHOEIRA], {}, { relacao: 'perto_de_casa' }),
+                stepGroup('café', 2, [CAFE_LONGE]),
+              ],
+            }),
+            road,
+          ),
         )}
         time={TIME}
         onTime={onTime}

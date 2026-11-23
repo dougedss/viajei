@@ -46,7 +46,7 @@ export type ReviewStop = Keyed<ImportStop> & {
    * a sugestão do caminho (fase 24): nasce desligada, com o desvio e a cidade; só entra se a pessoa
    * ligar. `night`: onde dormir, no fim de um dia que não é o último
    */
-  suggestion?: { detour: number; city: string | null; night: boolean } | null;
+  suggestion?: { detour: number | null; city: string | null; night: boolean } | null;
   /** o objeto do OpenStreetMap do lugar escolhido na conversa (fase 23): vai para a parada */
   osm?: { type: 'node' | 'way' | 'relation'; id: number } | null;
   /** o `place_id` do Google do lugar escolhido (fase 27, a decisão 4 do Douglas): vai para a parada */
