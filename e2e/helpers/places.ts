@@ -41,8 +41,8 @@ export function lugar(
 export type PlacesAnswer = Place[] | { status: number; code: string };
 
 /**
- * A `drive-times` respondida (D310): o tempo de carro de cada par pela estrada reta forjada (a mesma
- * conta da `rotaForjada`), ou o erro que `answer` devolver (a medição que não respondeu). Os pedidos
+ * A `drive-times` respondida (D310): o tempo de carro de cada par pela linha reta forjada (a 12 m/s,
+ * `FORGED_DRIVE_MPS`), ou o erro que `answer` devolver (a medição que não respondeu). Os pedidos
  * ficam guardados. Quem chama `buscaNoMapa` já a tem; chamar de novo, depois, troca a resposta.
  */
 export async function tempoDeCarro(
