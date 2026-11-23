@@ -3,6 +3,7 @@ import { useLocation } from 'react-router';
 import type { Catchup } from '@/features/travel-mode/catchup.ts';
 import type { DayState } from '@/features/travel-mode/rules.ts';
 import type { RouteStatus } from '@/features/itinerary/route.ts';
+import type { LegPlan } from '@/features/travel-mode/legs.ts';
 import type { DaySummary } from '@/features/weather/rules.ts';
 import type { ConvoyCar } from './convoy.ts';
 import type { DayRoute, Profile, RouteLeg, Stop, Trip, WeatherEntry } from '@/lib/db/schema.ts';
@@ -47,8 +48,18 @@ export type WorldSlotProps = {
   reviewPhotos?: readonly ReviewPhoto[] | undefined;
   /** tocar numa parada (a miniatura, a pílula, a linha da lista) abre a folha dela (fase 14) */
   onOpenStop?: ((stopId: string) => void) | undefined;
-  /** quem do time está em outro carro: um carro pequeno na estrada por pessoa (D179) */
+  /** quem do time está em outro carro: um carro pequeno na estrada por pessoa (D179), no trecho da vez */
   convoy?: readonly ConvoyCar[] | undefined;
+  /**
+   * o dia em trechos (fase 28): a maquete mostra um por vez, até o objetivo; sem isto (ou num dia de um
+   * trecho só), o dia inteiro, como antes
+   */
+  legPlan?: LegPlan | undefined;
+  /**
+   * a parada cujo "Como foi?" está para abrir, aberto ou na tela como cartão: a maquete segura o trecho
+   * dela até ele fechar (a decisão 12 de 21/11)
+   */
+  hold?: string | null | undefined;
   /** a altura medida do que fica sobre o pé da tela: a lista do dia termina acima disso */
   bottomInset: number;
   /**

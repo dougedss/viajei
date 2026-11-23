@@ -162,10 +162,13 @@ const SOURCE_LABEL = {
 
 /**
  * Uma linha discreta sobre a posição, na barra do "Agora": o ponto "GPS" enquanto a posição está
- * sendo acompanhada (e "econômico" parado), fora da rota com a distância, ou a fração do dia.
+ * sendo acompanhada (e "econômico" parado), fora da rota com a distância, ou a fração do dia. Num dia
+ * de mais de um trecho (fase 28, a decisão 13), a fração do trecho até o objetivo vem primeiro ("40% do
+ * trecho até Curitiba") e a do dia fica menor, ao lado.
  */
 export function PositionLine({
   position,
+  leg = null,
   tracking = false,
   lowPower = false,
   denied = false,
@@ -173,6 +176,8 @@ export function PositionLine({
   readAt = null,
 }: {
   position: CatchupPosition | null;
+  /** o trecho da vez: a fração dele e como se diz ("do trecho até Curitiba", "da volta"); null num dia de um trecho */
+  leg?: { fraction: number | null; label: string } | null;
   tracking?: boolean;
   lowPower?: boolean;
   /** o navegador negou a posição: uma frase, sem insistir (a pergunta do app é outra, D48) */
@@ -222,12 +227,27 @@ export function PositionLine({
       <p className="mt-0.5 flex items-center gap-2 mv-text-13 text-ink-2">{gps}</p>
     ) : null;
   }
+  const day = Math.round(position.fraction * 100);
+  if (leg && leg.fraction !== null) {
+    return (
+      <p className="mt-0.5 flex min-w-0 items-center gap-2 mv-text-13 text-ink-2" data-position-leg>
+        {gps}
+        <span className="inline-flex min-w-0 items-center gap-1">
+          <LocateFixed className="size-4 shrink-0" aria-hidden="true" />
+          <span className="truncate">
+            {Math.round(leg.fraction * 100)}% {leg.label}, {SOURCE_LABEL[position.source]}
+          </span>
+        </span>
+        <span className="shrink-0 mv-text-12">· {day}% do caminho do dia</span>
+      </p>
+    );
+  }
   return (
     <p className="mt-0.5 flex items-center gap-2 mv-text-13 text-ink-2">
       {gps}
       <span className="inline-flex items-center gap-1">
         <LocateFixed className="size-4 shrink-0" aria-hidden="true" />
-        {Math.round(position.fraction * 100)}% do caminho do dia, {SOURCE_LABEL[position.source]}
+        {day}% do caminho do dia, {SOURCE_LABEL[position.source]}
       </span>
     </p>
   );

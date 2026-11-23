@@ -74,3 +74,27 @@ export function placeCar(input: CarPositionInput): CarPlacement {
   const limit = following ? following.s - AT_NODE_EPSILON : layout.pathLength;
   return { s: Math.min(at.s + step, limit), offRoute: null, source: 'node', atNodeId: null };
 }
+
+/**
+ * Onde o trecho mostrado fica em relação ao da vez (fase 28): o da vez anda com o carro; um trecho
+ * feito (espiado, ou segurado enquanto o "Como foi?" do objetivo está aberto) mostra o carro no fim,
+ * no objetivo; um trecho que ainda vem mostra o carro no começo, de onde ele vai sair.
+ */
+export type LegRelation = 'current' | 'done' | 'ahead';
+
+/**
+ * O carro na maquete de um trecho. No da vez, `placeCar` com a posição já na fração do trecho (quem
+ * chama converte: a fração do dia não serve no layout do trecho); nos outros, o nó do fim ou do começo,
+ * sem posição do GPS (o carro não está lá).
+ */
+export function placeCarOnLeg(input: CarPositionInput & { relation: LegRelation }): CarPlacement {
+  const { layout, relation } = input;
+  if (relation === 'current') return placeCar(input);
+  const node = relation === 'done' ? layout.nodes.at(-1) : layout.nodes[0];
+  return {
+    s: node?.s ?? (relation === 'done' ? layout.pathLength : 0),
+    offRoute: null,
+    source: 'node',
+    atNodeId: node?.stop_id ?? null,
+  };
+}

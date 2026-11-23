@@ -293,7 +293,10 @@ export function photoCues(
 
 /**
  * "Rever o dia": do primeiro nó ao `s` atual, com todos os eventos do dia, até 20 s, e as fotos
- * das memórias aparecendo nos nós (o replay ao abrir não mostra fotos: é sobre o que mudou).
+ * das memórias aparecendo nos nós (o replay ao abrir não mostra fotos: é sobre o que mudou). Num dia de
+ * trechos (fase 28), um plano por trecho, cada um no layout dele: `only` diz de que paradas são os
+ * eventos (as do trecho; o objetivo de onde ele sai já apareceu no anterior). Os eventos saem do dia
+ * inteiro, porque o papel de cada nó (a chegada em casa, D233) é do dia.
  */
 export function planReview(
   layout: WorldLayout,
@@ -301,10 +304,11 @@ export function planReview(
   uid: string,
   current_s: number,
   photos: readonly ReviewPhoto[] = [],
+  only?: ReadonlySet<string>,
 ): ReplayPlan | null {
   const from_s = layout.nodes[0]?.s ?? 0;
   const distance = current_s - from_s;
-  const events = dayEvents(stops, uid);
+  const events = dayEvents(stops, uid).filter((e) => !only || only.has(e.stop_id));
   if (distance <= 0 && events.length === 0) return null;
   const to_s = Math.max(from_s, current_s);
   const duration_ms = scaled(REVIEW_MIN_MS, REVIEW_MAX_MS, distance, daySpan(layout));

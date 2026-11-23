@@ -121,9 +121,7 @@ describe('importar numa viagem vazia', () => {
     const plan = planImport(marked, existing(), ctx());
     expect(plan.stops.filter((st) => st.objective).map((st) => st.name)).toEqual([first.name]);
     // a importação, o formato do Viajei e o pedido para outras IAs não sabem do campo: tudo `false`
-    expect(planImport(review, existing(), ctx()).stops.every((st) => st.objective === false)).toBe(
-      true,
-    );
+    expect(planImport(review, existing(), ctx()).stops.some((st) => st.objective)).toBe(false);
   });
 
   it('sem horário no texto continua sem horário; nada é inventado', () => {

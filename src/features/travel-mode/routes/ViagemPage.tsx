@@ -90,6 +90,7 @@ import { useNightTheme, useNow } from '../hooks.ts';
 import { useLivePosition } from '../live.ts';
 import { liveEnabled } from '../live-rules.ts';
 import { declineGeo, grantGeo, useGeoConsent, useTeamTracks } from '../queries.ts';
+import { legPlan, legPosition } from '../legs.ts';
 import { dayState, isDepartureNode } from '../rules.ts';
 import { useOverlayInset } from '../overlay-inset.ts';
 import { dayBar, overlayCard } from '../screen.ts';
@@ -262,6 +263,29 @@ function DayView({
   const tripStops = useTripStops(tripId);
   const state = dayState({ date: day.date }, stops, now);
   const legs = legsByStop(stops, route);
+  // o dia em trechos (fase 28): o mapa mostra um por vez, até o objetivo; `dayState` devolve um array
+  // novo a cada render, então os trechos se refazem só quando muda o que os define
+  const legKey = state.stops
+    .map((s) =>
+      [
+        s.id,
+        s.position,
+        s.kind,
+        s.source,
+        s.lat,
+        s.lng,
+        s.objective,
+        s.done_at,
+        s.departed_at,
+        s.skipped,
+      ].join('|'),
+    )
+    .join(';');
+  const plan = useMemo(
+    () => legPlan(state.stops, route ?? null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- as paradas entram pela chave; a rota pelo hash
+    [legKey, route?.hash],
+  );
   const teamTracks = useTeamTracks(dayId, uid, members);
   // a previsão do dia (Dexie; com rede e cache velho, a busca da viagem inteira)
   const weather = useTripWeather(trip);
@@ -294,6 +318,9 @@ function DayView({
     .filter((m) => m.member.status === 'accepted')
     .flatMap((m) => (m.profile ? [m.profile] : []));
   const [memoryStopId, setMemoryStopId] = useState<string | null>(null);
+  // a parada cujo "Como foi?" vai abrir (o Chegamos! pelo toque, até a folha fechar): a maquete segura o
+  // trecho do objetivo até lá (fase 28, a decisão 12), sem trocar e voltar no 1,2 s da espera da folha
+  const [promptHold, setPromptHold] = useState<string | null>(null);
   const [reservationId, setReservationId] = useState<string | null>(null);
   // o momento calmo da tela: fechar a folha "Como foi?" (até o próximo Partiu!). Os cartões que já
   // esperavam na fila nesse instante saem aí; os outros esperam.
@@ -322,7 +349,15 @@ function DayView({
     // automáticas passam por aqui com `at: null`: sem o "+10", que é só do toque (o XP de verdade vem
     // do motor de progressão, que deriva `stop_done` de qualquer `done_at`)
     const at = source === 'tap' ? tappedRect() : null;
-    if (effect === 'depart') setCalmSince(null);
+    if (effect === 'depart') {
+      setCalmSince(null);
+      setPromptHold(null);
+    }
+    // a folha vai abrir: o trecho fica na tela desde já, antes de o `done_at` chegar ao Dexie
+    const sheet =
+      arriving !== null &&
+      memoryPrompt({ source, stop: arriving, answered: answered.has(arriving.id) }) === 'sheet';
+    if (sheet) setPromptHold(arriving.id);
     void action()
       .then(({ undo }) => {
         cuRef.current?.markSeen(seen);
@@ -332,10 +367,7 @@ function DayView({
           celebrateArrival();
           if (arriving && at) void gainXp(uid, 'stop_done', arriving.id, XP_POINTS.stop_done, at);
         }
-        if (
-          arriving &&
-          memoryPrompt({ source, stop: arriving, answered: answered.has(arriving.id) }) === 'sheet'
-        ) {
+        if (arriving && sheet) {
           if (sheetTimer.current) clearTimeout(sheetTimer.current);
           sheetTimer.current = setTimeout(() => setMemoryStopId(arriving.id), SHEET_DELAY_MS);
         }
@@ -346,7 +378,10 @@ function DayView({
           action: { label: 'Desfazer', onClick: () => void undo() },
         });
       })
-      .catch(() => toast.show({ title: 'Não deu para marcar. Tente de novo.', kind: 'late' }))
+      .catch(() => {
+        if (sheet) setPromptHold(null);
+        toast.show({ title: 'Não deu para marcar. Tente de novo.', kind: 'late' });
+      })
       .finally(() => setBusy(false));
   };
 
@@ -441,15 +476,20 @@ function DayView({
     () => (route && route.geometry.length >= 2 ? indexRoute(route.geometry) : null),
     [route],
   );
+  // no trecho da vez (fase 28): o carro do time se projeta dali em diante, na fração do trecho
+  const legSpan = plan.legs.length > 1 ? (plan.geometry[plan.current]?.span ?? null) : null;
   const convoyCars = useMemo(
     () =>
-      convoy({
-        me: cu.fix ? [cu.fix.lng, cu.fix.lat] : null,
-        team: teamPoints(teamTracks),
-        now: now.getTime(),
-        route: routeIndex,
-      }),
-    [cu.fix, teamTracks, now, routeIndex],
+      plan.legs.length > 1 && !legSpan
+        ? []
+        : convoy({
+            me: cu.fix ? [cu.fix.lng, cu.fix.lat] : null,
+            team: teamPoints(teamTracks),
+            now: now.getTime(),
+            route: routeIndex,
+            span: legSpan,
+          }),
+    [cu.fix, teamTracks, now, routeIndex, legSpan, plan.legs.length],
   );
 
   // selo no ícone ao ir para o plano de fundo durante a viagem
@@ -477,6 +517,11 @@ function DayView({
     : null;
   const prompts = pendingPrompts(stops, answered, dismissedPrompts, sheetStop?.id ?? null);
   const promptStop = prompts[0] ?? null;
+  // a folha prometida ou aberta segura o trecho; o cartão também, enquanto está na tela (o `card` abaixo)
+  const heldBySheet =
+    promptHold !== null && stops.some((s) => s.id === promptHold && s.done_at !== null)
+      ? promptHold
+      : null;
   const openReservation = reservations.find((r) => r.id === reservationId) ?? null;
   const openStop = openStopId ? (stops.find((s) => s.id === openStopId) ?? null) : null;
   const openStopIndex = openStop ? stops.findIndex((s) => s.id === openStop.id) : -1;
@@ -553,6 +598,7 @@ function DayView({
     memory: promptStop !== null,
     retro,
   });
+  const hold = heldBySheet ?? (card === 'memory' && promptStop ? promptStop.id : null);
 
   return (
     <>
@@ -582,6 +628,8 @@ function DayView({
             reviewPhotos={reviewPhotos}
             onOpenStop={setOpenStopId}
             convoy={convoyCars}
+            legPlan={plan}
+            hold={hold}
             bottomInset={overlayInset}
             weather={{ summary: daySummary(forecast), stops: forecast?.stops ?? {} }}
           />
@@ -675,6 +723,14 @@ function DayView({
               active ? (
                 <PositionLine
                   position={cu.position}
+                  leg={
+                    plan.legs.length > 1
+                      ? {
+                          fraction: legPosition(cu.position, plan, plan.current)?.fraction ?? null,
+                          label: plan.names[plan.current]?.progress ?? '',
+                        }
+                      : null
+                  }
                   tracking={live.tracking}
                   lowPower={live.lowPower}
                   denied={live.denied}
@@ -771,6 +827,7 @@ function DayView({
         uid={uid}
         onClose={() => {
           setMemoryStopId(null);
+          setPromptHold(null);
           setCalmSince(Date.now());
         }}
         onReceipt={
@@ -778,6 +835,7 @@ function DayView({
             ? () => {
                 // a nota do posto (fase 18): a folha "Como foi?" fecha e o gasto abre pela nota
                 setMemoryStopId(null);
+                setPromptHold(null);
                 setExpenseDraft({
                   date: day.date,
                   stop_id: sheetStop.id,

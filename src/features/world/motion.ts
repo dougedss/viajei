@@ -122,6 +122,14 @@ export class MotionController {
     return events;
   }
 
+  /**
+   * Tira da fila o que ainda não começou (fase 28: o "Pular" do "Rever o dia" de vários trechos encerra
+   * a sequência inteira, não só o trecho em curso). O movimento atual continua; `skip` o encerra.
+   */
+  clear(): void {
+    this.queue = [];
+  }
+
   /** "Pular": vai ao fim do movimento atual e dispara as deixas restantes de uma vez. */
   skip(now: number): MotionEvent[] {
     const c = this.current;

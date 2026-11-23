@@ -1,4 +1,4 @@
-import { haversineM, type LngLat } from '@shared/geo.ts';
+import { haversineM, lengthM, type LngLat } from '@shared/geo.ts';
 import { activeStops, isAutoStop, isLocated, routeWaypoints } from '@/features/itinerary/rules.ts';
 import type { DayRoute, RouteLeg, Stop } from '@/lib/db/schema.ts';
 import { indexRoute, waypointAlongs } from '@/lib/geo/project.ts';
@@ -77,7 +77,7 @@ export function legsOf(stops: readonly Stop[]): Leg[] {
   const home = isArrivalNode(lastPlanned, ordered);
   // os objetivos: os marcados entre a primeira e a última do roteiro; sem nenhum, a regra de reserva
   const middle = planned.slice(1, -1);
-  const marked = middle.filter((s) => s.objective === true);
+  const marked = middle.filter((s) => s.objective);
   const fallback =
     marked.length === 0 && isRoundTrip(planned, ordered) ? farthestFromHome(planned) : null;
   const objectives = marked.length > 0 ? marked : fallback ? [fallback] : [];
@@ -158,8 +158,7 @@ export function legNames(legs: readonly Leg[]): LegName[] {
   const pair =
     legs.length === 2 &&
     volta?.home === true &&
-    ida !== undefined &&
-    ida.from.kind === 'origin' &&
+    ida?.from.kind === 'origin' &&
     !isAutoStop(ida.from);
   return legs.map((leg, i) => {
     const where = placeName(leg.to);
@@ -254,4 +253,56 @@ export function legFraction(alongM: number | null, span: LegSpan | null): number
   const length = span.to_m - span.from_m;
   if (length <= 0) return alongM >= span.to_m ? 1 : 0;
   return Math.min(1, Math.max(0, (alongM - span.from_m) / length));
+}
+
+/**
+ * O dia em trechos, de uma vez, para a tela da viagem: os trechos, a rota e o lugar de cada um na rota
+ * do dia, os nomes, o trecho da vez e o comprimento do traçado do dia (a fração do dia que o
+ * `travel_state` guarda vira metros por ele).
+ */
+export type LegPlan = {
+  legs: Leg[];
+  geometry: LegGeometry[];
+  names: LegName[];
+  current: number;
+  total_m: number | null;
+};
+
+export function legPlan(stops: readonly Stop[], route: RouteIn | null): LegPlan {
+  const legs = legsOf(stops);
+  return {
+    legs,
+    geometry: legGeometry(stops, route, legs),
+    names: legNames(legs),
+    current: currentLeg(legs),
+    total_m: route && route.geometry.length >= 2 ? lengthM(route.geometry) : null,
+  };
+}
+
+/**
+ * A posição do carro na fração do trecho (fase 28): os metros da rota do dia (a projeção com piso, D234)
+ * presos ao trecho. No dia de um trecho só, a posição como está; sem onde o trecho fica, sem fração (o
+ * carro fica no nó, como sem rota).
+ */
+export function legPosition<T extends { fraction: number | null; alongM: number | null }>(
+  position: T | null,
+  plan: Pick<LegPlan, 'legs' | 'geometry'>,
+  index: number,
+): T | null {
+  if (!position || plan.legs.length <= 1) return position;
+  return {
+    ...position,
+    fraction: legFraction(position.alongM, plan.geometry[index]?.span ?? null),
+  };
+}
+
+/** A fração do dia (a do `travel_state`) na fração do trecho; no dia de um trecho só, como está. */
+export function legFractionOfDay(
+  fraction: number | null,
+  plan: Pick<LegPlan, 'legs' | 'geometry' | 'total_m'>,
+  index: number,
+): number | null {
+  if (fraction === null || plan.legs.length <= 1) return fraction;
+  if (plan.total_m === null) return null;
+  return legFraction(fraction * plan.total_m, plan.geometry[index]?.span ?? null);
 }

@@ -2,7 +2,7 @@ import { haversineM, type LngLat } from '@shared/geo.ts';
 import type { CarSpec } from '@/art/cars/types.ts';
 import { carOf, type CarSource } from '@/features/garage/rules.ts';
 import type { TripTrack } from '@/lib/db/schema.ts';
-import { isOffRoute, projectOntoRoute, type RouteIndex } from '@/lib/geo/project.ts';
+import { isOffRoute, projectFrom, projectOntoRoute, type RouteIndex } from '@/lib/geo/project.ts';
 
 /**
  * O comboio, puro (fase 14): quem do time está em outro carro aparece pequeno na estrada, na última
@@ -52,8 +52,14 @@ export function convoy(input: {
   team: readonly TeamPoint[];
   now: number;
   route: RouteIndex | null;
+  /**
+   * o trecho da vez, em metros da rota do dia (fase 28): o carro do time se projeta dali em diante,
+   * como o meu (a projeção com piso da D234), e a fração é a do trecho; fora dele, não aparece. Sem
+   * trecho (o dia de um trecho só), a rota inteira, como antes
+   */
+  span?: { from_m: number; to_m: number } | null;
 }): ConvoyCar[] {
-  const { me, team, now, route } = input;
+  const { me, team, now, route, span } = input;
   if (!me || !route) return [];
   const out: ConvoyCar[] = [];
   for (const p of team) {
@@ -61,11 +67,20 @@ export function convoy(input: {
     if (age_ms < 0 || age_ms > CONVOY_MAX_AGE_MS) continue;
     const distance_m = haversineM(me, p.point);
     if (distance_m <= CONVOY_MIN_DISTANCE_M) continue;
-    const projection = projectOntoRoute(route, p.point);
+    const projection = span
+      ? projectFrom(route, p.point, span.from_m)
+      : projectOntoRoute(route, p.point);
     if (isOffRoute(projection)) continue;
+    let fraction = projection.fraction;
+    if (span) {
+      const length = span.to_m - span.from_m;
+      // além do fim do trecho (com folga do GPS), o carro do time já está no seguinte
+      if (length <= 0 || projection.along_m > span.to_m + CONVOY_MIN_DISTANCE_M) continue;
+      fraction = Math.min(1, Math.max(0, (projection.along_m - span.from_m) / length));
+    }
     out.push({
       user_id: p.user_id,
-      fraction: projection.fraction,
+      fraction,
       point: p.point,
       age_ms,
       distance_m,

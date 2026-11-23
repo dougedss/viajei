@@ -123,6 +123,19 @@ describe('MotionController', () => {
     expect(m.currentMove?.kind).toBe('replay');
   });
 
+  it('limpar a fila (o "Pular" de vários trechos) deixa só o movimento atual, e o skip o encerra', () => {
+    const m = new MotionController(0);
+    m.enqueue(move({ kind: 'opening', to_s: 10, duration_ms: 600 }), 0);
+    m.enqueue(move({ kind: 'review', from_s: 10, to_s: 50 }), 0);
+    m.step(0);
+    expect(m.currentMove?.kind).toBe('opening');
+    m.clear();
+    expect(m.skip(100).at(-1)).toMatchObject({ type: 'done', skipped: true });
+    expect(m.busy).toBe(false);
+    expect(m.step(200)).toEqual([]);
+    expect(m.s).toBe(10);
+  });
+
   it('uma suavização nova substitui a anterior', () => {
     const m = new MotionController(0);
     m.enqueue(move({ kind: 'smooth', to_s: 10 }), 0);

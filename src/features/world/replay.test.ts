@@ -298,6 +298,22 @@ describe('planReview e dayEvents', () => {
     expect(planReview(layout, stops, UID, node(0).s)).toBeNull();
   });
 
+  it('por trecho (fase 28): só os eventos das paradas dele, com o papel de cada nó tirado do dia', () => {
+    const first = done[0]!.id;
+    const second = done[1]!.id;
+    // o segundo trecho sai do objetivo do primeiro: o evento dele já apareceu no anterior
+    const plan = planReview(layout, done, UID, layout.pathLength, [], new Set([second]));
+    const events = plan?.cues.flatMap((c) => (c.kind === 'event' ? [c.event] : [])) ?? [];
+    expect(events.map((e) => [e.stop_id, e.kind])).toEqual([[second, 'team_arrived']]);
+    const firstLeg = planReview(layout, done, UID, node(1).s, [], new Set([first, second]));
+    expect(firstLeg?.cues.flatMap((c) => (c.kind === 'event' ? [c.event.kind] : []))).toEqual([
+      'departed',
+      'team_arrived',
+    ]);
+    // sem nenhum evento do trecho e o carro no começo, nada a rever nele
+    expect(planReview(layout, done, UID, node(0).s, [], new Set(['nenhuma']))).toBeNull();
+  });
+
   it('as fotos aparecem nos nós, depois do evento, a primeira com +N', () => {
     const at = (i: number) => done[i]?.id ?? '';
     const photos = [

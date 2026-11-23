@@ -80,6 +80,36 @@ describe('o comboio', () => {
   });
 });
 
+describe('o comboio no trecho da vez (fase 28)', () => {
+  // uma ida e volta pela mesma reta: 20 km para o norte e de volta
+  const roundTrip = indexRoute([ORIGIN, HOTEL, ORIGIN]);
+  const half = roundTrip.total_m / 2;
+
+  it('na volta, o carro do time se projeta dali em diante e anda na fração do trecho', () => {
+    const cars = convoy({
+      me: ahead(18),
+      // a 5 km de casa, voltando: sem o piso, a projeção cairia na ida (25%)
+      team: [{ user_id: 'ana', point: ahead(5), t: NOW - 60_000 }],
+      now: NOW,
+      route: roundTrip,
+      span: { from_m: half, to_m: roundTrip.total_m },
+    });
+    expect(cars).toHaveLength(1);
+    expect(cars[0]?.fraction).toBeCloseTo(15 / 20, 2);
+  });
+
+  it('quem já passou do fim do trecho não aparece nele', () => {
+    const cars = convoy({
+      me: ORIGIN,
+      team: [{ user_id: 'ana', point: ahead(15), t: NOW - 60_000 }],
+      now: NOW,
+      route: roundTrip,
+      span: { from_m: 0, to_m: roundTrip.total_m / 4 },
+    });
+    expect(cars).toEqual([]);
+  });
+});
+
 describe('o carro de cada pessoa no comboio (fase 16)', () => {
   it('cada um com o carro do perfil dele, sem placa; quem não tem perfil aqui, o padrão', () => {
     const carFor = convoyCarFor(

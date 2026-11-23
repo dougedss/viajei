@@ -6,6 +6,7 @@ import type { Palette } from '@/art/palette.ts';
 import { createSceneTextures } from '@/art/textures.ts';
 import type { CarSpec } from '@/art/cars/types.ts';
 import type { ConvoyCar } from '../convoy.ts';
+import type { WorldLayout } from '../layout.ts';
 import type { StopStatus } from '@/features/travel-mode/rules.ts';
 import type { MotionEvent } from '../motion.ts';
 import type { WorldTier } from '../quality.ts';
@@ -30,6 +31,11 @@ import type { WorldRuntime } from './runtime.ts';
  */
 export type WorldSceneProps = {
   runtime: WorldRuntime;
+  /**
+   * o layout que a cena desenha (fase 28: o do trecho mostrado); quem troca o do runtime passa o novo
+   * aqui, e a cena renderiza de novo com ele. Sem isto, o do runtime
+   */
+  layout?: WorldLayout | undefined;
   palette: Palette;
   tier: WorldTier;
   statuses: Record<string, StopStatus>;
@@ -55,6 +61,7 @@ export type WorldSceneProps = {
 
 export function WorldScene({
   runtime,
+  layout: given,
   palette,
   tier,
   statuses,
@@ -71,7 +78,9 @@ export function WorldScene({
 }: WorldSceneProps) {
   const gl = useThree((s) => s.gl) as unknown as WebGPURenderer;
   const scene = useThree((s) => s.scene);
-  const layout = runtime.layout;
+  // o layout dado vai ao runtime antes dos componentes da cena renderizarem: eles o leem de lá
+  if (given && runtime.layout !== given) runtime.setLayout(given);
+  const layout = given ?? runtime.layout;
   const field = useMemo(() => buildHeightField(layout), [layout]);
   const [lighting, setLighting] = useState<LightingHandle | null>(null);
 

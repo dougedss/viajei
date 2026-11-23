@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CatchupPosition } from '@/lib/geo/catchup.ts';
 import { makeStop } from '@/test/factories.ts';
-import { AT_NODE_EPSILON, placeCar, ROAD_STEP_MIN } from './car-position.ts';
+import { AT_NODE_EPSILON, placeCar, placeCarOnLeg, ROAD_STEP_MIN } from './car-position.ts';
 import { buildLayout } from './layout.ts';
 
 const stops = [
@@ -134,5 +134,22 @@ describe('placeCar: fora da rota', () => {
     expect(p.offRoute).toEqual({ distance_m: 3050 });
     expect(p.s).toBeCloseTo(layout.fractionToS(0.4), 6);
     expect(p.atNodeId).toBeNull();
+  });
+});
+
+describe('placeCarOnLeg: o carro no trecho mostrado (fase 28)', () => {
+  it('no da vez, a regra de sempre, com a posição já na fração do trecho', () => {
+    const at = { state: idle, position: pos({ fraction: 0.25 }), layout };
+    expect(placeCarOnLeg({ ...at, relation: 'current' })).toEqual(placeCar(at));
+  });
+
+  it('num trecho feito, o carro no objetivo (o último nó), sem a posição do GPS', () => {
+    const p = placeCarOnLeg({ state: idle, position: pos(), layout, relation: 'done' });
+    expect(p).toEqual({ s: node('d').s, offRoute: null, source: 'node', atNodeId: 'd' });
+  });
+
+  it('num trecho que ainda vem, o carro de onde ele sai (o primeiro nó)', () => {
+    const p = placeCarOnLeg({ state: idle, position: pos(), layout, relation: 'ahead' });
+    expect(p).toEqual({ s: node('a').s, offRoute: null, source: 'node', atNodeId: 'a' });
   });
 });
