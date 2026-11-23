@@ -99,7 +99,15 @@ type Aberto = { context: BrowserContext; page: Page; close: () => Promise<void> 
 async function abrir(email: string, tripId: string): Promise<Aberto> {
   const use = test.info().project.use;
   const browser = await chromium.launch({ ...use.launchOptions, channel: 'chromium' });
-  const context = await browser.newContext({ ...use, geolocation: ponto(600), permissions: [] });
+  // um palco mais alto que o do descritor do iPhone 15 (393 × 659, o Safari com as barras): com o
+  // "Agora", a linha da posição e o cartão da vez embaixo, a 659 px a câmera chega ao teto e a pílula de
+  // cima sai de cena (o limite da D223), e o que este teste prova é o objetivo em cima
+  const context = await browser.newContext({
+    ...use,
+    viewport: { width: 393, height: 820 },
+    geolocation: ponto(600),
+    permissions: [],
+  });
   await context.route('**/functions/v1/route-day', async (route) => {
     if (route.request().method() === 'OPTIONS') {
       await route.fulfill({ status: 204, headers: CORS });
@@ -119,12 +127,12 @@ async function abrir(email: string, tripId: string): Promise<Aberto> {
   await page.getByLabel('E-mail').fill(email);
   await page.getByLabel('Senha', { exact: true }).fill(SENHA);
   await page.getByRole('button', { name: 'Entrar' }).click();
-  await expect(page.getByRole('heading', { name: 'Suas viagens' })).toBeVisible({
-    timeout: 20_000,
-  });
-  // as paradas chegam pelo sync ao abrir; a maquete monta no SwiftShader devagar
-  await page.goto(`/viagens/${tripId}`);
+  // com a viagem acontecendo hoje, entrar cai na tela da viagem do dia (como no `ida-e-volta.spec`)
   await expect(page.getByRole('region', { name: 'Agora' })).toBeVisible({ timeout: 20_000 });
+  if (!page.url().includes(tripId)) {
+    await page.goto(`/viagens/${tripId}`);
+    await expect(page.getByRole('region', { name: 'Agora' })).toBeVisible({ timeout: 20_000 });
+  }
   await context.grantPermissions(['geolocation'], { origin: new URL(page.url()).origin });
   await page.getByRole('button', { name: 'Usar posição' }).click();
   await expect(page.locator('[data-gps][data-fix-at]')).toBeAttached({ timeout: 15_000 });
