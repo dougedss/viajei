@@ -6,9 +6,21 @@ import { distanceToCoast } from './coast.ts';
 import { curiosities } from './curiosities.ts';
 import { arrivalAt, hasArrived, hasDeparted } from './geofence.ts';
 import { readPlace } from './index.ts';
-import { largestMunicipalityWithin, nearestMunicipality } from './municipalities.ts';
+import { cumulativeM } from '@shared/geo.ts';
+import {
+  largestMunicipalityWithin,
+  municipalitiesWithin,
+  nearestMunicipality,
+} from './municipalities.ts';
+import { municipalities } from './municipalities-data.ts';
 import { indexRoute, isOffRoute, projectOntoRoute } from './project.ts';
-import { classifySegments, passingPlaces, samplePlaces, type RouteShape } from './segments.ts';
+import {
+  classifySegments,
+  crossingRadiusM,
+  passingPlaces,
+  samplePlaces,
+  type RouteShape,
+} from './segments.ts';
 
 type Fixture = { geometry: number[][]; elevation: number[][] };
 const SP = { lng: -46.6339, lat: -23.5505 };
@@ -147,35 +159,114 @@ describe('leitura do lugar', () => {
     expect(a.places.length).toBeGreaterThan(0);
   });
 
-  it('os municípios da rota (fase 22): contíguos, em ordem, com o ponto mais perto do centro', () => {
-    const r = route(seedDay1);
-    const samples = samplePlaces(r);
-    const places = passingPlaces(samples);
-    expect(places.length).toBeGreaterThan(3);
-    expect(places[0]?.name).toBe('Papanduva');
-    // o dia 1 do seed passa por Caxias do Sul (a maior do caminho) e termina em Bom Princípio
-    const names = places.map((p) => p.name);
-    expect(names).toContain('Caxias do Sul');
-    // o dia termina em Bom Princípio; a cidade da amostra é a mais populosa a 12 km (São Sebastião do Caí)
-    expect(['Bom Princípio', 'São Sebastião do Caí']).toContain(names.at(-1));
+  it('as cidades de passagem do seed (fase 28): as que a estrada atravessa, em ordem, uma vez cada', () => {
+    const places = passingPlaces(route(seedDay1));
+    // medido com o dado embutido: a estrada a até o raio de cada uma (D321). Papanduva, de onde se
+    // sai, fica a 2,8 km do centro e não conta; Lages, a 4,0 km, conta (o raio dela é 5,0 km)
+    expect(places.map((p) => p.name)).toEqual([
+      'Monte Castelo',
+      'Santa Cecília',
+      'Ponte Alta do Norte',
+      'São Cristovão do Sul',
+      'Ponte Alta',
+      'Correia Pinto',
+      'Lages',
+      'Vacaria',
+      'Caxias do Sul',
+      'Farroupilha',
+      'São Vendelino',
+      'Bom Princípio',
+    ]);
     const biggest = [...places].sort((a, b) => b.pop - a.pop)[0];
     expect(biggest?.name).toBe('Caxias do Sul');
     let last = -1;
     for (const p of places) {
-      expect(p.from_m).toBeGreaterThanOrEqual(last);
-      expect(p.to_m).toBeGreaterThan(p.from_m);
-      expect(p.at_m).toBeGreaterThanOrEqual(p.from_m);
-      expect(p.at_m).toBeLessThanOrEqual(p.to_m);
-      expect(p.pop).toBeGreaterThan(0);
+      expect(p.at_m).toBeGreaterThan(last);
+      expect(p.from_m).toBeLessThanOrEqual(p.at_m);
+      expect(p.to_m).toBeGreaterThanOrEqual(p.at_m);
+      expect(p.distance_m).toBeLessThanOrEqual(crossingRadiusM(p.pop));
       expect(p.uf).toMatch(/^[A-Z]{2}$/);
-      last = p.to_m;
+      last = p.at_m;
     }
-    // dois vizinhos nunca são o mesmo município
-    for (let i = 1; i < places.length; i++) {
-      expect(`${places[i]!.name}|${places[i]!.uf}`).not.toBe(
-        `${places[i - 1]!.name}|${places[i - 1]!.uf}`,
-      );
-    }
+    expect(new Set(places.map((p) => `${p.name}|${p.uf}`)).size).toBe(places.length);
+    // a leitura do dia usa a mesma regra
+    expect(readPlace(route(seedDay1)).places).toEqual(places);
+  });
+
+  it('o raio da cidade atravessada cresce com a raiz da população, de 2 a 10 km', () => {
+    expect(crossingRadiusM(0)).toBe(2_000);
+    expect(crossingRadiusM(7_540)).toBe(2_000);
+    expect(crossingRadiusM(57_169)).toBeCloseTo(2_869, 0);
+    expect(crossingRadiusM(173_278)).toBeCloseTo(4_995, 0);
+    expect(crossingRadiusM(1_832_183)).toBe(10_000);
+  });
+
+  // a rota de 21/11 em miniatura (o print do Douglas): de Papanduva a Canoinhas e de volta, pela mesma
+  // estrada, passando a 0,9 km do centro de Major Vieira e a 9 km do de Monte Castelo (a regra da D220
+  // punha "Monte Castelo" duas vezes na maquete e nenhuma vez Major Vieira)
+  const centro = (name: string) => {
+    const m = municipalities().find((x) => x.name === name && x.uf === 'SC');
+    if (!m) throw new Error(`sem ${name} no dado embutido`);
+    return m;
+  };
+  const M_LAT = 111_320;
+  const mLng = (lat: number) => M_LAT * Math.cos((lat * Math.PI) / 180);
+  const idaEVolta = (): RouteShape => {
+    const mc = centro('Monte Castelo');
+    const mv = centro('Major Vieira');
+    const can = centro('Canoinhas');
+    const lat9 = mc.lat + 9_000 / M_LAT; // a estrada a 9 km ao norte do centro de Monte Castelo
+    const ida: [number, number][] = [
+      [mc.lng + 9_000 / mLng(lat9), lat9],
+      [mc.lng - 6_000 / mLng(lat9), lat9],
+      [mv.lng, mv.lat + 900 / M_LAT], // a 0,9 km do centro de Major Vieira
+      [can.lng, can.lat],
+    ];
+    const geometry = [...ida, ...[...ida].reverse().slice(1)];
+    const total = cumulativeM(geometry).at(-1) ?? 0;
+    return {
+      geometry,
+      elevation: [
+        [0, 800],
+        [total, 800],
+      ],
+    };
+  };
+
+  it('o caso de 21/11: Major Vieira uma vez, Monte Castelo nenhuma', () => {
+    const places = passingPlaces(idaEVolta());
+    const names = places.map((p) => p.name);
+    expect(names.filter((n) => n === 'Major Vieira')).toHaveLength(1);
+    expect(names).not.toContain('Monte Castelo');
+    const mv = places.find((p) => p.name === 'Major Vieira');
+    expect(mv?.distance_m).toBeLessThanOrEqual(900 + 1);
+    // Monte Castelo é candidato (a 9 km), mas a estrada não chega ao raio dele
+    const mc = centro('Monte Castelo');
+    expect(crossingRadiusM(mc.pop)).toBe(2_000);
+  });
+
+  it('uma vila a 1,5 km da estrada é atravessada; a 2,5 km, não', () => {
+    const mv = centro('Major Vieira');
+    const line = (offset_m: number): RouteShape => {
+      const lat = mv.lat + offset_m / M_LAT;
+      const geometry: [number, number][] = [
+        [mv.lng - 8_000 / mLng(lat), lat],
+        [mv.lng + 8_000 / mLng(lat), lat],
+      ];
+      return {
+        geometry,
+        elevation: [
+          [0, 800],
+          [16_000, 800],
+        ],
+      };
+    };
+    expect(passingPlaces(line(1_500)).map((p) => p.name)).toContain('Major Vieira');
+    expect(passingPlaces(line(2_500)).map((p) => p.name)).not.toContain('Major Vieira');
+    // e os candidatos vêm do raio maior: a vila a 2,5 km está entre eles
+    expect(
+      municipalitiesWithin(mv.lng, mv.lat + 2_500 / M_LAT, 3_000).map((m) => m.name),
+    ).toContain('Major Vieira');
   });
 });
 

@@ -26,7 +26,11 @@ export {
   hasDeparted,
   type Fix,
 } from './geofence.ts';
-export { largestMunicipalityWithin, nearestMunicipality } from './municipalities.ts';
+export {
+  largestMunicipalityWithin,
+  municipalitiesWithin,
+  nearestMunicipality,
+} from './municipalities.ts';
 export {
   indexRoute,
   isOffRoute,
@@ -37,6 +41,7 @@ export {
 export {
   classifySample,
   classifySegments,
+  crossingRadiusM,
   passingPlaces,
   samplePlaces,
   SCENERY_LABELS,
@@ -50,7 +55,7 @@ export {
 export type PlaceReading = {
   segments: Segment[];
   curiosities: Curiosity[];
-  /** os municípios por onde a rota passa, em ordem (fase 22: as cidades de passagem) */
+  /** os municípios que a rota atravessa, em ordem, uma vez cada (fase 22; revista na fase 28) */
   places: PassingPlace[];
 };
 
@@ -61,6 +66,6 @@ export function readPlace(route: RouteShape): PlaceReading {
   return {
     segments,
     curiosities: curiosities(route.elevation, samples, segments),
-    places: passingPlaces(samples),
+    places: passingPlaces(route),
   };
 }

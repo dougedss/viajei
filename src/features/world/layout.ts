@@ -235,6 +235,8 @@ export const LAKE_RE = /represa|lago|lagoa|barragem|açude/i;
 export const MAX_PLACES = 3;
 /** o nome da cidade fica a isto do eixo da estrada */
 export const PLACE_OFFSET = 7;
+/** o nome da cidade de passagem anda até isto ao longo da estrada, procurando lugar fora das peças */
+export const PLACE_REACH = 40;
 /** quanto a maquete desce abaixo do chão mais baixo e sobe acima do mais alto (as peças) */
 export const BASE_DEPTH = 6;
 export const TOP_ROOM = 18;
@@ -767,6 +769,7 @@ export function buildLayout(input: LayoutInput): WorldLayout {
     roadHalfWidth,
     firstNodeS,
     lastNodeS,
+    nodeS: nodes.map((nd) => nd.s),
     cityPieces: input.cityPieces ?? new Set(),
   });
 
@@ -980,6 +983,8 @@ type PlacesInput = {
   roadHalfWidth: number;
   firstNodeS: number;
   lastNodeS: number;
+  /** o `s` de cada nó: o nome de uma cidade não passa das paradas em volta dela */
+  nodeS: readonly number[];
   cityPieces: ReadonlySet<string>;
 };
 
@@ -993,7 +998,10 @@ const CITY_PAD_R = Math.hypot(CITY_BOX.w, CITY_BOX.d) / 2 + 1.5;
  * município, do lado de fora da curva, longe dos pisos das peças; quando ali não dá, anda um pouco
  * ao longo do trecho dela. Com o cartão-postal da cidade no catálogo (fase 23), a peça fica atrás do
  * nome, na caixa da cidade, num piso que não cobre nenhum outro piso nem a estrada que volta; sem um
- * lugar assim no trecho, a cidade fica só com o nome.
+ * lugar assim no trecho, a cidade fica só com o nome. Desde a fase 28 a cidade é a que a estrada
+ * atravessa, e o trecho dela é curto (o pedaço da rota dentro do raio da cidade): a que não acha um
+ * lugar fora das peças das paradas fica de fora, e entra a seguinte. Três por trecho (o layout é o do
+ * trecho), cada nome uma vez (a leitura já não repete).
  */
 function pickPlaces(input: PlacesInput): LayoutPlace[] {
   const { reading, axis, stops, totalKm, kmToS, pathAt, pads, roadHalfWidth } = input;
@@ -1004,10 +1012,7 @@ function pickPlaces(input: PlacesInput): LayoutPlace[] {
   const candidates: PassingPlace[] = reading.places.filter(
     (p) => !stopM.some((m) => m >= p.from_m - 1 && m <= p.to_m + 1),
   );
-  const chosen = [...candidates]
-    .sort((a, b) => b.pop - a.pop || a.at_m - b.at_m)
-    .slice(0, MAX_PLACES)
-    .sort((a, b) => a.at_m - b.at_m);
+  const byPop = [...candidates].sort((a, b) => b.pop - a.pop || a.at_m - b.at_m);
   const clear = (x: number, z: number) =>
     pads.every((pad) => Math.hypot(x - pad.x, z - pad.z) > pad.r + 4);
   // o piso da peça da cidade: fora de todo piso, e a estrada só passa ao lado dele (nenhuma volta do S
@@ -1020,16 +1025,27 @@ function pickPlaces(input: PlacesInput): LayoutPlace[] {
         Math.abs(q.s - s) <= CITY_PAD_R * 1.6,
     );
   const out: LayoutPlace[] = [];
-  for (const p of chosen) {
+  for (const p of byPop) {
+    if (out.length >= MAX_PLACES) break;
     const key = cityPlaceKey(p.uf, p.name);
     const wantPiece = key !== null && input.cityPieces.has(key);
     const km = clamp(axis.kmOffset + p.at_m / 1000, 0, totalKm);
     const s0 = kmToS(km);
+    // o nome anda até 40 unidades ao longo da estrada (fase 28: o trecho de uma cidade atravessada é
+    // curto, e num dia longo uns poucos km são menos de uma unidade), sem passar das paradas em volta:
+    // a cidade fica entre as mesmas duas paradas
     const sFrom = Math.max(
       input.firstNodeS,
-      kmToS(clamp(axis.kmOffset + p.from_m / 1000, 0, totalKm)),
+      s0 - PLACE_REACH,
+      ...input.nodeS.filter((n) => n <= s0 + 1e-6),
     );
-    const sTo = Math.min(input.lastNodeS, kmToS(clamp(axis.kmOffset + p.to_m / 1000, 0, totalKm)));
+    const sTo = Math.min(
+      input.lastNodeS,
+      s0 + PLACE_REACH,
+      ...input.nodeS.filter((n) => n >= s0 - 1e-6),
+    );
+    // o nome fora dos pisos vale mais que tudo; depois a peça da cidade; depois fora do meio do S
+    const full = wantPiece ? 7 : 5;
     let best: { s: number; score: number } | null = null;
     for (let d = 0; d <= 40; d += 2) {
       for (const s of d === 0 ? [s0] : [s0 - d, s0 + d]) {
@@ -1040,19 +1056,21 @@ function pickPlaces(input: PlacesInput): LayoutPlace[] {
         // fora do piso de toda peça e fora do meio do S (onde a estrada cruza); com peça, o piso dela
         const px = q.x + side * (roadHalfWidth + MINIATURE_ROAD_GAP + CITY_BOX.d / 2);
         const score =
-          (clear(x, q.z) ? 2 : 0) +
-          (Math.abs(q.x) > 5 ? 1 : 0) +
-          (wantPiece && pieceClear(px, q.z, s) ? 4 : 0);
+          (clear(x, q.z) ? 4 : 0) +
+          (wantPiece && pieceClear(px, q.z, s) ? 2 : 0) +
+          (Math.abs(q.x) > 5 ? 1 : 0);
         if (!best || score > best.score) best = { s, score };
-        if (score === (wantPiece ? 7 : 3)) break;
+        if (score === full) break;
       }
-      if (best?.score === (wantPiece ? 7 : 3)) break;
+      if (best?.score === full) break;
     }
-    const s = best?.s ?? s0;
+    // sem um lugar fora dos pisos das peças no trecho dela, a cidade fica de fora (o nome não cobre peça)
+    if (!best || (best.score & 4) === 0) continue;
+    const s = best.s;
     const q = pathAt(s);
     const side: -1 | 1 = q.x < 0 ? -1 : 1;
     let piece: LayoutPlace['piece'] = null;
-    if (wantPiece && best && best.score >= 4) {
+    if (wantPiece && (best.score & 2) !== 0) {
       const px = q.x + side * (roadHalfWidth + MINIATURE_ROAD_GAP + CITY_BOX.d / 2);
       piece = { x: px, z: q.z, angle: -side * (Math.PI / 2) };
       pads.push({ x: px, z: q.z, r: CITY_PAD_R, y: q.y });
@@ -1069,7 +1087,7 @@ function pickPlaces(input: PlacesInput): LayoutPlace[] {
       piece,
     });
   }
-  return out;
+  return out.sort((a, b) => a.s - b.s);
 }
 
 /** Onde a câmera do frame fica, para a cena copiar. */

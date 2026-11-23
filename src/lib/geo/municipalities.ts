@@ -36,3 +36,17 @@ export function largestMunicipalityWithin(
   }
   return best;
 }
+
+/**
+ * Todos os municípios cujo centro está a até `radiusM` (fase 28: os candidatos a cidade de passagem,
+ * antes da conta de quanto a estrada passa perto de cada um).
+ */
+export function municipalitiesWithin(lng: number, lat: number, radiusM: number): Municipality[] {
+  const degrees = radiusM / 111_000 + 0.01;
+  const out: Municipality[] = [];
+  for (const m of municipalities()) {
+    if (Math.abs(m.lat - lat) > degrees || Math.abs(m.lng - lng) > degrees * 1.3) continue;
+    if (fastDistanceM([lng, lat], [m.lng, m.lat]) <= radiusM) out.push(m);
+  }
+  return out;
+}

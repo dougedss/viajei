@@ -160,7 +160,7 @@ function useTripPlace(route: ReturnType<typeof spliceTrip>['route']): PlaceReadi
             reading: {
               segments,
               curiosities: curiosities(route.elevation, samples, segments),
-              places: passingPlaces(samples),
+              places: passingPlaces(route),
             },
           });
       },

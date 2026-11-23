@@ -4,6 +4,9 @@ import { readPlace, type PlaceReading } from '@/lib/geo/index.ts';
 import type { DayRoute } from '@/lib/db/schema.ts';
 import { makeStop } from '@/test/factories.ts';
 import { gemeoStops } from '@/test/fixtures/dia-gemeo.ts';
+import { cumulativeM } from '@shared/geo.ts';
+import { legPlan } from '@/features/travel-mode/legs.ts';
+import { municipalities } from '@/lib/geo/municipalities-data.ts';
 import { MINIATURE_BOX, MINIATURE_ROAD_GAP } from '@/art/stops/types.ts';
 import { indexRoute, projectOntoRoute } from '@/lib/geo/project.ts';
 import {
@@ -526,5 +529,117 @@ describe('layout com uma parada que se registrou sozinha (fase 15)', () => {
     });
     expect(layout.hasRoute).toBe(true);
     expect(layout.nodes[4]?.km).toBeCloseTo(layout.nodes[3]?.km ?? -1, 6);
+  });
+});
+
+describe('o mapa por trechos (fase 28)', () => {
+  // a rota de 21/11 em miniatura, com os centros de verdade do dado embutido: de perto de Papanduva a
+  // Canoinhas e de volta pela mesma estrada, a 0,9 km do centro de Major Vieira
+  const centro = (name: string) => {
+    const m = municipalities().find((x) => x.name === name && x.uf === 'SC');
+    if (!m) throw new Error(`sem ${name}`);
+    return m;
+  };
+  const mv = centro('Major Vieira');
+  const can = centro('Canoinhas');
+  const pap = centro('Papanduva');
+  const casa: [number, number] = [pap.lng - 0.03, pap.lat - 0.004];
+  const ida: [number, number][] = [casa, [mv.lng, mv.lat + 900 / 111_320], [can.lng, can.lat]];
+  const metros = (pts: [number, number][]) => cumulativeM(pts).at(-1) ?? 0;
+  const half = metros(ida);
+  const geometry = [...ida, ...[...ida].reverse().slice(1)];
+  const total = metros(geometry);
+  const route = {
+    hash: 'r2111',
+    geometry,
+    legs: [
+      { distance_m: half, duration_s: 1500 },
+      { distance_m: total - half, duration_s: 1500 },
+    ],
+    elevation: Array.from({ length: Math.ceil(total / 2000) + 1 }, (_, i): [number, number] => [
+      Math.min(total, i * 2000),
+      780,
+    ]),
+  };
+  const day = [
+    makeStop({
+      id: 'casa',
+      position: 'a0',
+      kind: 'origin',
+      name: 'Saída de casa',
+      lng: casa[0],
+      lat: casa[1],
+    }),
+    makeStop({
+      id: 'cafe',
+      position: 'a1',
+      kind: 'food',
+      name: 'Café',
+      lng: can.lng,
+      lat: can.lat,
+    }),
+    makeStop({
+      id: 'volta',
+      position: 'a2',
+      kind: 'origin',
+      name: 'Chegada em casa',
+      lng: casa[0],
+      lat: casa[1],
+    }),
+  ];
+  const layoutsOf = (stops: typeof day, r: typeof route, withPlace = false) => {
+    const plan = legPlan(stops, r);
+    return plan.legs.map((leg, i) => {
+      const legRoute = plan.geometry[i]?.route ?? null;
+      return buildLayout({
+        dayId: `d${String(i)}`,
+        stops: leg.stops,
+        route: legRoute,
+        place: withPlace && legRoute ? readPlace(legRoute) : null,
+      });
+    });
+  };
+
+  it('a ida e a volta: de onde se sai embaixo, para onde se vai em cima, e a casa uma vez por tela', () => {
+    const [outbound, back] = layoutsOf(day, route);
+    expect(outbound?.nodes.map((n) => n.stop_id)).toEqual(['casa', 'cafe']);
+    expect(back?.nodes.map((n) => n.stop_id)).toEqual(['cafe', 'volta']);
+    for (const l of [outbound, back]) {
+      expect(l?.hasRoute).toBe(true);
+      expect(l?.nodes.filter((n) => n.kind === 'origin')).toHaveLength(1);
+      // o começo embaixo e o fim em cima (a câmera de repouso olha do começo para o fim, D216)
+      expect(l?.nodes[0]?.position[2]).toBeLessThan(l?.nodes.at(-1)?.position[2] ?? -1);
+      expect((l?.realTotalKm ?? 0) * 1000).toBeCloseTo(half, -1);
+    }
+    // o dia inteiro numa tira, como era: a casa duas vezes, embaixo e em cima
+    const whole = buildLayout({ dayId: 'd', stops: day, route, place: null });
+    expect(whole.nodes.filter((n) => n.kind === 'origin')).toHaveLength(2);
+  });
+
+  it('num dia de um trecho só, o layout é o de sempre', () => {
+    const oneWay = day.slice(0, 2);
+    const r1 = {
+      ...route,
+      geometry: ida,
+      legs: [route.legs[0]!],
+      elevation: route.elevation.filter(([d]) => d <= half),
+    };
+    const [leg] = layoutsOf(oneWay, r1);
+    const today = buildLayout({ dayId: 'd0', stops: oneWay, route: r1, place: null });
+    expect(JSON.stringify(leg)).toBe(JSON.stringify(today));
+  });
+
+  it('as cidades por trecho: Major Vieira uma vez em cada tela, e nunca a cidade de uma parada', () => {
+    const [outbound, back] = layoutsOf(day, route, true);
+    for (const l of [outbound, back]) {
+      const names = l?.places.map((c) => c.name) ?? [];
+      expect(names.filter((n) => n === 'Major Vieira')).toHaveLength(1);
+      expect(names.length).toBeLessThanOrEqual(MAX_PLACES);
+      // o café fica em Canoinhas e a casa perto de Papanduva: as pílulas já dizem o lugar
+      expect(names).not.toContain('Canoinhas');
+    }
+    // a leitura do dia inteiro também não repete o nome (a regra da D220 o punha duas vezes)
+    const wholeDay = readPlace(route).places.filter((c) => c.name === 'Major Vieira');
+    expect(wholeDay).toHaveLength(1);
   });
 });

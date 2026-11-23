@@ -1,8 +1,12 @@
-import { pointAtM, cumulativeM, type LngLat } from '@shared/geo.ts';
+import { cumulativeM, pointAtM, projectOntoLine, sampleEveryM, type LngLat } from '@shared/geo.ts';
 import { biomeAt } from './biomes.ts';
 import type { BiomeCode } from './codec.ts';
 import { distanceToCoast } from './coast.ts';
-import { largestMunicipalityWithin, nearestMunicipality } from './municipalities.ts';
+import {
+  largestMunicipalityWithin,
+  municipalitiesWithin,
+  nearestMunicipality,
+} from './municipalities.ts';
 
 /**
  * Leitura do lugar: cada amostra de 2 km da rota é classificada cruzando altitude e inclinação,
@@ -117,10 +121,12 @@ export type Segment = {
 };
 
 /**
- * Um município por onde a rota passa (fase 22): o mais populoso a até 12 km de cada amostra (senão o
- * mais próximo), com o trecho da rota em que ele é esse município e o ponto mais perto do centro
- * dele. A maquete escreve o nome das maiores cidades de passagem na beira da estrada; quem decide
- * quais (e exclui as das paradas) é o layout.
+ * Uma cidade de passagem (fase 22; revista na fase 28): **um município que a estrada atravessa**. Os
+ * dados embutidos dos municípios são o centro e a população, sem o polígono, então "atravessa" se diz
+ * assim: a rota passa a até `crossingRadiusM(pop)` do centro dele. `at_m` é o ponto da rota mais perto
+ * do centro; `from_m` e `to_m`, o pedaço da rota dentro desse raio (a corda do círculo). Uma vez por
+ * município: a ida e a volta pela mesma cidade não a repetem. A maquete escreve o nome das maiores na
+ * beira da estrada; quem decide quais (e exclui as das paradas) é o layout.
  */
 export type PassingPlace = {
   name: string;
@@ -128,37 +134,74 @@ export type PassingPlace = {
   pop: number;
   from_m: number;
   to_m: number;
-  /** a amostra do trecho mais perto do centro do município */
+  /** o ponto da rota mais perto do centro do município */
   at_m: number;
+  /** a que distância do centro a rota passa, em metros */
+  distance_m: number;
 };
 
-function placeOf(
-  s: PlaceSample,
-): { name: string; uf: string; pop: number; distance_m: number } | null {
-  return s.city ?? s.town;
+/** O menor e o maior raio de uma cidade atravessada: a vila e a capital. */
+export const CROSSING_MIN_M = 2_000;
+export const CROSSING_MAX_M = 10_000;
+/** o raio de uma cidade de 10 mil habitantes, antes do mínimo */
+export const CROSSING_M_PER_10K = 1_200;
+
+/**
+ * Até onde do centro de uma cidade a estrada ainda a atravessa (fase 28): a mancha da cidade cresce com
+ * a população (a área, mais ou menos na proporção dela), então o raio cresce com a raiz da população,
+ * de 2 km (a vila) a 10 km (a capital). Medido na rota do seed (D321): a regra de 2 km mais 1 km por 100
+ * mil habitantes deixava Lages (173 mil) de fora com a estrada a 3,96 km do centro do IBGE; com a raiz,
+ * o raio de Lages é 4,99 km, e Monte Castelo (7,7 mil) continua de fora com a estrada a 9 km.
+ */
+export function crossingRadiusM(pop: number): number {
+  const r = CROSSING_M_PER_10K * Math.sqrt(Math.max(0, pop) / 10_000);
+  return Math.min(CROSSING_MAX_M, Math.max(CROSSING_MIN_M, r));
 }
 
-/** Os municípios da rota, em ordem, um por trecho contíguo de amostras com o mesmo município. */
-export function passingPlaces(samples: readonly PlaceSample[]): PassingPlace[] {
-  const out: PassingPlace[] = [];
-  let nearest = Number.POSITIVE_INFINITY;
-  samples.forEach((s, i) => {
-    const m = placeOf(s);
-    if (!m) return;
-    const to = samples[i + 1]?.dist_m ?? s.dist_m;
-    const last = out.at(-1);
-    if (last?.name === m.name && last.uf === m.uf && last.to_m >= s.dist_m) {
-      last.to_m = to;
-      if (m.distance_m < nearest) {
-        nearest = m.distance_m;
-        last.at_m = s.dist_m;
-      }
-      return;
+/** os candidatos saem de um ponto da rota a cada 2 km, até o maior raio mais a metade do passo */
+const CANDIDATE_STEP_M = 2_000;
+
+/**
+ * Os municípios que a rota atravessa, em ordem ao longo dela, cada um uma vez. A distância ao longo da
+ * rota (`at_m`, `from_m`, `to_m`) é a do perfil de altitude, a mesma das outras leituras (as partes do
+ * cenário e as curiosidades): o traçado simplificado mede um pouco menos que a estrada.
+ */
+export function passingPlaces(route: RouteShape): PassingPlace[] {
+  const geometry = route.geometry;
+  if (geometry.length < 2) return [];
+  const cum = cumulativeM(geometry);
+  const length = cum.at(-1) ?? 0;
+  if (length <= 0) return [];
+  const profile = route.elevation.at(-1)?.[0] ?? length;
+  const scale = profile > 0 ? profile / length : 1;
+  const candidates = new Map<
+    string,
+    { name: string; uf: string; pop: number; lng: number; lat: number }
+  >();
+  for (const sample of sampleEveryM(geometry, CANDIDATE_STEP_M)) {
+    const [lng = 0, lat = 0] = sample.point;
+    for (const m of municipalitiesWithin(lng, lat, CROSSING_MAX_M + CANDIDATE_STEP_M / 2)) {
+      candidates.set(`${m.name}|${m.uf}`, m);
     }
-    nearest = m.distance_m;
-    out.push({ name: m.name, uf: m.uf, pop: m.pop, from_m: s.dist_m, to_m: to, at_m: s.dist_m });
-  });
-  return out;
+  }
+  const out: PassingPlace[] = [];
+  for (const m of candidates.values()) {
+    const hit = projectOntoLine(geometry, cum, [m.lng, m.lat]);
+    const r = crossingRadiusM(m.pop);
+    if (hit.distance_m > r) continue;
+    const at = hit.fraction * length * scale;
+    const half = Math.sqrt(r * r - hit.distance_m * hit.distance_m) * scale;
+    out.push({
+      name: m.name,
+      uf: m.uf,
+      pop: m.pop,
+      from_m: Math.max(0, at - half),
+      to_m: Math.min(profile, at + half),
+      at_m: at,
+      distance_m: hit.distance_m,
+    });
+  }
+  return out.sort((a, b) => a.at_m - b.at_m || b.pop - a.pop);
 }
 
 function cityPop(s: PlaceSample): number {
